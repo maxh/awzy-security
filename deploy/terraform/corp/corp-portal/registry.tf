@@ -126,8 +126,8 @@ resource "aws_ecs_service" "registry" {
     rollback = true
   }
 
-  # CI points the service at a new task definition revision for each commit on main;
-  # Terraform doesn't move it back.
+  # CI points the service at a new revision for each commit on main, copied from the template
+  # (deploy-templates.tf); Terraform doesn't move it back.
   lifecycle {
     ignore_changes = [task_definition]
   }
