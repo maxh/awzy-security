@@ -45,3 +45,43 @@ groups:
         labels: { severity: ticket }
         annotations:
           summary: "{{ $labels.job }} answers {{ $value | humanizePercentage }} of requests with a 5xx"
+
+  # The platform plan's freshness targets, as the PDP sees them.
+  - name: awzy-freshness
+    rules:
+      - alert: AwzyPdpContainmentFeedStale
+        expr: awzy_pdp_containment_feed_age_seconds > 2
+        for: 1m
+        labels: { severity: page }
+        annotations:
+          summary: "A PDP hasn't heard the containment feed for {{ $value | humanizeDuration }} (target: 2 s)"
+          description: "Until it recovers, the PDP asks awzy-challenge on every check, which counts against the 10 ms budget."
+
+      - alert: AwzyPdpPolicySyncStale
+        expr: awzy_pdp_policy_sync_age_seconds > 60
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "A PDP last synced policy {{ $value | humanizeDuration }} ago (target: a published bundle live within 60 s)"
+
+      - alert: AwzyPdpPrincipalsSyncStale
+        expr: awzy_pdp_principals_sync_age_seconds > 60
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "A PDP last synced principals {{ $value | humanizeDuration }} ago (target: attribute changes within 60 s)"
+
+      - alert: AwzyPdpServingStaleResources
+        expr: sum(rate(awzy_pdp_resource_lookups_total{served="stale"}[5m])) > 0
+        for: 5m
+        labels: { severity: ticket }
+        annotations:
+          summary: "PDPs are deciding on cached resources because awzy-context can't be reached"
+
+      - alert: AwzyGatewayCantReachPdp
+        expr: sum(rate(awzy_gateway_pdp_unreachable_total[5m])) > 0
+        for: 1m
+        labels: { severity: page }
+        annotations:
+          summary: "awzy-gateway can't reach awzy-pdp; tool calls are replayed or denied (ADR 0030)"
+

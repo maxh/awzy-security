@@ -275,7 +275,9 @@ impl Pdp {
         }
         let context = Context::from_json_value(serde_json::Value::Object(context), Some((&self.schema, &action)))?;
         let request = Request::new(uid(principal)?, action, uid(&req.resource)?, context, Some(&self.schema))?;
+        let evaluating = std::time::Instant::now();
         let response = self.authorizer.is_authorized(&request, policy_set, entities);
+        metrics::CEDAR_EVALUATION.observe(evaluating.elapsed());
 
         let determining: Vec<_> = response.diagnostics().reason().filter_map(|id| policy_set.policy(id)).collect();
         // Cedar reports them in no particular order; sort so explanations are stable.
@@ -316,7 +318,11 @@ impl Pdp {
     ) -> anyhow::Result<bool> {
         let rest =
             PolicySet::from_policies(policy_set.policies().filter(|p| p.annotation("challenge").is_none()).cloned())?;
-        Ok(self.authorizer.is_authorized(request, &rest, entities).decision() == cedar_policy::Decision::Allow)
+        let evaluating = std::time::Instant::now();
+        let allowed =
+            self.authorizer.is_authorized(request, &rest, entities).decision() == cedar_policy::Decision::Allow;
+        metrics::CEDAR_EVALUATION.observe(evaluating.elapsed());
+        Ok(allowed)
     }
 }
 

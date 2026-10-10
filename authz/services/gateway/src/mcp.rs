@@ -277,17 +277,23 @@ async fn check(
             state.0.last_seen_monitor.store(monitor, Ordering::Release);
             match (res.verdict(), monitor) {
                 (Verdict::Allow, _) => {
+                    crate::metrics::FORWARDED.inc();
                     state.0.allows.record(c.cache_key);
                     None
                 }
                 (_, true) => {
+                    crate::metrics::MONITOR_FORWARDED.inc();
                     tracing::info!(decision = %res.decision_qid, what = %c.what, verdict = ?res.verdict(), "monitor mode: forwarding a call that would be blocked");
                     None
                 }
-                _ => Some(blocked(id, &c.what, &res)),
+                _ => {
+                    crate::metrics::BLOCKED.inc();
+                    Some(blocked(id, &c.what, &res))
+                }
             }
         }
         Err(status) if state.0.last_seen_monitor.load(Ordering::Acquire) => {
+            crate::metrics::OUTAGE_MONITOR_FORWARDED.inc();
             tracing::warn!(%status, what = %c.what, "awzy-pdp unreachable; install was monitoring, forwarding");
             None
         }
@@ -321,10 +327,12 @@ fn outage(
     };
     match replay {
         Some(age) => {
+            crate::metrics::OUTAGE_REPLAYED.inc();
             tracing::warn!(%status, what = %c.what, tier = ?tier, age_secs = age.as_secs(), "awzy-pdp unreachable; replaying a recent allow");
             None
         }
         None => {
+            crate::metrics::OUTAGE_DENIED.inc();
             tracing::warn!(%status, what = %c.what, tier = ?tier, "awzy-pdp unreachable; denying");
             let why = match (tier, containment) {
                 (None, _) => "it has no sensitivity of its own in the gateway's config, so it fails closed".to_string(),

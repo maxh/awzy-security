@@ -28,9 +28,13 @@ pub async fn sync_policies(
 ) {
     let mut client = None;
     loop {
-        if let Err(error) = sync_once(&pdp, &enforcement, verifier.as_deref(), &endpoint, &mut client).await {
-            tracing::warn!(%error, %endpoint, "policy sync failed; keeping the current bundle");
-            client = None;
+        match sync_once(&pdp, &enforcement, verifier.as_deref(), &endpoint, &mut client).await {
+            Ok(_) => crate::metrics::POLICY_SYNC.succeeded(),
+            Err(error) => {
+                crate::metrics::POLICY_SYNC.failed();
+                tracing::warn!(%error, %endpoint, "policy sync failed; keeping the current bundle");
+                client = None;
+            }
         }
         tokio::time::sleep(every).await;
     }

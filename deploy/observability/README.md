@@ -4,8 +4,10 @@ The operator view of an install (ADR 0068): what whoever runs it watches. Every 
 serves Prometheus metrics at `/metrics` on its own port; these files are what reads them.
 
 - `grafana/dashboards/`: Grafana dashboards as JSON. `awzy-operator.json` covers readiness,
-  releases, the PDP's checks and latency, and every service's requests.
-- `prometheus/alerts.yaml`: alert rules for the platform plan's targets.
+  releases, the PDP's checks, latency, Cedar time, and resource cache, the freshness targets
+  (containment feed, policy and principals syncs), awzy-gateway's outcomes and PDP outages, and
+  every service's requests.
+- `prometheus/alerts.yaml`: alert rules for the platform plan's latency and freshness targets.
 
 Locally, `docker compose -f deploy/local/compose.yaml --profile observability up -d` runs
 Prometheus (http://localhost:9091) and Grafana (http://localhost:3000) with both, scraping the

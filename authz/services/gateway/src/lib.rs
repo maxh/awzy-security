@@ -7,6 +7,7 @@
 mod config;
 pub mod containments;
 mod mcp;
+pub mod metrics;
 
 pub use awzy_identity::{ServiceAccountConfig, TokenConfig, TokenKey};
 pub use config::{GatewayConfig, UpstreamConfig};

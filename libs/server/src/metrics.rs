@@ -86,6 +86,71 @@ impl Histogram {
     }
 }
 
+/// A lock-free counter, for a service's own metrics.
+#[derive(Default)]
+pub struct Counter(AtomicU64);
+
+impl Counter {
+    pub const fn new() -> Self {
+        Self(AtomicU64::new(0))
+    }
+
+    pub fn inc(&self) {
+        self.0.fetch_add(1, Relaxed);
+    }
+
+    pub fn get(&self) -> u64 {
+        self.0.load(Relaxed)
+    }
+}
+
+/// When something that runs on a loop (a sync, a feed) last succeeded, for freshness: rendered as
+/// the seconds since, and the failures since the process started.
+pub struct LastSuccess {
+    started: Instant,
+    /// Milliseconds after `started`, plus one; 0 means never.
+    at_ms: AtomicU64,
+    failures: Counter,
+}
+
+impl Default for LastSuccess {
+    fn default() -> Self {
+        Self { started: Instant::now(), at_ms: AtomicU64::new(0), failures: Counter::new() }
+    }
+}
+
+impl LastSuccess {
+    pub fn succeeded(&self) {
+        self.at_ms.store(self.started.elapsed().as_millis() as u64 + 1, Relaxed);
+    }
+
+    pub fn failed(&self) {
+        self.failures.inc();
+    }
+
+    /// Seconds since the last success, or since the process started if it never succeeded.
+    pub fn age(&self) -> Duration {
+        let at = Duration::from_millis(self.at_ms.load(Relaxed).saturating_sub(1));
+        self.started.elapsed().saturating_sub(at)
+    }
+
+    /// `<name>_age_seconds` and `<name>_failures_total`. Nothing until the loop has run once, so
+    /// a sync a deployment doesn't use never looks stale.
+    pub fn render(&self, out: &mut String, name: &str, help: &str) {
+        if self.at_ms.load(Relaxed) == 0 && self.failures.get() == 0 {
+            return;
+        }
+        let _ = writeln!(
+            out,
+            "# HELP {name}_age_seconds Seconds since {help} last succeeded.\n# TYPE {name}_age_seconds gauge"
+        );
+        let _ = writeln!(out, "{name}_age_seconds {:.3}", self.age().as_secs_f64());
+        let _ =
+            writeln!(out, "# HELP {name}_failures_total Times {help} failed.\n# TYPE {name}_failures_total counter");
+        let _ = writeln!(out, "{name}_failures_total {}", self.failures.get());
+    }
+}
+
 /// Past this many route, method, and status combinations, new ones count as route `other`, so
 /// nothing a caller sends can grow the label set without bound.
 const MOST_SERIES: usize = 500;
@@ -237,6 +302,21 @@ mod tests {
         );
         assert!(!text.contains("alice"), "no IDs in labels");
         assert!(text.contains("awzy_build_info{version="), "{text}");
+    }
+
+    #[test]
+    fn freshness_counts_from_the_last_success() {
+        let s = LastSuccess::default();
+        let mut out = String::new();
+        s.render(&mut out, "awzy_x_sync", "the sync");
+        assert!(out.is_empty(), "a sync that never ran reports nothing");
+        s.failed();
+        s.succeeded();
+        assert!(s.age() < Duration::from_secs(1));
+        let mut out = String::new();
+        s.render(&mut out, "awzy_x_sync", "the sync");
+        assert!(out.contains("awzy_x_sync_failures_total 1\n"), "{out}");
+        assert!(out.contains("awzy_x_sync_age_seconds 0."), "{out}");
     }
 
     #[test]
