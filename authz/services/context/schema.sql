@@ -46,6 +46,15 @@ CREATE TABLE public.resources (
     classified_at timestamp with time zone
 );
 
+CREATE TABLE public.risk_scores (
+    subject_type text NOT NULL,
+    subject_id text NOT NULL,
+    score integer NOT NULL,
+    reasons jsonb DEFAULT '[]'::jsonb NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT risk_scores_score_check CHECK (((score >= 0) AND (score <= 100)))
+);
+
 CREATE TABLE public.service_accounts (
     id text NOT NULL,
     owner text NOT NULL,
@@ -88,6 +97,9 @@ ALTER TABLE ONLY public.humans
 
 ALTER TABLE ONLY public.resources
     ADD CONSTRAINT resources_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.risk_scores
+    ADD CONSTRAINT risk_scores_pkey PRIMARY KEY (subject_type, subject_id);
 
 ALTER TABLE ONLY public.service_accounts
     ADD CONSTRAINT service_accounts_pkey PRIMARY KEY (id);

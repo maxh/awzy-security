@@ -9,6 +9,7 @@
 
 pub mod classify;
 pub mod resources;
+pub mod risk;
 pub mod scim;
 pub mod store;
 
@@ -49,7 +50,10 @@ async fn principals(
         return Ok(Json(json!({ "version": current, "unchanged": true })));
     }
     let (version, entities) = store.snapshot().await.map_err(fail)?;
-    Ok(Json(json!({ "version": version, "entities": entities })))
+    // Read after the snapshot: a score written in between moves the version, so the PDP comes
+    // back for it.
+    let risk = store.risk_scores().await.map_err(fail)?;
+    Ok(Json(json!({ "version": version, "entities": entities, "risk": risk })))
 }
 
 fn internal(e: impl std::fmt::Display) -> Response {
@@ -193,6 +197,8 @@ pub fn router(store: ContextStore, scim_token: &str, access: &Access) -> Router 
     guarded(readers, &access.readers)
         .merge(guarded(resources::read_router(store.clone()), &access.readers))
         .merge(guarded(resources::write_router(store.clone()), &access.writers))
+        // The reasoner's scores (ADR 0056): the backend writes them, like resources.
+        .merge(guarded(risk::router(store.clone()), &access.writers))
         .merge(guarded(directory, &access.directory))
         .merge(scim::router(store, scim_token))
 }
