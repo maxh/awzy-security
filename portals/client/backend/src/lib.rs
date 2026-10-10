@@ -52,7 +52,8 @@ pub struct Services {
     /// Awzy Bot's model (ADR 0048); None when the install hasn't turned it on.
     pub bot: Option<awzy_bot::BotModel>,
     /// awzy-challenge, for challenges and containments (ADR 0054).
-    pub challenge: Option<awzy_authz_proto::challenge::v1::challenge_service_client::ChallengeServiceClient<AuthChannel>>,
+    pub challenge:
+        Option<awzy_authz_proto::challenge::v1::challenge_service_client::ChallengeServiceClient<AuthChannel>>,
 }
 
 impl Services {
