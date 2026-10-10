@@ -36,6 +36,11 @@ fails the build if it tries.
 testing, the local stack, local HTTPS, and running each service and portal. Coding agents also
 read [AGENTS.md](AGENTS.md).
 
+## Installing
+
+[INSTALL.md](INSTALL.md) is the runbook for installing awzy in your own cloud account: the cloud
+layer, bootstrap, DNS and your IdP, and checking the install.
+
 ## Not done yet
 
 - linux/arm64 images: the Zig linker rejects rustc's `--fix-cortex-a53-843419` flag (see `tools/rust.bzl`).
