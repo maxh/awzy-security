@@ -401,7 +401,11 @@ audience `awzy-gateway`; override with `AWZY_TOKEN_ISSUER` and `AWZY_TOKEN_AUDIE
 The first day includes the demo plan's scenarios: the curious contractor, the rogue agent's
 first half, the suddenly foolish administrator, and the peer outlier. awzy catches the last two
 only if awzy-reasoner scores the morning before what they do next, a few hundred calls later,
-so run the reasoner with a short `AWZY_REASONER_INTERVAL_SECS` (30) and the history below. The run ends with a `detection` line: scenario steps caught, and ordinary
+so run the reasoner with a short `AWZY_REASONER_INTERVAL_SECS` (30) and the history below. The rogue
+agent's ending also needs the plan's owner to reject SalesGenie's request on the client portal's
+Challenges page, Nora's export sent to awzy-intake (set `AWZY_INTAKE_URL` and `AWZY_INTAKE_TOKEN`
+for `activity`), and automated containments switched to enforce on the Enforcement page; in
+monitor, she's listed as "would contain" instead. The run ends with a `detection` line: scenario steps caught, and ordinary
 accesses challenged. Switch the install to enforce first, because in monitor mode the gateway
 allows everything and nothing is caught. Leave them out with `--no-scenarios`. To run them end
 to end without any of this, `bazel test --config=local-stack //authz/demo/synthetic:synthetic_test`.

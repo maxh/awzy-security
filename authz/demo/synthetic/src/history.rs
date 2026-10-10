@@ -69,6 +69,19 @@ pub fn event(date: NaiveDate, a: &Access) -> Value {
     e
 }
 
+/// A scenario's attempt to move data out, as the system it happened in would log it, at `at`.
+pub fn exfiltration_event(at: DateTime<Utc>, e: &crate::scenarios::Exfiltration) -> Value {
+    json!({
+        "at": at.to_rfc3339(),
+        "system": e.system,
+        "subject": { "type": "Human", "id": e.person },
+        "action": e.action,
+        "resource": { "type": "Resource", "id": e.resource },
+        "outcome": "success",
+        "attributes": {},
+    })
+}
+
 /// Every event for the `days` workdays before `today`, a day at a time.
 pub fn days(
     company: &Company,

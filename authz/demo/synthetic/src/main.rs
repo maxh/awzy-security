@@ -14,7 +14,8 @@
 //! AWZY_GATEWAY_URL, `--rate` per second (default 5) for `--days` generated days (default 1),
 //! with tokens signed by the gateway's development secret in AWZY_GATEWAY_DEV_SECRET. The first
 //! day includes the demo plan's scenarios (`--no-scenarios` leaves them out), and the run reports
-//! how many awzy caught and how much ordinary work it challenged.
+//! how many awzy caught and how much ordinary work it challenged. With AWZY_INTAKE_URL and
+//! AWZY_INTAKE_TOKEN, the scenarios' attempts to move data out go to awzy-intake as they happen.
 //! `history` sends the `--days` workdays before today (default 30) to awzy-intake at
 //! AWZY_INTAKE_URL as app events, with its shippers' token in AWZY_INTAKE_TOKEN (demo plan 5c).
 
@@ -111,6 +112,11 @@ async fn activity(args: &[String]) -> anyhow::Result<()> {
     let company = generate(profile, seed);
     let mut tally = Tally::default();
     let steps = scenarios::all(&company, profile);
+    let intake = match (std::env::var("AWZY_INTAKE_URL"), std::env::var("AWZY_INTAKE_TOKEN")) {
+        (Ok(url), Ok(token)) => Some(awzy_synthetic::history::Intake::new(&url, &token)),
+        _ => None,
+    };
+    let mut exports = if with_scenarios { scenarios::exfiltration() } else { vec![] };
     let mut detection = Detection::new(if with_scenarios { &steps } else { &[] });
     let mut tick = tokio::time::interval(std::time::Duration::from_secs_f64(1.0 / rate));
     let mut id = 0;
@@ -129,6 +135,21 @@ async fn activity(args: &[String]) -> anyhow::Result<()> {
         tracing::info!(day = d, calls = calls.len(), %endpoint, "replaying a day of activity");
         for (a, step) in &calls {
             tick.tick().await;
+            // The scenarios' exports, when their minute comes, if awzy-intake is there to hear them.
+            while d == 0 && exports.first().is_some_and(|e| e.minute <= a.minute) {
+                let e = exports.remove(0);
+                match &intake {
+                    Some(intake) => {
+                        let event = awzy_synthetic::history::exfiltration_event(chrono::Utc::now(), &e);
+                        if let Err(err) = intake.send(&[event]).await {
+                            tracing::warn!(error = %err, person = %e.person, "export not sent to awzy-intake");
+                        }
+                    }
+                    None => {
+                        tracing::info!(person = %e.person, "AWZY_INTAKE_URL is not set; the scenario's export isn't sent")
+                    }
+                }
+            }
             id += 1;
             let outcome = driver.send(a, id).await;
             if let awzy_synthetic::driver::Outcome::Failed(why) = &outcome {
