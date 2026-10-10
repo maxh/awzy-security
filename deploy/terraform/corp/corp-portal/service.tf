@@ -91,18 +91,13 @@ resource "aws_ecs_task_definition" "corp" {
       dependsOn    = [{ containerName = "accounts", condition = "SUCCESS" }]
       portMappings = [{ containerPort = 8080, protocol = "tcp" }]
       environment = [
-        # AWZY_CORP_PORTAL_* (ADR 0053). The AWZY_CORP_* copies keep an image older than that
-        # rename working; drop them once the running image reads the new names.
-        { name = "AWZY_CORP_ACCOUNTS_FILE", value = "${local.accounts_dir}/accounts.json" },
         { name = "AWZY_CORP_PORTAL_ACCOUNTS_FILE", value = "${local.accounts_dir}/accounts.json" },
         { name = "AWZY_CORP_PORTAL_PUBLIC_URL", value = "https://${local.hostname}" },
-        { name = "AWZY_CORP_PUBLIC_URL", value = "https://${local.hostname}" },
         { name = "AWZY_LOG_FORMAT", value = "json" },
       ]
       secrets = [
         { name = "AWZY_CORP_PORTAL_ALERTS_SLACK_WEBHOOK_URL", valueFrom = aws_secretsmanager_secret.alerts_slack_webhook.arn },
         { name = "AWZY_CORP_PORTAL_SESSION_SECRET", valueFrom = aws_secretsmanager_secret.session.arn },
-        { name = "AWZY_CORP_SESSION_SECRET", valueFrom = aws_secretsmanager_secret.session.arn },
         { name = "AWZY_POSTGRES_URL", valueFrom = aws_secretsmanager_secret.postgres_url.arn },
       ]
       mountPoints            = [{ sourceVolume = "config", containerPath = local.accounts_dir, readOnly = true }]
