@@ -15,5 +15,6 @@ rust-project.json
 # Per-deployment Terraform inputs (account IDs, buckets, emails): see deployment.env.example.
 deploy/terraform/**/deployment.env
 
-# A Google service account key for trying the Drive connector locally (ADR 0069).
+# Credentials for trying the Drive and Jira connectors locally (ADR 0069, 0070).
 drive-key.json
+jira-token
