@@ -28,7 +28,7 @@ service ChallengeService {
   rpc ListContainments(ListContainmentsRequest) returns (ListContainmentsResponse);
   // The active containments, for a PDP: the whole list on connect and on every change, and a
   // heartbeat in between, so a PDP knows when its copy may be stale.
-  rpc WatchContainments(WatchContainmentsRequest) returns (stream ContainmentFeed);
+  rpc WatchContainments(WatchContainmentsRequest) returns (stream WatchContainmentsResponse);
 }
 
 enum ChallengeStatus {
@@ -188,7 +188,7 @@ message ListContainmentsResponse {
 
 message WatchContainmentsRequest {}
 
-message ContainmentFeed {
+message WatchContainmentsResponse {
   // Increases with every containment or lift.
   int64 version = 1;
   // True when `active` is the whole list at `version`; false for a heartbeat.

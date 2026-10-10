@@ -6,10 +6,10 @@ use awzy_authz_proto::{
     challenge::v1::{
         challenge_service_server::{ChallengeService, ChallengeServiceServer},
         Challenge as WireChallenge, ChallengeStatus as WireStatus, ContainRequest, ContainResponse,
-        Containment as WireContainment, ContainmentFeed, DecideRequest, DecideResponse, GetChallengeRequest,
-        GetChallengeResponse, JustifyRequest, JustifyResponse, LiftRequest, LiftResponse, ListChallengesRequest,
-        ListChallengesResponse, ListContainmentsRequest, ListContainmentsResponse, ResolveRequest, ResolveResponse,
-        WatchContainmentsRequest,
+        Containment as WireContainment, DecideRequest, DecideResponse, GetChallengeRequest, GetChallengeResponse,
+        JustifyRequest, JustifyResponse, LiftRequest, LiftResponse, ListChallengesRequest, ListChallengesResponse,
+        ListContainmentsRequest, ListContainmentsResponse, ResolveRequest, ResolveResponse, WatchContainmentsRequest,
+        WatchContainmentsResponse,
     },
     challenges_from_wire, challenges_to_wire,
     prost_types::Timestamp,
@@ -37,7 +37,7 @@ struct Service {
     approvals: Arc<Approvals>,
 }
 
-type FeedStream = Pin<Box<dyn Stream<Item = Result<ContainmentFeed, Status>> + Send>>;
+type FeedStream = Pin<Box<dyn Stream<Item = Result<WatchContainmentsResponse, Status>> + Send>>;
 
 #[tonic::async_trait]
 impl ChallengeService for Service {
@@ -168,7 +168,8 @@ impl ChallengeService for Service {
                     sent = Some(list.version);
                     let active =
                         if changed { list.active.iter().cloned().map(containment_to_wire).collect() } else { vec![] };
-                    if tx.send(Ok(ContainmentFeed { version: list.version, changed, active })).await.is_err() {
+                    if tx.send(Ok(WatchContainmentsResponse { version: list.version, changed, active })).await.is_err()
+                    {
                         return; // the PDP went away
                     }
                 }
