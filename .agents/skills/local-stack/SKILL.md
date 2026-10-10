@@ -32,7 +32,8 @@ To confirm a test really ran rather than skipped, look for `skipping:` in its lo
 
 ## Run services
 
-DEVELOPMENT.md has the exact commands and environment for each: awzy-policy (`:8081` by convention),
+DEVELOPMENT.md has the exact commands and environment for each, and a table of every service's local
+port ("Running the services"): awzy-policy (`:8081`),
 the ClickHouse migrations, awzy-pdp (`:8082`, logging decisions through Kafka), the dev IdP
 (`https://127.0.0.1:5556`), and the client portal (`:8080`). Start them in that order, each in
 the background, and check `/readyz` before starting the next:

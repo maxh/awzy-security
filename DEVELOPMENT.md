@@ -139,13 +139,14 @@ Postgres, ClickHouse, Kafka, and Valkey for development and integration tests:
 ```sh
 docker compose -f deploy/local/compose.yaml up -d --wait
 bazel test --config=local-stack //...     # database tests run instead of skipping
-AWZY_POSTGRES_URL=postgres://awzy:awzy@localhost:5432/awzy_policy bazel run //authz/services/policy:awzy-policy
+AWZY_LISTEN_ADDR=127.0.0.1:8081 AWZY_POSTGRES_URL=postgres://awzy:awzy@localhost:5432/awzy_policy \
+  bazel run //authz/services/policy:awzy-policy
 
 # ClickHouse tables (decision log), then a PDP that logs every decision through Kafka:
 AWZY_CLICKHOUSE_URL=http://localhost:8123 AWZY_CLICKHOUSE_USER=awzy AWZY_CLICKHOUSE_PASSWORD=awzy \
   AWZY_CLICKHOUSE_DATABASE=awzy AWZY_CLICKHOUSE_KAFKA_BROKERS=kafka:29092 \
   bazel run //authz/jobs/clickhouse-migrate:awzy-clickhouse-migrate
-AWZY_KAFKA_BROKERS=localhost:9092 bazel run //authz/services/pdp:awzy-pdp
+AWZY_LISTEN_ADDR=127.0.0.1:8082 AWZY_KAFKA_BROKERS=localhost:9092 bazel run //authz/services/pdp:awzy-pdp
 ```
 
 Each Postgres database has a generated `schema.sql` next to its `migrations/` (for example
@@ -206,17 +207,37 @@ they use a self-signed certificate.
 
 ## Running the services
 
+Every service listens on `AWZY_LISTEN_ADDR` (default `0.0.0.0:8080`, as in a cluster, where each
+has its own pod). Locally they share one machine, so each gets its own port, and the commands
+below use these:
+
+| Port | Service |
+| --- | --- |
+| 8080 | client portal |
+| 8081 | awzy-policy |
+| 8082 | awzy-pdp |
+| 8083 | awzy-challenge |
+| 8084 | awzy-context |
+| 8085 | awzy-intake |
+| 8086 | awzy-gateway |
+| 8087 | awzy-reasoner |
+| 8088 | awzy-connectors |
+| 8089 | awzy-reporter |
+| 8090 | corp portal |
+| 8095 | the synthetic company's MCP servers (larkspur-drive, larkspur-admin) |
+| 5556 | the dev IdP |
+
 ### PDP
 
 ```sh
-bazel run //authz/services/pdp:awzy-pdp                    # policy decision point on :8080
+AWZY_LISTEN_ADDR=127.0.0.1:8082 bazel run //authz/services/pdp:awzy-pdp   # policy decision point on :8082
 ```
 
 Try a decision. Here an AI service account acts for bob, so the PDP checks both the account and bob
 and the stricter verdict wins:
 
 ```sh
-curl -s localhost:8080/v1/access/evaluation -H 'content-type: application/json' -d '{
+curl -s localhost:8082/v1/access/evaluation -H 'content-type: application/json' -d '{
   "subject": {"type": "ServiceAccount", "id": "sales-genie"}, "on_behalf_of": {"type": "Human", "id": "bob"},
   "action": "read", "resource": {"type": "Resource", "id": "design-doc"}, "context": {"risk_score": 90},
   "entities": [
@@ -315,8 +336,8 @@ token (RFC 8693 `act` claim = a service account acting for the token's subject),
 returns a denied call as an MCP tool error without forwarding it. Other messages pass through.
 
 ```sh
-AWZY_GATEWAY_CONFIG=gateway.json AWZY_GATEWAY_DEV_SECRET=dev-secret AWZY_PDP_ADDR=http://127.0.0.1:8082 \
-  bazel run //authz/services/gateway:awzy-gateway
+AWZY_LISTEN_ADDR=127.0.0.1:8086 AWZY_GATEWAY_CONFIG=gateway.json AWZY_GATEWAY_DEV_SECRET=dev-secret \
+  AWZY_PDP_ADDR=http://127.0.0.1:8082 bazel run //authz/services/gateway:awzy-gateway
 ```
 
 ```json
@@ -480,8 +501,8 @@ where ClickHouse's `events` table picks them up (run the ClickHouse migrations f
 
 ```sh
 export AWZY_INTAKE_TOKEN=$(openssl rand -hex 24)
-AWZY_LISTEN_ADDR=127.0.0.1:8086 AWZY_KAFKA_BROKERS=localhost:9092 bazel run //authz/services/intake:awzy-intake
-curl -X POST http://127.0.0.1:8086/v1/events -H "authorization: Bearer $AWZY_INTAKE_TOKEN" \
+AWZY_LISTEN_ADDR=127.0.0.1:8085 AWZY_KAFKA_BROKERS=localhost:9092 bazel run //authz/services/intake:awzy-intake
+curl -X POST http://127.0.0.1:8085/v1/events -H "authorization: Bearer $AWZY_INTAKE_TOKEN" \
   -H 'content-type: application/json' -d '{"events": [{"at": "'"$(date -u +%FT%TZ)"'", "system": "jira",
   "subject": {"type": "Human", "id": "bob"}, "action": "read", "resource": {"type": "Ticket", "id": "ENG-1"}}]}'
 # {"accepted":1,"qids":["event_0199…"]}
@@ -517,7 +538,7 @@ free-form) to the corp portal every minute. Register the install in the corp por
 (`registerInstall`), which returns its install ID and a reporting token, then:
 
 ```sh
-AWZY_LISTEN_ADDR=127.0.0.1:8095 AWZY_INSTALL_ID=install_… AWZY_REPORTING_TOKEN=awzyrt_… \
+AWZY_LISTEN_ADDR=127.0.0.1:8089 AWZY_INSTALL_ID=install_… AWZY_REPORTING_TOKEN=awzyrt_… \
   AWZY_REPORTER_CORP_PORTAL_URL=http://127.0.0.1:8090 \
   AWZY_REPORTER_TARGETS=awzy-pdp=http://127.0.0.1:8082,awzy-policy=http://127.0.0.1:8081 \
   bazel run //authz/services/reporter:awzy-reporter            # add -- --print to see one without sending
