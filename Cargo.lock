@@ -861,6 +861,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "awzy-authz-proto",
+ "awzy-challenge",
  "awzy-identity",
  "awzy-model",
  "awzy-pdp",
@@ -874,11 +875,13 @@ dependencies = [
  "jsonwebtoken",
  "serde",
  "serde_json",
+ "sqlx",
  "thiserror 2.0.21",
  "tokio",
  "tonic",
  "tower",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

@@ -45,4 +45,6 @@ Integration tests: `bazel test --config=local-stack //authz/services/challenge:c
 Callers need a service token (ADR 0055) from the group a method belongs to: the PDPs resolve
 challenges and follow containments; only the client portal reads and answers challenges for a
 person, since `answered_by` and `decided_by` are taken as given; the portal and the backend
-contain and lift. The chart sets the groups (`AWZY_CHALLENGE_PDPS`, `_PEOPLE`, `_CONTAINERS`).
+contain and lift; MCP gateways follow containments for their outage fallback. The chart sets the
+groups (`AWZY_CHALLENGE_CONTAINERS`, `_GATEWAYS`, `_PDPS`, `_PEOPLE`); the gateway isn't in the
+chart yet, so `_GATEWAYS` is set wherever it's deployed.

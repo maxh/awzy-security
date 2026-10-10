@@ -318,7 +318,9 @@ AWZY_GATEWAY_CONFIG=gateway.json AWZY_GATEWAY_DEV_SECRET=dev-secret AWZY_PDP_ADD
 If the PDP can't be reached in enforce mode, the gateway replays only a recent allow, for tools
 listed by name in a fail-open tier; everything else fails closed, and `confidential` and
 `crown_jewels` always do ([ADR 0030](docs/adr/0030-gateway-outage-fallback.md)). Without `outage`
-nothing fails open.
+nothing fails open. With `AWZY_CHALLENGE_ADDR`, the gateway follows awzy-challenge's containments:
+it forgets a contained accessor's recent allows and never replays one for them, and until the first
+list arrives it replays nothing.
 
 Installs use `"rs256_public_key_file"` with the IdP's key instead of the HS256 dev secret.
 

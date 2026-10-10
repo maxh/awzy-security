@@ -5,6 +5,7 @@
 //! reverse proxy for HTTP APIs.
 
 mod config;
+pub mod containments;
 mod mcp;
 
 pub use awzy_identity::{ServiceAccountConfig, TokenConfig, TokenKey};
