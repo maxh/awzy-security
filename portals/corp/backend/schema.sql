@@ -10,7 +10,12 @@ CREATE TABLE public.heartbeat_samples (
     kafka_lag bigint,
     clickhouse_disk_used_percent double precision,
     services_healthy integer NOT NULL,
-    services_total integer NOT NULL
+    services_total integer NOT NULL,
+    containment_feed_age_seconds double precision,
+    policy_sync_age_seconds double precision,
+    principals_sync_age_seconds double precision,
+    connector_sync_age_seconds double precision,
+    gateway_pdp_unreachable bigint
 );
 
 CREATE TABLE public.install_versions (

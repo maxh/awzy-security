@@ -229,6 +229,12 @@ pub struct Sample {
     pub error_rate: Option<f64>,
     pub kafka_lag: Option<i64>,
     pub clickhouse_disk_used_percent: Option<f64>,
+    pub containment_feed_age_seconds: Option<f64>,
+    pub policy_sync_age_seconds: Option<f64>,
+    pub principals_sync_age_seconds: Option<f64>,
+    pub connector_sync_age_seconds: Option<f64>,
+    /// Summed over the bucket: every outage call counts.
+    pub gateway_pdp_unreachable: Option<i64>,
     /// Some heartbeat in the bucket had a service that wasn't fully ready.
     pub degraded: bool,
 }
@@ -357,8 +363,11 @@ impl FleetStore {
         let healthy = hb.services.iter().filter(|s| s.ready && s.replicas_ready >= s.replicas_desired).count();
         sqlx::query(
             "INSERT INTO heartbeat_samples (install_id, received_at, decisions_per_second, pdp_p99_ms, error_rate,
-                                            kafka_lag, clickhouse_disk_used_percent, services_healthy, services_total)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT DO NOTHING",
+                                            kafka_lag, clickhouse_disk_used_percent, services_healthy, services_total,
+                                            containment_feed_age_seconds, policy_sync_age_seconds,
+                                            principals_sync_age_seconds, connector_sync_age_seconds,
+                                            gateway_pdp_unreachable)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) ON CONFLICT DO NOTHING",
         )
         .bind(hb.install_id.uuid())
         .bind(received_at)
@@ -369,6 +378,11 @@ impl FleetStore {
         .bind(m.clickhouse_disk_used_percent)
         .bind(healthy as i32)
         .bind(hb.services.len() as i32)
+        .bind(m.containment_feed_age_seconds)
+        .bind(m.policy_sync_age_seconds)
+        .bind(m.principals_sync_age_seconds)
+        .bind(m.connector_sync_age_seconds)
+        .bind(m.gateway_pdp_unreachable.map(|n| i64::try_from(n).unwrap_or(i64::MAX)))
         .execute(&mut *tx)
         .await?;
         sqlx::query("DELETE FROM heartbeat_samples WHERE install_id = $1 AND received_at < $2")
@@ -400,6 +414,11 @@ impl FleetStore {
                     max(error_rate) AS error_rate,
                     max(kafka_lag) AS kafka_lag,
                     max(clickhouse_disk_used_percent) AS clickhouse_disk_used_percent,
+                    max(containment_feed_age_seconds) AS containment_feed_age_seconds,
+                    max(policy_sync_age_seconds) AS policy_sync_age_seconds,
+                    max(principals_sync_age_seconds) AS principals_sync_age_seconds,
+                    max(connector_sync_age_seconds) AS connector_sync_age_seconds,
+                    sum(gateway_pdp_unreachable)::BIGINT AS gateway_pdp_unreachable,
                     bool_or(services_healthy < services_total) AS degraded
              FROM heartbeat_samples
              WHERE install_id = $1 AND received_at > $2

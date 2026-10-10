@@ -51,6 +51,11 @@ function Charts({ id, span }: { id: string; span: Span }) {
               errorRate
               kafkaLag
               clickhouseDiskUsedPercent
+              containmentFeedAgeSeconds
+              policySyncAgeSeconds
+              principalsSyncAgeSeconds
+              connectorSyncAgeSeconds
+              gatewayPdpUnreachable
               degraded
             }
           }
@@ -82,6 +87,15 @@ function Charts({ id, span }: { id: string; span: Span }) {
   };
   const common = { from, to, maxGap: w.bucketMs * 1.5, formatTime, formatAxisTime };
   const degraded = samples.filter((s) => s.degraded).length;
+  // Freshness (ADR 0068): each card only when the install reports it, since not every install
+  // runs awzy-challenge, awzy-context, a connector, or awzy-gateway.
+  const freshness = [
+    { title: "Containment feed age", note: "worst PDP; target 2 s", pick: (s: Sample) => s.containmentFeedAgeSeconds },
+    { title: "Policy sync age", note: "worst PDP; target 60 s", pick: (s: Sample) => s.policySyncAgeSeconds },
+    { title: "Principals sync age", note: "worst PDP; target 60 s", pick: (s: Sample) => s.principalsSyncAgeSeconds },
+    { title: "Connector sync age", note: "stalest connector", pick: (s: Sample) => s.connectorSyncAgeSeconds },
+  ].filter((f) => samples.some((s) => f.pick(s) != null));
+  const outageCalls = samples.some((s) => s.gatewayPdpUnreachable != null);
 
   if (samples.length === 0) {
     return (
@@ -139,9 +153,33 @@ function Charts({ id, span }: { id: string; span: Span }) {
             {...common}
           />
         </ChartCard>
+        {freshness.map((f) => (
+          <ChartCard key={f.title} title={f.title} note={f.note}>
+            <LineChart label={f.title} points={series(f.pick)} format={seconds} {...common} />
+          </ChartCard>
+        ))}
+        {outageCalls && (
+          <ChartCard title="Gateway calls without the PDP" note="total per interval">
+            <LineChart
+              label="Tool calls awzy-gateway made while it couldn't reach awzy-pdp"
+              points={series((s) => s.gatewayPdpUnreachable)}
+              format={(v) => Math.round(v).toLocaleString()}
+              {...common}
+            />
+          </ChartCard>
+        )}
       </SimpleGrid>
     </Stack>
   );
+}
+
+type Sample = NonNullable<NonNullable<InstallChartsQuery["response"]["node"]>["metricHistory"]>[number];
+
+/** An age in seconds, in the largest unit that keeps it readable. */
+function seconds(v: number): string {
+  if (v < 60) return `${v.toFixed(v < 10 ? 1 : 0)} s`;
+  if (v < 3600) return `${Math.round(v / 60)} min`;
+  return `${(v / 3600).toFixed(1)} h`;
 }
 
 function ChartCard({ title, note, children }: { title: string; note: string; children: ReactNode }) {

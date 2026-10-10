@@ -5,12 +5,14 @@
 //! without sending it, and AWZY_REPORTER_ENABLED=false turns reporting off.
 //!
 //! In a cluster it reads the awzy workloads from the Kubernetes API (replicas, restarts, image
-//! digests) and scrapes each PDP pod's `/metrics` for decisions per second, p99, and error rate.
-//! Locally it probes each service's `/readyz`, `/version`, and the PDP's `/metrics` by URL.
+//! digests) and scrapes each PDP pod's `/metrics` for decisions per second, p99, and error rate,
+//! and the PDP, gateway, and connector pods' for freshness ([`freshness`]). Locally it probes each
+//! service's `/readyz` and `/version`, and those services' `/metrics`, by URL.
 //! ClickHouse disk use and Kafka lag come from its own read-only ClickHouse user and Kafka's
 //! offsets ([`data_metrics`], ADR 0042), when it's given them.
 
 pub mod data_metrics;
+mod freshness;
 pub mod kube;
 mod pdp_metrics;
 mod restarts;
@@ -45,7 +47,8 @@ pub fn http_client() -> HttpClient {
 pub enum Source {
     /// Each service's base URL, probed directly. For local runs.
     Probe(Vec<(Service, String)>),
-    /// The Kubernetes API, in these namespaces. PDP pods are scraped on `pdp_metrics_port`.
+    /// The Kubernetes API, in these namespaces. PDP, gateway, and connector pods are scraped on
+    /// `pdp_metrics_port`.
     Kubernetes { namespaces: Vec<String>, pdp_metrics_port: u16 },
 }
 
@@ -150,6 +153,7 @@ pub struct Reporter {
     client: HttpClient,
     kube: Option<kube::KubeApi>,
     pdp: pdp_metrics::Tracker,
+    freshness: freshness::Tracker,
     restarts: restarts::RestartTracker,
     data: data_metrics::DataSources,
 }
@@ -165,26 +169,40 @@ impl Reporter {
 
     fn with_kube(config: Config, kube: Option<kube::KubeApi>) -> Self {
         let data = data_metrics::DataSources::new(config.data.clone());
-        Self { config, client: http_client(), kube, pdp: Default::default(), restarts: Default::default(), data }
+        Self {
+            config,
+            client: http_client(),
+            kube,
+            pdp: Default::default(),
+            freshness: Default::default(),
+            restarts: Default::default(),
+            data,
+        }
     }
 
     /// One heartbeat, from what's running now. Metrics need two collections to compare, so the
     /// first heartbeat has none.
     pub async fn collect(&mut self) -> Heartbeat {
-        let (services, pdp_endpoints) = match (&self.config.source, &self.kube) {
+        let (services, endpoints) = match (&self.config.source, &self.kube) {
             (Source::Kubernetes { namespaces, pdp_metrics_port }, Some(kube)) => {
                 from_kubernetes(kube, &mut self.restarts, namespaces, *pdp_metrics_port).await
             }
-            (Source::Probe(targets), _) => (self.probe_all(targets).await, probe_pdp_endpoints(targets)),
+            (Source::Probe(targets), _) => (self.probe_all(targets).await, probe_metrics_endpoints(targets)),
             (Source::Kubernetes { .. }, None) => (vec![], vec![]),
         };
         let mut samples = HashMap::new();
-        for (key, url) in pdp_endpoints {
+        let mut scrapes = Vec::new();
+        for (service, key, url) in endpoints {
             if let Some((200, body)) = get(&self.client, &url).await {
-                samples.insert(key, pdp_metrics::parse(&String::from_utf8_lossy(&body)));
+                let text = String::from_utf8_lossy(&body);
+                if service == Service::Pdp {
+                    samples.insert(key.clone(), pdp_metrics::parse(&text));
+                }
+                scrapes.push((key, freshness::parse(&text)));
             }
         }
         let rates = self.pdp.update(samples, std::time::Instant::now());
+        let fresh = self.freshness.update(&scrapes);
         let data = self.data.collect().await;
         Heartbeat {
             schema_version: SCHEMA_VERSION,
@@ -198,6 +216,11 @@ impl Reporter {
                 error_rate: rates.and_then(|r| r.error_rate),
                 kafka_lag: data.kafka_lag,
                 clickhouse_disk_used_percent: data.clickhouse_disk_used_percent,
+                containment_feed_age_seconds: fresh.containment_feed_age,
+                policy_sync_age_seconds: fresh.policy_sync_age,
+                principals_sync_age_seconds: fresh.principals_sync_age,
+                connector_sync_age_seconds: fresh.connector_sync_age,
+                gateway_pdp_unreachable: fresh.gateway_unreachable,
             },
         }
     }
@@ -235,13 +258,17 @@ impl Reporter {
     }
 }
 
-/// The awzy workloads in `namespaces`, and the PDP pods to scrape (pod UID, metrics URL).
+/// Whose `/metrics` the heartbeat reads: the PDPs for throughput and latency, and these three for
+/// freshness.
+const SCRAPED: [Service; 3] = [Service::Pdp, Service::Gateway, Service::Connectors];
+
+/// The awzy workloads in `namespaces`, and the pods to scrape (service, pod UID, metrics URL).
 async fn from_kubernetes(
     kube: &kube::KubeApi,
     restart_tracker: &mut restarts::RestartTracker,
     namespaces: &[String],
     port: u16,
-) -> (Vec<ServiceStatus>, Vec<(String, String)>) {
+) -> (Vec<ServiceStatus>, Vec<(Service, String, String)>) {
     let mut workloads = Vec::new();
     let mut pods = Vec::new();
     for ns in namespaces {
@@ -275,19 +302,22 @@ async fn from_kubernetes(
             ready: w.ready > 0,
         });
     }
-    let pdp = pods
+    let endpoints = pods
         .iter()
-        .filter(|p| p.workload == Service::Pdp.as_str() && p.ready)
-        .filter_map(|p| p.ip.as_ref().map(|ip| (p.uid.clone(), format!("http://{}:{port}/metrics", bracket(ip)))))
+        .filter(|p| p.ready)
+        .filter_map(|p| Some((SCRAPED.into_iter().find(|s| s.as_str() == p.workload)?, p)))
+        .filter_map(|(s, p)| {
+            p.ip.as_ref().map(|ip| (s, p.uid.clone(), format!("http://{}:{port}/metrics", bracket(ip))))
+        })
         .collect();
-    (services, pdp)
+    (services, endpoints)
 }
 
-fn probe_pdp_endpoints(targets: &[(Service, String)]) -> Vec<(String, String)> {
+fn probe_metrics_endpoints(targets: &[(Service, String)]) -> Vec<(Service, String, String)> {
     targets
         .iter()
-        .filter(|(s, _)| *s == Service::Pdp)
-        .map(|(_, base)| (base.clone(), format!("{base}/metrics")))
+        .filter(|(s, _)| SCRAPED.contains(s))
+        .map(|(s, base)| (*s, base.clone(), format!("{base}/metrics")))
         .collect()
 }
 

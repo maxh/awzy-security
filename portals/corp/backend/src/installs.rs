@@ -104,6 +104,16 @@ pub struct MetricSample {
     pub kafka_lag: Option<i64>,
     /// 0 to 100.
     pub clickhouse_disk_used_percent: Option<f64>,
+    /// Seconds since the worst PDP's containment feed was heard from (target: 2 s).
+    pub containment_feed_age_seconds: Option<f64>,
+    /// Seconds since the worst PDP synced policy (target: a published bundle live within 60 s).
+    pub policy_sync_age_seconds: Option<f64>,
+    /// Seconds since the worst PDP synced principals (target: 60 s).
+    pub principals_sync_age_seconds: Option<f64>,
+    /// Seconds since the stalest connector synced.
+    pub connector_sync_age_seconds: Option<f64>,
+    /// Tool calls awzy-gateway made without its PDP in the bucket.
+    pub gateway_pdp_unreachable: Option<i64>,
     /// Some heartbeat in the bucket had a service that wasn't fully ready.
     pub degraded: bool,
 }
@@ -171,6 +181,11 @@ impl Install {
             error_rate: m.error_rate,
             kafka_lag: m.kafka_lag,
             clickhouse_disk_used_percent: m.clickhouse_disk_used_percent,
+            containment_feed_age_seconds: m.containment_feed_age_seconds,
+            policy_sync_age_seconds: m.policy_sync_age_seconds,
+            principals_sync_age_seconds: m.principals_sync_age_seconds,
+            connector_sync_age_seconds: m.connector_sync_age_seconds,
+            gateway_pdp_unreachable: m.gateway_pdp_unreachable,
         })
     }
 
@@ -187,6 +202,11 @@ impl Install {
                 error_rate: s.error_rate,
                 kafka_lag: s.kafka_lag,
                 clickhouse_disk_used_percent: s.clickhouse_disk_used_percent,
+                containment_feed_age_seconds: s.containment_feed_age_seconds,
+                policy_sync_age_seconds: s.policy_sync_age_seconds,
+                principals_sync_age_seconds: s.principals_sync_age_seconds,
+                connector_sync_age_seconds: s.connector_sync_age_seconds,
+                gateway_pdp_unreachable: s.gateway_pdp_unreachable,
                 degraded: s.degraded,
             })
             .collect())
@@ -267,6 +287,12 @@ pub struct InstallMetrics {
     pub kafka_lag: Option<u64>,
     /// 0 to 100.
     pub clickhouse_disk_used_percent: Option<f64>,
+    pub containment_feed_age_seconds: Option<f64>,
+    pub policy_sync_age_seconds: Option<f64>,
+    pub principals_sync_age_seconds: Option<f64>,
+    pub connector_sync_age_seconds: Option<f64>,
+    /// Since the previous heartbeat.
+    pub gateway_pdp_unreachable: Option<u64>,
 }
 
 #[derive(SimpleObject)]

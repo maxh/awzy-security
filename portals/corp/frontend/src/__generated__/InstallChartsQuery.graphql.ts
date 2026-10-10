@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<a77ccb3558f37061c7e2e6304f382cfd>>
+ * @generated SignedSource<<454faf0198df3e984f0268818e16e739>>
  * @lightSyntaxTransform
  */
 
@@ -18,11 +18,16 @@ export type InstallChartsQuery$data = {
     readonly metricHistory?: ReadonlyArray<{
       readonly at: string;
       readonly clickhouseDiskUsedPercent: number | null | undefined;
+      readonly connectorSyncAgeSeconds: number | null | undefined;
+      readonly containmentFeedAgeSeconds: number | null | undefined;
       readonly decisionsPerSecond: number | null | undefined;
       readonly degraded: boolean;
       readonly errorRate: number | null | undefined;
+      readonly gatewayPdpUnreachable: number | null | undefined;
       readonly kafkaLag: number | null | undefined;
       readonly pdpP99Ms: number | null | undefined;
+      readonly policySyncAgeSeconds: number | null | undefined;
+      readonly principalsSyncAgeSeconds: number | null | undefined;
     }>;
   } | null | undefined;
 };
@@ -114,6 +119,41 @@ v2 = {
           "alias": null,
           "args": null,
           "kind": "ScalarField",
+          "name": "containmentFeedAgeSeconds",
+          "storageKey": null
+        },
+        {
+          "alias": null,
+          "args": null,
+          "kind": "ScalarField",
+          "name": "policySyncAgeSeconds",
+          "storageKey": null
+        },
+        {
+          "alias": null,
+          "args": null,
+          "kind": "ScalarField",
+          "name": "principalsSyncAgeSeconds",
+          "storageKey": null
+        },
+        {
+          "alias": null,
+          "args": null,
+          "kind": "ScalarField",
+          "name": "connectorSyncAgeSeconds",
+          "storageKey": null
+        },
+        {
+          "alias": null,
+          "args": null,
+          "kind": "ScalarField",
+          "name": "gatewayPdpUnreachable",
+          "storageKey": null
+        },
+        {
+          "alias": null,
+          "args": null,
+          "kind": "ScalarField",
           "name": "degraded",
           "storageKey": null
         }
@@ -182,16 +222,16 @@ return {
     ]
   },
   "params": {
-    "cacheID": "17debe259b5b5317966791b19aa289b5",
+    "cacheID": "2b21e90d7cc221025f1e7c14a2d32732",
     "id": null,
     "metadata": {},
     "name": "InstallChartsQuery",
     "operationKind": "query",
-    "text": "query InstallChartsQuery(\n  $id: ID!\n  $window: MetricWindow!\n) {\n  node(id: $id) {\n    __typename\n    ... on Install {\n      metricHistory(window: $window) {\n        at\n        decisionsPerSecond\n        pdpP99Ms\n        errorRate\n        kafkaLag\n        clickhouseDiskUsedPercent\n        degraded\n      }\n    }\n    id\n  }\n}\n"
+    "text": "query InstallChartsQuery(\n  $id: ID!\n  $window: MetricWindow!\n) {\n  node(id: $id) {\n    __typename\n    ... on Install {\n      metricHistory(window: $window) {\n        at\n        decisionsPerSecond\n        pdpP99Ms\n        errorRate\n        kafkaLag\n        clickhouseDiskUsedPercent\n        containmentFeedAgeSeconds\n        policySyncAgeSeconds\n        principalsSyncAgeSeconds\n        connectorSyncAgeSeconds\n        gatewayPdpUnreachable\n        degraded\n      }\n    }\n    id\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "0b44f29266cba336ed5dacd445afd259";
+(node as any).hash = "666c6567d7831dbcd77ab8dd6d19247b";
 
 export default node;
