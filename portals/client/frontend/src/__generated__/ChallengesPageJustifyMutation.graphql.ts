@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<5317c435692984892f88ac78d75d5fdf>>
+ * @generated SignedSource<<6b028902e94eb1d13fc81c24636aa0ad>>
  * @lightSyntaxTransform
  */
 
@@ -20,7 +20,9 @@ export type ChallengesPageJustifyMutation$variables = {
 export type ChallengesPageJustifyMutation$data = {
   readonly justifyChallenge: {
     readonly challenge: {
+      readonly grantExpiresAt: string | null | undefined;
       readonly id: string;
+      readonly kinds: ReadonlyArray<ChallengeKind>;
       readonly passed: ReadonlyArray<ChallengeKind>;
       readonly status: ChallengeStatus;
     };
@@ -80,7 +82,21 @@ v1 = [
             "alias": null,
             "args": null,
             "kind": "ScalarField",
+            "name": "kinds",
+            "storageKey": null
+          },
+          {
+            "alias": null,
+            "args": null,
+            "kind": "ScalarField",
             "name": "passed",
+            "storageKey": null
+          },
+          {
+            "alias": null,
+            "args": null,
+            "kind": "ScalarField",
+            "name": "grantExpiresAt",
             "storageKey": null
           }
         ],
@@ -108,16 +124,16 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "48760f5ec542492fa7fe74e4bb1836ed",
+    "cacheID": "5517194588ccf16e2604ede52b525eb9",
     "id": null,
     "metadata": {},
     "name": "ChallengesPageJustifyMutation",
     "operationKind": "mutation",
-    "text": "mutation ChallengesPageJustifyMutation(\n  $input: JustifyChallengeInput!\n) {\n  justifyChallenge(input: $input) {\n    challenge {\n      id\n      status\n      passed\n    }\n  }\n}\n"
+    "text": "mutation ChallengesPageJustifyMutation(\n  $input: JustifyChallengeInput!\n) {\n  justifyChallenge(input: $input) {\n    challenge {\n      id\n      status\n      kinds\n      passed\n      grantExpiresAt\n    }\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "f63bde83c44089c80c4057e00936e6f6";
+(node as any).hash = "07b7c82b20ce42e052dbae23e426eb2b";
 
 export default node;
