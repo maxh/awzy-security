@@ -2,8 +2,10 @@
 # Deploys the corp portal release (ADR 0053) to the corp portal and the registry proxy on ECS
 # (deploy/terraform/corp/corp-portal). Runs in CI after publish-images.sh, as awzy-ci-deploy.
 #
-# For each service: copy its running task definition with only the image changed, register it,
-# point the service at it, then wait for the service to settle. ECS's deployment circuit
+# For each service: copy its task definition template (the revision Terraform registered, named
+# in SSM by deploy-templates.tf) with the image set, register it, point the service at it, then
+# wait for the service to settle. So Terraform's changes to a task definition reach the service
+# with the next deploy. ECS's deployment circuit
 # breaker rolls a failing deploy back; that shows up here as the old revision still running.
 #
 # CI runs for commits on main finish in any order, so a commit older than the one deployed is
@@ -33,7 +35,10 @@ declare -A wanted
 for entry in "${SERVICES[@]}"; do
   IFS=: read -r service container repo <<< "$entry"
   current=$(aws ecs describe-services --cluster "$CLUSTER" --services "$service" --query 'services[0].taskDefinition' --output text)
-  aws ecs describe-task-definition --task-definition "$current" --query taskDefinition --output json > /tmp/td.json
+  # The template; the running revision until Terraform has published one.
+  template=$(aws ssm get-parameter --name "/awzy-corp-portal/task-definition-template/$service" \
+    --query Parameter.Value --output text 2>/dev/null || echo "$current")
+  aws ecs describe-task-definition --task-definition "$template" --query taskDefinition --output json > /tmp/td.json
   python3 - "$container" "$AWZY_CORP_PORTAL_RELEASE_REGISTRY/$repo:$AWZY_CORP_PORTAL_RELEASE_TAG" <<'PY'
 import json, sys
 container, image = sys.argv[1], sys.argv[2]
@@ -57,7 +62,7 @@ json.dump(td, open("/tmp/td.json", "w"))
 PY
   new=$(aws ecs register-task-definition --cli-input-json file:///tmp/td.json --query 'taskDefinition.taskDefinitionArn' --output text)
   aws ecs update-service --cluster "$CLUSTER" --service "$service" --task-definition "$new" --query 'service.serviceName' --output text > /dev/null
-  echo "$service: $current -> $new"
+  echo "$service: $current -> $new (from ${template##*/})"
   wanted[$service]=$new
 done
 

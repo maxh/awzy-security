@@ -46,6 +46,11 @@ data "aws_iam_policy_document" "ci_deploy" {
       "arn:aws:ecs:${var.region}:${var.build_account_id}:service/${aws_ecs_cluster.corp.name}/awzy-registry",
     ]
   }
+  # Which revision to deploy from (deploy-templates.tf).
+  statement {
+    actions   = ["ssm:GetParameter"]
+    resources = ["arn:aws:ssm:${var.region}:${var.build_account_id}:parameter/awzy-corp-portal/task-definition-template/*"]
+  }
   # The new revisions keep the roles they had.
   statement {
     actions   = ["iam:PassRole"]
