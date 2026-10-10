@@ -239,6 +239,20 @@ Principals are `Human` and `ServiceAccount` (any non-human identity, including A
 The same port serves gRPC (`awzy.authz.v1.Authorizer/Check`, defined in `authz/libs/proto/awzy/authz/v1/authz.proto`),
 which is what enforcement points use. Rust bindings come from `//authz/libs/proto` (protox + tonic, no `protoc`).
 
+### Freshness (how fast changes reach decisions)
+
+`pdp_freshness` measures the platform plan's freshness targets against running services, under
+load. It needs a PDP configured with awzy-policy, awzy-challenge, and awzy-context, and their
+addresses. Use it on local stacks and test installs only: it publishes a bundle with probe policies
+(restoring the original at the end), provisions a probe person and group over SCIM, contains and
+lifts the probe, and relabels a probe document.
+
+```sh
+AWZY_PDP_ADDR=http://127.0.0.1:8082 AWZY_POLICY_ADDR=http://127.0.0.1:8081 \
+  AWZY_CHALLENGE_ADDR=http://127.0.0.1:8083 AWZY_CONTEXT_URL=http://127.0.0.1:8084 AWZY_SCIM_TOKEN=... \
+  bazel run -c opt //authz/services/pdp:pdp_freshness -- 5 16   # rounds, background clients
+```
+
 ### Policy bundles
 
 awzy-policy runs against the [local stack](#local-stack). Signed policy bundles are optional
