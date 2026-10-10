@@ -1,0 +1,31 @@
+name: repin-prs
+
+# After each push to main, re-pins open pull requests whose only conflict with main is in
+# crate_universe's lockfiles, and flags the ones that need a hand rebase (tools/ci/repin-prs.sh).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One at a time: two runs pushing to the same branch would race.
+concurrency:
+  group: repin-prs
+  cancel-in-progress: false
+
+jobs:
+  repin:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the re-pinned merge to the PR's branch
+      pull-requests: write # comment when a hand rebase is needed
+      actions: write # start the PR's CI, which the workflow token's push doesn't
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-bazel
+        with:
+          buildbuddy-api-key: ${{ secrets.AWZY_CORP_BUILDBUDDY_API_KEY }}
+      - run: tools/ci/repin-prs.sh
+        env:
+          GH_TOKEN: ${{ github.token }}

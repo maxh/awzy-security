@@ -1,12 +1,19 @@
 #!/bin/sh
-# Run by the post-rewrite and post-merge hooks. If tools/git-merge-lockfile resolved a lockfile
-# conflict, re-pin crate_universe's lockfiles from every Cargo.toml and commit them, so the
-# branch builds without a hand merge. Loads BUILD files only; nothing is built.
+# Re-pins crate_universe's lockfiles (Cargo.lock, MODULE.bazel.lock) after tools/git-merge-lockfile
+# resolved a conflict in them, so the branch builds without a hand merge. Loads BUILD files only;
+# nothing is built.
+#
+#   repin-if-needed           run by the post-rewrite and post-merge hooks: re-pin and commit
+#   repin-if-needed --stage   run by the pre-commit hook, when a merge stopped on another conflict
+#                             and is being committed by hand: re-pin and add the lockfiles to it
+#
+# The marker stays until the lockfiles are re-pinned and committed, so a failure here is reported
+# and caught again by the next commit.
 set -eu
 marker="$(git rev-parse --git-dir)/awzy-repin-needed"
 [ -f "$marker" ] || exit 0
-rm -f "$marker"
 cd "$(git rev-parse --show-toplevel)"
+
 bazel=$(command -v bazel || command -v bazelisk || true)
 if [ -z "$bazel" ]; then
   echo "repin: a lockfile conflict was resolved, but bazel isn't on PATH to re-pin. Run:" >&2
@@ -15,9 +22,26 @@ if [ -z "$bazel" ]; then
 fi
 echo "repin: re-pinning crates after a lockfile conflict..." >&2
 CARGO_BAZEL_REPIN=1 "$bazel" query --noshow_progress --ui_event_filters=-info,-warning //... >/dev/null
-if git diff --quiet -- Cargo.lock MODULE.bazel.lock; then
+
+if [ "${1:-}" = "--stage" ]; then
+  git add Cargo.lock MODULE.bazel.lock
+  rm -f "$marker"
+  echo "repin: added the re-pinned lockfiles to this commit." >&2
+  exit 0
+fi
+
+if git diff --quiet -- Cargo.lock MODULE.bazel.lock && git diff --cached --quiet -- Cargo.lock MODULE.bazel.lock; then
+  rm -f "$marker"
   echo "repin: the lockfiles were already current." >&2
-else
-  git commit -q -m "Re-pin crates after merging lockfiles" -- Cargo.lock MODULE.bazel.lock
+  exit 0
+fi
+# A whole commit of what's staged, not a partial one (`git commit -- <paths>`), which git
+# refuses in some merge states.
+git add Cargo.lock MODULE.bazel.lock
+if AWZY_REPINNED=1 git commit -q -m "Re-pin crates after merging lockfiles"; then
+  rm -f "$marker"
   echo "repin: committed the re-pinned lockfiles." >&2
+else
+  echo "repin: re-pinned, but couldn't commit the lockfiles (above). They're staged; commit them," >&2
+  echo "  or the next commit will re-pin and include them." >&2
 fi

@@ -118,6 +118,14 @@ frontend (`AWZY_PORTAL_STATIC_DIR`) next to `/graphql`, and the portal image shi
 
 - Rust crates: declare them once in the root `Cargo.toml` `[workspace.dependencies]`, then
   `CARGO_BAZEL_REPIN=1 bazel test //...` to update `Cargo.lock` and `MODULE.bazel.lock`.
+- Lockfile conflicts: `MODULE.bazel.lock` records a hash of every `Cargo.toml`, so any two
+  branches that change a crate's dependencies conflict there. Nobody merges them by hand:
+  - Locally, the merge driver keeps one side and the hooks re-pin and commit after a rebase or
+    merge. If it stopped on another conflict, the commit that resolves it re-pins and includes
+    the lockfiles (`tools/git-hooks`, installed by `pnpm install`).
+  - On GitHub, after each push to main, `repin-prs` re-pins every open PR whose only conflict is
+    the lockfiles, pushes the result, and starts its CI; a PR with other conflicts gets a comment
+    asking for a rebase.
 - npm packages: `pnpm install` updates `pnpm-lock.yaml`. pnpm runs with `hoist=false`, so every
   package declares every dependency it imports.
 - IDE: `bazel run @rules_rust//tools/rust_analyzer:gen_rust_project`.
