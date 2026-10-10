@@ -52,7 +52,7 @@ pub fn with_readiness(app: Router, ready: Readiness) -> Router {
 }
 
 /// Serves `app` on `AWZY_LISTEN_ADDR` (default `0.0.0.0:8080`) until SIGTERM or Ctrl-C, with the
-/// health routes and `/metrics` (ADR 0066).
+/// health routes and `/metrics` (ADR 0068).
 pub async fn serve(service: &'static str, app: Router) -> anyhow::Result<()> {
     serve_with_readiness(service, app, Arc::new(|| true)).await
 }

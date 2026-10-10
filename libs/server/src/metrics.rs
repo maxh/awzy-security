@@ -1,4 +1,4 @@
-//! Prometheus metrics at `/metrics` on every service's port (ADR 0066).
+//! Prometheus metrics at `/metrics` on every service's port (ADR 0068).
 //!
 //! Every service gets requests by route, method, and status class, with a latency histogram, and
 //! `awzy_build_info`. A service adds its own metrics as a [`Source`]. Labels are bounded sets,

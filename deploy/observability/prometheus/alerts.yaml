@@ -1,4 +1,4 @@
-# Alerts for whoever runs an install (ADR 0066). They encode the platform plan's targets; the
+# Alerts for whoever runs an install (ADR 0068). They encode the platform plan's targets; the
 # local stack loads them into Prometheus, and the AWS monitoring module ships the same file.
 groups:
   - name: awzy

@@ -1,4 +1,4 @@
-//! The PDP's own metrics at `/metrics`, next to every service's baseline (ADR 0066): decisions by
+//! The PDP's own metrics at `/metrics`, next to every service's baseline (ADR 0068): decisions by
 //! verdict, failed checks, and check latency.
 //!
 //! awzy-reporter scrapes them for the install's heartbeat (decisions per second, p99, error rate;

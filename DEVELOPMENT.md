@@ -555,7 +555,7 @@ In a cluster the Helm chart runs the reporter (`reporter.installId`, and the rep
 namespace and scrapes the PDPs' `/metrics`. Its ClickHouse password is the
 `awzy-clickhouse-reporter` Secret that bootstrap makes. `reporter.enabled=false` deploys nothing.
 
-### Metrics and dashboards (ADR 0066)
+### Metrics and dashboards (ADR 0068)
 
 Every service serves Prometheus metrics at `/metrics` on its own port: requests by route with
 latency, readiness, its release, and its own numbers (the PDP's checks by verdict and latency).

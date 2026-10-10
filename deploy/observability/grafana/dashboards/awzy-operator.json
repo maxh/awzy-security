@@ -1,7 +1,7 @@
 {
   "uid": "awzy-operator",
   "title": "awzy: operator",
-  "description": "How an install is doing (ADR 0066).",
+  "description": "How an install is doing (ADR 0068).",
   "tags": [
     "awzy"
   ],

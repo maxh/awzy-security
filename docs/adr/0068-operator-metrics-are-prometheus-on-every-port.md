@@ -1,4 +1,4 @@
-# 0066. Operator metrics are Prometheus text on every service's port; dashboards and alerts live in the repo
+# 0068. Operator metrics are Prometheus text on every service's port; dashboards and alerts live in the repo
 
 - Status: Accepted
 - Date: 2026-10-10

@@ -1,6 +1,6 @@
 # deploy/observability
 
-The operator view of an install (ADR 0066): what whoever runs it watches. Every awzy service
+The operator view of an install (ADR 0068): what whoever runs it watches. Every awzy service
 serves Prometheus metrics at `/metrics` on its own port; these files are what reads them.
 
 - `grafana/dashboards/`: Grafana dashboards as JSON. `awzy-operator.json` covers readiness,

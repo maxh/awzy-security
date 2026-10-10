@@ -68,7 +68,7 @@ services:
       interval: 2s
       retries: 30
 
-  # Operator view (ADR 0066), only with `--profile observability`: Prometheus on :9091 with the
+  # Operator view (ADR 0068), only with `--profile observability`: Prometheus on :9091 with the
   # alert rules, Grafana on :3000 (no sign-in) with the dashboards.
   prometheus:
     image: prom/prometheus:v3.5.0

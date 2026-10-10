@@ -523,7 +523,7 @@ pub struct EvaluationRequest {
 ///
 /// Deciding needs a service token from any workload in the cluster (ADR 0055): enforcement points
 /// run anywhere, and the policies decide what they may do. `/metrics` comes from awzy-server, open
-/// for the reporter (ADR 0066).
+/// for the reporter (ADR 0068).
 pub fn router(state: AppState) -> Router {
     let guard =
         awzy_service_auth::Guard::new(state.service_auth.clone(), awzy_service_auth::Allowed::AnyServiceAccount);
