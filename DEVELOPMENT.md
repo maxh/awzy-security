@@ -330,6 +330,13 @@ AWZY_GATEWAY_URL=http://127.0.0.1:8086 AWZY_GATEWAY_DEV_SECRET=dev-secret \
 The driver signs each call's token with the gateway's dev secret (issuer `https://idp.local`,
 audience `awzy-gateway`; override with `AWZY_TOKEN_ISSUER` and `AWZY_TOKEN_AUDIENCE`).
 
+For baselines, send a backdated month of the same activity to awzy-intake (demo plan step 5c):
+
+```sh
+AWZY_INTAKE_URL=http://127.0.0.1:8085 AWZY_INTAKE_TOKEN=... \
+  bazel run //authz/jobs/synthetic:awzy-synthetic -- history --days 30
+```
+
 ### Signing in locally
 
 The client portal needs an IdP. `tools/dev-idp` is a development-only OIDC provider with a

@@ -22,8 +22,12 @@ Generates Larkspur Capital, the synthetic company in the [demo plan](../../../do
   mostly their work's and their team's documents, with agents acting for their owners and a
   little noise, made as tool calls on larkspur-drive through awzy-gateway, so each is a real
   decision. Each access records why it was generated, to score detection against later.
+- **History** (demo plan step 5c, `awzy-synthetic history --days 30`): the same seeded days,
+  placed on the workdays before today and sent to awzy-intake as app events from
+  `larkspur-drive`, so baselines have a month to learn from. Why each access was generated
+  isn't sent; it's regenerated from the seed to score detection.
 - The same seed always gives the same company; running it again replaces rather than duplicates.
 - Demo installs run it as a Job after each sync (`demoData.enabled`); never on a real install.
 
-A month of history for baselines comes next (step 5c). Running it locally:
+ Running it locally:
 [DEVELOPMENT.md](../../../DEVELOPMENT.md#the-synthetic-company-adr-0039).

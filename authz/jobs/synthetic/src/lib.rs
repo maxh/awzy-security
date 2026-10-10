@@ -10,6 +10,7 @@
 pub mod activity;
 pub mod drive;
 pub mod driver;
+pub mod history;
 mod names;
 pub mod org;
 pub mod push;

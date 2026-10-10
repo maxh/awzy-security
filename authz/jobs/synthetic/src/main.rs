@@ -1,6 +1,7 @@
 //! awzy-synthetic directory|world|all [--profile demo|scale] [--seed N] [--print]
 //! awzy-synthetic drive
 //! awzy-synthetic activity [--profile demo|scale] [--seed N] [--days N] [--rate N]
+//! awzy-synthetic history [--profile demo|scale] [--seed N] [--days N]
 //!
 //! `directory` sends the synthetic company's people, groups, and service accounts to awzy-context
 //! at AWZY_CONTEXT_URL (default http://127.0.0.1:8084) with the SCIM token in AWZY_SCIM_TOKEN.
@@ -11,6 +12,8 @@
 //! `activity` makes the company's everyday tool calls on larkspur-drive through the gateway at
 //! AWZY_GATEWAY_URL, `--rate` per second (default 5) for `--days` generated days (default 1),
 //! with tokens signed by the gateway's development secret in AWZY_GATEWAY_DEV_SECRET.
+//! `history` sends the `--days` workdays before today (default 30) to awzy-intake at
+//! AWZY_INTAKE_URL as app events, with its shippers' token in AWZY_INTAKE_TOKEN (demo plan 5c).
 
 use anyhow::{bail, Context};
 use awzy_synthetic::{
@@ -20,7 +23,8 @@ use awzy_synthetic::{
 
 const USAGE: &str =
     "usage: awzy-synthetic directory|world|all [--profile demo|scale] [--seed N] [--print] | awzy-synthetic drive \
-     | awzy-synthetic activity [--profile demo|scale] [--seed N] [--days N] [--rate N]";
+     | awzy-synthetic activity [--profile demo|scale] [--seed N] [--days N] [--rate N] \
+     | awzy-synthetic history [--profile demo|scale] [--seed N] [--days N]";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -38,6 +42,7 @@ async fn main() -> anyhow::Result<()> {
     }
     let (directory, world) = match command {
         "activity" => return activity(&args).await,
+        "history" => return history(&args).await,
         "directory" => (true, false),
         "world" => (false, true),
         "all" => (true, true),
@@ -117,5 +122,27 @@ async fn activity(args: &[String]) -> anyhow::Result<()> {
         }
     }
     tracing::info!(calls = id, ?tally, "activity done");
+    Ok(())
+}
+
+/// Sends a backdated month of activity to awzy-intake, a day at a time (demo plan step 5c).
+async fn history(args: &[String]) -> anyhow::Result<()> {
+    use awzy_synthetic::history::{self, Intake};
+    let flag = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
+    let profile_name = flag("--profile").unwrap_or_else(|| "demo".into());
+    let profile = Profile::parse(&profile_name).with_context(|| format!("unknown profile {profile_name:?}"))?;
+    let seed: u64 = flag("--seed").map(|s| s.parse()).transpose()?.unwrap_or(1);
+    let days: usize = flag("--days").map(|s| s.parse()).transpose()?.unwrap_or(30);
+    let url = std::env::var("AWZY_INTAKE_URL").context("AWZY_INTAKE_URL is not set")?;
+    let token = std::env::var("AWZY_INTAKE_TOKEN").context("AWZY_INTAKE_TOKEN is not set")?;
+    let intake = Intake::new(&url, &token);
+    let company = generate(profile, seed);
+    let today = chrono::Utc::now().date_naive();
+    let mut total = 0;
+    for (i, events) in history::days(&company, profile, today, days).enumerate() {
+        total += intake.send(&events).await?;
+        tracing::info!(day = i + 1, of = days, events = events.len(), total, "history sent");
+    }
+    tracing::info!(total, days, "history done");
     Ok(())
 }
