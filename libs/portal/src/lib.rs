@@ -61,8 +61,9 @@ async fn cache_policy(mut req: Request, next: Next) -> Response {
         req.headers_mut().remove(header::IF_MODIFIED_SINCE);
     }
     let mut res = next.run(req).await;
+    let found = res.status().is_success();
     let headers = res.headers_mut();
-    if hashed && res.status().is_success() {
+    if hashed && found {
         headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=31536000, immutable"));
     } else {
         headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
