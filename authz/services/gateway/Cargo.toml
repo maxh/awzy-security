@@ -26,6 +26,9 @@ tonic.workspace = true
 awzy-service-auth.workspace = true
 
 [dev-dependencies]
+awzy-challenge.workspace = true
 jsonwebtoken.workspace = true
+sqlx.workspace = true
+uuid.workspace = true
 awzy-pdp.workspace = true
 tower.workspace = true

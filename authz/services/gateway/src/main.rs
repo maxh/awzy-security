@@ -1,5 +1,10 @@
+use std::sync::Arc;
+
 use anyhow::Context;
-use awzy_authz_proto::authz::v1::authorizer_client::AuthorizerClient;
+use awzy_authz_proto::{
+    authz::v1::authorizer_client::AuthorizerClient, challenge::v1::challenge_service_client::ChallengeServiceClient,
+};
+use awzy_gateway::containments::{self, Containments};
 use tonic::transport::Channel;
 
 #[tokio::main]
@@ -15,6 +20,24 @@ async fn main() -> anyhow::Result<()> {
         Channel::from_shared(pdp_addr)?.connect_lazy(),
         "awzy-pdp",
     ));
-    let state = awzy_gateway::GatewayState::new(config, pdp)?;
+    // Containments from awzy-challenge, so a PDP outage never replays an allow for a contained
+    // accessor (ADR 0030). Without it, outages replay as before.
+    let state = match std::env::var("AWZY_CHALLENGE_ADDR") {
+        Ok(addr) => {
+            let containments = Arc::new(Containments::awaiting_feed());
+            let state = awzy_gateway::GatewayState::with_containments(config, pdp, containments.clone())?;
+            let challenge = ChallengeServiceClient::new(awzy_service_auth::grpc_channel(
+                Channel::from_shared(addr)?.connect_lazy(),
+                "awzy-challenge",
+            ));
+            let forgetting = state.clone();
+            tokio::spawn(containments::follow(containments, challenge, move |set| forgetting.forget_allows(set)));
+            state
+        }
+        Err(_) => {
+            tracing::warn!("AWZY_CHALLENGE_ADDR is not set; a PDP outage replays allows without checking containments");
+            awzy_gateway::GatewayState::new(config, pdp)?
+        }
+    };
     awzy_server::serve("awzy-gateway", awzy_gateway::router(state)).await
 }

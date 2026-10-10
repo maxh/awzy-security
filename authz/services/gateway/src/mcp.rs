@@ -38,7 +38,10 @@ use serde_json::{json, Value};
 
 use awzy_identity::{Accessor, IdentityError, Verifier};
 
-use crate::{GatewayConfig, UpstreamConfig};
+use crate::{
+    containments::{Containments, Replay},
+    GatewayConfig, UpstreamConfig,
+};
 
 const MAX_BODY: usize = 4 * 1024 * 1024;
 const REQUEST_HEADERS: &[&str] = &["content-type", "accept", "mcp-session-id", "mcp-protocol-version", "last-event-id"];
@@ -57,6 +60,8 @@ struct Inner {
     last_seen_monitor: AtomicBool,
     /// When the PDP last allowed each (caller, tool), for replaying during an outage.
     allows: AllowCache,
+    /// Who is contained, so an outage never replays an allow for them (ADR 0030).
+    containments: Arc<Containments>,
 }
 
 /// Recent allows, keyed by everything that identified the call: subject, the person it acted
@@ -91,10 +96,33 @@ impl AllowCache {
         let entries = self.entries.lock().expect("allow cache lock");
         entries.get(key).map(|at| at.elapsed()).filter(|age| *age < self.ttl)
     }
+
+    /// Drops every allow for a call by, or for, one of `contained` (`Type::id`).
+    fn forget(&self, contained: &std::collections::HashSet<String>) {
+        if contained.is_empty() {
+            return;
+        }
+        let mut entries = self.entries.lock().expect("allow cache lock");
+        entries.retain(|key, _| {
+            let mut parts = key.splitn(3, '|');
+            let (subject, person) = (parts.next().unwrap_or_default(), parts.next().unwrap_or_default());
+            !contained.contains(subject) && !contained.contains(person)
+        });
+    }
 }
 
 impl GatewayState {
+    /// Without awzy-challenge: outages replay without regard to containments.
     pub fn new(config: GatewayConfig, pdp: AuthorizerClient<AuthChannel>) -> anyhow::Result<Self> {
+        Self::with_containments(config, pdp, Arc::new(Containments::none()))
+    }
+
+    /// Following awzy-challenge's containments; call [`Self::forget_allows`] with each list.
+    pub fn with_containments(
+        config: GatewayConfig,
+        pdp: AuthorizerClient<AuthChannel>,
+        containments: Arc<Containments>,
+    ) -> anyhow::Result<Self> {
         config.validate()?;
         let verifier = Verifier::new(&config.token)?;
         let upstream = Client::builder(TokioExecutor::new()).build_http();
@@ -102,7 +130,20 @@ impl GatewayState {
             ttl: std::time::Duration::from_secs(config.outage.cached_allow_ttl_secs),
             entries: Default::default(),
         };
-        Ok(Self(Arc::new(Inner { config, verifier, pdp, upstream, last_seen_monitor: AtomicBool::new(false), allows })))
+        Ok(Self(Arc::new(Inner {
+            config,
+            verifier,
+            pdp,
+            upstream,
+            last_seen_monitor: AtomicBool::new(false),
+            allows,
+            containments,
+        })))
+    }
+
+    /// Drops cached allows for calls by, or for, the contained accessors (`Type::id`).
+    pub fn forget_allows(&self, contained: &std::collections::HashSet<String>) {
+        self.0.allows.forget(contained);
     }
 }
 
@@ -250,7 +291,7 @@ async fn check(
             tracing::warn!(%status, what = %c.what, "awzy-pdp unreachable; install was monitoring, forwarding");
             None
         }
-        Err(status) => outage(state, up, tool, &c, id, &status),
+        Err(status) => outage(state, up, accessor, tool, &c, id, &status),
     }
 }
 
@@ -260,6 +301,7 @@ async fn check(
 fn outage(
     state: &GatewayState,
     up: &UpstreamConfig,
+    accessor: &Accessor,
     tool: &str,
     c: &Check<'_>,
     id: &Value,
@@ -270,7 +312,13 @@ fn outage(
     let fail_open = tier.is_some_and(|t| {
         outage.fail_open_tiers.iter().any(|f| f == t) && !crate::config::ALWAYS_FAIL_CLOSED.contains(&t)
     });
-    let replay = if fail_open { state.0.allows.recent(&c.cache_key) } else { None };
+    let who: Vec<&awzy_model::EntityRef> =
+        std::iter::once(&accessor.subject).chain(accessor.on_behalf_of.as_ref()).collect();
+    let containment = state.0.containments.replay(&who);
+    let replay = match containment {
+        Replay::Allowed if fail_open => state.0.allows.recent(&c.cache_key),
+        _ => None,
+    };
     match replay {
         Some(age) => {
             tracing::warn!(%status, what = %c.what, tier = ?tier, age_secs = age.as_secs(), "awzy-pdp unreachable; replaying a recent allow");
@@ -278,10 +326,14 @@ fn outage(
         }
         None => {
             tracing::warn!(%status, what = %c.what, tier = ?tier, "awzy-pdp unreachable; denying");
-            let why = match tier {
-                None => "it has no sensitivity of its own in the gateway's config, so it fails closed".to_string(),
-                Some(t) if !fail_open => format!("its tier ({t}) fails closed"),
-                Some(_) => "no recent allow for this caller could be replayed".to_string(),
+            let why = match (tier, containment) {
+                (None, _) => "it has no sensitivity of its own in the gateway's config, so it fails closed".to_string(),
+                (Some(t), _) if !fail_open => format!("its tier ({t}) fails closed"),
+                (Some(_), Replay::Contained) => "this caller's access is contained".to_string(),
+                (Some(_), Replay::Unknown) => {
+                    "the gateway hasn't yet learned who is contained, so it replays nothing".to_string()
+                }
+                (Some(_), Replay::Allowed) => "no recent allow for this caller could be replayed".to_string(),
             };
             Some(tool_error(
                 id,
@@ -482,6 +534,16 @@ mod tests {
         mode: awzy_model::EnforcementMode,
         upstream_url: String,
     ) -> (Router, Arc<AtomicBool>) {
+        let (app, down, _) = gateway_with_containments(mode, upstream_url, Arc::new(Containments::none())).await;
+        (app, down)
+    }
+
+    /// The gateway with a PDP that can be switched off, and the containments it follows.
+    async fn gateway_with_containments(
+        mode: awzy_model::EnforcementMode,
+        upstream_url: String,
+        containments: Arc<Containments>,
+    ) -> (Router, Arc<AtomicBool>, GatewayState) {
         std::env::set_var(SECRET_ENV, SECRET);
         let enforcement = Arc::new(awzy_pdp::Enforcement::fixed(mode));
         let down = Arc::new(AtomicBool::new(false));
@@ -538,7 +600,8 @@ mod tests {
             },
             service_account_registry: crate::config::Registry::Config,
         };
-        (router(GatewayState::new(config, pdp).unwrap()), down)
+        let state = GatewayState::with_containments(config, pdp, containments).unwrap();
+        (router(state.clone()), down, state)
     }
 
     fn token(sub: &str, act: Option<&str>, groups: &[&str]) -> String {
@@ -672,6 +735,58 @@ mod tests {
             vec!["read_file", "delete_file", "list_files", "read_file"],
             "during the outage only alice's replayed read reached the upstream"
         );
+    }
+
+    /// The drill from the platform plan's Phase 3: an outage never replays an allow for an
+    /// accessor contained before it.
+    #[tokio::test]
+    async fn an_outage_never_replays_an_allow_for_someone_contained_before_it() {
+        let seen = Upstream::default();
+        let containments = Arc::new(Containments::awaiting_feed());
+        let (app, pdp_down, state) = gateway_with_containments(
+            awzy_model::EnforcementMode::Enforce,
+            start_upstream(seen.clone()).await,
+            containments.clone(),
+        )
+        .await;
+        let alice = token("alice", None, &["security"]);
+        let carol = token("carol", None, &["security"]);
+        // An agent acting for alice: contained along with her.
+        let genie_for_alice = token("alice", Some("sales-genie"), &["security"]);
+
+        // Until the first list arrives, nothing replays.
+        call(&app, Some(&alice), "read_file").await;
+        pdp_down.store(true, Ordering::Release);
+        let (_, unknown) = call(&app, Some(&alice), "read_file").await;
+        assert!(unknown["result"]["content"][0]["text"].as_str().unwrap().contains("hasn't yet learned"), "{unknown}");
+        pdp_down.store(false, Ordering::Release);
+
+        // The feed arrives with no one contained; everyone builds up recent allows.
+        let list = |who: &[&str]| who.iter().map(|w| format!("Human::{w}")).collect::<std::collections::HashSet<_>>();
+        state.forget_allows(&list(&[]));
+        containments.load(list(&[]));
+        for t in [&alice, &carol, &genie_for_alice] {
+            let (_, ok) = call(&app, Some(t), "read_file").await;
+            assert_eq!(ok["result"]["content"][0]["text"], "ran read_file");
+        }
+
+        // Alice is contained, then the PDP goes down.
+        state.forget_allows(&list(&["alice"]));
+        containments.load(list(&["alice"]));
+        pdp_down.store(true, Ordering::Release);
+        for t in [&alice, &genie_for_alice] {
+            let (_, refused) = call(&app, Some(t), "read_file").await;
+            assert!(refused["result"]["content"][0]["text"].as_str().unwrap().contains("contained"), "{refused}");
+        }
+        let (_, carol_replayed) = call(&app, Some(&carol), "read_file").await;
+        assert_eq!(carol_replayed["result"]["content"][0]["text"], "ran read_file", "carol isn't contained");
+
+        // Lifted while the PDP is still down: her old allows were forgotten, so still nothing.
+        containments.load(list(&[]));
+        let (_, lifted) = call(&app, Some(&alice), "read_file").await;
+        assert!(lifted["result"]["content"][0]["text"].as_str().unwrap().contains("no recent allow"), "{lifted}");
+
+        assert_eq!(seen.0.lock().unwrap().len(), 5, "1 before the feed, 3 with the PDP up, and carol's replay");
     }
 
     #[tokio::test]

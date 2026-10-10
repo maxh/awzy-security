@@ -44,16 +44,29 @@ pub struct Access {
     people: Allowed,
     /// Containing and lifting: the client portal, and later awzy-reasoner.
     containers: Allowed,
+    /// Following containments, so an outage never replays an allow for a contained accessor:
+    /// the MCP gateways (ADR 0030).
+    gateways: Allowed,
+}
+
+/// Callers either group allows.
+fn either(a: &Allowed, b: &Allowed) -> Allowed {
+    match (a, b) {
+        (Allowed::Only(a), Allowed::Only(b)) => Allowed::Only(a.iter().chain(b).cloned().collect()),
+        _ => Allowed::AnyServiceAccount,
+    }
 }
 
 impl Access {
-    /// From `AWZY_CHALLENGE_PDPS`, `AWZY_CHALLENGE_PEOPLE`, and `AWZY_CHALLENGE_CONTAINERS`.
+    /// From `AWZY_CHALLENGE_CONTAINERS`, `AWZY_CHALLENGE_GATEWAYS`, `AWZY_CHALLENGE_PDPS`, and
+    /// `AWZY_CHALLENGE_PEOPLE`.
     pub fn from_env() -> anyhow::Result<Self> {
         Ok(Self {
             verifier: Arc::new(awzy_service_auth::Verifier::from_env("awzy-challenge")?),
             pdps: Allowed::from_env("AWZY_CHALLENGE_PDPS"),
             people: Allowed::from_env("AWZY_CHALLENGE_PEOPLE"),
             containers: Allowed::from_env("AWZY_CHALLENGE_CONTAINERS"),
+            gateways: Allowed::from_env("AWZY_CHALLENGE_GATEWAYS"),
         })
     }
 
@@ -65,6 +78,7 @@ impl Access {
             pdps: nobody(),
             people: nobody(),
             containers: nobody(),
+            gateways: nobody(),
         }
     }
 
@@ -73,13 +87,11 @@ impl Access {
         let group = |methods: &[&str], allowed: &Allowed| -> Vec<(String, Rule)> {
             methods.iter().map(|m| (method(m), Rule::Allow(allowed.clone()))).collect()
         };
+        let mut rules = group(&["Resolve"], &self.pdps);
+        // Following containments: the PDPs, and the gateways for their outage fallback.
+        rules.extend(group(&["WatchContainments"], &either(&self.pdps, &self.gateways)));
         // Listing containments: a PDP whose feed is stale, and the portal showing them to admins.
-        let pdps_or_containers = match (&self.pdps, &self.containers) {
-            (Allowed::Only(a), Allowed::Only(b)) => Allowed::Only(a.iter().chain(b).cloned().collect()),
-            _ => Allowed::AnyServiceAccount,
-        };
-        let mut rules = group(&["Resolve", "WatchContainments"], &self.pdps);
-        rules.extend(group(&["ListContainments"], &pdps_or_containers));
+        rules.extend(group(&["ListContainments"], &either(&self.pdps, &self.containers)));
         rules.extend(group(&["GetChallenge", "ListChallenges", "Justify", "Decide"], &self.people));
         // Security keys (ADR 0059): only the portal, which authenticates the person they belong to.
         rules.extend(group(
