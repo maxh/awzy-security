@@ -29,9 +29,9 @@ entity Resource in [Resource] {
   owner?: Human,
   // Who it's shared with, including through its folders (ADR 0061): the people and groups who can
   // at least read it, those who can also change it, and whether everyone in the organization can.
-  shared_people?: Set<Human>,
+  shared_humans?: Set<Human>,
   shared_groups?: Set<Group>,
-  writer_people?: Set<Human>,
+  writer_humans?: Set<Human>,
   writer_groups?: Set<Group>,
   shared_with_everyone?: Bool,
 };

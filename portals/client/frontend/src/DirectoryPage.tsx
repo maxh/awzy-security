@@ -18,7 +18,7 @@ import { type FormEvent, Suspense, useState } from "react";
 import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
 
 import type { DirectoryPageGroupsQuery } from "./__generated__/DirectoryPageGroupsQuery.graphql";
-import type { DirectoryPagePeopleQuery } from "./__generated__/DirectoryPagePeopleQuery.graphql";
+import type { DirectoryPageHumansQuery } from "./__generated__/DirectoryPageHumansQuery.graphql";
 import type { DirectoryPageRegisterMutation } from "./__generated__/DirectoryPageRegisterMutation.graphql";
 import type { DirectoryPageRemoveMutation } from "./__generated__/DirectoryPageRemoveMutation.graphql";
 import type { DirectoryPageServiceAccountsQuery } from "./__generated__/DirectoryPageServiceAccountsQuery.graphql";
@@ -39,14 +39,14 @@ export function DirectoryPage() {
         <Summary />
       </Suspense>
       <Card padding="lg">
-        <Tabs defaultValue="people" keepMounted={false}>
+        <Tabs defaultValue="humans" keepMounted={false}>
           <Tabs.List>
-            <Tabs.Tab value="people">People</Tabs.Tab>
+            <Tabs.Tab value="humans">People</Tabs.Tab>
             <Tabs.Tab value="groups">Groups</Tabs.Tab>
             <Tabs.Tab value="service-accounts">Service accounts</Tabs.Tab>
           </Tabs.List>
-          <Tabs.Panel value="people" pt="md">
-            <People />
+          <Tabs.Panel value="humans" pt="md">
+            <Humans />
           </Tabs.Panel>
           <Tabs.Panel value="groups" pt="md">
             <Suspense fallback={loading}>
@@ -67,8 +67,8 @@ function Summary() {
     graphql`
       query DirectoryPageSummaryQuery {
         directorySummary {
-          people
-          activePeople
+          humans
+          activeHumans
           groups
           serviceAccounts
           lastProvisionedAt
@@ -80,7 +80,7 @@ function Summary() {
   );
   return (
     <SimpleGrid cols={{ base: 2, md: 4 }}>
-      <Stat label="People" value={s.activePeople.toLocaleString()} hint={`active, of ${s.people.toLocaleString()}`} />
+      <Stat label="People" value={s.activeHumans.toLocaleString()} hint={`active, of ${s.humans.toLocaleString()}`} />
       <Stat label="Groups" value={s.groups.toLocaleString()} hint="from your IdP over SCIM" />
       <Stat label="Service accounts" value={s.serviceAccounts.toLocaleString()} hint="registered here" />
       <Stat
@@ -96,7 +96,7 @@ function Summary() {
   );
 }
 
-function People() {
+function Humans() {
   const [search, setSearch] = useState("");
   const [applied, setApplied] = useState("");
   const submit = (e: FormEvent) => {
@@ -119,17 +119,17 @@ function People() {
         </Group>
       </form>
       <Suspense fallback={loading}>
-        <PeopleTable search={applied} />
+        <HumansTable search={applied} />
       </Suspense>
     </Stack>
   );
 }
 
-function PeopleTable({ search }: { search: string }) {
-  const { people } = useLazyLoadQuery<DirectoryPagePeopleQuery>(
+function HumansTable({ search }: { search: string }) {
+  const { humans } = useLazyLoadQuery<DirectoryPageHumansQuery>(
     graphql`
-      query DirectoryPagePeopleQuery($search: String) {
-        people(search: $search, first: 200) {
+      query DirectoryPageHumansQuery($search: String) {
+        humans(search: $search, first: 200) {
           userName
           displayName
           active
@@ -141,7 +141,7 @@ function PeopleTable({ search }: { search: string }) {
     { search: search || null },
     { fetchPolicy: "store-and-network" },
   );
-  if (people.length === 0)
+  if (humans.length === 0)
     return (
       <Text c="dimmed">
         No people{search ? ` matching "${search}"` : " yet: set up SCIM provisioning in your IdP"}.
@@ -159,7 +159,7 @@ function PeopleTable({ search }: { search: string }) {
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>
-        {people.map((p) => (
+        {humans.map((p) => (
           <Table.Tr key={p.userName}>
             <Table.Td ff="monospace">{p.userName}</Table.Td>
             <Table.Td>{p.displayName ?? ""}</Table.Td>
@@ -189,7 +189,7 @@ function Groups() {
       query DirectoryPageGroupsQuery {
         groups {
           name
-          people
+          humans
           groups
           parents
           updatedAt
@@ -215,7 +215,7 @@ function Groups() {
         {groups.map((g) => (
           <Table.Tr key={g.name}>
             <Table.Td ff="monospace">Group::"{g.name}"</Table.Td>
-            <Table.Td>{g.people}</Table.Td>
+            <Table.Td>{g.humans}</Table.Td>
             <Table.Td>{g.groups}</Table.Td>
             <Table.Td>{g.parents.join(", ")}</Table.Td>
             <Table.Td>{formatTime(g.updatedAt)}</Table.Td>

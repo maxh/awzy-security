@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<1c3b137ceddf5c84e63f50d3b37598f3>>
+ * @generated SignedSource<<42f8f8f3ad485204d2281fc6aff25ac6>>
  * @lightSyntaxTransform
  */
 
@@ -12,9 +12,9 @@ export type DirectoryPageGroupsQuery$variables = Record<PropertyKey, never>;
 export type DirectoryPageGroupsQuery$data = {
   readonly groups: ReadonlyArray<{
     readonly groups: number;
+    readonly humans: number;
     readonly name: string;
     readonly parents: ReadonlyArray<string>;
-    readonly people: number;
     readonly updatedAt: string;
   }>;
 };
@@ -44,7 +44,7 @@ var v0 = [
         "alias": null,
         "args": null,
         "kind": "ScalarField",
-        "name": "people",
+        "name": "humans",
         "storageKey": null
       },
       {
@@ -90,16 +90,16 @@ return {
     "selections": (v0/*:: as any*/)
   },
   "params": {
-    "cacheID": "b53dc799eb96006042c564fa99f4f8c3",
+    "cacheID": "3022fb2d2f96d3c2c3416d7f558d76c2",
     "id": null,
     "metadata": {},
     "name": "DirectoryPageGroupsQuery",
     "operationKind": "query",
-    "text": "query DirectoryPageGroupsQuery {\n  groups {\n    name\n    people\n    groups\n    parents\n    updatedAt\n  }\n}\n"
+    "text": "query DirectoryPageGroupsQuery {\n  groups {\n    name\n    humans\n    groups\n    parents\n    updatedAt\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "6133a9410af749a67921344f3c81ce11";
+(node as any).hash = "a562796f54568b2f5c97ed9433854856";
 
 export default node;

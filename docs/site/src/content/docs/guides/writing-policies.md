@@ -16,7 +16,7 @@ Nothing is allowed until a `permit` matches; any matching `forbid` overrides eve
 permit (principal in Group::"engineering", action == Action::"read", resource)
 when { resource.sensitivity == "public" || resource.sensitivity == "internal" };
 
-@id("deactivated-people")
+@id("deactivated-humans")
 forbid (principal is Human, action, resource)
 when { principal has active && !principal.active };
 ```

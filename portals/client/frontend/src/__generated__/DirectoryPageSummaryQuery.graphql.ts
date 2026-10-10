@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<87687e4c322e8802869d05b01fd24da3>>
+ * @generated SignedSource<<cb2153c5a800eb6a0cd2553ccb7cc089>>
  * @lightSyntaxTransform
  */
 
@@ -11,10 +11,10 @@ import { ConcreteRequest } from 'relay-runtime';
 export type DirectoryPageSummaryQuery$variables = Record<PropertyKey, never>;
 export type DirectoryPageSummaryQuery$data = {
   readonly directorySummary: {
-    readonly activePeople: number;
+    readonly activeHumans: number;
     readonly groups: number;
+    readonly humans: number;
     readonly lastProvisionedAt: string | null | undefined;
-    readonly people: number;
     readonly serviceAccounts: number;
   };
 };
@@ -37,14 +37,14 @@ var v0 = [
         "alias": null,
         "args": null,
         "kind": "ScalarField",
-        "name": "people",
+        "name": "humans",
         "storageKey": null
       },
       {
         "alias": null,
         "args": null,
         "kind": "ScalarField",
-        "name": "activePeople",
+        "name": "activeHumans",
         "storageKey": null
       },
       {
@@ -90,16 +90,16 @@ return {
     "selections": (v0/*:: as any*/)
   },
   "params": {
-    "cacheID": "886e8b83bc39f6fca418437acccf4a69",
+    "cacheID": "ad856d27a9f5f6ebefe573fe4011b36a",
     "id": null,
     "metadata": {},
     "name": "DirectoryPageSummaryQuery",
     "operationKind": "query",
-    "text": "query DirectoryPageSummaryQuery {\n  directorySummary {\n    people\n    activePeople\n    groups\n    serviceAccounts\n    lastProvisionedAt\n  }\n}\n"
+    "text": "query DirectoryPageSummaryQuery {\n  directorySummary {\n    humans\n    activeHumans\n    groups\n    serviceAccounts\n    lastProvisionedAt\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "524d6bc1b31d67791ca4d872b0d74830";
+(node as any).hash = "70248a0cdb0ab089ecc0bd9994943332";
 
 export default node;

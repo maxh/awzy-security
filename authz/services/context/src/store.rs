@@ -498,7 +498,7 @@ impl ContextStore {
 
     /// People ordered by userName, optionally those whose userName or display name contains
     /// `search`, with the groups they're directly in.
-    pub async fn directory_people(&self, search: Option<&str>, limit: i64) -> Result<Vec<Value>, sqlx::Error> {
+    pub async fn directory_humans(&self, search: Option<&str>, limit: i64) -> Result<Vec<Value>, sqlx::Error> {
         let rows: Vec<DirectoryPersonRow> = sqlx::query_as(
             "SELECT h.user_name, h.display_name, h.active, h.updated_at,
                     COALESCE(array_agg(g.display_name ORDER BY g.display_name) FILTER (WHERE g.display_name IS NOT NULL), '{}')
@@ -535,24 +535,26 @@ impl ContextStore {
         .await?;
         Ok(rows
             .into_iter()
-            .map(|(name, updated_at, people, groups, parents)| {
-                json!({ "name": name, "people": people, "groups": groups, "parents": parents, "updated_at": updated_at })
+            .map(|(name, updated_at, humans, groups, parents)| {
+                // `people` is the name before ADR 0073, for a client portal that predates it.
+                json!({ "name": name, "humans": humans, "people": humans, "groups": groups, "parents": parents, "updated_at": updated_at })
             })
             .collect())
     }
 
     /// Totals, and when the IdP last changed anything.
     pub async fn directory_summary(&self) -> Result<Value, sqlx::Error> {
-        let (people, active, groups, accounts, last): (i64, i64, i64, i64, Option<DateTime<Utc>>) = sqlx::query_as(
+        let (humans, active, groups, accounts, last): (i64, i64, i64, i64, Option<DateTime<Utc>>) = sqlx::query_as(
             "SELECT (SELECT count(*) FROM humans), (SELECT count(*) FROM humans WHERE active), (SELECT count(*) FROM groups),
                     (SELECT count(*) FROM service_accounts),
                     GREATEST((SELECT max(updated_at) FROM humans), (SELECT max(updated_at) FROM groups))",
         )
         .fetch_one(&self.pool)
         .await?;
-        Ok(
-            json!({ "people": people, "active_people": active, "groups": groups, "service_accounts": accounts, "last_provisioned_at": last }),
-        )
+        Ok(json!({ "humans": humans, "active_humans": active, "groups": groups, "service_accounts": accounts,
+                    "last_provisioned_at": last,
+                    // The names before ADR 0073, for a client portal that predates it.
+                    "people": humans, "active_people": active }))
     }
 
     // ---- The PDPs' snapshot

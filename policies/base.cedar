@@ -13,7 +13,7 @@ when { resource.sensitivity == "public" || resource.sensitivity == "internal" };
 permit (principal is Human, action == Action::"read", resource is Resource)
 when {
   (resource has owner && resource.owner == principal) ||
-  (resource has shared_people && resource.shared_people.contains(principal)) ||
+  (resource has shared_humans && resource.shared_humans.contains(principal)) ||
   (resource has shared_groups && principal in resource.shared_groups) ||
   (resource has shared_with_everyone && resource.shared_with_everyone)
 };
@@ -22,7 +22,7 @@ when {
 permit (principal is Human, action == Action::"write", resource is Resource)
 when {
   (resource has owner && resource.owner == principal) ||
-  (resource has writer_people && resource.writer_people.contains(principal)) ||
+  (resource has writer_humans && resource.writer_humans.contains(principal)) ||
   (resource has writer_groups && principal in resource.writer_groups)
 };
 
@@ -59,7 +59,7 @@ permit (
 
 // Everyone answers the challenges sent to them in the client portal. Seeing every challenge and
 // containing accessors is `administer`, the security team's above.
-@id("people-answer-their-challenges")
+@id("humans-answer-their-challenges")
 permit (principal is Human, action == Action::"view", resource == PortalArea::"challenges");
 
 // Approval challenges (awzy-challenge): the security team's people approve. Clients add data owners
@@ -79,12 +79,12 @@ forbid (principal is ServiceAccount, action == Action::"approve", resource)
 unless { context has approving_for && principal.owner != context.approving_for };
 
 // Crown jewels need a person's approval, whatever a client's policies let agents approve.
-@id("crown-jewels-need-a-person-to-approve")
+@id("crown-jewels-need-a-human-to-approve")
 forbid (principal is ServiceAccount, action == Action::"approve", resource)
 when { resource.sensitivity == "crown_jewels" };
 
 // Deprovisioned in the IdP: no access, whatever their token says (ADR 0031).
-@id("deactivated-people")
+@id("deactivated-humans")
 forbid (principal is Human, action, resource)
 when { principal has active && !principal.active };
 
