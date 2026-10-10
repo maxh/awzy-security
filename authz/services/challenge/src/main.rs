@@ -14,9 +14,30 @@ async fn main() -> anyhow::Result<()> {
         pending: secs("AWZY_CHALLENGE_PENDING_SECS")?.unwrap_or(defaults.pending),
         grant: secs("AWZY_CHALLENGE_GRANT_SECS")?.unwrap_or(defaults.grant),
     };
-    let store = Arc::new(ChallengeStore::new(pool, lifetimes));
+    let mut store = ChallengeStore::new(pool.clone(), lifetimes);
+    let mut worker = None;
+
+    // Telling people what's waiting for them, in the client's Slack (ADR 0073).
+    match std::env::var("AWZY_CHALLENGE_SLACK_TOKEN") {
+        Ok(token) if !token.is_empty() => {
+            let channel = std::env::var("AWZY_CHALLENGE_SLACK_SECURITY_CHANNEL")
+                .context("AWZY_CHALLENGE_SLACK_SECURITY_CHANNEL is required with AWZY_CHALLENGE_SLACK_TOKEN")?;
+            let portal_url = std::env::var("AWZY_CHALLENGE_PORTAL_URL")
+                .context("AWZY_CHALLENGE_PORTAL_URL is required with AWZY_CHALLENGE_SLACK_TOKEN")?;
+            let api = std::env::var("AWZY_CHALLENGE_SLACK_API").unwrap_or_else(|_| "https://slack.com/api".into());
+            let slack = awzy_challenge::slack::Slack::new(&api, &token, &channel);
+            worker = Some(awzy_challenge::notify::Worker { pool, slack, portal_url });
+            tracing::info!("telling people what's waiting for them in Slack");
+            store = store.with_notifications();
+        }
+        _ => tracing::warn!("AWZY_CHALLENGE_SLACK_TOKEN is not set; nobody is told about challenges"),
+    }
+    let store = Arc::new(store);
     // TODO: run migrations from a release Job instead of at startup.
     store.migrate().await?;
+    if let Some(worker) = worker {
+        tokio::spawn(worker.run());
+    }
 
     // Approvers are whoever the PDP allows to `approve` the resource.
     let approvals = match std::env::var("AWZY_PDP_ADDR") {

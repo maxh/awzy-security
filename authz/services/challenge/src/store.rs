@@ -114,6 +114,8 @@ pub struct Resolution {
     pub challenge_id: Option<ChallengeId>,
     /// An approver rejected this request and the rejection hasn't expired.
     pub rejected: bool,
+    /// The challenge is new: this request opened it rather than finding it open (ADR 0073).
+    pub opened: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -196,11 +198,19 @@ fn bind_request<'q>(
 pub struct ChallengeStore {
     pool: PgPool,
     lifetimes: Lifetimes,
+    /// Whether to record notifications (ADR 0073): only when a channel is configured.
+    pub(crate) notify: bool,
 }
 
 impl ChallengeStore {
     pub fn new(pool: PgPool, lifetimes: Lifetimes) -> Self {
-        Self { pool, lifetimes }
+        Self { pool, lifetimes, notify: false }
+    }
+
+    /// Records what to tell people as challenges and containments happen (ADR 0073).
+    pub fn with_notifications(mut self) -> Self {
+        self.notify = true;
+        self
     }
 
     pub fn pool(&self) -> &PgPool {
@@ -238,6 +248,7 @@ impl ChallengeStore {
         }
         let passed = passed.intersection(required);
         let remaining = required.without(passed);
+        let mut opened = false;
         let challenge_id = if open && !rejected && !remaining.is_empty() {
             let expire = format!(
                 "UPDATE challenges SET status = 'expired' WHERE {REQUEST_MATCH} \
@@ -251,22 +262,23 @@ impl ChallengeStore {
                     resource_id) WHERE status = 'pending' \
                  DO UPDATE SET kinds = ARRAY(SELECT DISTINCT k FROM unnest(challenges.kinds || EXCLUDED.kinds) AS k \
                     ORDER BY k) \
-                 RETURNING id";
-            let id: uuid::Uuid = bind_request(sqlx::query(insert), request)
+                 RETURNING id, (xmax = 0) AS inserted";
+            let row = bind_request(sqlx::query(insert), request)
                 .bind(ChallengeId::new().uuid())
                 .bind(decision_id.uuid())
                 .bind(kind_names(remaining))
                 .bind(answerer_id.unwrap_or_default())
                 .bind(self.lifetimes.pending.as_secs_f64())
                 .fetch_one(&mut *tx)
-                .await?
-                .try_get("id")?;
-            Some(ChallengeId::from_uuid(id))
+                .await?;
+            // An inserted row has no xmax; one the conflict updated does.
+            opened = row.try_get("inserted")?;
+            Some(ChallengeId::from_uuid(row.try_get("id")?))
         } else {
             None
         };
         tx.commit().await?;
-        Ok(Resolution { passed, challenge_id, rejected })
+        Ok(Resolution { passed, challenge_id, rejected, opened })
     }
 
     pub async fn get(&self, id: ChallengeId) -> Result<Challenge, StoreError> {
@@ -700,7 +712,7 @@ pub(crate) mod tests {
         let Some(store) = test_store(Lifetimes::default()).await else { return };
         let req = request(alice(), None);
         let r = store.resolve(DecisionId::new(), &req, of(&[ChallengeKind::Approval]), None, false).await.unwrap();
-        assert_eq!(r, Resolution { passed: Challenges::default(), challenge_id: None, rejected: false });
+        assert_eq!(r, Resolution { passed: Challenges::default(), challenge_id: None, rejected: false, opened: false });
         assert!(store.list(None, None, 10).await.unwrap().is_empty());
     }
 

@@ -105,6 +105,9 @@ message ResolveRequest {
   string answerer_id = 7;
   // False only looks up what was passed, and opens nothing.
   bool open = 8;
+  // The resource's owner, from its entity, when it has one: told about an approval it's asked
+  // for (ADR 0073).
+  string resource_owner_id = 9;
 }
 
 message ResolveResponse {

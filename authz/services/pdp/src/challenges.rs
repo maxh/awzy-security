@@ -55,7 +55,7 @@ impl ChallengeResolver {
         decision_id: DecisionId,
         req: &AccessRequest,
         required: Challenges,
-        answerer: Option<&str>,
+        parties: &Parties,
     ) -> anyhow::Result<Resolution> {
         let Some(client) = &self.client else { anyhow::bail!("awzy-challenge isn't configured") };
         let res = tokio::time::timeout(
@@ -67,8 +67,9 @@ impl ChallengeResolver {
                 action: req.action.clone(),
                 resource: Some(req.resource.clone().into()),
                 kinds: challenges_to_wire(required),
-                answerer_id: answerer.unwrap_or_default().to_string(),
+                answerer_id: parties.answerer.clone().unwrap_or_default(),
                 open: true,
+                resource_owner_id: parties.resource_owner.clone().unwrap_or_default(),
             }),
         )
         .await
@@ -80,6 +81,34 @@ impl ChallengeResolver {
         };
         Ok(Resolution { passed: challenges_from_wire(&res.passed), challenge_id, rejected: res.rejected })
     }
+}
+
+/// Who a challenge involves besides the requester: the person it goes to, and the resource's
+/// owner, told when it asks for an approval (ADR 0073).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Parties {
+    pub answerer: Option<String>,
+    pub resource_owner: Option<String>,
+}
+
+pub fn parties(req: &AccessRequest, entities: &Value) -> Parties {
+    Parties { answerer: answerer(req, entities), resource_owner: resource_owner(req, entities) }
+}
+
+/// The person who owns the requested resource, from its entity's `owner` (ADR 0061).
+pub fn resource_owner(req: &AccessRequest, entities: &Value) -> Option<String> {
+    let resource = entities
+        .as_array()?
+        .iter()
+        .find(|e| e["uid"]["type"] == req.resource.kind.as_str() && e["uid"]["id"] == req.resource.id.as_str())?;
+    human_ref(&resource["attrs"]["owner"])
+}
+
+/// A reference to a person in Cedar entity JSON, written either way.
+fn human_ref(v: &Value) -> Option<String> {
+    let v = if v.get("__entity").is_some() { &v["__entity"] } else { v };
+    let r: EntityRef = serde_json::from_value(v.clone()).ok()?;
+    (r.kind == awzy_model::entity_type::HUMAN).then_some(r.id)
 }
 
 /// The person a challenge goes to: the human subject, the person a service account acts for,
@@ -95,11 +124,7 @@ pub fn answerer(req: &AccessRequest, entities: &Value) -> Option<String> {
         .as_array()?
         .iter()
         .find(|e| e["uid"]["type"] == req.subject.kind.as_str() && e["uid"]["id"] == req.subject.id.as_str())?;
-    let owner = &subject["attrs"]["owner"];
-    // Cedar entity JSON writes a reference either way.
-    let owner = if owner.get("__entity").is_some() { &owner["__entity"] } else { owner };
-    let owner: EntityRef = serde_json::from_value(owner.clone()).ok()?;
-    (owner.kind == awzy_model::entity_type::HUMAN).then_some(owner.id)
+    human_ref(&subject["attrs"]["owner"])
 }
 
 #[cfg(test)]
@@ -136,5 +161,16 @@ mod tests {
                 "attrs": { "owner": owner, "ai": true }, "parents": [] }]);
             assert_eq!(answerer(&request(agent.clone(), None), &entities).as_deref(), Some("olga"));
         }
+    }
+
+    #[test]
+    fn an_approval_is_also_told_to_the_resources_owner() {
+        let alice = EntityRef::new("Human", "alice");
+        let entities = json!([{ "uid": { "type": "Resource", "id": "plan" },
+            "attrs": { "sensitivity": "crown_jewels", "owner": { "__entity": { "type": "Human", "id": "priya" } } },
+            "parents": [] }]);
+        let p = parties(&request(alice.clone(), None), &entities);
+        assert_eq!(p, Parties { answerer: Some("alice".into()), resource_owner: Some("priya".into()) });
+        assert_eq!(resource_owner(&request(alice, None), &json!([])), None, "an unknown resource has no owner");
     }
 }

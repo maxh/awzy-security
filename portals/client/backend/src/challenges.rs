@@ -492,6 +492,7 @@ mod tests {
             kinds: vec![kind.into()],
             answerer_id: who.into(),
             open: true,
+            ..Default::default()
         };
         client.resolve(req).await.unwrap().into_inner().challenge_qid
     }
