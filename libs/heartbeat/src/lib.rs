@@ -119,6 +119,21 @@ pub struct Metrics {
     pub kafka_lag: Option<u64>,
     /// 0 to 100.
     pub clickhouse_disk_used_percent: Option<f64>,
+    /// The freshness targets, as seconds since each was last current: the worst across PDPs
+    /// (containment feed, policy and principals syncs) and across connectors (ADR 0068). An
+    /// install with no awzy-challenge, awzy-context, or connector doesn't send that one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub containment_feed_age_seconds: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_sync_age_seconds: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub principals_sync_age_seconds: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connector_sync_age_seconds: Option<f64>,
+    /// Tool calls awzy-gateway made since the last heartbeat while it couldn't reach awzy-pdp
+    /// (ADR 0030): replayed, forwarded in monitor, or denied.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gateway_pdp_unreachable: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -190,6 +205,16 @@ impl Heartbeat {
         }
         if !in_range(m.clickhouse_disk_used_percent, 100.0) {
             return Err(InvalidHeartbeat::OutOfRange("clickhouse_disk_used_percent"));
+        }
+        let ages = [
+            m.containment_feed_age_seconds,
+            m.policy_sync_age_seconds,
+            m.principals_sync_age_seconds,
+            m.connector_sync_age_seconds,
+        ];
+        // A year: anything older is as stale as it gets.
+        if !ages.iter().all(|a| in_range(*a, 3.2e7)) {
+            return Err(InvalidHeartbeat::OutOfRange("freshness"));
         }
         Ok(())
     }
@@ -267,5 +292,23 @@ mod tests {
         let mut rate = sample();
         rate["metrics"]["error_rate"] = json!(3.0);
         assert!(parse(rate).is_err());
+
+        let mut age = sample();
+        age["metrics"]["policy_sync_age_seconds"] = json!(-1.0);
+        assert!(parse(age).unwrap_err().contains("freshness"));
+    }
+
+    #[test]
+    fn freshness_is_optional_and_left_out_when_unknown() {
+        let mut fresh = sample();
+        fresh["metrics"]["containment_feed_age_seconds"] = json!(0.4);
+        fresh["metrics"]["gateway_pdp_unreachable"] = json!(0);
+        let h = parse(fresh).unwrap();
+        assert_eq!(h.metrics.containment_feed_age_seconds, Some(0.4));
+        let sent = serde_json::to_value(parse(sample()).unwrap()).unwrap();
+        assert!(
+            sent["metrics"].get("connector_sync_age_seconds").is_none(),
+            "older corp portals reject fields they don't know"
+        );
     }
 }

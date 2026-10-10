@@ -133,6 +133,14 @@ type InstallMetrics {
 	0 to 100.
 	"""
 	clickhouseDiskUsedPercent: Float
+	containmentFeedAgeSeconds: Float
+	policySyncAgeSeconds: Float
+	principalsSyncAgeSeconds: Float
+	connectorSyncAgeSeconds: Float
+	"""
+	Since the previous heartbeat.
+	"""
+	gatewayPdpUnreachable: Int
 }
 
 """
@@ -154,6 +162,26 @@ type MetricSample {
 	0 to 100.
 	"""
 	clickhouseDiskUsedPercent: Float
+	"""
+	Seconds since the worst PDP's containment feed was heard from (target: 2 s).
+	"""
+	containmentFeedAgeSeconds: Float
+	"""
+	Seconds since the worst PDP synced policy (target: a published bundle live within 60 s).
+	"""
+	policySyncAgeSeconds: Float
+	"""
+	Seconds since the worst PDP synced principals (target: 60 s).
+	"""
+	principalsSyncAgeSeconds: Float
+	"""
+	Seconds since the stalest connector synced.
+	"""
+	connectorSyncAgeSeconds: Float
+	"""
+	Tool calls awzy-gateway made without its PDP in the bucket.
+	"""
+	gatewayPdpUnreachable: Int
 	"""
 	Some heartbeat in the bucket had a service that wasn't fully ready.
 	"""
