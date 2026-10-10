@@ -27,7 +27,7 @@ pub struct Jwks {
     uri: hyper::Uri,
     /// A file holding a bearer token to send with each fetch, read fresh every time: the
     /// Kubernetes API server serves its keys only to authenticated callers, and a pod's token
-    /// rotates (ADR 0054).
+    /// rotates (ADR 0055).
     bearer_file: Option<std::path::PathBuf>,
     client: Client<hyper_rustls::HttpsConnector<HttpConnector>, Empty<Bytes>>,
     state: Mutex<State>,

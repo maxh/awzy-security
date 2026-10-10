@@ -1,4 +1,4 @@
-//! awzy-service-auth: how awzy's services inside an install prove who is calling (ADR 0054).
+//! awzy-service-auth: how awzy's services inside an install prove who is calling (ADR 0055).
 //!
 //! A caller sends the projected Kubernetes service-account token the chart mounts for the
 //! service it calls (`TokenSource`). The receiver checks it locally against the cluster's signing
