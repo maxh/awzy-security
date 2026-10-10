@@ -1,4 +1,7 @@
-//! HTTP server runtime shared by every service: health routes, listen address, graceful shutdown.
+//! HTTP server runtime shared by every service: health routes, metrics, listen address, graceful
+//! shutdown.
+
+pub mod metrics;
 
 use std::{net::SocketAddr, sync::Arc};
 
@@ -48,7 +51,8 @@ pub fn with_readiness(app: Router, ready: Readiness) -> Router {
     )
 }
 
-/// Serves `app` on `AWZY_LISTEN_ADDR` (default `0.0.0.0:8080`) until SIGTERM or Ctrl-C.
+/// Serves `app` on `AWZY_LISTEN_ADDR` (default `0.0.0.0:8080`) until SIGTERM or Ctrl-C, with the
+/// health routes and `/metrics` (ADR 0066).
 pub async fn serve(service: &'static str, app: Router) -> anyhow::Result<()> {
     serve_with_readiness(service, app, Arc::new(|| true)).await
 }
@@ -58,7 +62,9 @@ pub async fn serve_with_readiness(service: &'static str, app: Router, ready: Rea
     let addr: SocketAddr = std::env::var("AWZY_LISTEN_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string()).parse()?;
     let listener = TcpListener::bind(addr).await?;
     tracing::info!(service, %addr, "listening");
-    axum::serve(listener, with_readiness(app, ready)).with_graceful_shutdown(shutdown_signal()).await?;
+    metrics::register(Arc::new(metrics::Readiness(ready.clone())));
+    let app = metrics::with_metrics(with_readiness(app, ready));
+    axum::serve(listener, app).with_graceful_shutdown(shutdown_signal()).await?;
     Ok(())
 }
 

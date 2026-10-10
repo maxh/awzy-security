@@ -1,0 +1,8 @@
+# Loads the dashboards in deploy/observability/grafana/dashboards (ADR 0066).
+apiVersion: 1
+providers:
+  - name: awzy
+    folder: awzy
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

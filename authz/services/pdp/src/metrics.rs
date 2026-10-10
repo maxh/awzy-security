@@ -1,4 +1,5 @@
-//! Prometheus metrics at `/metrics`: decisions by verdict, failed checks, and check latency.
+//! The PDP's own metrics at `/metrics`, next to every service's baseline (ADR 0066): decisions by
+//! verdict, failed checks, and check latency.
 //!
 //! awzy-reporter scrapes them for the install's heartbeat (decisions per second, p99, error rate;
 //! ADR 0026), and a client's own monitoring can scrape them too. Counters are lock-free atomics
@@ -64,6 +65,12 @@ impl Metrics {
         out.push_str(&format!("awzy_pdp_check_duration_seconds_sum {}\n", self.sum_nanos.load(Relaxed) as f64 / 1e9));
         out.push_str(&format!("awzy_pdp_check_duration_seconds_count {cumulative}\n"));
         out
+    }
+}
+
+impl awzy_server::metrics::Source for Metrics {
+    fn render(&self, out: &mut String) {
+        out.push_str(&Metrics::render(self));
     }
 }
 

@@ -522,9 +522,9 @@ pub struct EvaluationRequest {
 /// so gRPC clients connect to the same address.
 ///
 /// Deciding needs a service token from any workload in the cluster (ADR 0055): enforcement points
-/// run anywhere, and the policies decide what they may do. `/metrics` stays open for the reporter.
+/// run anywhere, and the policies decide what they may do. `/metrics` comes from awzy-server, open
+/// for the reporter (ADR 0066).
 pub fn router(state: AppState) -> Router {
-    let metrics = state.metrics.clone();
     let guard =
         awzy_service_auth::Guard::new(state.service_auth.clone(), awzy_service_auth::Allowed::AnyServiceAccount);
     let decide = Router::new()
@@ -532,15 +532,7 @@ pub fn router(state: AppState) -> Router {
         .with_state(state.clone())
         .merge(grpc::router(state.clone()))
         .route_layer(axum::middleware::from_fn_with_state(guard, awzy_service_auth::require));
-    Router::new()
-        .route(
-            "/metrics",
-            axum::routing::get(move || {
-                let metrics = metrics.clone();
-                async move { ([(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4")], metrics.render()) }
-            }),
-        )
-        .merge(decide)
+    decide
 }
 
 async fn evaluate(

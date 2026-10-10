@@ -58,6 +58,8 @@ async fn main() -> anyhow::Result<()> {
         Err(_) => tracing::warn!("AWZY_KAFKA_BROKERS is not set; decisions are not logged"),
     }
 
+    awzy_server::metrics::register(state.metrics.clone());
+
     // Not ready until the first sync loads the bundle and mode; checks are refused until then too.
     let ready = state.clone();
     awzy_server::serve_with_readiness("awzy-pdp", awzy_pdp::router(state), Arc::new(move || ready.is_ready())).await

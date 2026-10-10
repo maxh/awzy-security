@@ -68,6 +68,30 @@ services:
       interval: 2s
       retries: 30
 
+  # Operator view (ADR 0066), only with `--profile observability`: Prometheus on :9091 with the
+  # alert rules, Grafana on :3000 (no sign-in) with the dashboards.
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: [observability]
+    command: ["--config.file=/etc/prometheus/prometheus.yaml"]
+    ports: ["9091:9090"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - ../observability/prometheus/alerts.yaml:/etc/prometheus/alerts.yaml:ro
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    profiles: [observability]
+    ports: ["3000:3000"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
 volumes:
   postgres:
   clickhouse:
