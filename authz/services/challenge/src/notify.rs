@@ -35,15 +35,14 @@ pub enum Recipient {
 impl Recipient {
     fn to_text(&self) -> String {
         match self {
-            // Stored as `person:` until no older awzy-challenge reads these rows (ADR 0075).
-            Self::Human(id) => format!("person:{id}"),
+            Self::Human(id) => format!("human:{id}"),
             Self::Security => "security".into(),
         }
     }
 
     fn parse(s: &str) -> Option<Self> {
         match s.split_once(':') {
-            Some(("human" | "person", id)) if !id.is_empty() => Some(Self::Human(id.to_string())),
+            Some(("human", id)) if !id.is_empty() => Some(Self::Human(id.to_string())),
             _ => (s == "security").then_some(Self::Security),
         }
     }
@@ -299,8 +298,7 @@ mod tests {
         for r in [Recipient::Human("nora@larkspur.example".into()), Recipient::Security] {
             assert_eq!(Recipient::parse(&r.to_text()), Some(r));
         }
-        assert_eq!(Recipient::parse("person:"), None);
-        assert_eq!(Recipient::parse("human:nora"), Some(Recipient::Human("nora".into())), "the name after ADR 0075");
+        assert_eq!(Recipient::parse("human:"), None);
     }
 
     /// With the local stack: notifications are recorded only when turned on, and for whom.
@@ -329,6 +327,6 @@ mod tests {
             .fetch_all(store.pool())
             .await
             .unwrap();
-        assert_eq!(recipients, vec!["person:nora", "person:priya", "security"]);
+        assert_eq!(recipients, vec!["human:nora", "human:priya", "security"]);
     }
 }

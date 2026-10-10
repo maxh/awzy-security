@@ -91,7 +91,6 @@ struct WireHuman {
 #[derive(Deserialize)]
 struct WireGroup {
     name: String,
-    #[serde(alias = "people")]
     humans: i64,
     groups: i64,
     parents: Vec<String>,
@@ -100,10 +99,7 @@ struct WireGroup {
 
 #[derive(Deserialize)]
 struct WireSummary {
-    // awzy-context before ADR 0074 says `people` and `active_people`.
-    #[serde(alias = "people")]
     humans: i64,
-    #[serde(alias = "active_people")]
     active_humans: i64,
     groups: i64,
     service_accounts: i64,
@@ -218,15 +214,12 @@ impl DirectoryQuery {
         #[graphql(default = 200)] first: i32,
     ) -> Result<Vec<Human>> {
         require(ctx, PortalAction::View, PortalArea::Directory).await?;
-        // The route every awzy-context serves during the rename (ADR 0074); `/v1/directory/humans`
-        // once no older one runs.
-        let mut path = format!("/v1/directory/people?limit={}", first.clamp(1, 1000));
+        let mut path = format!("/v1/directory/humans?limit={}", first.clamp(1, 1000));
         if let Some(s) = search.filter(|s| !s.trim().is_empty()) {
             path.push_str(&format!("&search={}", urlencode(s.trim())));
         }
         #[derive(Deserialize)]
         struct Wire {
-            #[serde(alias = "people")]
             humans: Vec<WireHuman>,
         }
         let w: Wire = context(ctx)?.get(&path).await?;
@@ -381,11 +374,11 @@ mod tests {
     async fn fake_context(seen: Arc<Mutex<Vec<(String, String, Value)>>>) -> String {
         let at = "2026-10-09T12:00:00Z";
         let app = Router::new()
-            .route("/v1/directory/summary", get(move || async move { Json(json!({ "people": 2, "active_people": 1, "groups": 1, "service_accounts": 0, "last_provisioned_at": at })) }))
+            .route("/v1/directory/summary", get(move || async move { Json(json!({ "humans": 2, "active_humans": 1, "groups": 1, "service_accounts": 0, "last_provisioned_at": at })) }))
             .route(
-                "/v1/directory/people",
+                "/v1/directory/humans",
                 get(move || async move {
-                    Json(json!({ "people": [{ "user_name": "alice", "display_name": "Alice", "active": true, "groups": ["security"], "updated_at": at }] }))
+                    Json(json!({ "humans": [{ "user_name": "alice", "display_name": "Alice", "active": true, "groups": ["security"], "updated_at": at }] }))
                 }),
             )
             .route(
@@ -420,7 +413,6 @@ mod tests {
         let bob = testing::human("bob", "engineering");
 
         let d = testing::run(&schema, &alice, "{ directorySummary { humans activeHumans lastProvisionedAt } humans(search: \"ali\") { userName groups active } }").await;
-        // The fake answers with the names before ADR 0074, as an older awzy-context does.
         assert_eq!(d["directorySummary"]["activeHumans"], 1);
         assert_eq!(d["humans"][0], json!({ "userName": "alice", "groups": ["security"], "active": true }));
 

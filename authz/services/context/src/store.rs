@@ -536,8 +536,7 @@ impl ContextStore {
         Ok(rows
             .into_iter()
             .map(|(name, updated_at, humans, groups, parents)| {
-                // `people` is the name before ADR 0074, for a client portal that predates it.
-                json!({ "name": name, "humans": humans, "people": humans, "groups": groups, "parents": parents, "updated_at": updated_at })
+                json!({ "name": name, "humans": humans, "groups": groups, "parents": parents, "updated_at": updated_at })
             })
             .collect())
     }
@@ -552,9 +551,7 @@ impl ContextStore {
         .fetch_one(&self.pool)
         .await?;
         Ok(json!({ "humans": humans, "active_humans": active, "groups": groups, "service_accounts": accounts,
-                    "last_provisioned_at": last,
-                    // The names before ADR 0074, for a client portal that predates it.
-                    "people": humans, "active_people": active }))
+                    "last_provisioned_at": last }))
     }
 
     // ---- The PDPs' snapshot
