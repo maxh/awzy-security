@@ -5,7 +5,7 @@
 //! day's evidence adds up (ADR 0066). AWZY_REASONER_INVESTIGATIONS=true investigates the people it
 //! flags with Claude on Bedrock (AWZY_LLM_MODEL, AWZY_LLM_EFFORT, AWS_REGION), at most
 //! AWZY_REASONER_INVESTIGATION_TOKENS a month (default 2,000,000), proposing rather than applying
-//! containments for members of AWZY_REASONER_PRIVILEGED_GROUPS (default `it,security`; ADR 0070).
+//! containments for members of AWZY_REASONER_PRIVILEGED_GROUPS (default `it,security`; ADR 0071).
 
 use std::time::Duration;
 

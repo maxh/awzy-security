@@ -6,7 +6,7 @@
 //! resources and work items, written by connectors ([`resources`]; demo plan step 2), served to
 //! PDPs by ID (ADR 0044) and classified in the background ([`classify`]; ADR 0047); and what
 //! awzy-reasoner works out about principals: risk scores ([`risk`]; ADR 0056) and investigations
-//! ([`investigations`]; ADR 0070). The Kafka change feed comes next.
+//! ([`investigations`]; ADR 0071). The Kafka change feed comes next.
 
 pub mod classify;
 pub mod investigations;
@@ -216,7 +216,7 @@ pub fn router(store: ContextStore, scim_token: &str, access: &Access) -> Router 
         .merge(guarded(resources::write_router(store.clone()), &access.writers))
         // The reasoner's scores (ADR 0056): the backend writes them, like resources.
         .merge(guarded(risk::router(store.clone()), &access.writers))
-        // Its investigations (ADR 0070): it writes them and reads its own back, and the client
+        // Its investigations (ADR 0071): it writes them and reads its own back, and the client
         // portal reads them.
         .merge(guarded(investigations::write_router(store.clone()), &access.writers))
         .merge(guarded(investigations::read_router(store.clone()), &either(&access.writers, &access.directory)))

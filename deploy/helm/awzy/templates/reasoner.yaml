@@ -3,7 +3,7 @@
 # awzy-reasoner: scores each principal's risk from ClickHouse with its own read-only user and
 # writes the scores to awzy-context with a service token (ADR 0056, ADR 0055). Contains people
 # in awzy-challenge under the automated-containments mode it reads from awzy-policy (ADR 0066),
-# and, when turned on, investigates the people it flags with Claude on Bedrock (ADR 0070).
+# and, when turned on, investigates the people it flags with Claude on Bedrock (ADR 0071).
 {{- $env := list
     (dict "name" "AWZY_CHALLENGE_ADDR" "value" (printf "http://awzy-challenge.%s.svc:8080" $sys))
     (dict "name" "AWZY_CLICKHOUSE_DATABASE" "value" .Values.clickhouse.database)

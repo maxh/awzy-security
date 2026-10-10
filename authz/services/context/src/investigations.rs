@@ -1,4 +1,4 @@
-//! Investigations from awzy-reasoner (ADR 0070): a model's checked finding about one principal
+//! Investigations from awzy-reasoner (ADR 0071): a model's checked finding about one principal
 //! (ADR 0067). The reasoner writes each one at `POST /v1/investigations`; it and, later, the
 //! client portal read them back, and the reasoner counts their tokens against the monthly budget.
 

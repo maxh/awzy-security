@@ -1,4 +1,4 @@
-# 0070. Investigations run on the reasoner's flags, within a monthly budget, and are kept in awzy-context
+# 0071. Investigations run on the reasoner's flags, within a monthly budget, and are kept in awzy-context
 
 - Status: Accepted
 - Date: 2026-10-10
