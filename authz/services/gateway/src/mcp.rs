@@ -305,11 +305,19 @@ fn blocked(id: &Value, what: &str, res: &CheckResponse) -> Response<Body> {
                 .map(|c| c.as_str_name().trim_start_matches("CHALLENGE_KIND_").to_lowercase())
                 .collect();
             let kinds = kinds.join(" and ");
+            let next = if res.challenge_id.is_empty() {
+                "No challenge could be opened, so the call was not made. Try again shortly.".to_string()
+            } else {
+                format!(
+                    "The call was not made. Challenge {} is waiting for an answer; once it's passed, \
+                     retry the same call.",
+                    res.challenge_id
+                )
+            };
             (
                 "challenge",
                 format!(
-                    "awzy requires {kinds} for {what} (decision {}, policies: {policies}). \
-                     Challenges aren't available through the gateway yet, so the call was not made.",
+                    "awzy requires {kinds} for {what} (decision {}, policies: {policies}). {next}",
                     res.decision_id
                 ),
             )
@@ -323,7 +331,11 @@ fn blocked(id: &Value, what: &str, res: &CheckResponse) -> Response<Body> {
             ),
         ),
     };
-    tool_error(id, text, json!({ "awzy/decision_id": res.decision_id, "awzy/verdict": verdict }))
+    let mut meta = json!({ "awzy/decision_id": res.decision_id, "awzy/verdict": verdict });
+    if !res.challenge_id.is_empty() {
+        meta["awzy/challenge_id"] = json!(res.challenge_id);
+    }
+    tool_error(id, text, meta)
 }
 
 fn tool_error(id: &Value, text: String, meta: Value) -> Response<Body> {

@@ -669,11 +669,20 @@ name = "awzy-challenge"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "awzy-authz-proto",
+ "awzy-model",
+ "awzy-pdp",
  "awzy-server",
  "awzy-telemetry",
  "axum",
+ "chrono",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.21",
  "tokio",
+ "tonic",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

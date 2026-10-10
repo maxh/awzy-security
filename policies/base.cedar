@@ -23,6 +23,11 @@ permit (
   resource is PortalArea
 );
 
+// Approval challenges (awzy-challenge): the security team approves. Clients add data owners and
+// managers as connectors bring those relationships in.
+@id("security-team-approves")
+permit (principal in Group::"security", action == Action::"approve", resource);
+
 // Deprovisioned in the IdP: no access, whatever their token says (ADR 0031).
 @id("deactivated-people")
 forbid (principal is Human, action, resource)

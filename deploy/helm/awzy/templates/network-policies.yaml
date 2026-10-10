@@ -38,6 +38,18 @@ spec:
   ingress:
     - from: [{{ toJson $awzy }}]
 ---
+# awzy-challenge only from awzy's own services: the PDP and the client portal.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awzy-challenge
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: awzy-challenge } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{{ toJson $awzy }}]
+---
 # awzy-context: /v1/principals and /v1/service-accounts from awzy's services; the Gateway only
 # for SCIM. NetworkPolicy works per port, so it's the Gateway's routes that keep /v1/* private
 # (only /scim/v2 is routed there).

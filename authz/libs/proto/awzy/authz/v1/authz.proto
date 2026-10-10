@@ -85,6 +85,9 @@ message CheckResponse {
   // MONITOR: allow regardless of the verdict. An enforcement point that doesn't understand this
   // field applies the verdict, which fails safe.
   EnforcementMode mode = 6;
+  // For an enforced challenge: the challenge opened in awzy-challenge (QID: challenge_<uuid>). The
+  // person answers it, then the caller retries the same request. Empty when none could be opened.
+  string challenge_id = 7;
 }
 
 message DelegationCheck {
