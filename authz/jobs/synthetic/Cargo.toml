@@ -9,6 +9,7 @@ license.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 bytes.workspace = true
+chrono.workspace = true
 http-body-util.workspace = true
 hyper-rustls.workspace = true
 hyper-util.workspace = true
