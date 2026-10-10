@@ -21,7 +21,7 @@ use crate::access::{require, PortalAction, PortalArea};
 pub struct ContextClient {
     base: String,
     client: Client<HttpConnector, Full<Bytes>>,
-    /// This portal's service token for awzy-context (ADR 0054).
+    /// This portal's service token for awzy-context (ADR 0055).
     tokens: awzy_service_auth::TokenSource,
 }
 
@@ -53,7 +53,7 @@ impl ContextClient {
         if let Some(a) = actor {
             req = req.header("x-awzy-actor", a);
         }
-        // This portal's service token for awzy-context (ADR 0054).
+        // This portal's service token for awzy-context (ADR 0055).
         if let Some(authorization) = self.tokens.authorization("awzy-context")? {
             req = req.header("authorization", authorization);
         }

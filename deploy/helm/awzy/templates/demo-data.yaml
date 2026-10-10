@@ -17,7 +17,7 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
-      # The backend's account: awzy-context allows it to write (ADR 0054).
+      # The backend's account: awzy-context allows it to write (ADR 0055).
       serviceAccountName: awzy
       volumes:
         - name: awzy-service-tokens

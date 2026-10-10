@@ -35,7 +35,7 @@ struct SnapshotParams {
 }
 
 /// People and groups as Cedar entities, unless the caller already has this version.
-/// Callers authenticate with service tokens (ADR 0054; see `Access`).
+/// Callers authenticate with service tokens (ADR 0055; see `Access`).
 async fn principals(
     State(store): State<ContextStore>,
     Query(p): Query<SnapshotParams>,
@@ -128,7 +128,7 @@ async fn directory_summary(State(store): State<ContextStore>) -> Response {
     }
 }
 
-/// Who may call which routes (ADR 0054). Each group's callers come from the chart, as
+/// Who may call which routes (ADR 0055). Each group's callers come from the chart, as
 /// `namespace/service-account`; a group it leaves empty is closed.
 pub struct Access {
     verifier: Arc<awzy_service_auth::Verifier>,

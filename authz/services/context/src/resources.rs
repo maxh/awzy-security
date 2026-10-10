@@ -698,8 +698,8 @@ async fn delete_work_item(State(store): State<ContextStore>, Path(id): Path<Stri
 
 /// `/v1/resources` and `/v1/work-items` for connectors (writes, in batches of up to
 /// [`MAX_BATCH`]) and for enforcement points and the PDP (reads).
-/// Callers authenticate with service tokens (ADR 0054; see `Access`).
-/// Reading resources and work items: what the PDP and connectors need (ADR 0054 groups them).
+/// Callers authenticate with service tokens (ADR 0055; see `Access`).
+/// Reading resources and work items: what the PDP and connectors need (ADR 0055 groups them).
 pub fn read_router(store: ContextStore) -> Router {
     Router::new()
         .route("/v1/resources", get(list_resources))

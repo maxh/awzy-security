@@ -75,7 +75,7 @@ pub struct Resources {
     /// awzy-context's base URL; `None` when the PDP runs without it.
     endpoint: Option<String>,
     client: Client<HttpConnector, Empty<Bytes>>,
-    /// This process's service token for awzy-context (ADR 0054).
+    /// This process's service token for awzy-context (ADR 0055).
     tokens: awzy_service_auth::TokenSource,
     cache: RwLock<HashMap<String, Cached>>,
     ttl: Duration,

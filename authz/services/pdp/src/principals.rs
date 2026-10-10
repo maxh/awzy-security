@@ -120,7 +120,7 @@ impl Principals {
     }
 }
 
-/// A GET to awzy-context, with this process's service token for it (ADR 0054).
+/// A GET to awzy-context, with this process's service token for it (ADR 0055).
 pub(crate) fn context_get(url: &str, tokens: &TokenSource) -> anyhow::Result<axum::http::Request<Empty<Bytes>>> {
     let mut req = axum::http::Request::get(url);
     if let Some(authorization) = tokens.authorization("awzy-context")? {
