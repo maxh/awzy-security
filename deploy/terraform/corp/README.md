@@ -25,8 +25,13 @@ cd build && tofu init && tofu plan
 ```
 
 `deployment.env` also passes the state bucket to `tofu init` (`TF_CLI_ARGS_init`), since a
-backend block can't read variables. Keep a copy somewhere safe: it's the only record of which
-accounts this tree manages.
+backend block can't read variables. It's the only record of which accounts this tree manages,
+so a copy lives in Secrets Manager in the management account (`awzy/deployment-env/corp`):
+
+```sh
+tools/deployment-env pull deploy/terraform/corp --profile <management profile> --region <region>   # on a new machine
+tools/deployment-env push deploy/terraform/corp --profile <management profile> --region <region>   # after editing it
+```
 
 CI publishes with the repository's Actions variables, set from `build/`'s outputs:
 `AWZY_CORP_AWS_DEPLOY_ROLE_ARN` (from `corp-portal/`), `AWZY_CORP_AWS_PUBLISH_ROLE_ARN`,

@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Keeps a deployment's gitignored deployment.env (the account IDs, buckets, and names its
+# Terraform targets; ADR 0053) in AWS Secrets Manager in that deployment's management account, so
+# it survives a lost laptop and can be restored on another machine.
+#
+#   tools/deployment-env push deploy/terraform/corp --profile awzy-corp --region us-east-2
+#   tools/deployment-env pull deploy/terraform/corp --profile awzy-corp --region us-east-2
+#
+# The secret is named awzy/deployment-env/<deployment folder name>. `pull` refuses to replace a
+# local file that differs unless given --force, and shows what would change.
+set -euo pipefail
+
+usage() { echo "usage: $0 push|pull <deployment dir> --profile <aws profile> --region <region> [--force]" >&2; exit 2; }
+[ $# -ge 2 ] || usage
+action=$1 dir=${2%/}; shift 2
+profile="" region="" force=false
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --profile) profile=$2; shift 2 ;;
+    --region) region=$2; shift 2 ;;
+    --force) force=true; shift ;;
+    *) usage ;;
+  esac
+done
+[ -n "$profile" ] && [ -n "$region" ] || usage
+[ -d "$dir" ] || { echo "no such directory: $dir" >&2; exit 2; }
+
+file="$dir/deployment.env"
+name="awzy/deployment-env/$(basename "$dir")"
+aws=(aws --profile "$profile" --region "$region")
+account=$("${aws[@]}" sts get-caller-identity --query Account --output text)
+
+case "$action" in
+  push)
+    [ -f "$file" ] || { echo "no $file to push" >&2; exit 1; }
+    # The file says which management account it belongs in; refuse to store it anywhere else.
+    expected=$(sed -n 's/^export TF_VAR_management_account_id=//p' "$file" | tr -d "'\"")
+    [ "$expected" = "$account" ] || { echo "$file is for account $expected, but --profile $profile is $account" >&2; exit 1; }
+    if "${aws[@]}" secretsmanager describe-secret --secret-id "$name" >/dev/null 2>&1; then
+      "${aws[@]}" secretsmanager put-secret-value --secret-id "$name" --secret-string "file://$file" >/dev/null
+    else
+      "${aws[@]}" secretsmanager create-secret --name "$name" \
+        --description "deployment.env for $dir (tools/deployment-env)" --secret-string "file://$file" >/dev/null
+    fi
+    echo "stored $file as $name in account $account"
+    ;;
+  pull)
+    tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT
+    # JSON, not text: --output text adds a newline the file doesn't have.
+    "${aws[@]}" secretsmanager get-secret-value --secret-id "$name" --query SecretString --output json |
+      python3 -c 'import json, sys; sys.stdout.write(json.load(sys.stdin))' > "$tmp"
+    if [ -f "$file" ] && ! cmp -s "$tmp" "$file"; then
+      if ! $force; then
+        diff -u "$file" "$tmp" >&2 || true
+        echo "$file differs from $name (above); rerun with --force to replace it" >&2
+        exit 1
+      fi
+    fi
+    (umask 077 && cp "$tmp" "$file")
+    echo "restored $file from $name in account $account"
+    ;;
+  *) usage ;;
+esac
