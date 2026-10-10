@@ -29,7 +29,7 @@ pub const CEREMONY_LIFETIME: Duration = Duration::from_secs(300);
 #[derive(Debug, Clone, PartialEq)]
 pub struct SecurityKey {
     pub id: SecurityKeyId,
-    pub person_id: String,
+    pub human_id: String,
     pub name: String,
     /// The key that authorized adding this one; None for a person's first key.
     pub added_with: Option<SecurityKeyId>,
@@ -404,7 +404,7 @@ impl SecurityKeys {
 fn key_from_row(row: &PgRow) -> Result<SecurityKey, sqlx::Error> {
     Ok(SecurityKey {
         id: SecurityKeyId::from_uuid(row.try_get("id")?),
-        person_id: row.try_get("person_id")?,
+        human_id: row.try_get("person_id")?,
         name: row.try_get("name")?,
         added_with: row.try_get::<Option<uuid::Uuid>, _>("added_with")?.map(SecurityKeyId::from_uuid),
         created_at: row.try_get("created_at")?,

@@ -601,8 +601,8 @@ function ResetKeys() {
   const [error, setError] = useState<string | null>(null);
 
   const keysOf = graphql`
-    query ChallengesPageKeysOfQuery($personId: String!) {
-      securityKeys(personId: $personId) {
+    query ChallengesPageKeysOfQuery($humanId: String!) {
+      securityKeys(humanId: $humanId) {
         id
         name
         createdAt
@@ -623,7 +623,7 @@ function ResetKeys() {
   const look = async () => {
     try {
       const res = await fetchQuery<ChallengesPageKeysOfQuery>(environment, keysOf, {
-        personId: person.trim(),
+        humanId: person.trim(),
       }).toPromise();
       setFound(res?.securityKeys ?? []);
       setError(null);

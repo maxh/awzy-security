@@ -1,6 +1,6 @@
 # 0058. Fields holding QIDs are named `_qid` on the wire
 
-- Status: Accepted
+- Status: Accepted; amended by [0062](0062-a-persons-id-on-the-wire-is-human-id.md) (`person_id` is `human_id`)
 - Date: 2026-10-10
 - Amends: [0013](0013-qids-and-utc-timestamps.md) (how QID fields are named), and makes a one-time
   exception to [0045](0045-sdks-are-enforcement-points-built-on-a-stable-proto.md) (no edits to `v1`)

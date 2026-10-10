@@ -776,7 +776,7 @@ type Query {
 	"""
 	Someone's security keys, to reset a lost one. For those who administer challenges.
 	"""
-	securityKeys(personId: String!): [SecurityKey!]!
+	securityKeys(humanId: String!): [SecurityKey!]!
 }
 
 input RegisterServiceAccountInput {
@@ -822,7 +822,10 @@ type SecurityKey {
 	QID: security_key_<uuid>.
 	"""
 	id: ID!
-	personId: String!
+	"""
+	Whose key it is: the person's `Human` entity ID.
+	"""
+	humanId: String!
 	"""
 	What the person called it.
 	"""

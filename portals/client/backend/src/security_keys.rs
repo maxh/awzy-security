@@ -33,8 +33,9 @@ impl SecurityKey {
         ID(self.0.qid.clone())
     }
 
-    async fn person_id(&self) -> &str {
-        &self.0.person_id
+    /// Whose key it is: the person's `Human` entity ID.
+    async fn human_id(&self) -> &str {
+        &self.0.human_id
     }
 
     /// What the person called it.
@@ -152,15 +153,15 @@ impl SecurityKeyQuery {
     /// The signed-in person's security keys.
     async fn my_security_keys(&self, ctx: &Context<'_>) -> Result<Vec<SecurityKey>> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
-        let person_id = answering_person(&viewer)?;
-        let keys = client(ctx)?.list_security_keys(ListSecurityKeysRequest { person_id }).await.map_err(grpc)?;
+        let human_id = answering_person(&viewer)?;
+        let keys = client(ctx)?.list_security_keys(ListSecurityKeysRequest { human_id }).await.map_err(grpc)?;
         Ok(keys.into_inner().keys.into_iter().map(SecurityKey).collect())
     }
 
     /// Someone's security keys, to reset a lost one. For those who administer challenges.
-    async fn security_keys(&self, ctx: &Context<'_>, person_id: String) -> Result<Vec<SecurityKey>> {
+    async fn security_keys(&self, ctx: &Context<'_>, human_id: String) -> Result<Vec<SecurityKey>> {
         require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
-        let keys = client(ctx)?.list_security_keys(ListSecurityKeysRequest { person_id }).await.map_err(grpc)?;
+        let keys = client(ctx)?.list_security_keys(ListSecurityKeysRequest { human_id }).await.map_err(grpc)?;
         Ok(keys.into_inner().keys.into_iter().map(SecurityKey).collect())
     }
 }
@@ -174,7 +175,7 @@ impl SecurityKeyMutation {
     /// removing one.
     async fn begin_security_key_change(&self, ctx: &Context<'_>) -> Result<WebAuthnCeremony> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
-        let req = BeginKeyChangeRequest { person_id: answering_person(&viewer)? };
+        let req = BeginKeyChangeRequest { human_id: answering_person(&viewer)? };
         let res = client(ctx)?.begin_key_change(req).await.map_err(grpc)?.into_inner();
         Ok(ceremony(res.ceremony_qid, res.options_json))
     }
@@ -188,7 +189,7 @@ impl SecurityKeyMutation {
     ) -> Result<WebAuthnCeremony> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req = BeginKeyRegistrationRequest {
-            person_id: answering_person(&viewer)?,
+            human_id: answering_person(&viewer)?,
             authorization: input.authorization.map(AssertionInput::wire).transpose()?,
         };
         let res = client(ctx)?.begin_key_registration(req).await.map_err(grpc)?.into_inner();
@@ -203,7 +204,7 @@ impl SecurityKeyMutation {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req = FinishKeyRegistrationRequest {
             ceremony_qid: input.ceremony_qid.0,
-            person_id: answering_person(&viewer)?,
+            human_id: answering_person(&viewer)?,
             name: input.name,
             client_data_json: bytes("clientDataJson", &input.client_data_json)?,
             attestation_object: bytes("attestationObject", &input.attestation_object)?,
@@ -219,7 +220,7 @@ impl SecurityKeyMutation {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req = RemoveSecurityKeyRequest {
             security_key_qid: input.security_key_qid.0,
-            person_id: answering_person(&viewer)?,
+            human_id: answering_person(&viewer)?,
             authorization: Some(input.authorization.wire()?),
         };
         key(client(ctx)?.remove_security_key(req).await.map_err(grpc)?.into_inner().key)
@@ -245,7 +246,7 @@ impl SecurityKeyMutation {
     ) -> Result<WebAuthnCeremony> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req =
-            BeginVerificationRequest { challenge_qid: input.challenge_qid.0, person_id: answering_person(&viewer)? };
+            BeginVerificationRequest { challenge_qid: input.challenge_qid.0, human_id: answering_person(&viewer)? };
         let res = client(ctx)?.begin_verification(req).await.map_err(grpc)?.into_inner();
         Ok(ceremony(res.ceremony_qid, res.options_json))
     }
@@ -258,7 +259,7 @@ impl SecurityKeyMutation {
     ) -> Result<ChallengePayload> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req = FinishVerificationRequest {
-            person_id: answering_person(&viewer)?,
+            human_id: answering_person(&viewer)?,
             assertion: Some(input.assertion.wire()?),
         };
         let c = client(ctx)?.finish_verification(req).await.map_err(grpc)?.into_inner().challenge;

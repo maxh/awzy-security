@@ -239,7 +239,8 @@ message WatchContainmentsResponse {
 message SecurityKey {
   // QID: security_key_<uuid>.
   string qid = 1;
-  string person_id = 2;
+  // The person whose key it is, by their Human entity ID (the IdP's user name), not a QID.
+  string human_id = 2;
   string name = 3;
   // The key that authorized adding this one; empty for a person's first key.
   string added_with_qid = 4;
@@ -263,7 +264,7 @@ message Assertion {
 }
 
 message ListSecurityKeysRequest {
-  string person_id = 1;
+  string human_id = 1;
 }
 
 message ListSecurityKeysResponse {
@@ -272,7 +273,7 @@ message ListSecurityKeysResponse {
 
 message BeginKeyChangeRequest {
   // The signed-in person.
-  string person_id = 1;
+  string human_id = 1;
 }
 
 message BeginKeyChangeResponse {
@@ -283,7 +284,7 @@ message BeginKeyChangeResponse {
 }
 
 message BeginKeyRegistrationRequest {
-  string person_id = 1;
+  string human_id = 1;
   // Required once the person has a key: an assertion over a BeginKeyChange ceremony.
   Assertion authorization = 2;
 }
@@ -296,7 +297,7 @@ message BeginKeyRegistrationResponse {
 
 message FinishKeyRegistrationRequest {
   string ceremony_qid = 1;
-  string person_id = 2;
+  string human_id = 2;
   // What the person calls the key, e.g. "YubiKey on my keychain".
   string name = 3;
   bytes client_data_json = 4;
@@ -310,7 +311,7 @@ message FinishKeyRegistrationResponse {
 message RemoveSecurityKeyRequest {
   // QID: security_key_<uuid>.
   string security_key_qid = 1;
-  string person_id = 2;
+  string human_id = 2;
   // An assertion over a BeginKeyChange ceremony, from any of the person's keys.
   Assertion authorization = 3;
 }
@@ -333,9 +334,9 @@ message ResetSecurityKeyResponse {
 }
 
 message BeginVerificationRequest {
-  // QID: challenge_<uuid>. Must ask for verification and be sent to person_id.
+  // QID: challenge_<uuid>. Must ask for verification and be sent to human_id.
   string challenge_qid = 1;
-  string person_id = 2;
+  string human_id = 2;
 }
 
 message BeginVerificationResponse {
@@ -345,7 +346,7 @@ message BeginVerificationResponse {
 }
 
 message FinishVerificationRequest {
-  string person_id = 1;
+  string human_id = 1;
   Assertion assertion = 2;
 }
 

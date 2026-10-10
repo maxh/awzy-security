@@ -67,7 +67,7 @@ bazel build --config=lint //...                    # clippy
   (`requested_at_unix` on a break-glass request).
 - **IDs on the wire** (protobuf, GraphQL, JSON): a field holding one of awzy's own QIDs is named
   `_qid` (`string decision_qid`, `challengeQid`; a message's own is `qid`), so it can't be
-  mistaken for an ID from the client's systems, which keeps `_id` (`person_id`, `EntityRef.id`).
+  mistaken for an ID from the client's systems, which keeps `_id` (`human_id`, `EntityRef.id`).
   GraphQL objects keep `id`, which Relay requires (ADR 0058).
 - **Who did something** is an `Actor` (an entity and the person it acted for), never a string:
   `awzy_model::Actor`, `awzy.authz.v1.Actor` in protobuf, the `Actor` type in GraphQL (ADR 0060).

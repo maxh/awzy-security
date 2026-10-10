@@ -7,7 +7,7 @@ awzy works with two kinds of thing, and names them so they can't be confused:
 
 - **Entities from your systems:** people, groups, service accounts, documents, MCP tools. awzy
   didn't create them, so it keeps the IDs your IdP and apps give them. They're written as a type
-  and an ID, `Human::"alice"`, and fields holding their IDs end in `_id` (`person_id`).
+  and an ID, `Human::"alice"`, and fields holding their IDs end in `_id` (`human_id`).
 - **awzy's own records:** decisions, policy bundles, challenges, containments. awzy creates them
   and gives each a [QID](#qids). Fields holding one end in `_qid` (`decision_qid`).
 

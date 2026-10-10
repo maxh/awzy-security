@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<0584bccfd937dc777bd201b09fb9743f>>
+ * @generated SignedSource<<f486cd12d2c2e132240f0bd2ce853dde>>
  * @lightSyntaxTransform
  */
 
@@ -9,7 +9,7 @@
 
 import { ConcreteRequest } from 'relay-runtime';
 export type ChallengesPageKeysOfQuery$variables = {
-  personId: string;
+  humanId: string;
 };
 export type ChallengesPageKeysOfQuery$data = {
   readonly securityKeys: ReadonlyArray<{
@@ -29,7 +29,7 @@ var v0 = [
   {
     "defaultValue": null,
     "kind": "LocalArgument",
-    "name": "personId"
+    "name": "humanId"
   }
 ],
 v1 = [
@@ -38,8 +38,8 @@ v1 = [
     "args": [
       {
         "kind": "Variable",
-        "name": "personId",
-        "variableName": "personId"
+        "name": "humanId",
+        "variableName": "humanId"
       }
     ],
     "concreteType": "SecurityKey",
@@ -97,16 +97,16 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "cae60034c72dba432ac3ca1a3d288472",
+    "cacheID": "c773779d32faa9485879a18fee0c12d0",
     "id": null,
     "metadata": {},
     "name": "ChallengesPageKeysOfQuery",
     "operationKind": "query",
-    "text": "query ChallengesPageKeysOfQuery(\n  $personId: String!\n) {\n  securityKeys(personId: $personId) {\n    id\n    name\n    createdAt\n    lastUsedAt\n  }\n}\n"
+    "text": "query ChallengesPageKeysOfQuery(\n  $humanId: String!\n) {\n  securityKeys(humanId: $humanId) {\n    id\n    name\n    createdAt\n    lastUsedAt\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "923694357810340a341f06e7f67a79ef";
+(node as any).hash = "165ea5f5e052de4a74d75ed63deb8e77";
 
 export default node;
