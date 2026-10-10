@@ -1,6 +1,6 @@
 # 0016. `Human` and `ServiceAccount` principals; delegation per request
 
-- Status: Accepted
+- Status: Accepted; amended by [0065](0065-agents-approve-people-verify.md) (who answers challenges, delegation chains)
 - Date: 2026-10-08
 - Partly supersedes: 0008 (how an unattended agent's owner is treated)
 

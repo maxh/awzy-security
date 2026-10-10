@@ -31,7 +31,8 @@ attributes include what it inherits from the folders above it, and every attribu
 optional in the schema may be missing, so test it with `has` first.
 
 **Actions** are `read` and `write` on a `Resource`, `call` on an `McpTool`, `view` and
-`administer` on a `PortalArea`, and `approve` for approving someone else's challenged request.
+`administer` on a `PortalArea`, and `approve` for approving someone else's challenged request,
+by a person or an agent you name in a policy.
 
 ### Sensitivity
 
@@ -84,6 +85,7 @@ claimed; the first two come from the request's own fields and its validated toke
 | `on_behalf_of` | `Human`, optional | awzy | The person a service account acts for, from its validated token. Absent when it acts on its own authority |
 | `assigned` | `Bool`, optional | awzy | Whether the accessor is on open work that links the resource. Absent when awzy doesn't know |
 | `client` | `String`, optional | The enforcement point | The calling software, such as `browser`, `cli`, or `mcp` (awzy-gateway sets `mcp`). A hint that an agent may be using a person's own credentials |
+| `approving_for` | `Human`, optional | awzy-challenge | Only on an `approve` check: the person who answers for the challenged request. An agent never approves for its own owner, and without this field it can't approve at all |
 
 When an agent acts for a person, the check runs twice, once as each, and each sees its own
 `risk_score` and `assigned`. See [How awzy decides](/concepts/how-awzy-decides/).

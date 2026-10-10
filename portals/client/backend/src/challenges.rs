@@ -374,12 +374,20 @@ impl ChallengeMutation {
     }
 
     /// Approves or rejects someone else's request. awzy-challenge checks with the PDP that the
-    /// signed-in person may approve the resource.
+    /// signed-in person, or a service account such as an overseer agent (ADR 0065), may approve the
+    /// resource.
     async fn decide_challenge(&self, ctx: &Context<'_>, input: DecideChallengeInput) -> Result<ChallengePayload> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
+        if viewer.on_behalf_of.is_some() {
+            return Err(format!(
+                "{} can't approve for someone else; it approves on its own authority or not at all",
+                viewer.actor().label()
+            )
+            .into());
+        }
         let req = DecideRequest {
             challenge_qid: input.challenge_qid.0,
-            decided_by_actor: Some(awzy_model::Actor::human(answering_person(&viewer)?).into()),
+            decided_by_actor: Some(viewer.actor().into()),
             approve: input.approve,
             note: input.note.unwrap_or_default(),
             approver_entities: viewer.entities.iter().map(awzy_authz_proto::entity_from_json).collect(),
