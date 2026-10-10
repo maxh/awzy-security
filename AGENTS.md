@@ -19,8 +19,8 @@ don't re-propose a decision an ADR settled (for example, keeping Kafka) without 
 ## Layout and boundaries
 
 Code lives with the product that owns it (ADR 0011), never in repo-wide top-level folders:
-`authz/` (client side, split into `services/`, `jobs/` that run once per release, and `libs/`
-for client-side code only; ADR 0040), `portals/client/`, `portals/corp/`, `portals/common/`
+`authz/` (client side, split into `services/`, `jobs/` that run once per release, `libs/`
+for client-side code only, and `demo/` that only demo installs and tests use; ADR 0040, 0063), `portals/client/`, `portals/corp/`, `portals/common/`
 (shared TypeScript), `libs/` (shared Rust), `policies/` (Cedar), `tools/` (Bazel macros, CI
 scripts, dev IdP). Shared code goes in a folder called `common`, not `shared`.
 

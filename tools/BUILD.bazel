@@ -10,3 +10,10 @@ package_group(
         "//policies/...",
     ],
 )
+
+# Demo-only code (ADR 0063): the synthetic company and its stand-in servers. Visible only to
+# itself, so no service, job, or library can depend on it and carry it into a real install.
+package_group(
+    name = "demo_only",
+    packages = ["//authz/demo/..."],
+)

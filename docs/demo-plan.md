@@ -104,7 +104,7 @@ side door:
 | Agent activity | A driver that makes real MCP tool calls through awzy-gateway, with tokens from the demo IdP, so every access is a real PDP decision |
 | Other activity (app and audit logs) | Events to awzy-intake, then Kafka and ClickHouse, as a log shipper would |
 
-The generator is one Rust crate (`authz/jobs/synthetic`) with a CLI for local runs and a
+The generator is one Rust crate (`authz/demo/synthetic`) with a CLI for local runs and a
 Kubernetes Job in the chart for the demo install, behind a demo-only value next to `demoIdp`.
 
 ## Where it runs
