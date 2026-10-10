@@ -232,12 +232,25 @@ Cedar evaluates against entities with attributes and parents. Relationships such
 
 ### Freshness targets
 
-A containment only helps if it takes effect quickly. These are proposed numbers, not measurements yet. Phase 3 confirms or replaces them under load, measured from the write to the first decision that reflects it.
+A containment only helps if it takes effect quickly. The targets, measured from the write to the first decision that reflects it:
 
 - ≤ 2 s: containment applied (pushed to every PDP)
 - ≤ 2 s: passed challenge honored on retry
 - ≤ 60 s: attribute change reaches every PDP snapshot
 - ≤ 60 s: published policy bundle live on every PDP
+
+Measured 2026-10-10 with `pdp_freshness` (5 rounds each; optimized builds of awzy-context, awzy-policy, awzy-challenge, and a PDP logging to Kafka, plus Postgres, Kafka, and 16 load clients, all on one Apple M1 laptop):
+
+| Change | Target | Median | Max | What bounds it |
+| --- | --- | --- | --- | --- |
+| Containment applied | 2 s | 84 ms | 134 ms | The containment feed's push ([ADR 0054](adr/0054-challenges-and-containments-over-grpc.md)) |
+| Containment lifted | | 65 ms | 202 ms | The same |
+| Passed challenge honored on retry | 2 s | 27 ms | 41 ms | awzy-challenge is asked on each challenge verdict |
+| Person joins or leaves a group in the IdP | 60 s | 4.7 s | 4.9 s | The PDP polls awzy-context's principals every 5 s |
+| A resource relabeled in awzy-context | 60 s | 29.9 s | 31.1 s | The PDP's 30 s resource cache ([ADR 0044](adr/0044-pdp-loads-resources-from-awzy-context.md)) |
+| Published bundle live | 60 s | 9.4 s | 9.8 s | The PDP polls awzy-policy every 10 s |
+
+All within target. The slow ones are set by polling and cache intervals, not load: they're configuration, and they'll shrink when the attribute and bundle changes are pushed rather than polled. Over the same run the background checks' p99 was 10.8 ms, a little over the 10 ms target, with everything on one machine. Still to measure: in a real cluster, with several PDP replicas (the harness reports when a change has "settled", 20 reflecting decisions in a row, for that).
 
 > **When the PDP is unreachable, sensitivity decides fail-open or fail-closed.** Each PEP holds a small signed fallback bundle, pushed with each policy publish. A PEP can't look up a resource's sensitivity on its own, so the bundle maps what the PEP can see (MCP server and tool name, HTTP route prefix, resource type) to a tier. It is compiled from awzy-context when the bundle is published, and the client sets fail-open or fail-closed per tier in the client portal. Anything the bundle doesn't list fails closed, and high-sensitivity tiers always fail closed. Fail-open replays only a cached allow younger than a short TTL the client sets. A containment issued before the outage has already cleared that accessor's cached allows. A containment issued during the outage can't reach a PEP that is cut off from the PDP, and the short TTL is what limits that exposure.
 

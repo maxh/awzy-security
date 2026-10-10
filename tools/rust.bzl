@@ -16,12 +16,13 @@ IMAGE_PLATFORMS = [
     "//tools/platforms:linux_amd64",
 ]
 
-def awzy_rust_library(name, crate_name, deps = [], test_deps = [], compile_data = [], visibility = None):
+def awzy_rust_library(name, crate_name, deps = [], test_deps = [], compile_data = [], test_size = "small", visibility = None):
     """A library crate plus its unit tests (`:<name>_test`).
 
     Third-party deps come from the package's Cargo.toml via crate_universe;
     `deps` lists only first-party Bazel targets, and `test_deps` first-party targets that
-    only the tests use (Cargo dev-dependencies).
+    only the tests use (Cargo dev-dependencies). `test_size` is Bazel's: "small" allows a minute,
+    "medium" five, for tests that run several services end to end.
     """
     rust_library(
         name = name,
@@ -35,12 +36,12 @@ def awzy_rust_library(name, crate_name, deps = [], test_deps = [], compile_data 
     rust_test(
         name = name + "_test",
         crate = ":" + name,
-        size = "small",
+        size = test_size,
         deps = test_deps + all_crate_deps(normal_dev = True),
         proc_macro_deps = all_crate_deps(proc_macro_dev = True),
     )
 
-def awzy_service(name, crate_name, binary_name, deps = [], test_deps = [], compile_data = [], extra_binaries = [], frontend = None, visibility = None):
+def awzy_service(name, crate_name, binary_name, deps = [], test_deps = [], compile_data = [], extra_binaries = [], frontend = None, test_size = "small", visibility = None):
     """A deployable service: library crate, unit tests, the `binary_name` executable, and its image.
 
     `extra_binaries` names files in src/bin/ (without .rs) to build as additional binaries.
@@ -61,6 +62,7 @@ def awzy_service(name, crate_name, binary_name, deps = [], test_deps = [], compi
         deps = deps,
         test_deps = test_deps,
         compile_data = compile_data,
+        test_size = test_size,
         visibility = visibility,
     )
     for binary in [binary_name] + extra_binaries:
