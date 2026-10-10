@@ -1,6 +1,6 @@
 # 0074. A human is `human` in every name, and several are `humans`
 
-- Status: Accepted
+- Status: Accepted; amended by [0076](0076-the-human-rename-finishes-at-once.md) (finished at once)
 - Date: 2026-10-10
 - Amends: [0061](0061-ownership-and-sharing-in-the-resource-entity.md) (the sharing attributes'
   names) and [0062](0062-a-persons-id-on-the-wire-is-human-id.md) (extends its rename to every

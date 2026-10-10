@@ -40,7 +40,7 @@ const MAX_TEXT: usize = 20_000;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Share {
-    /// human | group | domain | anyone. `person`, the name before ADR 0074, still reads as `human`.
+    /// human | group | domain | anyone
     pub kind: String,
     /// A userName, a group name, or a domain; empty for `anyone`.
     #[serde(default)]
@@ -197,7 +197,7 @@ impl ResourceInput {
             }
         }
         for share in &self.sharing {
-            let kinds = ["human", "person", "group", "domain", "anyone"];
+            let kinds = ["human", "group", "domain", "anyone"];
             let roles = ["reader", "commenter", "writer", "owner"];
             if !kinds.contains(&share.kind.as_str()) || !roles.contains(&share.role.as_str()) {
                 return Err(invalid(format!("{}: sharing kind or role {share:?} isn't known", self.id)));
@@ -565,7 +565,7 @@ fn entity_sharing<'a>(r: &Resource, sharing: impl Iterator<Item = &'a Share>) ->
     for share in sharing {
         let writes = matches!(share.role.as_str(), "writer" | "owner");
         match share.kind.as_str() {
-            "human" | "person" => {
+            "human" => {
                 humans.insert(share.id.as_str());
                 if writes {
                     writer_humans.insert(share.id.as_str());
@@ -588,15 +588,11 @@ fn entity_sharing<'a>(r: &Resource, sharing: impl Iterator<Item = &'a Share>) ->
     let mut attrs = json!({
         "sensitivity": r.effective_sensitivity().unwrap_or(DEFAULT_SENSITIVITY),
         "unclassified": r.effective_sensitivity().is_none(),
-        "shared_humans": refs(entity_type::HUMAN, humans.clone()),
+        "shared_humans": refs(entity_type::HUMAN, humans),
         "shared_groups": refs(entity_type::GROUP, groups),
-        "writer_humans": refs(entity_type::HUMAN, writer_humans.clone()),
+        "writer_humans": refs(entity_type::HUMAN, writer_humans),
         "writer_groups": refs(entity_type::GROUP, writer_groups),
         "shared_with_everyone": everyone,
-        // The names before ADR 0074, for bundles published under them. The PDP drops whichever
-        // pair its schema doesn't declare. Removed in a later release.
-        "shared_people": refs(entity_type::HUMAN, humans),
-        "writer_people": refs(entity_type::HUMAN, writer_humans),
     });
     if let Some(owner) = &r.owner {
         attrs["owner"] = json!({ "__entity": { "type": entity_type::HUMAN, "id": owner } });
@@ -896,7 +892,6 @@ mod tests {
         };
         let a = &chain[0]["attrs"];
         assert_eq!(names(&a["shared_humans"]), ["sam"]);
-        assert_eq!(names(&a["shared_people"]), ["sam"], "also under the name before ADR 0074, for a release");
         assert_eq!(names(&a["shared_groups"]), ["engineering"], "inherited from its folder");
         assert_eq!(names(&a["writer_groups"]), ["engineering"], "a writer on the folder writes the document");
         assert_eq!(
@@ -905,9 +900,6 @@ mod tests {
             "sam only reads"
         );
         assert_eq!(names(&chain[1]["attrs"]["shared_humans"]).len(), 0, "a folder doesn't inherit from its document");
-
-        let older = resource("older", None, vec![share("person", "sam", "writer")]);
-        assert_eq!(names(&entity(&older)["attrs"]["writer_humans"]), ["sam"], "an older connector's `person` share");
 
         let public = resource("public", None, vec![share("anyone", "", "reader"), share("group", "x", "reader")]);
         assert_eq!(entity(&public)["attrs"]["shared_with_everyone"], true);
@@ -931,8 +923,7 @@ mod tests {
                      "attrs": { "sensitivity": "confidential", "unclassified": false,
                                 "owner": { "__entity": { "type": "Human", "id": "nora.patel@larkspur.example" } },
                                 "shared_humans": [], "shared_groups": [{ "__entity": { "type": "Group", "id": "sales" } }],
-                                "writer_humans": [], "writer_groups": [], "shared_with_everyone": false,
-                                "shared_people": [], "writer_people": [] },
+                                "writer_humans": [], "writer_groups": [], "shared_with_everyone": false },
                      "parents": [{ "type": "Resource", "id": "synthetic:folder:sales" }] })
         );
 

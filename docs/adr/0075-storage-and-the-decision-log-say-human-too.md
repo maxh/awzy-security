@@ -1,6 +1,6 @@
 # 0075. Storage and the decision log say `human` too
 
-- Status: Accepted
+- Status: Accepted; amended by [0076](0076-the-human-rename-finishes-at-once.md) (finished at once)
 - Date: 2026-10-10
 - Amends: [0074](0074-a-human-is-named-human-everywhere.md) (which left storage columns and logged
   policy IDs alone) and [0058](0058-qid-fields-are-named-qid-on-the-wire.md) (storage keeps its
