@@ -12,7 +12,7 @@ mod grpc;
 mod store;
 
 pub use feed::{Feed, HEARTBEAT};
-pub use grpc::router;
+pub use grpc::{router, Access};
 pub use store::{
     ActiveContainments, Challenge, ChallengeStatus, ChallengeStore, Containment, Lifetimes, RequestKey, Resolution,
     StoreError, MIN_JUSTIFICATION_CHARS,

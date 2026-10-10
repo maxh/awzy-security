@@ -1,5 +1,6 @@
 //! `awzy.challenge.v1.ChallengeService` over gRPC.
 
+use awzy_service_auth::{require_by_path, Allowed, PathGuard, Rule};
 use std::{pin::Pin, sync::Arc};
 
 use awzy_authz_proto::{
@@ -27,8 +28,58 @@ use crate::{
     store::{Challenge, ChallengeStatus, ChallengeStore, Containment, RequestKey, StoreError},
 };
 
-pub fn router(store: Arc<ChallengeStore>, feed: Arc<Feed>, approvals: Arc<Approvals>) -> Router {
-    tonic::service::Routes::new(ChallengeServiceServer::new(Service { store, feed, approvals })).into_axum_router()
+/// Who may call which methods (ADR 0055). Each group's callers come from the chart, as
+/// `namespace/service-account`; a method no group names is refused.
+pub struct Access {
+    verifier: Arc<awzy_service_auth::Verifier>,
+    /// Resolving challenges and following containments: the PDPs.
+    pdps: Allowed,
+    /// Reading and answering challenges for a person (`answered_by`, `decided_by` are taken as
+    /// given): only the client portal, which authenticates that person.
+    people: Allowed,
+    /// Containing and lifting: the client portal, and later awzy-reasoner.
+    containers: Allowed,
+}
+
+impl Access {
+    /// From `AWZY_CHALLENGE_PDPS`, `AWZY_CHALLENGE_PEOPLE`, and `AWZY_CHALLENGE_CONTAINERS`.
+    pub fn from_env() -> anyhow::Result<Self> {
+        Ok(Self {
+            verifier: Arc::new(awzy_service_auth::Verifier::from_env("awzy-challenge")?),
+            pdps: Allowed::from_env("AWZY_CHALLENGE_PDPS"),
+            people: Allowed::from_env("AWZY_CHALLENGE_PEOPLE"),
+            containers: Allowed::from_env("AWZY_CHALLENGE_CONTAINERS"),
+        })
+    }
+
+    /// Everyone may call everything: for tests and local runs.
+    pub fn off() -> Self {
+        let nobody = || Allowed::only(&[]);
+        Self {
+            verifier: Arc::new(awzy_service_auth::Verifier::off()),
+            pdps: nobody(),
+            people: nobody(),
+            containers: nobody(),
+        }
+    }
+
+    fn guard(&self) -> PathGuard {
+        let method = |m: &str| format!("/awzy.challenge.v1.ChallengeService/{m}");
+        let group = |methods: &[&str], allowed: &Allowed| -> Vec<(String, Rule)> {
+            methods.iter().map(|m| (method(m), Rule::Allow(allowed.clone()))).collect()
+        };
+        let mut rules = group(&["Resolve", "ListContainments", "WatchContainments"], &self.pdps);
+        rules.extend(group(&["GetChallenge", "ListChallenges", "Justify", "Decide"], &self.people));
+        rules.extend(group(&["Contain", "Lift"], &self.containers));
+        PathGuard::new(self.verifier.clone(), rules)
+    }
+}
+
+/// `access`: who may call which methods.
+pub fn router(store: Arc<ChallengeStore>, feed: Arc<Feed>, approvals: Arc<Approvals>, access: &Access) -> Router {
+    tonic::service::Routes::new(ChallengeServiceServer::new(Service { store, feed, approvals }))
+        .into_axum_router()
+        .route_layer(axum::middleware::from_fn_with_state(access.guard(), require_by_path))
 }
 
 struct Service {
@@ -305,7 +356,7 @@ mod tests {
         let approvals = Arc::new(Approvals::Only(vec!["carol".into()]));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let endpoint = format!("http://{}", listener.local_addr().unwrap());
-        let app = router(store, feed, approvals);
+        let app = router(store, feed, approvals, &Access::off());
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let client = ChallengeServiceClient::connect(endpoint.clone()).await.unwrap();
         (endpoint, client)

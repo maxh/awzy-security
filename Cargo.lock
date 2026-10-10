@@ -673,6 +673,7 @@ dependencies = [
  "awzy-model",
  "awzy-pdp",
  "awzy-server",
+ "awzy-service-auth",
  "awzy-telemetry",
  "axum",
  "chrono",
