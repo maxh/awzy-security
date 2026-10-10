@@ -148,6 +148,61 @@ context:
 
 # Pods allowed to reach the PDP. Enforcement points can run anywhere in the cluster (or call
 # through a private endpoint), so it accepts any in-cluster source.
+# awzy-gateway (ADR 0019): the MCP proxy agents call. Tokens are validated against the client
+# portal's IdP unless auth is set here. Off until there's an upstream MCP server to front.
+mcpGateway:
+  enabled: false
+  replicas: 2
+  # Public hostname for agents outside the cluster: https://<hostname>/mcp/<upstream>. Empty: in-cluster only.
+  hostname: ""
+  auth:
+    issuer: ""
+    jwksUrl: ""
+    audience: awzy
+    subjectClaim: "" # e.g. email with Okta or Entra
+  # Each: { name, url, default_sensitivity, tools: { <tool>: <tier> }, resource_tools: {...} }
+  upstreams: []
+  outage:
+    failOpenTiers: [] # e.g. [public, internal]; confidential and crown_jewels always fail closed
+    cachedAllowTtlSecs: 300
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { memory: 256Mi }
+
+# awzy-intake: events from apps and audit logs onto Kafka. Secret in the system namespace with
+# key "token" (at least 32 characters), which sources send.
+intake:
+  enabled: false
+  replicas: 2
+  tokenSecret: awzy-intake-token
+  eventsTopic: awzy.events.v1
+  # Public hostname for sources outside the cluster: https://<hostname>/v1/events. Empty: in-cluster only.
+  hostname: ""
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { memory: 256Mi }
+
+# awzy-connectors: on when Drive or Jira is configured. Always one replica.
+connectors:
+  # Google Drive (ADR 0069): a service account with domain-wide delegation, acting as `subject`,
+  # a Content manager of each shared drive to cover. Secret with key "key.json".
+  drive:
+    subject: ""
+    adminSubject: "" # to name group shares as SCIM does; optional
+    domain: "" # default: the subject's
+    keySecret: awzy-connectors-drive
+    intervalSeconds: 300
+  # Jira Cloud (ADR 0070): an account that can browse the projects. Secret with key "token".
+  jira:
+    url: "" # https://<site>.atlassian.net
+    user: ""
+    projects: [] # default: every project the account can browse
+    tokenSecret: awzy-connectors-jira
+    intervalSeconds: 300
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 256Mi }
+
 networkPolicies:
   enabled: true
   # Namespace of the Gateway's Envoy proxies (Envoy Gateway's default).

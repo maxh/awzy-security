@@ -105,6 +105,10 @@ resource "helm_release" "config" {
       hostname           = var.ingress.hostname
       acmeEmail          = var.ingress.acme_email
       serviceAnnotations = local.c.load_balancer.service_annotations
+      extraHostnames = {
+        mcp    = try(var.mcp_gateway.hostname == null ? "" : var.mcp_gateway.hostname, "")
+        intake = try(var.intake.hostname == null ? "" : var.intake.hostname, "")
+      }
     }
     cosignPubKey = var.cosign_public_key
     chart        = { repository = "${local.registry_host}/awzy/charts", version = var.chart_version }
@@ -143,6 +147,28 @@ resource "helm_release" "config" {
         }
       }
       gateway = { name = "awzy", namespace = local.namespaces.ops }
+      mcpGateway = {
+        enabled   = var.mcp_gateway != null
+        hostname  = try(var.mcp_gateway.hostname == null ? "" : var.mcp_gateway.hostname, "")
+        upstreams = try(var.mcp_gateway.upstreams, [])
+        outage    = { failOpenTiers = try(var.mcp_gateway.fail_open_tiers, []), cachedAllowTtlSecs = 300 }
+      }
+      intake = {
+        enabled  = var.intake != null
+        hostname = try(var.intake.hostname == null ? "" : var.intake.hostname, "")
+      }
+      connectors = {
+        drive = {
+          subject      = var.drive == null ? "" : nonsensitive(var.drive.subject)
+          adminSubject = var.drive == null ? "" : nonsensitive(var.drive.admin_subject)
+          domain       = var.drive == null ? "" : nonsensitive(var.drive.domain)
+        }
+        jira = {
+          url      = var.jira == null ? "" : nonsensitive(var.jira.url)
+          user     = var.jira == null ? "" : nonsensitive(var.jira.user)
+          projects = var.jira == null ? [] : nonsensitive(var.jira.projects)
+        }
+      }
     }
   })]
 
@@ -150,6 +176,7 @@ resource "helm_release" "config" {
     helm_release.argo_cd, helm_release.kyverno, helm_release.external_secrets,
     helm_release.clickhouse_operator, helm_release.envoy_gateway, helm_release.cert_manager,
     kubernetes_secret_v1.clickhouse, kubernetes_secret_v1.reporting_token, kubernetes_secret_v1.scim_token,
+    kubernetes_secret_v1.intake_token, kubernetes_secret_v1.drive, kubernetes_secret_v1.jira,
     kubernetes_secret_v1.registry, kubernetes_secret_v1.registry_kyverno, kubernetes_secret_v1.chart_repo,
   ]
 }

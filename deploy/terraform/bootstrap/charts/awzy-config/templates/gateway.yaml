@@ -76,6 +76,24 @@ spec:
           selector:
             matchLabels:
               app.kubernetes.io/part-of: awzy
+    {{- /* awzy-gateway and awzy-intake on their own hostnames, each with its own certificate:
+    the client portal already serves /mcp on its hostname. */}}
+    {{- range $name, $host := .Values.ingress.extraHostnames }}{{- if $host }}
+    - name: https-{{ $name }}
+      protocol: HTTPS
+      port: 443
+      hostname: {{ $host | quote }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: awzy-{{ $name }}-tls
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              app.kubernetes.io/part-of: awzy
+    {{- end }}{{- end }}
 ---
 # Plain HTTP only redirects. cert-manager's ACME challenge routes match a longer path, so they
 # still win.

@@ -58,15 +58,20 @@ spec:
           labelSelector:
             matchLabels: {{- include "awzy.selector" . | nindent 14 }}
       {{- end }}
-      {{- with .tokens }}
-      # Service tokens this workload sends, one per service it calls (ADR 0055).
+      {{- if or .tokens .volumes }}
       volumes:
+        {{- with .tokens }}
+        # Service tokens this workload sends, one per service it calls (ADR 0055).
         - name: awzy-service-tokens
           projected:
             sources:
               {{- range . }}
               - serviceAccountToken: { audience: {{ . }}, expirationSeconds: 600, path: {{ . }} }
               {{- end }}
+        {{- end }}
+        {{- with .volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
       {{- with .root.Values.image.pullSecret }}
       imagePullSecrets: [{ name: {{ . }} }]
@@ -88,9 +93,14 @@ spec:
             {{- with .env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- with .tokens }}
+          {{- if or .tokens .mounts }}
           volumeMounts:
+            {{- if .tokens }}
             - { name: awzy-service-tokens, mountPath: /var/run/secrets/awzy/tokens, readOnly: true }
+            {{- end }}
+            {{- with .mounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
           readinessProbe:
             httpGet: { path: /readyz, port: http }

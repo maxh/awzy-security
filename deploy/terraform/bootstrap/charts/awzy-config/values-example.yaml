@@ -12,3 +12,4 @@ ingress:
   hostname: demo.awzysecurity.com
   acmeEmail: ops@example.com
   serviceAnnotations: { service.beta.kubernetes.io/aws-load-balancer-type: nlb }
+  extraHostnames: { mcp: mcp.example.com, intake: "" }
