@@ -319,8 +319,9 @@ impl ChallengeService for Service {
         req: Request<ResetSecurityKeyRequest>,
     ) -> Result<Response<ResetSecurityKeyResponse>, Status> {
         let req = req.into_inner();
-        let key = self.keys()?.reset(qid(&req.security_key_qid)?, &req.removed_by).await.map_err(key_status)?;
-        tracing::warn!(key_id = %key.id, person = %key.person_id, removed_by = %req.removed_by, "security key reset by an admin");
+        let removed_by = actor(req.removed_by_actor, &req.removed_by, "removed_by_actor")?;
+        let key = self.keys()?.reset(qid(&req.security_key_qid)?, &removed_by).await.map_err(key_status)?;
+        tracing::warn!(key_id = %key.id, person = %key.person_id, removed_by = %removed_by, "security key reset by an admin");
         Ok(Response::new(ResetSecurityKeyResponse { key: Some(key_to_wire(key)) }))
     }
 
@@ -439,6 +440,7 @@ fn key_status(e: KeyError) -> Status {
 }
 
 fn key_to_wire(k: SecurityKey) -> WireKey {
+    let (removed_by_actor, removed_by) = awzy_authz_proto::actor_to_wire(k.removed_by.as_deref().unwrap_or(""));
     WireKey {
         qid: k.id.to_string(),
         person_id: k.person_id,
@@ -447,7 +449,8 @@ fn key_to_wire(k: SecurityKey) -> WireKey {
         created_at: Some(ts(k.created_at)),
         last_used_at: k.last_used_at.map(ts),
         removed_at: k.removed_at.map(ts),
-        removed_by: k.removed_by.unwrap_or_default(),
+        removed_by,
+        removed_by_actor,
     }
 }
 

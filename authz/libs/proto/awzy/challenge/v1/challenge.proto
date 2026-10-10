@@ -246,7 +246,10 @@ message SecurityKey {
   google.protobuf.Timestamp created_at = 5;
   google.protobuf.Timestamp last_used_at = 6;
   google.protobuf.Timestamp removed_at = 7;
+  // Deprecated: use `removed_by_actor`, which this repeats as text (`Human::alice`).
   string removed_by = 8;
+  // Who removed it (ADR 0060).
+  awzy.authz.v1.Actor removed_by_actor = 9;
 }
 
 // A browser's navigator.credentials.get() response.
@@ -319,8 +322,10 @@ message RemoveSecurityKeyResponse {
 message ResetSecurityKeyRequest {
   // QID: security_key_<uuid>.
   string security_key_qid = 1;
-  // The admin removing it.
+  // Deprecated: use `removed_by_actor`, which this repeats as text (`Human::alice`).
   string removed_by = 2;
+  // The admin removing it (ADR 0060).
+  awzy.authz.v1.Actor removed_by_actor = 3;
 }
 
 message ResetSecurityKeyResponse {
