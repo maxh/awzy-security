@@ -9,7 +9,9 @@
 //! route group comes from the chart, which knows the install's namespaces
 //! (`Allowed::from_env("AWZY_CONTEXT_WRITERS")`).
 //!
-//! `AWZY_SERVICE_AUTH=off` turns both sides off for local development and tests.
+//! Both sides are on in Kubernetes (every pod has `KUBERNETES_SERVICE_HOST`) and off elsewhere,
+//! where there's no service-account token: a laptop, a test. `AWZY_SERVICE_AUTH=on|off`
+//! overrides that.
 
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
@@ -33,7 +35,11 @@ const CLUSTER_JWKS: &str = "https://kubernetes.default.svc/openid/v1/jwks";
 pub const TOKEN_DIR: &str = "/var/run/secrets/awzy/tokens";
 
 fn turned_off() -> bool {
-    std::env::var("AWZY_SERVICE_AUTH").as_deref() == Ok("off")
+    match std::env::var("AWZY_SERVICE_AUTH").as_deref() {
+        Ok("off") => true,
+        Ok("on") => false,
+        _ => std::env::var_os("KUBERNETES_SERVICE_HOST").is_none(),
+    }
 }
 
 /// The workload that called, from its token.
@@ -110,10 +116,13 @@ impl Verifier {
         Self(None)
     }
 
-    /// The cluster's keys and issuer. Off when `AWZY_SERVICE_AUTH=off`.
+    /// The cluster's keys and issuer. Off outside Kubernetes, or with `AWZY_SERVICE_AUTH=off`.
     pub fn from_env(audience: &str) -> anyhow::Result<Self> {
         if turned_off() {
-            tracing::warn!(audience, "AWZY_SERVICE_AUTH=off: callers are not authenticated");
+            tracing::warn!(
+                audience,
+                "service auth is off (not in Kubernetes, or AWZY_SERVICE_AUTH=off): callers are not authenticated"
+            );
             return Ok(Self::off());
         }
         let own = std::fs::read_to_string(POD_TOKEN).map_err(|e| anyhow::anyhow!("reading {POD_TOKEN}: {e}"))?;
@@ -228,7 +237,8 @@ impl TokenSource {
         Self(None)
     }
 
-    /// `AWZY_SERVICE_TOKEN_DIR` (default `TOKEN_DIR`); off when `AWZY_SERVICE_AUTH=off`.
+    /// `AWZY_SERVICE_TOKEN_DIR` (default `TOKEN_DIR`); off outside Kubernetes, or with
+    /// `AWZY_SERVICE_AUTH=off`.
     pub fn from_env() -> Self {
         if turned_off() {
             return Self::off();

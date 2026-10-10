@@ -10,4 +10,5 @@ Part of [awzy-authz](../../README.md).
   `AWZY_CONTEXT_WRITERS=awzy-system/awzy`, read with `Allowed::from_env`.
 - **Calling:** `TokenSource::from_env().authorization("awzy-context")` reads the projected token
   the chart mounts for that audience, fresh on each call, as the kubelet rotates it.
-- `AWZY_SERVICE_AUTH=off` turns both off for local development and tests.
+- On in Kubernetes, off elsewhere (a laptop, a test), since only pods have tokens;
+  `AWZY_SERVICE_AUTH=on|off` overrides that.
