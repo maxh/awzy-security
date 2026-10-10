@@ -467,7 +467,7 @@ pub(crate) mod tests {
         let active = store.active().await.unwrap().unwrap();
         assert_eq!(active.id, out.bundle.id);
         assert_eq!(active.policies, POLICIES);
-        assert_eq!(active.published_by.as_deref(), Some("break-glass:sha256:admin"));
+        assert_eq!(active.published_by.as_deref(), Some("BreakGlassKey::sha256:admin"));
 
         assert!(matches!(store.break_glass_rollback(&req).await.unwrap_err(), StoreError::NonceReused));
         let missing = BreakGlassRequest { nonce: "n-2".into(), to_version: Some(999), ..req };

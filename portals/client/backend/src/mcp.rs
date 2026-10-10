@@ -710,6 +710,9 @@ mod tests {
         )
         .await;
         assert_eq!(call["result"]["structuredContent"]["draft"]["status"], "draft", "{call}");
-        assert_eq!(call["result"]["structuredContent"]["draft"]["created_by"], "sec-agent for alice", "{call}");
+        assert_eq!(
+            call["result"]["structuredContent"]["draft"]["created_by"], "ServiceAccount::sec-agent for Human::alice",
+            "{call}"
+        );
     }
 }
