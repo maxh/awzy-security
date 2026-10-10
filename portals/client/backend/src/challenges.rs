@@ -29,7 +29,7 @@ use crate::{
 
 pub(crate) type ChallengeClient = ChallengeServiceClient<awzy_service_auth::AuthChannel>;
 
-fn client(ctx: &Context<'_>) -> Result<ChallengeClient> {
+pub(crate) fn client(ctx: &Context<'_>) -> Result<ChallengeClient> {
     ctx.data::<Services>()
         .ok()
         .and_then(|s| s.challenge.clone())
@@ -37,19 +37,19 @@ fn client(ctx: &Context<'_>) -> Result<ChallengeClient> {
 }
 
 /// awzy-challenge's own message, without tonic's wrapping.
-fn grpc(s: tonic::Status) -> async_graphql::Error {
+pub(crate) fn grpc(s: tonic::Status) -> async_graphql::Error {
     s.message().to_string().into()
 }
 
 /// The signed-in person, or an error for a service account.
-fn answering_person(viewer: &Viewer) -> Result<String> {
+pub(crate) fn answering_person(viewer: &Viewer) -> Result<String> {
     if viewer.subject.kind != entity_type::HUMAN || viewer.on_behalf_of.is_some() {
         return Err(format!("{} can't answer challenges; only the person can, in the portal", viewer.actor()).into());
     }
     Ok(viewer.subject.id.clone())
 }
 
-fn time(t: &Option<Timestamp>) -> Option<UtcTimestamp> {
+pub(crate) fn time(t: &Option<Timestamp>) -> Option<UtcTimestamp> {
     t.as_ref().and_then(|t| DateTime::from_timestamp(t.seconds, t.nanos.max(0) as u32)).map(UtcTimestamp)
 }
 
@@ -434,10 +434,16 @@ mod tests {
         let pool = PgPoolOptions::new().max_connections(2).connect_with(options).await.unwrap();
         let store = Arc::new(ChallengeStore::new(pool, Lifetimes::default()));
         store.migrate().await.unwrap();
+        let keys = Arc::new(awzy_challenge::keys::SecurityKeys::new(
+            store.pool().clone(),
+            awzy_challenge::webauthn::RelyingParty::new("portal.example.com", ["https://portal.example.com"]),
+            store.clone(),
+        ));
         let app = awzy_challenge::router(
             store,
             Arc::new(Feed::default()),
             Arc::new(Approvals::pdp(&pdp_endpoint().await).unwrap()),
+            Some(keys),
             &awzy_challenge::Access::off(),
         );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -488,7 +494,7 @@ mod tests {
             )
         };
         let why = "Preparing the audit committee's Q3 review";
-        assert!(run_err(&schema, &carol, justify(why)).await.contains("only bob can justify"));
+        assert!(run_err(&schema, &carol, justify(why)).await.contains("only bob can answer"));
         assert!(run_err(&schema, &bob, justify("because")).await.contains("at least 20 characters"));
         let done = run(&schema, &bob, justify(why)).await;
         assert_eq!(done["justifyChallenge"]["challenge"], json!({ "status": "PASSED", "justification": why }));
@@ -530,6 +536,34 @@ mod tests {
         );
         assert_eq!(run(&schema, &alice, lift).await["liftContainment"]["containment"]["liftedBy"], json!("alice"));
         assert_eq!(run(&schema, &alice, "{ containments { id } }").await["containments"], json!([]));
+    }
+
+    #[tokio::test]
+    async fn security_keys_start_with_the_portals_relying_party() {
+        let Some((schema, mut client)) = setup().await else { return };
+        let bob = person("bob", "engineering");
+        assert_eq!(run(&schema, &bob, "{ mySecurityKeys { id } }").await["mySecurityKeys"], json!([]));
+
+        let begin =
+            run(&schema, &bob, "mutation { beginSecurityKeyRegistration(input: {}) { ceremonyQid optionsJson } }")
+                .await;
+        let c = &begin["beginSecurityKeyRegistration"];
+        assert!(c["ceremonyQid"].as_str().unwrap().starts_with("ceremony_"));
+        let options: serde_json::Value = serde_json::from_str(c["optionsJson"].as_str().unwrap()).unwrap();
+        assert_eq!(options["rp"]["id"], "portal.example.com");
+        assert_eq!(options["pubKeyCredParams"], json!([{ "type": "public-key", "alg": -7 }]));
+
+        // Without a key, there's nothing to verify with, and nothing to authorize a change.
+        let id = open(&mut client, "bob", WireKind::Verification).await;
+        let verify = format!(
+            r#"mutation {{ beginChallengeVerification(input: {{ challengeQid: "{id}" }}) {{ ceremonyQid }} }}"#
+        );
+        assert!(run_err(&schema, &bob, verify.as_str()).await.contains("has no security key"));
+        let change = "mutation { beginSecurityKeyChange { ceremonyQid } }";
+        assert!(run_err(&schema, &bob, change).await.contains("has no security key"));
+        // Someone else can't start a verification of bob's challenge.
+        let carol = person("carol", "engineering");
+        assert!(run_err(&schema, &carol, verify.as_str()).await.contains("only bob can answer"));
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
-use awzy_challenge::{approvals::Approvals, ChallengeStore, Feed, Lifetimes};
+use awzy_challenge::{approvals::Approvals, keys::SecurityKeys, ChallengeStore, Feed, Lifetimes};
 use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
@@ -27,6 +27,23 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
+    // Security keys (ADR 0059): the RP ID is the portal's hostname, and the origins its URLs.
+    let keys = match std::env::var("AWZY_CHALLENGE_WEBAUTHN_RP_ID") {
+        Ok(rp_id) => {
+            let origins = std::env::var("AWZY_CHALLENGE_WEBAUTHN_ORIGINS")
+                .context("AWZY_CHALLENGE_WEBAUTHN_ORIGINS is required with AWZY_CHALLENGE_WEBAUTHN_RP_ID")?;
+            let origins: Vec<String> =
+                origins.split(',').map(|o| o.trim().to_string()).filter(|o| !o.is_empty()).collect();
+            tracing::info!(%rp_id, ?origins, "security keys on");
+            let rp = awzy_challenge::webauthn::RelyingParty::new(rp_id, origins);
+            Some(Arc::new(SecurityKeys::new(store.pool().clone(), rp, store.clone())))
+        }
+        Err(_) => {
+            tracing::warn!("AWZY_CHALLENGE_WEBAUTHN_RP_ID is not set; security keys are off");
+            None
+        }
+    };
+
     let feed = Arc::new(Feed::default());
     tokio::spawn(feed.clone().follow(store.clone()));
     // Not ready until the containment list is loaded, so PDPs never get an empty one by mistake.
@@ -35,7 +52,7 @@ async fn main() -> anyhow::Result<()> {
     let access = awzy_challenge::Access::from_env()?;
     awzy_server::serve_with_readiness(
         "awzy-challenge",
-        awzy_challenge::router(store, feed, Arc::new(approvals), &access),
+        awzy_challenge::router(store, feed, Arc::new(approvals), keys, &access),
         Arc::new(move || ready.is_loaded()),
     )
     .await

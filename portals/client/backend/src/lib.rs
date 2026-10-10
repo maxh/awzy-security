@@ -17,6 +17,7 @@ mod enforcement;
 mod mcp;
 mod node;
 mod policies;
+mod security_keys;
 
 use access::{Auth, PortalAction, PortalArea, Surface, Viewer};
 use async_graphql::{
@@ -157,6 +158,7 @@ pub struct ClientPortalQuery(
     dry_run::DryRunQuery,
     awzy_bot::AwzyBotQuery,
     challenges::ChallengeQuery,
+    security_keys::SecurityKeyQuery,
 );
 
 #[derive(MergedObject, Default)]
@@ -167,6 +169,7 @@ pub struct ClientPortalMutation(
     directory::DirectoryMutation,
     awzy_bot::AwzyBotMutation,
     challenges::ChallengeMutation,
+    security_keys::SecurityKeyMutation,
 );
 
 pub type ClientPortalSchema = Schema<ClientPortalQuery, ClientPortalMutation, EmptySubscription>;

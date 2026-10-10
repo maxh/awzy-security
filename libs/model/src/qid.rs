@@ -101,6 +101,16 @@ qid!(
     ContainmentId,
     "containment"
 );
+qid!(
+    /// A person's security key (a WebAuthn credential) in awzy-challenge.
+    SecurityKeyId,
+    "security_key"
+);
+qid!(
+    /// One WebAuthn ceremony: a challenge awzy-challenge issued to a browser, used once.
+    CeremonyId,
+    "ceremony"
+);
 
 #[cfg(test)]
 mod tests {

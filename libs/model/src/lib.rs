@@ -4,7 +4,9 @@
 
 mod qid;
 
-pub use qid::{ChallengeId, ContainmentId, DecisionId, EventId, InstallId, PolicyBundleId, QidError};
+pub use qid::{
+    CeremonyId, ChallengeId, ContainmentId, DecisionId, EventId, InstallId, PolicyBundleId, QidError, SecurityKeyId,
+};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
