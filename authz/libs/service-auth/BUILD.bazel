@@ -1,6 +1,6 @@
 load("//tools:rust.bzl", "awzy_rust_library")
 
-# How awzy's services inside an install prove who is calling (ADR 0054).
+# How awzy's services inside an install prove who is calling (ADR 0055).
 awzy_rust_library(
     name = "service-auth",
     crate_name = "awzy_service_auth",
