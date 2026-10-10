@@ -6,7 +6,14 @@ use awzy_model::{Actor, ChallengeId, ChallengeKind, Challenges, ContainmentId, D
 use chrono::{DateTime, Utc};
 use sqlx::{postgres::PgRow, PgPool, Postgres, Row, Transaction};
 
-static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
+/// Its migrations, tolerating ones a newer version already applied (ADR 0072): an older version
+/// restarted mid-rollout, or rolled back to, still starts against the schema the newer one
+/// expanded.
+fn migrator() -> sqlx::migrate::Migrator {
+    let mut migrator = sqlx::migrate!("./migrations");
+    migrator.set_ignore_missing(true);
+    migrator
+}
 
 /// The Postgres channel notified on every containment and lift, with the new feed version.
 pub const CONTAINMENT_CHANNEL: &str = "awzy_containments";
@@ -201,7 +208,7 @@ impl ChallengeStore {
     }
 
     pub async fn migrate(&self) -> Result<(), sqlx::migrate::MigrateError> {
-        MIGRATOR.run(&self.pool).await
+        migrator().run(&self.pool).await
     }
 
     /// What `request` has passed of `required`, and, with `open`, the pending challenge for the

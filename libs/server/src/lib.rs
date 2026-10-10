@@ -3,7 +3,14 @@
 
 pub mod metrics;
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use axum::{http::StatusCode, routing::get, Router};
 use tokio::net::TcpListener;
@@ -58,14 +65,35 @@ pub async fn serve(service: &'static str, app: Router) -> anyhow::Result<()> {
 }
 
 /// Like [`serve`], with `/readyz` following `ready`.
+///
+/// On SIGTERM it drains (ADR 0072): `/readyz` fails at once, it keeps serving for
+/// `AWZY_SHUTDOWN_DELAY_SECS` (default 0) while Kubernetes stops routing to it, then it finishes
+/// in-flight requests and closes HTTP/2 and gRPC connections with GOAWAY.
 pub async fn serve_with_readiness(service: &'static str, app: Router, ready: Readiness) -> anyhow::Result<()> {
     let addr: SocketAddr = std::env::var("AWZY_LISTEN_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string()).parse()?;
+    let delay = std::env::var("AWZY_SHUTDOWN_DELAY_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(0);
     let listener = TcpListener::bind(addr).await?;
     tracing::info!(service, %addr, "listening");
+    let stopping = Arc::new(AtomicBool::new(false));
+    let ready = draining(ready, stopping.clone());
     metrics::register(Arc::new(metrics::Readiness(ready.clone())));
     let app = metrics::with_metrics(with_readiness(app, ready));
-    axum::serve(listener, app).with_graceful_shutdown(shutdown_signal()).await?;
+    let drained = async move {
+        shutdown_signal().await;
+        stopping.store(true, Ordering::Release);
+        if delay > 0 {
+            tracing::info!(delay_secs = delay, "not ready; serving until traffic moves elsewhere");
+            tokio::time::sleep(Duration::from_secs(delay)).await;
+        }
+        tracing::info!("finishing in-flight requests");
+    };
+    axum::serve(listener, app).with_graceful_shutdown(drained).await?;
     Ok(())
+}
+
+/// `ready`, until shutdown begins.
+fn draining(ready: Readiness, stopping: Arc<AtomicBool>) -> Readiness {
+    Arc::new(move || !stopping.load(Ordering::Acquire) && ready())
 }
 
 async fn shutdown_signal() {
@@ -95,7 +123,6 @@ mod tests {
 
     #[tokio::test]
     async fn readyz_follows_readiness() {
-        use std::sync::atomic::{AtomicBool, Ordering};
         let flag = Arc::new(AtomicBool::new(false));
         let f = flag.clone();
         let app = with_readiness(Router::new(), Arc::new(move || f.load(Ordering::Acquire)));
@@ -105,6 +132,22 @@ mod tests {
         assert_eq!(get(app.clone()).await, 503);
         flag.store(true, Ordering::Release);
         assert_eq!(get(app).await, 200);
+    }
+
+    #[tokio::test]
+    async fn a_draining_server_is_not_ready_but_still_serves() {
+        let stopping = Arc::new(AtomicBool::new(false));
+        let ready = draining(Arc::new(|| true), stopping.clone());
+        assert!(ready());
+        stopping.store(true, Ordering::Release);
+        assert!(!ready(), "Kubernetes stops routing to it");
+        let app = with_readiness(Router::new().route("/work", get(|| async { "done" })), ready);
+        let status = |path: &'static str| {
+            let app = app.clone();
+            async move { app.oneshot(Request::get(path).body(Body::empty()).unwrap()).await.unwrap().status() }
+        };
+        assert_eq!(status("/readyz").await, 503);
+        assert_eq!(status("/work").await, 200, "requests already routed to it still succeed");
     }
 
     #[tokio::test]

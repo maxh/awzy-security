@@ -46,6 +46,9 @@ pub struct ClientPortalMcp {
 pub fn router(services: Services, allowed_hosts: Vec<String>) -> Router {
     let mut config = StreamableHttpServerConfig::default();
     config.json_response = true;
+    // Stateless: no session lives in one pod, so a rollout or a second replica drops no client
+    // (ADR 0072). Every tool is a single request and response.
+    config.legacy_session_mode = false;
     if !allowed_hosts.is_empty() {
         config.allowed_hosts = allowed_hosts;
     }

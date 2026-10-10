@@ -53,13 +53,13 @@ pdp:
     limits: { memory: 512Mi }
 
 policy:
-  replicas: 1
+  replicas: 2
   resources:
     requests: { cpu: 100m, memory: 128Mi }
     limits: { memory: 256Mi }
 
 clientPortal:
-  replicas: 1
+  replicas: 2
   # The client's IdP (required: the portal refuses to start without one).
   auth:
     issuer: ""
@@ -119,7 +119,7 @@ reasoner:
 
 # awzy-challenge: challenges and containments. Each PDP follows its containment feed.
 challenge:
-  replicas: 1
+  replicas: 2
   # How long a challenge waits for an answer (and a rejection blocks the request), and how long
   # a passed one allows the request. Seconds.
   pendingSeconds: 86400
@@ -129,7 +129,7 @@ challenge:
     limits: { memory: 256Mi }
 
 context:
-  replicas: 1
+  replicas: 2
   # Secret in the system namespace with key "token": the SCIM bearer token the client's IdP
   # uses (created by bootstrap).
   scimTokenSecret: awzy-scim-token
@@ -164,5 +164,8 @@ demoIdp:
 gateway:
   name: awzy
   namespace: awzy-ops
+
+# Seconds a pod keeps serving after SIGTERM, not ready, so traffic moves before it stops (ADR 0072).
+shutdownDelaySeconds: 10
 
 logFormat: json

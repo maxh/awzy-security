@@ -9,7 +9,14 @@ use serde_json::{json, Value};
 use sqlx::{postgres::PgRow, PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
-static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
+/// Its migrations, tolerating ones a newer version already applied (ADR 0072): an older version
+/// restarted mid-rollout, or rolled back to, still starts against the schema the newer one
+/// expanded.
+fn migrator() -> sqlx::migrate::Migrator {
+    let mut migrator = sqlx::migrate!("./migrations");
+    migrator.set_ignore_missing(true);
+    migrator
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
@@ -174,7 +181,7 @@ impl ContextStore {
     }
 
     pub async fn migrate(&self) -> Result<(), sqlx::migrate::MigrateError> {
-        MIGRATOR.run(&self.pool).await
+        migrator().run(&self.pool).await
     }
 
     // ---- People
