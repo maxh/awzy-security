@@ -45,6 +45,8 @@ spec:
             - { name: http, containerPort: 8080 }
           env:
             - { name: AWZY_LOG_FORMAT, value: {{ $root.Values.logFormat | quote }} }
+            # The commit this chart was released from (appVersion, set by publish-chart.sh).
+            - { name: AWZY_RELEASE_VERSION, value: {{ $root.Chart.AppVersion | quote }} }
             {{- with .env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
