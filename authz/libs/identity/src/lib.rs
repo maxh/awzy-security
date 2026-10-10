@@ -8,7 +8,7 @@
 //! - An `act` claim (RFC 8693 token exchange): `act.sub` is a service account acting for the
 //!   person in `sub` (ADR 0016).
 
-mod jwks;
+pub mod jwks;
 
 use awzy_model::{entity_type, EntityRef};
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};

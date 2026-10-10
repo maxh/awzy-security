@@ -25,6 +25,10 @@ const FETCH_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct Jwks {
     uri: hyper::Uri,
+    /// A file holding a bearer token to send with each fetch, read fresh every time: the
+    /// Kubernetes API server serves its keys only to authenticated callers, and a pod's token
+    /// rotates (ADR 0055).
+    bearer_file: Option<std::path::PathBuf>,
     client: Client<hyper_rustls::HttpsConnector<HttpConnector>, Empty<Bytes>>,
     state: Mutex<State>,
 }
@@ -54,10 +58,17 @@ impl Jwks {
         let tls = rustls::ClientConfig::builder().with_root_certificates(roots).with_no_client_auth();
         let https = hyper_rustls::HttpsConnectorBuilder::new().with_tls_config(tls).https_only().enable_http1().build();
         Ok(Self {
+            bearer_file: None,
             uri,
             client: Client::builder(TokioExecutor::new()).build(https),
             state: Mutex::new(State::default()),
         })
+    }
+
+    /// Sends the token in `path` with each fetch.
+    pub fn with_bearer_file(mut self, path: impl Into<std::path::PathBuf>) -> Self {
+        self.bearer_file = Some(path.into());
+        self
     }
 
     /// The key with this ID, refreshing the set if it's unknown and the last fetch is old enough.
@@ -77,7 +88,13 @@ impl Jwks {
     }
 
     async fn fetch(&self) -> anyhow::Result<HashMap<String, DecodingKey>> {
-        let res = tokio::time::timeout(FETCH_TIMEOUT, self.client.get(self.uri.clone()))
+        let mut req = hyper::Request::get(self.uri.clone());
+        if let Some(path) = &self.bearer_file {
+            let token = std::fs::read_to_string(path)
+                .map_err(|e| anyhow::anyhow!("reading the bearer token in {}: {e}", path.display()))?;
+            req = req.header(hyper::header::AUTHORIZATION, format!("Bearer {}", token.trim()));
+        }
+        let res = tokio::time::timeout(FETCH_TIMEOUT, self.client.request(req.body(Empty::new())?))
             .await
             .map_err(|_| anyhow::anyhow!("JWKS fetch from {} timed out", self.uri))??;
         anyhow::ensure!(res.status().is_success(), "JWKS fetch from {} returned {}", self.uri, res.status());
