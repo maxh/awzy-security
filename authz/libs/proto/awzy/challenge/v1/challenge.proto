@@ -1,0 +1,197 @@
+syntax = "proto3";
+
+// Challenges and containments (awzy-challenge). The PDP resolves challenges and follows the
+// containment feed; the client portal answers challenges and manages containments.
+package awzy.challenge.v1;
+
+import "awzy/authz/v1/authz.proto";
+import "google/protobuf/timestamp.proto";
+
+service ChallengeService {
+  // Called by the PDP on an enforced challenge verdict: which of the required kinds this exact
+  // request has already passed, and, with `open`, the pending challenge for the rest.
+  rpc Resolve(ResolveRequest) returns (ResolveResponse);
+  rpc GetChallenge(GetChallengeRequest) returns (GetChallengeResponse);
+  // Newest first.
+  rpc ListChallenges(ListChallengesRequest) returns (ListChallengesResponse);
+  // Answers a justification challenge. Only the person the challenge was sent to can.
+  rpc Justify(JustifyRequest) returns (JustifyResponse);
+  // Approves or rejects an approval challenge. The approver must be someone else whom the PDP
+  // allows to `approve` the resource.
+  rpc Decide(DecideRequest) returns (DecideResponse);
+
+  // Revokes an accessor's access until the containment is lifted. Idempotent: containing an
+  // accessor who is already contained returns the active containment.
+  rpc Contain(ContainRequest) returns (ContainResponse);
+  rpc Lift(LiftRequest) returns (LiftResponse);
+  // Newest first.
+  rpc ListContainments(ListContainmentsRequest) returns (ListContainmentsResponse);
+  // The active containments, for a PDP: the whole list on connect and on every change, and a
+  // heartbeat in between, so a PDP knows when its copy may be stale.
+  rpc WatchContainments(WatchContainmentsRequest) returns (stream WatchContainmentsResponse);
+}
+
+enum ChallengeStatus {
+  CHALLENGE_STATUS_UNSPECIFIED = 0;
+  // Waiting for an answer.
+  CHALLENGE_STATUS_PENDING = 1;
+  // Every kind was passed. The request is allowed on retry until `grant_expires_at`.
+  CHALLENGE_STATUS_PASSED = 2;
+  // An approver said no. The request is denied until `expires_at`.
+  CHALLENGE_STATUS_REJECTED = 3;
+  // Not answered in time.
+  CHALLENGE_STATUS_EXPIRED = 4;
+}
+
+message Challenge {
+  // QID: challenge_<uuid>.
+  string id = 1;
+  // The decision that opened it (QID: decision_<uuid>).
+  string decision_id = 2;
+  awzy.authz.v1.EntityRef subject = 3;
+  // Set when a service account acted for a person.
+  awzy.authz.v1.EntityRef on_behalf_of = 4;
+  string action = 5;
+  awzy.authz.v1.EntityRef resource = 6;
+  // Every one must be passed.
+  repeated awzy.authz.v1.ChallengeKind kinds = 7;
+  repeated awzy.authz.v1.ChallengeKind passed = 8;
+  ChallengeStatus status = 9;
+  // The person it was sent to: the human subject, the person a service account acted for, or a
+  // service account's owner. Empty when no one is known, so only an approval can pass it.
+  string answerer_id = 10;
+  string justification = 11;
+  // Who approved or rejected it, and their note.
+  string decided_by = 12;
+  string decision_note = 13;
+  google.protobuf.Timestamp created_at = 14;
+  // A pending challenge expires then; a rejected one stops blocking the request then.
+  google.protobuf.Timestamp expires_at = 15;
+  google.protobuf.Timestamp passed_at = 16;
+  // A passed challenge allows the request until then.
+  google.protobuf.Timestamp grant_expires_at = 17;
+}
+
+message ResolveRequest {
+  // The challenge verdict's decision (QID: decision_<uuid>).
+  string decision_id = 1;
+  awzy.authz.v1.EntityRef subject = 2;
+  awzy.authz.v1.EntityRef on_behalf_of = 3;
+  string action = 4;
+  awzy.authz.v1.EntityRef resource = 5;
+  // What the verdict requires.
+  repeated awzy.authz.v1.ChallengeKind kinds = 6;
+  // Who answers it; see Challenge.answerer_id.
+  string answerer_id = 7;
+  // False only looks up what was passed, and opens nothing.
+  bool open = 8;
+}
+
+message ResolveResponse {
+  // Required kinds this request has a live grant for.
+  repeated awzy.authz.v1.ChallengeKind passed = 1;
+  // The pending challenge for the kinds not yet passed, when `open` and some remain.
+  string challenge_id = 2;
+  // An approver rejected this request recently: the PDP denies it.
+  bool rejected = 3;
+}
+
+message GetChallengeRequest {
+  string id = 1;
+}
+
+message GetChallengeResponse {
+  Challenge challenge = 1;
+}
+
+message ListChallengesRequest {
+  // Only challenges sent to this person.
+  string answerer_id = 1;
+  // Only challenges in this status.
+  ChallengeStatus status = 2;
+  // Default 50, at most 500.
+  int32 limit = 3;
+}
+
+message ListChallengesResponse {
+  repeated Challenge challenges = 1;
+}
+
+message JustifyRequest {
+  string id = 1;
+  // The signed-in person answering.
+  string answered_by = 2;
+  string justification = 3;
+}
+
+message JustifyResponse {
+  Challenge challenge = 1;
+}
+
+message DecideRequest {
+  string id = 1;
+  // The signed-in person deciding: a Human ID.
+  string decided_by = 2;
+  bool approve = 3;
+  string note = 4;
+}
+
+message DecideResponse {
+  Challenge challenge = 1;
+}
+
+message Containment {
+  // QID: containment_<uuid>.
+  string id = 1;
+  awzy.authz.v1.EntityRef subject = 2;
+  string reason = 3;
+  string created_by = 4;
+  google.protobuf.Timestamp created_at = 5;
+  // Unset while active.
+  google.protobuf.Timestamp lifted_at = 6;
+  string lifted_by = 7;
+  string lift_reason = 8;
+}
+
+message ContainRequest {
+  awzy.authz.v1.EntityRef subject = 1;
+  string reason = 2;
+  string created_by = 3;
+}
+
+message ContainResponse {
+  Containment containment = 1;
+}
+
+message LiftRequest {
+  string id = 1;
+  string lifted_by = 2;
+  string reason = 3;
+}
+
+message LiftResponse {
+  Containment containment = 1;
+}
+
+message ListContainmentsRequest {
+  // Only containments still in force.
+  bool active_only = 1;
+  // Only this accessor's.
+  awzy.authz.v1.EntityRef subject = 2;
+  // Default 50, at most 500.
+  int32 limit = 3;
+}
+
+message ListContainmentsResponse {
+  repeated Containment containments = 1;
+}
+
+message WatchContainmentsRequest {}
+
+message WatchContainmentsResponse {
+  // Increases with every containment or lift.
+  int64 version = 1;
+  // True when `active` is the whole list at `version`; false for a heartbeat.
+  bool changed = 2;
+  repeated Containment active = 3;
+}

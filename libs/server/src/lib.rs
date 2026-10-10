@@ -8,12 +8,21 @@ use tokio::net::TcpListener;
 /// Whether the service can take traffic. `/readyz` answers 503 until it returns true.
 pub type Readiness = Arc<dyn Fn() -> bool + Send + Sync>;
 
-/// What `/version` reports: the release, and the image digest when the chart sets
-/// AWZY_IMAGE_DIGEST. awzy-reporter reads it (ADR 0026).
+/// What `/version` reports: the release, and the image digest when AWZY_IMAGE_DIGEST is set.
+/// awzy-reporter reads it (ADR 0026).
+///
+/// The release comes from AWZY_RELEASE_VERSION at runtime, which deployments set to the commit
+/// they deployed (the chart from its appVersion, the corp portal's deploy script from its tag).
+/// Builds don't stamp it: a version compiled in would make every commit rebuild every crate.
 fn version() -> serde_json::Value {
+    version_from(std::env::var("AWZY_RELEASE_VERSION").ok(), std::env::var("AWZY_IMAGE_DIGEST").ok())
+}
+
+fn version_from(release: Option<String>, image_digest: Option<String>) -> serde_json::Value {
+    let release = release.filter(|r| !r.is_empty());
     serde_json::json!({
-        "version": option_env!("AWZY_RELEASE_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")),
-        "image_digest": std::env::var("AWZY_IMAGE_DIGEST").ok(),
+        "version": release.as_deref().unwrap_or(env!("CARGO_PKG_VERSION")),
+        "image_digest": image_digest,
     })
 }
 
@@ -99,5 +108,17 @@ mod tests {
                 with_health(Router::new()).oneshot(Request::get(path).body(Body::empty()).unwrap()).await.unwrap();
             assert_eq!(res.status(), 200, "{path}");
         }
+    }
+
+    #[test]
+    fn the_deployed_release_wins_over_the_crate_version() {
+        let v = version_from(Some("13789b7a".into()), Some("sha256:abc".into()));
+        assert_eq!((v["version"].as_str(), v["image_digest"].as_str()), (Some("13789b7a"), Some("sha256:abc")));
+        assert_eq!(
+            version_from(None, None)["version"],
+            env!("CARGO_PKG_VERSION"),
+            "a local run reports the crate version"
+        );
+        assert_eq!(version_from(Some(String::new()), None)["version"], env!("CARGO_PKG_VERSION"));
     }
 }

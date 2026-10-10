@@ -4,8 +4,11 @@
 //! challenge. A `forbid` policy annotated `@challenge("<kind>")` turns a deny into a challenge.
 //! It never calls a model or ClickHouse: everything it needs arrives as entity attributes, from
 //! the enforcement point or, with awzy-context, from its principals snapshot ([`principals`]) and
-//! the resource lookup ([`resources`]).
+//! the resource lookup ([`resources`]). With awzy-challenge, contained accessors are denied
+//! ([`containments`]) and enforced challenges are opened and honored once passed ([`challenges`]).
 
+pub mod challenges;
+pub mod containments;
 mod decision_log;
 mod enforcement;
 mod grpc;
@@ -24,8 +27,8 @@ use std::{collections::HashSet, str::FromStr, sync::Arc};
 use arc_swap::ArcSwap;
 
 use awzy_model::{
-    AccessRequest, ChallengeKind, Decision, DecisionId, DecisionRecord, DelegationCheck, EnforcementMode, EntityRef,
-    Verdict,
+    AccessRequest, ChallengeKind, Challenges, Decision, DecisionId, DecisionRecord, DelegationCheck, EnforcementMode,
+    EntityRef, Verdict,
 };
 use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use cedar_policy::{
@@ -139,6 +142,19 @@ impl Pdp {
         entities: &Entities,
         assignees: Option<&HashSet<String>>,
     ) -> anyhow::Result<Decision> {
+        self.decide_passed(req, entities, assignees, Challenges::default())
+    }
+
+    /// [`Self::decide_assigned`] for a request that has passed `passed` challenges: `forbid`
+    /// policies that ask only for one of those are set aside, so a passed challenge never lifts
+    /// a plain deny or a challenge of another kind.
+    pub fn decide_passed(
+        &self,
+        req: &AccessRequest,
+        entities: &Entities,
+        assignees: Option<&HashSet<String>>,
+        passed: Challenges,
+    ) -> anyhow::Result<Decision> {
         for key in ["on_behalf_of", "human_present", "assigned"] {
             anyhow::ensure!(
                 !req.context.contains_key(key),
@@ -154,22 +170,45 @@ impl Pdp {
         }
 
         let assignees = assignees.filter(|_| self.knows_assigned);
-        let (verdict, policies) = self.check(&req.subject, req, &context, entities, assignees)?;
+        let without_passed;
+        let policy_set = if passed.is_empty() {
+            &self.policies
+        } else {
+            without_passed = PolicySet::from_policies(
+                self.policies
+                    .policies()
+                    .filter(|p| {
+                        let kind = p.annotation("challenge").and_then(ChallengeKind::parse);
+                        !kind.is_some_and(|k| passed.contains(k))
+                    })
+                    .cloned(),
+            )?;
+            &without_passed
+        };
+        let (verdict, policies) = self.check(policy_set, &req.subject, req, &context, entities, assignees)?;
         let on_behalf_of = match &req.on_behalf_of {
             Some(human) => {
-                let (verdict, policies) = self.check(human, req, &context, entities, assignees)?;
+                let (verdict, policies) = self.check(policy_set, human, req, &context, entities, assignees)?;
                 Some(DelegationCheck { verdict, policies })
             }
             None => None,
         };
         let verdict = on_behalf_of.as_ref().map_or(verdict, |d| verdict.stricter(d.verdict));
         // AppState::check stamps the install's mode; a bare decision is never enforced by default.
-        Ok(Decision { id: DecisionId::new(), verdict, policies, on_behalf_of, mode: EnforcementMode::Monitor })
+        Ok(Decision {
+            id: DecisionId::new(),
+            verdict,
+            policies,
+            on_behalf_of,
+            mode: EnforcementMode::Monitor,
+            challenge_id: None,
+        })
     }
 
     /// One Cedar evaluation with `principal`. Returns the verdict and determining policy IDs.
     fn check(
         &self,
+        policy_set: &PolicySet,
         principal: &EntityRef,
         req: &AccessRequest,
         context: &serde_json::Map<String, serde_json::Value>,
@@ -183,9 +222,9 @@ impl Pdp {
         }
         let context = Context::from_json_value(serde_json::Value::Object(context), Some((&self.schema, &action)))?;
         let request = Request::new(uid(principal)?, action, uid(&req.resource)?, context, Some(&self.schema))?;
-        let response = self.authorizer.is_authorized(&request, &self.policies, entities);
+        let response = self.authorizer.is_authorized(&request, policy_set, entities);
 
-        let determining: Vec<_> = response.diagnostics().reason().filter_map(|id| self.policies.policy(id)).collect();
+        let determining: Vec<_> = response.diagnostics().reason().filter_map(|id| policy_set.policy(id)).collect();
         // Cedar reports them in no particular order; sort so explanations are stable.
         let mut policies: Vec<String> = determining
             .iter()
@@ -226,6 +265,10 @@ pub struct AppState {
     pub resources: Arc<resources::Resources>,
     /// Checks callers' service tokens (ADR 0055). Off in tests and local runs.
     pub service_auth: Arc<awzy_service_auth::Verifier>,
+    /// Contained accessors from awzy-challenge, if configured.
+    pub containments: Arc<containments::Containments>,
+    /// Opens and resolves enforced challenges, if configured.
+    pub challenges: Arc<challenges::ChallengeResolver>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -252,7 +295,20 @@ impl AppState {
             principals: Arc::new(principals::Principals::none()),
             resources: Arc::new(resources::Resources::none()),
             service_auth: Arc::new(awzy_service_auth::Verifier::off()),
+            containments: Arc::new(containments::Containments::none()),
+            challenges: Arc::new(challenges::ChallengeResolver::none()),
         }
+    }
+
+    /// Containments and challenges from awzy-challenge.
+    pub fn with_challenges(
+        mut self,
+        containments: Arc<containments::Containments>,
+        challenges: Arc<challenges::ChallengeResolver>,
+    ) -> Self {
+        self.containments = containments;
+        self.challenges = challenges;
+        self
     }
 
     pub fn with_resources(mut self, resources: Arc<resources::Resources>) -> Self {
@@ -276,9 +332,9 @@ impl AppState {
     }
 
     /// Ready once the policy bundle and mode are loaded and, with awzy-context, the first
-    /// principals snapshot.
+    /// principals snapshot, and with awzy-challenge, the first containment list.
     pub fn is_ready(&self) -> bool {
-        self.enforcement.is_ready() && self.principals.is_ready()
+        self.enforcement.is_ready() && self.principals.is_ready() && self.containments.is_ready()
     }
 
     pub fn with_log(mut self, log: Arc<DecisionLog>) -> Self {
@@ -299,21 +355,90 @@ impl AppState {
         if !self.is_ready() {
             return Err(CheckError::NotReady);
         }
+        let mode = if req.always_enforced { EnforcementMode::Enforce } else { self.enforcement.mode() };
+        let who: Vec<&awzy_model::EntityRef> = std::iter::once(&req.subject).chain(req.on_behalf_of.as_ref()).collect();
+        let contained = self.containments.find(&who).await.map_err(CheckError::Unavailable)?;
         // With awzy-context, every service account must be registered there (ADR 0033).
-        let assembled = replay::assemble(&self.principals, &self.resources, req, entities)
-            .await
-            .map_err(CheckError::Unavailable)?;
+        let assembled = if contained.is_empty() {
+            Some(
+                replay::assemble(&self.principals, &self.resources, req, entities)
+                    .await
+                    .map_err(CheckError::Unavailable)?,
+            )
+        } else {
+            None
+        };
         // Loaded after the lookup, which may wait on awzy-context, so a sync isn't held up.
-        let pdp = self.pdp.load();
+        let pdp = self.pdp.load_full();
         let mut decision = match assembled {
-            replay::Assembled::Unregistered => replay::unregistered(),
-            replay::Assembled::Ready { entities, assignees } => {
-                pdp.decide_assigned(req, &pdp.entities(entities)?, assignees.as_deref())?
+            // A contained accessor, or a delegated request for a contained person, is denied
+            // before any policy is evaluated. The containment IDs explain it.
+            None => Decision { policies: contained, ..replay::unregistered() },
+            Some(replay::Assembled::Unregistered) => replay::unregistered(),
+            Some(replay::Assembled::Ready { entities, assignees }) => {
+                let answerer = challenges::answerer(req, &entities);
+                let entities = pdp.entities(entities)?;
+                let decision = pdp.decide_assigned(req, &entities, assignees.as_deref())?;
+                match decision.verdict {
+                    // In monitor nothing is sent, so there's nothing to resolve (ADR 0007).
+                    Verdict::Challenge { challenges } if mode == EnforcementMode::Enforce => {
+                        self.resolve_challenge(
+                            &pdp,
+                            req,
+                            &entities,
+                            assignees.as_deref(),
+                            decision,
+                            challenges,
+                            answerer,
+                        )
+                        .await?
+                    }
+                    _ => decision,
+                }
             }
         };
-        decision.mode = if req.always_enforced { EnforcementMode::Enforce } else { self.enforcement.mode() };
+        decision.mode = mode;
         if let Some(log) = &self.log {
             log.record(DecisionRecord::new(req, &decision, pdp.version(), chrono::Utc::now()));
+        }
+        Ok(decision)
+    }
+
+    /// An enforced challenge: denied if an approver rejected the request, decided again with
+    /// what it has passed set aside, and otherwise given the challenge to answer.
+    #[expect(clippy::too_many_arguments, reason = "one call site, each argument distinct")]
+    async fn resolve_challenge(
+        &self,
+        pdp: &Pdp,
+        req: &AccessRequest,
+        entities: &Entities,
+        assignees: Option<&HashSet<String>>,
+        mut decision: Decision,
+        required: awzy_model::Challenges,
+        answerer: Option<String>,
+    ) -> Result<Decision, CheckError> {
+        if !self.challenges.is_configured() {
+            return Ok(decision);
+        }
+        let resolution = match self.challenges.resolve(decision.id, req, required, answerer.as_deref()).await {
+            Ok(r) => r,
+            Err(error) => {
+                tracing::warn!(%error, decision_id = %decision.id, "couldn't open a challenge; the verdict stands");
+                return Ok(decision);
+            }
+        };
+        if resolution.rejected {
+            decision.verdict = Verdict::Deny;
+            decision.policies.push(challenges::CHALLENGE_REJECTED.to_string());
+            return Ok(decision);
+        }
+        if !resolution.passed.is_empty() {
+            let id = decision.id;
+            decision = pdp.decide_passed(req, entities, assignees, resolution.passed)?;
+            decision.id = id;
+        }
+        if matches!(decision.verdict, Verdict::Challenge { .. }) {
+            decision.challenge_id = resolution.challenge_id;
         }
         Ok(decision)
     }
@@ -483,6 +608,32 @@ mod tests {
         assert_eq!(d.verdict, Verdict::Allow);
         assert_eq!(d.policies, vec!["security-team-read"]);
         assert!(d.on_behalf_of.is_none());
+    }
+
+    #[test]
+    fn a_passed_challenge_lifts_only_its_own_kind() {
+        let pdp = Pdp::with_defaults().unwrap();
+        let entities = fixtures(&pdp);
+        let verified = Challenges::of(ChallengeKind::Verification);
+
+        let d = pdp.decide_passed(&read("bob", "design-doc", 90), &entities, None, verified).unwrap();
+        assert_eq!((d.verdict, d.policies), (Verdict::Allow, vec!["engineering-read-internal".to_string()]));
+
+        let approved = Challenges::of(ChallengeKind::Approval);
+        let d = pdp.decide_passed(&read("bob", "design-doc", 90), &entities, None, approved).unwrap();
+        assert_eq!(d.verdict, Verdict::Challenge { challenges: verified }, "approval isn't verification");
+
+        // A challenge sits on top of a permit; passing one never grants what no policy permits.
+        let d = pdp.decide_passed(&read("bob", "board-deck", 90), &entities, None, verified).unwrap();
+        assert_eq!(d.verdict, Verdict::Deny);
+    }
+
+    #[test]
+    fn the_security_team_approves_challenges() {
+        let pdp = Pdp::with_defaults().unwrap();
+        let approve = |who: &str| AccessRequest { action: "approve".into(), ..read(who, "board-deck", 10) };
+        assert_eq!(pdp.decide(&approve("alice"), &fixtures(&pdp)).unwrap().verdict, Verdict::Allow);
+        assert_eq!(pdp.decide(&approve("bob"), &fixtures(&pdp)).unwrap().verdict, Verdict::Deny);
     }
 
     #[test]

@@ -1,7 +1,8 @@
 //! Conversions between the wire types and `awzy-model`.
 
 use awzy_model::{
-    AccessRequest, ChallengeKind as ModelChallenge, Decision, EntityRef as ModelRef, Verdict as ModelVerdict,
+    AccessRequest, ChallengeKind as ModelChallenge, Challenges, Decision, EntityRef as ModelRef,
+    Verdict as ModelVerdict,
 };
 
 use awzy_model::EnforcementMode as ModelMode;
@@ -99,22 +100,38 @@ fn wire_verdict(v: ModelVerdict) -> (Verdict, Vec<i32>) {
     match v {
         ModelVerdict::Allow => (Verdict::Allow, vec![]),
         ModelVerdict::Deny => (Verdict::Deny, vec![]),
-        ModelVerdict::Challenge { challenges } => (
-            Verdict::Challenge,
-            challenges
-                .iter()
-                .map(|c| {
-                    match c {
-                        ModelChallenge::Justification => ChallengeKind::Justification,
-                        ModelChallenge::Verification => ChallengeKind::Verification,
-                        ModelChallenge::Approval => ChallengeKind::Approval,
-                        ModelChallenge::Biometric => ChallengeKind::Biometric,
-                    }
-                    .into()
-                })
-                .collect(),
-        ),
+        ModelVerdict::Challenge { challenges } => (Verdict::Challenge, challenges_to_wire(challenges)),
     }
+}
+
+/// Challenge kinds as wire enum values, in [`Challenges::iter`] order.
+pub fn challenges_to_wire(challenges: Challenges) -> Vec<i32> {
+    challenges
+        .iter()
+        .map(|c| {
+            match c {
+                ModelChallenge::Justification => ChallengeKind::Justification,
+                ModelChallenge::Verification => ChallengeKind::Verification,
+                ModelChallenge::Approval => ChallengeKind::Approval,
+                ModelChallenge::Biometric => ChallengeKind::Biometric,
+            }
+            .into()
+        })
+        .collect()
+}
+
+/// Wire enum values as challenge kinds. Unknown and unspecified values are dropped.
+pub fn challenges_from_wire(kinds: &[i32]) -> Challenges {
+    kinds
+        .iter()
+        .filter_map(|k| match ChallengeKind::try_from(*k).ok()? {
+            ChallengeKind::Justification => Some(ModelChallenge::Justification),
+            ChallengeKind::Verification => Some(ModelChallenge::Verification),
+            ChallengeKind::Approval => Some(ModelChallenge::Approval),
+            ChallengeKind::Biometric => Some(ModelChallenge::Biometric),
+            ChallengeKind::Unspecified => None,
+        })
+        .collect()
 }
 
 impl From<Decision> for CheckResponse {
@@ -130,6 +147,7 @@ impl From<Decision> for CheckResponse {
                 DelegationCheck { verdict: verdict.into(), challenges, policies: c.policies }
             }),
             mode: EnforcementMode::from(d.mode).into(),
+            challenge_id: d.challenge_id.map(|id| id.to_string()).unwrap_or_default(),
         }
     }
 }
@@ -177,6 +195,13 @@ mod tests {
         let ctx = json!({ "risk_score": 90, "ratio": 0.5, "tags": ["a"], "nested": { "ok": true } });
         let back = struct_to_json(json_to_struct(ctx.as_object().unwrap().clone()));
         assert_eq!(Json::Object(back), ctx);
+    }
+
+    #[test]
+    fn challenge_kinds_round_trip() {
+        let kinds: Challenges = [ModelChallenge::Approval, ModelChallenge::Justification].into_iter().collect();
+        assert_eq!(challenges_from_wire(&challenges_to_wire(kinds)), kinds);
+        assert!(challenges_from_wire(&[0, 99]).is_empty(), "unspecified and unknown values are dropped");
     }
 
     #[test]
