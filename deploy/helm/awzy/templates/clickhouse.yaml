@@ -81,6 +81,9 @@ spec:
             # Optional until bootstrap has made it; without it the reporter's user is left alone.
             - name: AWZY_CLICKHOUSE_REPORTER_PASSWORD
               valueFrom: { secretKeyRef: { name: {{ $ch.reporterPasswordSecret }}, key: password, optional: true } }
+            # Likewise for the reasoner's user.
+            - name: AWZY_CLICKHOUSE_REASONER_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ $ch.reasonerPasswordSecret }}, key: password, optional: true } }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

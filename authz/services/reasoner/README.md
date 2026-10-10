@@ -12,4 +12,20 @@ world model. Writes risk attributes and can request containments.
 - Treats all event content as untrusted input; see
   [Securing awzy itself](../../../docs/platform-plan.md#securing-awzy-itself)
 
-A skeleton so far ([platform plan](../../../docs/platform-plan.md#built-so-far)).
+## Built so far: risk scores (ADR 0056)
+
+Every 15 minutes (`AWZY_REASONER_INTERVAL_SECS`) it reads the last 30 days of decisions and
+events from ClickHouse, scores each person's and service account's last 24 hours from 0 to 100,
+and writes the scores to awzy-context (`POST /v1/risk`). The PDPs pick them up with the
+principals snapshot and use each principal's own score as `context.risk_score`.
+
+A score is deterministic ([`score.rs`](src/score.rs)): resources opened against the principal's
+own usual day (after five active days of history), against its team's median (the smallest group
+it's in, with at least three other active members), and denials. Either comparison alone adds at
+most 50, so it takes both, or one plus denials, to pass the base policy's challenge threshold.
+
+ClickHouse access is a read-only `awzy_reasoner` user that can select `decisions` and `events`
+and nothing else; `awzy-clickhouse-migrate` creates it from the `awzy-clickhouse-reasoner` Secret.
+
+Investigations (an LLM agent with read-only tools, raising scores but never lowering them below
+the deterministic one) come next.

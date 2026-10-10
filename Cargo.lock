@@ -1028,11 +1028,21 @@ name = "awzy-reasoner"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "awzy-clickhouse",
  "awzy-server",
+ "awzy-service-auth",
  "awzy-telemetry",
  "axum",
+ "bytes",
+ "chrono",
+ "clickhouse",
+ "http-body-util",
+ "hyper-util",
+ "serde",
+ "serde_json",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

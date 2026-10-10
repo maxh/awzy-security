@@ -42,6 +42,9 @@ clickhouse:
   # awzy-reporter's read-only user (ADR 0042): disk sizes and Kafka consumer positions only.
   # Secret in the data and system namespaces with key "password" (created by bootstrap).
   reporterPasswordSecret: awzy-clickhouse-reporter
+  # awzy-reasoner's read-only user (ADR 0056): decisions and events only.
+  # Secret in the data and system namespaces with key "password" (created by bootstrap).
+  reasonerPasswordSecret: awzy-clickhouse-reasoner
 
 pdp:
   replicas: 2
@@ -92,6 +95,15 @@ reporter:
   resources:
     requests: { cpu: 10m, memory: 32Mi }
     limits: { memory: 64Mi }
+
+# awzy-reasoner: risk scores from ClickHouse activity, written to awzy-context (ADR 0056).
+reasoner:
+  enabled: true
+  intervalSeconds: 900
+  replicas: 1
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 256Mi }
 
 # awzy-challenge: challenges and containments. Each PDP follows its containment feed.
 challenge:

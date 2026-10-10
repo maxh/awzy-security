@@ -9,6 +9,7 @@ async fn main() -> anyhow::Result<()> {
         .with_user(env("AWZY_CLICKHOUSE_USER")?)
         .with_password(env("AWZY_CLICKHOUSE_PASSWORD")?)
         .with_database(env("AWZY_CLICKHOUSE_DATABASE")?);
+    let database = env("AWZY_CLICKHOUSE_DATABASE")?;
     let settings = awzy_clickhouse::Settings {
         kafka_brokers: env("AWZY_CLICKHOUSE_KAFKA_BROKERS")?,
         decisions_topic: std::env::var("AWZY_DECISIONS_TOPIC").unwrap_or_else(|_| "awzy.decisions.v1".into()),
@@ -20,6 +21,10 @@ async fn main() -> anyhow::Result<()> {
     // ADR 0042: the reporter's read-only user, when the install gives it a password.
     if let Ok(password) = std::env::var("AWZY_CLICKHOUSE_REPORTER_PASSWORD") {
         awzy_clickhouse::ensure_reporter_user(&client, awzy_clickhouse::REPORTER_USER, &password).await?;
+    }
+    // ADR 0056: awzy-reasoner's read-only user, likewise.
+    if let Ok(password) = std::env::var("AWZY_CLICKHOUSE_REASONER_PASSWORD") {
+        awzy_clickhouse::ensure_reasoner_user(&client, &database, awzy_clickhouse::REASONER_USER, &password).await?;
     }
     Ok(())
 }

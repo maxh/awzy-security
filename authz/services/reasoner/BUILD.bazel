@@ -5,8 +5,11 @@ awzy_service(
     crate_name = "awzy_reasoner",
     binary_name = "awzy-reasoner",
     deps = [
+        "//authz/libs/service-auth",
         "//libs/server",
         "//libs/telemetry",
     ],
+    # The ClickHouse test builds its schema with the migrations.
+    test_deps = ["//authz/jobs/clickhouse-migrate:clickhouse"],
     visibility = ["//tools:client_side"],
 )
