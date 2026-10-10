@@ -44,6 +44,11 @@ when { resource.sensitivity == "public" || resource.sensitivity == "internal" };
 @id("security-team-calls-any-tool")
 permit (principal in Group::"security", action == Action::"call", resource is McpTool);
 
+// IT administrators' work includes high-risk operations: resetting credentials, changing MFA,
+// exporting and restoring the directory.
+@id("it-calls-any-tool")
+permit (principal in Group::"it", action == Action::"call", resource is McpTool);
+
 // The client portal (ADR 0020): the security team runs it.
 @id("security-team-runs-the-portal")
 permit (
@@ -77,6 +82,14 @@ when { principal has active && !principal.active };
 @challenge("verification")
 forbid (principal, action, resource)
 when { context.risk_score > 80 };
+
+// The suddenly foolish administrator (ADR 0062): someone whose risk is elevated runs a high-risk
+// operation only after touching their security key, which an agent working with their credentials
+// can't do for them. Checked for a person, so an agent acting for one is stopped too.
+@id("elevated-risk-high-risk-operations-verify")
+@challenge("verification")
+forbid (principal is Human, action == Action::"call", resource is McpTool)
+when { resource.sensitivity == "crown_jewels" && context.risk_score > 40 };
 
 // AI acting on its own authority never touches crown jewels.
 @id("unattended-ai-no-crown-jewels")

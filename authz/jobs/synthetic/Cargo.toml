@@ -29,6 +29,7 @@ awzy-classify.workspace = true
 awzy-context.workspace = true
 awzy-gateway.workspace = true
 awzy-pdp.workspace = true
+awzy-reasoner.workspace = true
 awzy-model.workspace = true
 sqlx.workspace = true
 tonic.workspace = true

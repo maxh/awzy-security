@@ -39,7 +39,8 @@ entity Resource in [Resource] {
 // An MCP server behind awzy-gateway, and its tools (`<server>/<tool>`).
 entity McpServer;
 entity McpTool in [McpServer] {
-  // Set per tool in the gateway's config until awzy-context classifies tools.
+  // Set per tool in the gateway's config until awzy-context classifies tools. A high-risk
+  // operation (resetting credentials, exporting the directory) is "crown_jewels".
   sensitivity: String,
 };
 

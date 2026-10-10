@@ -354,8 +354,14 @@ AWZY_CONTEXT_URL=http://127.0.0.1:8084 bazel run //authz/jobs/synthetic:awzy-syn
 ```json
 { "name": "larkspur-drive", "url": "http://127.0.0.1:8095/mcp", "default_sensitivity": "internal",
   "tools": { "read_document": "internal", "list_folder": "internal" },
-  "resource_tools": { "read_document": { "argument": "id" }, "list_folder": { "argument": "id" } } }
+  "resource_tools": { "read_document": { "argument": "id" }, "list_folder": { "argument": "id" } } },
+{ "name": "larkspur-admin", "url": "http://127.0.0.1:8095/admin/mcp", "default_sensitivity": "crown_jewels",
+  "tools": { "reset_password": "confidential", "disable_mfa": "crown_jewels",
+             "rotate_admin_credentials": "crown_jewels", "export_directory": "crown_jewels" } }
 ```
+
+The same process serves larkspur-admin at `/admin/mcp`: IT's high-risk operations, which change
+nothing ([ADR 0062](docs/adr/0062-unfamiliar-territory-raises-risk-and-high-risk-operations-need-a-key.md)).
 
 Then make Larkspur's everyday activity flow through it (demo plan step 5b): people opening their
 work's and their team's documents, SalesGenie acting for Nora, FinanceSummarizer alone at 6am,
@@ -371,8 +377,10 @@ AWZY_GATEWAY_URL=http://127.0.0.1:8086 AWZY_GATEWAY_DEV_SECRET=dev-secret \
 The driver signs each call's token with the gateway's dev secret (issuer `https://idp.local`,
 audience `awzy-gateway`; override with `AWZY_TOKEN_ISSUER` and `AWZY_TOKEN_AUDIENCE`).
 
-The first day includes the demo plan's scenarios (step 6): the curious contractor and the rogue
-agent's first half. The run ends with a `detection` line: scenario steps caught, and ordinary
+The first day includes the demo plan's scenarios: the curious contractor, the rogue agent's
+first half, and the suddenly foolish administrator. awzy catches the administrator only if
+awzy-reasoner scores his questions before his operations, which come a few hundred calls later,
+so run the reasoner with a short `AWZY_REASONER_INTERVAL_SECS` (30) and the history below. The run ends with a `detection` line: scenario steps caught, and ordinary
 accesses challenged. Switch the install to enforce first, because in monitor mode the gateway
 allows everything and nothing is caught. Leave them out with `--no-scenarios`. To run them end
 to end without any of this, `bazel test --config=local-stack //authz/jobs/synthetic:synthetic_test`.

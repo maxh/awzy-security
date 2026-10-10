@@ -3,7 +3,7 @@
 //!
 //! The same seeded days as the live driver ([`crate::activity`]), placed on the workdays before
 //! today: day 0 is the earliest. Each access is an event in awzy's own schema, from the
-//! `larkspur-drive` system, as if the drive logged it. Why the generator chose each access (the
+//! `larkspur-drive` or `larkspur-admin` system, as if it logged it. Why the generator chose each access (the
 //! ground truth detection is scored against) is never sent: it's regenerated from the seed.
 
 use std::time::Duration;
@@ -20,12 +20,10 @@ use hyper_util::{
 use serde_json::{json, Value};
 
 use crate::{
-    activity::{self, Access, LIST},
+    activity::{self, server_of, Access, ADMIN, LIST},
     org::{Company, Profile},
 };
 
-/// The system the events say they came from.
-pub const SYSTEM: &str = "larkspur-drive";
 /// awzy-intake takes at most this many events per request.
 pub const BATCH: usize = 1000;
 const TIMEOUT: Duration = Duration::from_secs(30);
@@ -49,15 +47,22 @@ pub fn event(date: NaiveDate, a: &Access) -> Value {
     let at: DateTime<Utc> = Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).expect("midnight"))
         + chrono::Duration::minutes(i64::from(a.minute));
     let subject_type = if a.on_behalf_of.is_some() || !a.human_present { "ServiceAccount" } else { "Human" };
+    let system = server_of(a.tool);
     let mut e = json!({
         "at": at.to_rfc3339(),
-        "system": SYSTEM,
+        "system": system,
         "subject": { "type": subject_type, "id": a.subject },
         "action": if a.tool == LIST { "list" } else { "read" },
         "resource": { "type": "Resource", "id": a.resource },
         "outcome": "success",
         "attributes": { "tool": a.tool },
     });
+    // An operation is on the tool, as the gateway checks it; what it operated on is an attribute.
+    if system == ADMIN {
+        e["action"] = json!(a.tool);
+        e["resource"] = json!({ "type": "McpTool", "id": format!("{ADMIN}/{}", a.tool) });
+        e["attributes"]["target"] = json!(a.resource);
+    }
     if let Some(person) = &a.on_behalf_of {
         e["on_behalf_of"] = json!({ "type": "Human", "id": person });
     }
@@ -158,6 +163,11 @@ mod tests {
         assert!(p.get("on_behalf_of").is_none());
         let alone = day.iter().find(|a| a.subject == "finance-summarizer").unwrap();
         assert_eq!(event(date("2026-10-08"), alone)["subject"]["type"], "ServiceAccount");
+        let op = day.iter().find(|a| a.why == activity::Why::Admin).unwrap();
+        let e = event(date("2026-10-08"), op);
+        assert_eq!((e["system"].as_str(), e["action"].as_str()), (Some("larkspur-admin"), Some(op.tool)));
+        assert_eq!(e["resource"], json!({ "type": "McpTool", "id": format!("larkspur-admin/{}", op.tool) }));
+        assert_eq!(e["attributes"]["target"], json!(op.resource));
         for e in day.iter().map(|a| event(date("2026-10-08"), a)) {
             assert!(e.get("why").is_none() && e["attributes"].get("why").is_none(), "the ground truth stays here");
         }

@@ -8,8 +8,9 @@
 //! `world` sends its resources and work items, which name those people, so it runs after
 //! `directory`; `all` runs both. `--print` writes the company as JSON instead and sends nothing.
 //! `drive` serves larkspur-drive, an MCP server over the documents in awzy-context, at
-//! AWZY_LISTEN_ADDR (default 127.0.0.1:8095) `/mcp`, for awzy-gateway to front (ADR 0050).
-//! `activity` makes the company's everyday tool calls on larkspur-drive through the gateway at
+//! AWZY_LISTEN_ADDR (default 127.0.0.1:8095) `/mcp`, and larkspur-admin, IT's high-risk
+//! operations, at `/admin/mcp`, for awzy-gateway to front (ADR 0050, 0062).
+//! `activity` makes the company's everyday tool calls on both through the gateway at
 //! AWZY_GATEWAY_URL, `--rate` per second (default 5) for `--days` generated days (default 1),
 //! with tokens signed by the gateway's development secret in AWZY_GATEWAY_DEV_SECRET. The first
 //! day includes the demo plan's scenarios (`--no-scenarios` leaves them out), and the run reports
@@ -38,8 +39,9 @@ async fn main() -> anyhow::Result<()> {
     if command == "drive" {
         let addr = std::env::var("AWZY_LISTEN_ADDR").unwrap_or_else(|_| "127.0.0.1:8095".into());
         let listener = tokio::net::TcpListener::bind(&addr).await?;
-        tracing::info!(%addr, context = %url, "larkspur-drive serving MCP at /mcp");
-        axum::serve(listener, awzy_synthetic::drive::router(ContextClient::new(&url, ""))).await?;
+        tracing::info!(%addr, context = %url, "larkspur-drive serving MCP at /mcp, larkspur-admin at /admin/mcp");
+        let app = awzy_synthetic::drive::router(ContextClient::new(&url, "")).merge(awzy_synthetic::admin::router());
+        axum::serve(listener, app).await?;
         return Ok(());
     }
     let (directory, world) = match command {
@@ -96,7 +98,7 @@ async fn activity(args: &[String]) -> anyhow::Result<()> {
     let env = |k: &str, default: &str| std::env::var(k).unwrap_or_else(|_| default.to_string());
     let gateway = std::env::var("AWZY_GATEWAY_URL").context("AWZY_GATEWAY_URL is not set")?;
     let secret = std::env::var("AWZY_GATEWAY_DEV_SECRET").context("AWZY_GATEWAY_DEV_SECRET is not set")?;
-    let endpoint = format!("{}/mcp/{}", gateway.trim_end_matches('/'), env("AWZY_DRIVE_UPSTREAM", "larkspur-drive"));
+    let endpoint = format!("{}/mcp", gateway.trim_end_matches('/'));
     let driver = Driver::new(
         &endpoint,
         secret.as_bytes(),

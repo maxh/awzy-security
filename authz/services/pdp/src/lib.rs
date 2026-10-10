@@ -713,6 +713,40 @@ mod tests {
         assert_eq!(d.policies, vec!["high-risk-verify"]);
     }
 
+    #[test]
+    fn an_administrator_at_elevated_risk_touches_a_key_for_high_risk_operations() {
+        let pdp = Pdp::with_defaults().unwrap();
+        let entities = pdp
+            .entities(json!([
+                { "uid": { "type": "Group", "id": "it" }, "attrs": {}, "parents": [] },
+                { "uid": { "type": "Group", "id": "it-admin" }, "attrs": {}, "parents": [{ "type": "Group", "id": "it" }] },
+                { "uid": { "type": "Human", "id": "lee" }, "attrs": {}, "parents": [{ "type": "Group", "id": "it-admin" }] },
+                { "uid": { "type": "McpTool", "id": "larkspur-admin/export_directory" },
+                  "attrs": { "sensitivity": "crown_jewels" }, "parents": [] },
+                { "uid": { "type": "McpTool", "id": "larkspur-admin/reset_password" },
+                  "attrs": { "sensitivity": "confidential" }, "parents": [] },
+            ]))
+            .unwrap();
+        let call = |tool: &str, risk: i64| AccessRequest {
+            action: "call".into(),
+            resource: EntityRef::new("McpTool", format!("larkspur-admin/{tool}")),
+            ..read("lee", "", risk)
+        };
+        let verify = Verdict::Challenge { challenges: Challenges::of(ChallengeKind::Verification) };
+
+        // Routine for IT at ordinary risk.
+        let d = pdp.decide(&call("export_directory", 10), &entities).unwrap();
+        assert_eq!((d.verdict, d.policies), (Verdict::Allow, vec!["it-calls-any-tool".to_string()]));
+        // Elevated: the high-risk operation needs the key, the ordinary one doesn't.
+        let d = pdp.decide(&call("export_directory", 50), &entities).unwrap();
+        assert_eq!((d.verdict, d.policies), (verify, vec!["elevated-risk-high-risk-operations-verify".to_string()]));
+        assert_eq!(pdp.decide(&call("reset_password", 50), &entities).unwrap().verdict, Verdict::Allow);
+        // And touching it is what lets the operation run.
+        let passed = Challenges::of(ChallengeKind::Verification);
+        let d = pdp.decide_passed(&call("export_directory", 50), &entities, None, passed).unwrap();
+        assert_eq!(d.verdict, Verdict::Allow);
+    }
+
     /// Larkspur's shapes (ADR 0061): Sam, a Quarry Labs contractor in engineering; Nora in sales;
     /// SalesGenie in Nora's team; Priya owns the payments design and the strategic plan.
     fn larkspur(pdp: &Pdp) -> Entities {

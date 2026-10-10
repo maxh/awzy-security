@@ -104,6 +104,7 @@ awzy-identity = { path = "authz/libs/identity" }
 awzy-intake = { path = "authz/services/intake" }
 awzy-model = { path = "libs/model" }
 awzy-pdp = { path = "authz/services/pdp" }
+awzy-reasoner = { path = "authz/services/reasoner" }
 awzy-server = { path = "libs/server" }
 awzy-signing = { path = "authz/libs/signing" }
 awzy-classify = { path = "authz/libs/classify" }

@@ -8,6 +8,7 @@
 //! demo plan.
 
 pub mod activity;
+pub mod admin;
 pub mod drive;
 pub mod driver;
 pub mod history;

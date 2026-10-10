@@ -1,8 +1,9 @@
 //! Each principal's activity per day, from ClickHouse: the decisions the PDPs made and the
 //! events awzy-intake received, together. A "day" is 24 hours counted back from the run, so
-//! day 0 is always the last full 24 hours whatever time the reasoner runs.
+//! day 0 is always the last full 24 hours whatever time the reasoner runs. And, for each resource
+//! opened in the last day, who had opened it (ADR 0062).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{DateTime, Utc};
 
@@ -59,10 +60,83 @@ pub async fn load(clickhouse: &clickhouse::Client, as_of: DateTime<Utc>) -> anyh
         clickhouse.query(QUERY).bind(end).bind(start).bind(end).bind(start).bind(end).fetch_all().await?;
     let mut history = History::new();
     for r in rows {
-        let day = Day { accesses: r.accesses, resources: r.resources, denied: r.denied };
+        let day = Day { accesses: r.accesses, resources: r.resources, denied: r.denied, ..Day::default() };
         history.entry((r.subject_type, r.subject_id)).or_default().insert(r.days_ago, day);
     }
     Ok(history)
+}
+
+/// Who opened one resource: in the [`HISTORY_DAYS`] before the last day, and during it.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Openers {
+    pub before: BTreeSet<Principal>,
+    pub last_day: BTreeSet<Principal>,
+}
+
+/// The openers of every resource opened in the last day, by resource ID.
+pub type Opened = BTreeMap<String, Openers>;
+
+/// Openers kept per resource and period. A resource opened by more than this many is familiar
+/// to everyone, so the rest needn't be read.
+pub const MAX_OPENERS: usize = 100;
+
+#[derive(Debug, clickhouse::Row, serde::Deserialize)]
+struct OpenersRow {
+    resource_id: String,
+    before: Vec<(String, String)>,
+    last_day: Vec<(String, String)>,
+}
+
+// Only resources (documents, folders, repositories), not tools or portal areas: what's being
+// asked is whose material it is.
+const OPENERS_QUERY: &str = "
+WITH accesses AS
+(
+    SELECT at, subject_type, subject_id, resource_id
+    FROM decisions
+    WHERE at > fromUnixTimestamp64Milli(?, 'UTC') AND at <= fromUnixTimestamp64Milli(?, 'UTC')
+      AND resource_type = 'Resource' AND subject_type IN ('Human', 'ServiceAccount')
+    UNION ALL
+    SELECT at, subject_type, subject_id, resource_id
+    FROM events
+    WHERE at > fromUnixTimestamp64Milli(?, 'UTC') AND at <= fromUnixTimestamp64Milli(?, 'UTC')
+      AND resource_type = 'Resource' AND subject_type IN ('Human', 'ServiceAccount')
+)
+SELECT
+    resource_id,
+    groupUniqArrayIf(LIMIT)((subject_type, subject_id), at <= fromUnixTimestamp64Milli(?, 'UTC')) AS before,
+    groupUniqArrayIf(LIMIT)((subject_type, subject_id), at > fromUnixTimestamp64Milli(?, 'UTC')) AS last_day
+FROM accesses
+WHERE resource_id IN (SELECT resource_id FROM accesses WHERE at > fromUnixTimestamp64Milli(?, 'UTC'))
+GROUP BY resource_id";
+
+/// For each resource opened in the day before `as_of`, who opened it then and in the
+/// [`HISTORY_DAYS`] before.
+pub async fn load_opened(clickhouse: &clickhouse::Client, as_of: DateTime<Utc>) -> anyhow::Result<Opened> {
+    let end = as_of.timestamp_millis();
+    let start = (as_of - chrono::Duration::days(HISTORY_DAYS + 1)).timestamp_millis();
+    let day_start = (as_of - chrono::Duration::days(1)).timestamp_millis();
+    // One more than the most kept, so a full list shows the resource is popular.
+    let query = OPENERS_QUERY.replace("LIMIT", &(MAX_OPENERS + 1).to_string());
+    let rows: Vec<OpenersRow> = clickhouse
+        .query(&query)
+        .bind(start)
+        .bind(end)
+        .bind(start)
+        .bind(end)
+        .bind(day_start)
+        .bind(day_start)
+        .bind(day_start)
+        .fetch_all()
+        .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let openers =
+                Openers { before: r.before.into_iter().collect(), last_day: r.last_day.into_iter().collect() };
+            (r.resource_id, openers)
+        })
+        .collect())
 }
 
 #[cfg(test)]
@@ -121,15 +195,36 @@ mod tests {
         .await
         .unwrap();
 
+        // The handbook: cy opened it a week ago and ana today. A tool call isn't a resource.
+        let (week_ago, today) = ((as_of - chrono::Duration::days(7)).timestamp_millis(), now);
+        ch.query(&format!(
+            "INSERT INTO events (id, at, subject_type, subject_id, resource_type, resource_id) VALUES
+             (generateUUIDv4(), fromUnixTimestamp64Milli({week_ago}, 'UTC'), 'Human', 'cy', 'Resource', 'handbook'),
+             (generateUUIDv4(), fromUnixTimestamp64Milli({today}, 'UTC'), 'Human', 'ana', 'Resource', 'handbook'),
+             (generateUUIDv4(), fromUnixTimestamp64Milli({today}, 'UTC'), 'Human', 'ana', 'McpTool', 'admin/export')"
+        ))
+        .execute()
+        .await
+        .unwrap();
+
         let history = load(&ch, as_of).await.unwrap();
+        let opened = load_opened(&ch, as_of).await.unwrap();
         admin.query(&format!("DROP DATABASE {database}")).execute().await.unwrap();
+
+        let who = |ids: &[&str]| ids.iter().map(|id| ("Human".to_string(), id.to_string())).collect::<BTreeSet<_>>();
+        assert_eq!(opened["handbook"], Openers { before: who(&["cy"]), last_day: who(&["ana"]) });
+        assert_eq!(opened["board-deck"], Openers { before: who(&[]), last_day: who(&["ben"]) });
+        assert_eq!(opened["doc-0-0"].last_day.len(), 4, "each analyst opened their own doc-0-0 today");
+        assert!(!opened.contains_key("doc-3-0"), "only what was opened in the last day");
+        assert!(!opened.contains_key("admin/export"), "tools aren't resources");
 
         assert_eq!(history.len(), 4, "groups aren't principals");
         let ana = &history[&("Human".to_string(), "ana".to_string())];
         assert_eq!(ana.len(), 20);
-        assert_eq!(ana[&0], Day { accesses: 60, resources: 60, denied: 0 });
+        // Sixty documents, the handbook, and a tool.
+        assert_eq!(ana[&0], Day { accesses: 62, resources: 62, denied: 0, unfamiliar: 0 });
         assert_eq!(ana[&19].resources, 10);
         let ben = &history[&("Human".to_string(), "ben".to_string())];
-        assert_eq!(ben[&0], Day { accesses: 11, resources: 11, denied: 1 });
+        assert_eq!(ben[&0], Day { accesses: 11, resources: 11, denied: 1, unfamiliar: 0 });
     }
 }
