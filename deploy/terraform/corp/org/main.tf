@@ -12,9 +12,13 @@ terraform {
     }
   }
 
-  # bucket, region, and profile come from TF_CLI_ARGS_init (deployment.env).
+  # State in the management account, where this module works. OpenTofu reads variables here
+  # (deployment.env); plain Terraform can't.
   backend "s3" {
+    bucket       = var.state_bucket
     key          = "corp/org/terraform.tfstate"
+    region       = var.region
+    profile      = var.management_profile
     use_lockfile = true
   }
 }

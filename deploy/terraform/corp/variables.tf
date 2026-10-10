@@ -57,6 +57,11 @@ variable "region" {
 }
 
 variable "state_bucket" {
-  description = "S3 bucket for this deployment's Terraform state, in the management account"
+  description = "S3 bucket for the management account's Terraform state (state/, org/)"
+  type        = string
+}
+
+variable "build_state_bucket" {
+  description = "S3 bucket for the build account's Terraform state (build/, corp-portal/), in the build account"
   type        = string
 }

@@ -1,5 +1,7 @@
-# The S3 bucket that holds Terraform state for the vendor side (deploy/terraform/corp/*).
-# It lives in the management account because corp/org must run there anyway.
+# The S3 buckets that hold Terraform state for the vendor side (deploy/terraform/corp/*). Each
+# account keeps the state of what runs in it: the management account for state/ and org/, the
+# build account for build/ and corp-portal/. So routine changes in the build account never need
+# the management account.
 #
 # Bootstrap: applied once with local state, then `tofu init -migrate-state` moves this
 # module's own state into the bucket (see ../README.md).
@@ -13,9 +15,12 @@ terraform {
     }
   }
 
-  # bucket, region, and profile come from TF_CLI_ARGS_init (deployment.env).
+  # OpenTofu reads variables here (deployment.env); plain Terraform can't.
   backend "s3" {
+    bucket       = var.state_bucket
     key          = "corp/state/terraform.tfstate"
+    region       = var.region
+    profile      = var.management_profile
     use_lockfile = true
   }
 }
@@ -26,60 +31,54 @@ provider "aws" {
   allowed_account_ids = [var.management_account_id]
 }
 
-resource "aws_s3_bucket" "state" {
-  bucket = var.state_bucket
-
-  lifecycle {
-    prevent_destroy = true
-  }
+provider "aws" {
+  alias               = "build"
+  region              = var.region
+  profile             = var.build_profile
+  allowed_account_ids = [var.build_account_id]
 }
 
-resource "aws_s3_bucket_versioning" "state" {
-  bucket = aws_s3_bucket.state.id
-  versioning_configuration {
-    status = "Enabled"
-  }
+module "management" {
+  source = "./bucket"
+  name   = var.state_bucket
 }
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
-  bucket = aws_s3_bucket.state.id
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
+module "build" {
+  source    = "./bucket"
+  name      = var.build_state_bucket
+  providers = { aws = aws.build }
 }
 
-resource "aws_s3_bucket_public_access_block" "state" {
-  bucket                  = aws_s3_bucket.state.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
+# The management bucket's resources before they moved into ./bucket.
+moved {
+  from = aws_s3_bucket.state
+  to   = module.management.aws_s3_bucket.this
 }
-
-resource "aws_s3_bucket_ownership_controls" "state" {
-  bucket = aws_s3_bucket.state.id
-  rule {
-    object_ownership = "BucketOwnerEnforced"
-  }
+moved {
+  from = aws_s3_bucket_versioning.state
+  to   = module.management.aws_s3_bucket_versioning.this
 }
-
-resource "aws_s3_bucket_policy" "state" {
-  bucket = aws_s3_bucket.state.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Sid       = "DenyInsecureTransport"
-      Effect    = "Deny"
-      Principal = "*"
-      Action    = "s3:*"
-      Resource  = [aws_s3_bucket.state.arn, "${aws_s3_bucket.state.arn}/*"]
-      Condition = { Bool = { "aws:SecureTransport" = "false" } }
-    }]
-  })
+moved {
+  from = aws_s3_bucket_server_side_encryption_configuration.state
+  to   = module.management.aws_s3_bucket_server_side_encryption_configuration.this
+}
+moved {
+  from = aws_s3_bucket_public_access_block.state
+  to   = module.management.aws_s3_bucket_public_access_block.this
+}
+moved {
+  from = aws_s3_bucket_ownership_controls.state
+  to   = module.management.aws_s3_bucket_ownership_controls.this
+}
+moved {
+  from = aws_s3_bucket_policy.state
+  to   = module.management.aws_s3_bucket_policy.this
 }
 
 output "bucket" {
-  value = aws_s3_bucket.state.id
+  value = module.management.id
+}
+
+output "build_bucket" {
+  value = module.build.id
 }

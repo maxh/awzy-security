@@ -1,15 +1,18 @@
 # deploy/terraform/corp
 
 The vendor side of the deployment (see `docs/deployment-plan.md`): what runs in the
-organization that builds and ships awzy. Applied with OpenTofu (`tofu`); plain Terraform works
-too.
+organization that builds and ships awzy. Applied with OpenTofu (`tofu`, 1.8 or later): the
+backends read variables, which plain Terraform can't.
 
-| Module | Account | What |
+Each module keeps its state in the account it works in, so routine changes in the build account
+never need the management account.
+
+| Module | Account (and its state) | What |
 | --- | --- | --- |
-| `state/` | management | S3 bucket for this tree's state |
+| `state/` | management | the state buckets: one in the management account, one in the build account |
 | `org/` | management | member accounts (`member_accounts`); the RCP |
 | `build/` | build | ECR repositories, cosign key, CI publish role |
-| `corp-portal/` | build, for now | `corp.<domain>` and `registry.<domain>` (ADR 0028): ECS Fargate, load balancer, Aurora, Cloudflare DNS |
+| `corp-portal/` | build, for now | `corp.<domain>`, `registry.<domain>` (ADR 0028), and `docs.<domain>`: ECS Fargate, load balancer, Aurora, S3 and CloudFront, Cloudflare DNS |
 
 ## Configuration
 
@@ -24,9 +27,9 @@ source deployment.env
 cd build && tofu init && tofu plan
 ```
 
-`deployment.env` also passes the state bucket to `tofu init` (`TF_CLI_ARGS_init`), since a
-backend block can't read variables. It's the only record of which accounts this tree manages,
-so a copy lives in Secrets Manager in the management account (`awzy/deployment-env/corp`):
+`deployment.env` names the state buckets too (`TF_VAR_state_bucket`, `TF_VAR_build_state_bucket`),
+which the backends read. It's the only record of which accounts this tree manages, so a copy
+lives in Secrets Manager in the management account (`awzy/deployment-env/corp`):
 
 ```sh
 tools/deployment-env push corp                                          # after editing it
@@ -40,8 +43,9 @@ Without them, CI tests and skips publishing.
 
 ## Credentials
 
-Modules use the AWS CLI profiles named in `deployment.env` (`TF_VAR_management_profile`,
-`TF_VAR_build_profile`); sign in to each first.
+Modules use the AWS CLI profiles named in `deployment.env`: `build/` and `corp-portal/` only
+the build account's (`TF_VAR_build_profile`), `org/` only the management account's
+(`TF_VAR_management_profile`), and `state/` both. Sign in to the ones you need first.
 
 For an organization AWS manages (awzy's is one: root sign-in is disabled and every account
 shares one root email), console access goes through the IAM Identity Center access portal's
@@ -54,7 +58,8 @@ changes anything.
 ## First run (already done)
 
 `state/` creates the bucket its own backend points at, so it was applied once without the
-backend and then migrated:
+backend and then migrated. Its second bucket, in the build account, came later; `build/` and
+`corp-portal/` moved their state there with `tofu init -migrate-state`.
 
 ```sh
 cd state
@@ -68,10 +73,8 @@ rm terraform.tfstate*
 ```
 
 After that, every module is plain `tofu init && tofu plan` (with `deployment.env` sourced).
-
-Modules keep their state in the management account and work in their own account, so the
-backend uses the management profile and each provider its own. `corp-portal/` also reads a
-Cloudflare API token from `TF_VAR_cloudflare_token_file` (default `~/.config/awzy/cf-token`).
+`corp-portal/` also reads a Cloudflare API token from `TF_VAR_cloudflare_token_file` (default
+`~/.config/awzy/cf-token`).
 
 ## Corp portal accounts
 
