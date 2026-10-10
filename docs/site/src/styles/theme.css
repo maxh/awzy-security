@@ -1,0 +1,16 @@
+/* The portals' brand: the kangaroo's green as the accent, and navy behind dark mode. */
+:root {
+  --sl-color-accent-low: #0a2e22;
+  --sl-color-accent: #29a974;
+  --sl-color-accent-high: #a9dcc6;
+}
+
+:root:not([data-theme="light"]) {
+  --sl-color-black: #0d1526;
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #d5eee3;
+  --sl-color-accent: #0c8357;
+  --sl-color-accent-high: #00563a;
+}

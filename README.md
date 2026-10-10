@@ -7,6 +7,7 @@ agents, deployed single-tenant inside each client's cloud (AWS, Google Cloud, or
 
 Read more:
 
+- [docs.awzysecurity.com](https://docs.awzysecurity.com): the public documentation, built from [`docs/site`](docs/site)
 - [Platform plan](docs/platform-plan.md): the architecture, and what's built so far
 - [Deployment plan](docs/deployment-plan.md): how installs reach a client's cloud
 - [Demo plan](docs/demo-plan.md): the synthetic company the demo and tests run on
