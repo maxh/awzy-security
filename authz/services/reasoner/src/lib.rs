@@ -33,7 +33,7 @@ pub struct Scored {
 const MAX_ID_LEN: usize = 256;
 
 /// How many resources each principal opened in the last day that neither it nor anyone on its
-/// team had opened in the month before, or alongside it that day (ADR 0062). A principal with
+/// team had opened in the month before, or alongside it that day (ADR 0064). A principal with
 /// no team is compared only with itself; a resource with more than [`MAX_OPENERS`] openers is
 /// familiar to everyone.
 pub fn unfamiliar(opened: &Opened, teams: &HashMap<Principal, String>) -> HashMap<Principal, u64> {

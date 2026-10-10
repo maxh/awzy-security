@@ -183,4 +183,4 @@ Each step is usable on its own and shows up in the demo:
 7. **Scenarios with reasoning**: the peer outlier, the foolish administrator, and the rogue
    agent's containment, once awzy-reasoner exists. The foolish administrator runs end to end: awzy-reasoner
    scores his basic questions as elevated risk, and his high-risk operations on `larkspur-admin`
-   ask for his security key ([ADR 0062](adr/0062-unfamiliar-territory-raises-risk-and-high-risk-operations-need-a-key.md)).
+   ask for his security key ([ADR 0064](adr/0064-unfamiliar-territory-raises-risk-and-high-risk-operations-need-a-key.md)).

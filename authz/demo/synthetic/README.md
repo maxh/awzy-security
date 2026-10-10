@@ -20,7 +20,7 @@ Generates Larkspur Capital, the synthetic company in the [demo plan](../../../do
   ([ADR 0050](../../../docs/adr/0050-mcp-tool-calls-checked-on-the-resource.md)), and **larkspur-admin**
   at `/admin/mcp` in the same process: IT's high-risk operations (`reset_password`,
   `disable_mfa`, `rotate_admin_credentials`, `export_directory`), which change nothing
-  ([ADR 0062](../../../docs/adr/0062-unfamiliar-territory-raises-risk-and-high-risk-operations-need-a-key.md)).
+  ([ADR 0064](../../../docs/adr/0064-unfamiliar-territory-raises-risk-and-high-risk-operations-need-a-key.md)).
 - **Activity** (demo plan step 5b, `awzy-synthetic activity`): a seeded day of who opens what,
   mostly their work's and their team's documents, with agents acting for their owners and a
   little noise, made as tool calls on larkspur-drive through awzy-gateway, so each is a real
@@ -34,7 +34,7 @@ Generates Larkspur Capital, the synthetic company in the [demo plan](../../../do
   caught and how much ordinary work it challenged. A test runs them end to end through
   awzy-context, the PDP, larkspur-drive, larkspur-admin, and awzy-gateway, with awzy-reasoner's
   scores ([ADR 0061](../../../docs/adr/0061-ownership-and-sharing-in-the-resource-entity.md),
-  [ADR 0062](../../../docs/adr/0062-unfamiliar-territory-raises-risk-and-high-risk-operations-need-a-key.md)).
+  [ADR 0064](../../../docs/adr/0064-unfamiliar-territory-raises-risk-and-high-risk-operations-need-a-key.md)).
 - **History** (demo plan step 5c, `awzy-synthetic history --days 30`): the same seeded days,
   placed on the workdays before today and sent to awzy-intake as app events from
   `larkspur-drive`, so baselines have a month to learn from. Why each access was generated

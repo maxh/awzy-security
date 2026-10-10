@@ -9,7 +9,7 @@
 //! `directory`; `all` runs both. `--print` writes the company as JSON instead and sends nothing.
 //! `drive` serves larkspur-drive, an MCP server over the documents in awzy-context, at
 //! AWZY_LISTEN_ADDR (default 127.0.0.1:8095) `/mcp`, and larkspur-admin, IT's high-risk
-//! operations, at `/admin/mcp`, for awzy-gateway to front (ADR 0050, 0062).
+//! operations, at `/admin/mcp`, for awzy-gateway to front (ADR 0050, 0064).
 //! `activity` makes the company's everyday tool calls on both through the gateway at
 //! AWZY_GATEWAY_URL, `--rate` per second (default 5) for `--days` generated days (default 1),
 //! with tokens signed by the gateway's development secret in AWZY_GATEWAY_DEV_SECRET. The first

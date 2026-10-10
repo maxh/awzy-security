@@ -95,7 +95,7 @@ pub fn rogue_agent() -> Vec<Step> {
 /// Lee, an IT administrator, looks up engineering's introductions for new starters, which nobody
 /// in IT has needed in a month, then IT's runbook, and then runs its high-risk operations within a
 /// minute, as an agent working with his credentials would. Each of those is ordinary on its own.
-/// awzy-reasoner turns the questions into elevated risk (ADR 0062), and with it each operation
+/// awzy-reasoner turns the questions into elevated risk (ADR 0064), and with it each operation
 /// asks for his security key, which an agent can't touch.
 pub fn foolish_admin() -> Vec<Step> {
     let lee = cast("it-admin").expect("cast");

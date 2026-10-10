@@ -1,6 +1,6 @@
 //! `larkspur-admin`: a small MCP server standing in for a client's directory and infrastructure
 //! administration tools, for the demo to put behind awzy-gateway next to larkspur-drive. Its
-//! operations are the high-risk ones the suddenly foolish administrator runs (ADR 0062), and IT
+//! operations are the high-risk ones the suddenly foolish administrator runs (ADR 0064), and IT
 //! runs as routine.
 //!
 //! Each tool takes what it operates on as `id` (a person, a system) and changes nothing: the

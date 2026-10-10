@@ -29,7 +29,7 @@ pub const DRIVE: &str = "larkspur-drive";
 pub const ADMIN: &str = "larkspur-admin";
 
 /// larkspur-admin's tools and how sensitive each is, as awzy-gateway is configured with them. The
-/// crown jewels are the high-risk operations (ADR 0062).
+/// crown jewels are the high-risk operations (ADR 0064).
 pub const ADMIN_TOOLS: &[(&str, &str)] = &[
     ("reset_password", "confidential"),
     ("disable_mfa", "crown_jewels"),

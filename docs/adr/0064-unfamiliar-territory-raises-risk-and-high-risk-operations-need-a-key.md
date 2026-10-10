@@ -1,4 +1,4 @@
-# 0062. Unfamiliar territory raises risk, and high-risk operations at elevated risk need a security key
+# 0064. Unfamiliar territory raises risk, and high-risk operations at elevated risk need a security key
 
 - Status: Accepted
 - Date: 2026-10-10
