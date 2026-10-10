@@ -18,7 +18,8 @@ message EntityRef {
 
 // Who did something (ADR 0060): a person (type "Human", the IdP's ID), a service account or one of
 // awzy's services ("AwzyService", e.g. "awzy-reasoner"), a break-glass key ("BreakGlassKey", its
-// fingerprint), or corp portal staff ("Staff"); and the person it acted for, when it acted for one.
+// fingerprint), or awzy staff in the corp portal ("AwzyStaff"); and the person it acted for, when it
+// acted for one.
 message Actor {
   EntityRef subject = 1;
   EntityRef on_behalf_of = 2;

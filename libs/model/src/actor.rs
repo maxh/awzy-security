@@ -14,8 +14,8 @@ pub mod actor_type {
     pub const AWZY_SERVICE: &str = "AwzyService";
     /// A break-glass key (ADR 0021), by its fingerprint. Whoever held it isn't known.
     pub const BREAK_GLASS_KEY: &str = "BreakGlassKey";
-    /// An awzy staff member in the corp portal, by user name.
-    pub const STAFF: &str = "Staff";
+    /// An awzy staff member in the corp portal, by user name. Never in a client's install.
+    pub const AWZY_STAFF: &str = "AwzyStaff";
 }
 
 const KINDS: [&str; 5] = [
@@ -23,7 +23,7 @@ const KINDS: [&str; 5] = [
     entity_type::SERVICE_ACCOUNT,
     actor_type::AWZY_SERVICE,
     actor_type::BREAK_GLASS_KEY,
-    actor_type::STAFF,
+    actor_type::AWZY_STAFF,
 ];
 
 /// Who acted, and for whom: a person (`Human`), a service account or awzy service acting on its
@@ -50,8 +50,8 @@ impl Actor {
         Self::new(EntityRef::new(actor_type::AWZY_SERVICE, service), None)
     }
 
-    pub fn staff(user_name: impl Into<String>) -> Self {
-        Self::new(EntityRef::new(actor_type::STAFF, user_name), None)
+    pub fn awzy_staff(user_name: impl Into<String>) -> Self {
+        Self::new(EntityRef::new(actor_type::AWZY_STAFF, user_name), None)
     }
 
     /// The same actor acting for `person`.
@@ -126,7 +126,7 @@ mod tests {
             Actor::awzy("awzy-bot").for_person("alice"),
             Actor::new(EntityRef::new(entity_type::SERVICE_ACCOUNT, "sales-genie"), None).for_person("bob"),
             Actor::new(EntityRef::new(actor_type::BREAK_GLASS_KEY, "sha256:ab12"), None),
-            Actor::staff("max"),
+            Actor::awzy_staff("max"),
         ] {
             assert_eq!(Actor::parse(&actor.to_string()), actor, "{actor}");
         }

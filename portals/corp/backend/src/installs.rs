@@ -203,7 +203,7 @@ impl Install {
 
     /// The staff member who registered it.
     async fn created_by(&self) -> Actor {
-        Actor(awzy_model::Actor::staff(&self.0.created_by))
+        Actor(awzy_model::Actor::awzy_staff(&self.0.created_by))
     }
 
     async fn created_at(&self) -> UtcTimestamp {

@@ -16,7 +16,7 @@ impl Actor {
 
 #[Object]
 impl Actor {
-    /// `Human`, `ServiceAccount`, `AwzyService`, `BreakGlassKey`, or `Staff`.
+    /// `Human`, `ServiceAccount`, `AwzyService`, `BreakGlassKey`, or `AwzyStaff`.
     #[graphql(name = "type")]
     async fn kind(&self) -> &str {
         &self.0.subject.kind

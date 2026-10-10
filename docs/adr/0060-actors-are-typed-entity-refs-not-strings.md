@@ -25,8 +25,9 @@ entities, and awzy already writes entities as `EntityRef` (`type`, `id`).
   `awzy.authz.v1.Actor { subject, on_behalf_of }` on the wire. The same shape as an accessor.
 - **Its type says what it is**: `Human` (the client IdP's ID), `ServiceAccount`, `AwzyService`
   (one of awzy's own: `awzy-reasoner`, `awzy-bot`, `awzy-publish`), `BreakGlassKey` (a key's
-  fingerprint; who held it isn't known), or `Staff` (a corp portal user name). Awzy Bot drafting
-  for alice is `AwzyService::awzy-bot` on behalf of `Human::alice`.
+  fingerprint; who held it isn't known), or `AwzyStaff` (an awzy employee in the corp portal, by
+  user name; never in a client's install). Awzy Bot drafting for alice is `AwzyService::awzy-bot`
+  on behalf of `Human::alice`.
 - **Protobuf `v1` gains a typed field next to each string**, `…_by_actor`, and the strings are
   deprecated, removed in `v2`. Services read the typed field and fall back to the string from
   callers that predate it; they fill both in responses, the string as the actor's text form

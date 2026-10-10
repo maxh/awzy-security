@@ -1,6 +1,6 @@
 type Actor {
 	"""
-	`Human`, `ServiceAccount`, `AwzyService`, `BreakGlassKey`, or `Staff`.
+	`Human`, `ServiceAccount`, `AwzyService`, `BreakGlassKey`, or `AwzyStaff`.
 	"""
 	type: String!
 	"""
