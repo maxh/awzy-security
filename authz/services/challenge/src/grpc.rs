@@ -109,10 +109,12 @@ impl ChallengeService for Service {
         // Checked before the store's own checks so a refusal names the policy decision; the store
         // then re-checks the challenge is still pending as it records the answer.
         let c = self.store.get(id).await.map_err(status)?;
-        self.approvals.check(&req.decided_by, &c.request.resource).await.map_err(|e| match e {
-            ApprovalError::Refused(_) => Status::permission_denied(e.to_string()),
-            ApprovalError::Unavailable(_) => Status::unavailable(e.to_string()),
-        })?;
+        self.approvals.check(&req.decided_by, &c.request.resource, req.approver_entities.clone()).await.map_err(
+            |e| match e {
+                ApprovalError::Refused(_) => Status::permission_denied(e.to_string()),
+                ApprovalError::Unavailable(_) => Status::unavailable(e.to_string()),
+            },
+        )?;
         let c = self.store.decide(id, &req.decided_by, req.approve, &req.note).await.map_err(status)?;
         tracing::info!(challenge_id = %c.id, decided_by = %req.decided_by, approve = req.approve, "challenge decided");
         Ok(Response::new(DecideResponse { challenge: Some(challenge_to_wire(c)) }))
@@ -401,6 +403,7 @@ mod tests {
             decided_by: by.into(),
             approve,
             note: String::new(),
+            approver_entities: vec![],
         };
         let refused = client.decide(decide("dave", true)).await.unwrap_err();
         assert_eq!(refused.code(), Code::PermissionDenied);
@@ -409,7 +412,13 @@ mod tests {
 
         let id = check(&state, "erin", "payroll").await.challenge_id.unwrap().to_string();
         client
-            .decide(DecideRequest { id, decided_by: "carol".into(), approve: false, note: "no".into() })
+            .decide(DecideRequest {
+                id,
+                decided_by: "carol".into(),
+                approve: false,
+                note: "no".into(),
+                approver_entities: vec![],
+            })
             .await
             .unwrap();
         let rejected = check(&state, "erin", "payroll").await;

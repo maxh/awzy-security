@@ -500,6 +500,7 @@ mod tests {
 
         let schema = crate::schema_with(Services {
             policy: Some(serve_fake_policy(FakePolicy::default()).await),
+            challenge: None,
             clickhouse: Some(ch),
             pdp: Some(crate::testing::pdp().await),
             context: None,

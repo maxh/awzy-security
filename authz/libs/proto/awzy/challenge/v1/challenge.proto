@@ -134,6 +134,9 @@ message DecideRequest {
   string decided_by = 2;
   bool approve = 3;
   string note = 4;
+  // The approver's entities as the caller validated them (the person and their groups from the
+  // token), for the PDP's `approve` check. A PDP with awzy-context uses the IdP's instead.
+  repeated awzy.authz.v1.Entity approver_entities = 5;
 }
 
 message DecideResponse {

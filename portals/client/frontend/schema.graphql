@@ -32,6 +32,118 @@ type AskAwzyBotPayload {
 	refused: Boolean!
 }
 
+type Challenge implements Node {
+	"""
+	QID: challenge_<uuid>.
+	"""
+	id: ID!
+	"""
+	The decision that opened it.
+	"""
+	decisionId: String!
+	subject: EntityRef
+	"""
+	Set when a service account acted for a person.
+	"""
+	onBehalfOf: EntityRef
+	action: String!
+	resource: EntityRef
+	"""
+	Every one must be passed.
+	"""
+	kinds: [ChallengeKind!]!
+	passed: [ChallengeKind!]!
+	status: ChallengeStatus!
+	"""
+	The person it was sent to. Null when no one is known, so only an approval can pass it.
+	"""
+	answererId: String
+	justification: String
+	"""
+	Who approved or rejected it.
+	"""
+	decidedBy: String
+	decisionNote: String
+	createdAt: UtcTimestamp
+	"""
+	A pending challenge expires then; a rejection stops blocking the request then.
+	"""
+	expiresAt: UtcTimestamp
+	passedAt: UtcTimestamp
+	"""
+	A passed challenge allows the request until then.
+	"""
+	grantExpiresAt: UtcTimestamp
+}
+
+enum ChallengeKind {
+	"""
+	The person says why they need the access.
+	"""
+	JUSTIFICATION
+	"""
+	A security key (WebAuthn). Not available yet.
+	"""
+	VERIFICATION
+	"""
+	Someone else approves.
+	"""
+	APPROVAL
+	"""
+	A biometric check through an external provider. Not available yet.
+	"""
+	BIOMETRIC
+}
+
+type ChallengePayload {
+	challenge: Challenge!
+}
+
+enum ChallengeStatus {
+	"""
+	Waiting for an answer.
+	"""
+	PENDING
+	"""
+	Every kind passed: the request is allowed on retry until `grantExpiresAt`.
+	"""
+	PASSED
+	"""
+	An approver said no: the request is denied until `expiresAt`.
+	"""
+	REJECTED
+	"""
+	Not answered in time.
+	"""
+	EXPIRED
+}
+
+input ContainAccessorInput {
+	subject: EntityRefInput!
+	reason: String!
+}
+
+type Containment {
+	"""
+	QID: containment_<uuid>.
+	"""
+	id: ID!
+	subject: EntityRef
+	reason: String!
+	createdBy: String!
+	createdAt: UtcTimestamp
+	"""
+	Null while it's in force.
+	"""
+	liftedAt: UtcTimestamp
+	liftedBy: String
+	liftReason: String
+}
+
+type ContainmentPayload {
+	containment: Containment!
+}
+
 input CreatePolicyDraftInput {
 	schema: String!
 	policies: String!
@@ -46,6 +158,12 @@ type CreatePolicyDraftPayload {
 	Why the bundle was rejected: Cedar parse or schema validation errors.
 	"""
 	validationError: String
+}
+
+input DecideChallengeInput {
+	id: ID!
+	approve: Boolean!
+	note: String
 }
 
 type Decision implements Node {
@@ -209,6 +327,27 @@ type EntityRef {
 	id: String!
 }
 
+input EntityRefInput {
+	"""
+	`Human` or `ServiceAccount`.
+	"""
+	type: String!
+	id: String!
+}
+
+input JustifyChallengeInput {
+	id: ID!
+	"""
+	Why the access is needed: at least 20 characters.
+	"""
+	justification: String!
+}
+
+input LiftContainmentInput {
+	id: ID!
+	reason: String!
+}
+
 type Mutation {
 	"""
 	Validates and saves a draft. Nothing is enforced until it is published.
@@ -235,6 +374,20 @@ type Mutation {
 	One turn of a conversation with Awzy Bot.
 	"""
 	askAwzyBot(input: AskAwzyBotInput!): AskAwzyBotPayload!
+	"""
+	Answers a justification challenge sent to the signed-in person.
+	"""
+	justifyChallenge(input: JustifyChallengeInput!): ChallengePayload!
+	"""
+	Approves or rejects someone else's request. awzy-challenge checks with the PDP that the
+	signed-in person may approve the resource.
+	"""
+	decideChallenge(input: DecideChallengeInput!): ChallengePayload!
+	"""
+	Revokes an accessor's access until it's lifted. Every PDP applies it within seconds.
+	"""
+	containAccessor(input: ContainAccessorInput!): ContainmentPayload!
+	liftContainment(input: LiftContainmentInput!): ContainmentPayload!
 }
 
 interface Node {
@@ -431,6 +584,10 @@ enum PortalArea {
 	People and groups from the IdP, and service accounts.
 	"""
 	DIRECTORY
+	"""
+	`view`: answer your own challenges. `administer`: every challenge, and containments.
+	"""
+	CHALLENGES
 }
 
 input PublishPolicyBundleInput {
@@ -502,6 +659,18 @@ type Query {
 	Whether this install has Awzy Bot set up (ADR 0048).
 	"""
 	awzyBotEnabled: Boolean!
+	"""
+	Challenges sent to the signed-in person, newest first.
+	"""
+	myChallenges(status: ChallengeStatus, first: Int): [Challenge!]!
+	"""
+	Every challenge, newest first. For those who administer challenges.
+	"""
+	challenges(status: ChallengeStatus, first: Int): [Challenge!]!
+	"""
+	Containments, newest first. For those who administer challenges.
+	"""
+	containments(activeOnly: Boolean! = true, first: Int): [Containment!]!
 }
 
 input RegisterServiceAccountInput {

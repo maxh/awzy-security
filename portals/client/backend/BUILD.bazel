@@ -6,7 +6,10 @@ awzy_service(
     binary_name = "awzy-client-portal",
     extra_binaries = ["print_schema"],
     frontend = "//portals/client/frontend:build",
-    test_deps = ["//authz/jobs/clickhouse-migrate:clickhouse"],
+    test_deps = [
+        "//authz/jobs/clickhouse-migrate:clickhouse",
+        "//authz/services/challenge",
+    ],
     visibility = ["//tools:client_side"],
     deps = [
         "//authz/libs/identity",

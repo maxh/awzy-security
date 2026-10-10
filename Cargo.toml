@@ -87,6 +87,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 uuid = { version = "1", features = ["serde", "v7"] }
 
+awzy-challenge = { path = "authz/services/challenge" }
 awzy-clickhouse = { path = "authz/jobs/clickhouse-migrate" }
 awzy-cloud = { path = "libs/cloud" }
 awzy-heartbeat = { path = "libs/heartbeat" }

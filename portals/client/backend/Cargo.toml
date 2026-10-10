@@ -33,6 +33,8 @@ tonic.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+awzy-challenge.workspace = true
 jsonwebtoken.workspace = true
+sqlx.workspace = true
 awzy-clickhouse.workspace = true
 tower.workspace = true

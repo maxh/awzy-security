@@ -260,6 +260,23 @@ bazel run //authz/services/policy:awzy-break-glass -- --endpoint http://127.0.0.
 It talks to awzy-policy directly, so it works when the IdP, PDP, or portal is the problem. Requests
 expire after 5 minutes, can't be replayed, and every use is recorded and logged.
 
+### Challenges and containments (ADR 0054)
+
+awzy-challenge runs against the [local stack](#local-stack) (its database, `awzy_challenge`, is made
+by the stack's init script). It asks the PDP who may approve:
+
+```sh
+AWZY_LISTEN_ADDR=127.0.0.1:8083 AWZY_POSTGRES_URL=postgres://awzy:awzy@localhost:5432/awzy_challenge \
+  AWZY_PDP_ADDR=http://127.0.0.1:8082 bazel run //authz/services/challenge:awzy-challenge
+# PDP and client portal: add AWZY_CHALLENGE_ADDR=http://127.0.0.1:8083
+```
+
+A PDP with `AWZY_CHALLENGE_ADDR` isn't ready until it has the containment list. Challenges are only
+opened in enforce mode: switch the install on the portal's Enforcement page, then a challenged
+request comes back with a `challenge_id`. The person answers it on the Challenges page and retries.
+Locally, `AWZY_CHALLENGE_GRANT_SECS` and `AWZY_CHALLENGE_PENDING_SECS` shorten how long a pass
+lasts and how long a challenge waits.
+
 ### MCP gateway (first enforcement point)
 
 `awzy-gateway` sits in front of MCP servers at `/mcp/{upstream}`. It validates the caller's bearer
