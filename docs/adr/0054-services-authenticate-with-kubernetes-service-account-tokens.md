@@ -45,8 +45,9 @@ it. awzy should run as little extra software in a client's cluster as it can (pl
   Telling the PDP from awzy-policy needs a service account per service, which also means a
   workload-identity binding per service (least-privilege cloud access); that's a change to the
   install contract, decided separately.
-- **`AWZY_SERVICE_AUTH=off`** turns sending and checking off for local development and tests,
-  with a warning at startup. The chart never sets it.
+- **On in Kubernetes, off elsewhere.** Only pods have service-account tokens, so a service
+  running on a laptop or in a test neither sends nor checks them, and says so at startup.
+  `AWZY_SERVICE_AUTH=on|off` overrides that; the chart never sets it.
 - Network policies stay, as a second fence.
 
 Rejected: a service mesh with mTLS (Istio, Linkerd). It's more software to run and upgrade
