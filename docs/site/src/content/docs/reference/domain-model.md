@@ -19,21 +19,40 @@ IdP (over SCIM) and from connectors to your apps.
 | Entity | What it is | Attributes policies can use |
 | --- | --- | --- |
 | `Human` | A person, by your IdP's ID for them | `active`; member of `Group`s |
-| `ServiceAccount` | Anything non-human with its own credentials: a backend service, a scheduled job, an AI agent | `owner` (the accountable `Human`), `ai` |
+| `ServiceAccount` | Anything non-human with its own credentials: a backend service, a scheduled job, an AI agent. Registered in awzy-context; one that isn't is denied before any policy runs | `owner` (the accountable `Human`), `ai` |
 | `Group` | A group or team from your IdP. Groups can nest | |
-| `Resource` | Something people access: a document, a folder, a project. Resources nest | `sensitivity`, `unclassified`, `owner`, who it's shared with |
+| `Resource` | Something people access: a document, a folder, a project. Resources nest | `sensitivity`, `unclassified`, `owner`, and sharing: `shared_people`, `shared_groups` (can read), `writer_people`, `writer_groups` (can also change), `shared_with_everyone` |
 | `McpServer`, `McpTool` | An MCP server behind awzy-gateway, and its tools (`<server>/<tool>`) | `sensitivity` |
 | `PortalArea` | An area of the client portal: `decisions`, `policies`, `enforcement`, `directory`, `challenges` | `sensitivity` |
 
 `Human` and `ServiceAccount` are the **accessors**: the subject of every check. See
-[People, agents, and delegation](/concepts/principals-and-delegation/).
-
-**Sensitivity** is one of `public`, `internal`, `confidential`, or `crown_jewels`. A resource
-that no label or classifier has set is marked `unclassified` and gets the default tier you
-choose, so policies can treat it with care.
+[People, agents, and delegation](/concepts/principals-and-delegation/). A resource's sharing
+attributes include what it inherits from the folders above it, and every attribute marked
+optional in the schema may be missing, so test it with `has` first.
 
 **Actions** are `read` and `write` on a `Resource`, `call` on an `McpTool`, `view` and
 `administer` on a `PortalArea`, and `approve` for approving someone else's challenged request.
+
+### Sensitivity
+
+Every `Resource`, `McpTool`, and `PortalArea` has a `sensitivity`: `public`, `internal`,
+`confidential`, or `crown_jewels`. For a resource, two things can set it:
+
+- **The connector**, from the label it has in your system ("Highly Confidential", say).
+- **awzy's classifier**, in the background, in order of trust: a label whose text names a tier,
+  then markings in the content ("Strictly confidential"), then names and folders ("board",
+  "payroll"). Names never make anything `public`; that takes a label or a marking.
+
+Policies see the **higher** of the two, so a label is never lowered. A resource neither has
+placed gets your default tier and `unclassified: true`, so policies can challenge it. A resource
+awzy-context doesn't know yet is treated the same way.
+
+### Risk
+
+awzy-reasoner scores each person and service account from 0 to 100 every 15 minutes, from their
+recent activity against their own and their team's usual, and stores the score with its reasons.
+A check sees its own accessor's score as `context.risk_score`. See
+[Risk scores](/concepts/risk/).
 
 ### Work items
 
@@ -52,16 +71,53 @@ forbid (principal is ServiceAccount, action == Action::"read", resource)
 when { context has assigned && !context.assigned };
 ```
 
+## Request context
+
+Every check carries a context. Most of it awzy sets from what it knows. A caller that puts
+`human_present`, `on_behalf_of`, or `assigned` in the context is rejected, so they can't be
+claimed; the first two come from the request's own fields and its validated token.
+
+| Field | Type | Set by | What it is |
+| --- | --- | --- | --- |
+| `risk_score` | `Long` | awzy | The accessor's risk, 0 to 100. awzy-reasoner's score replaces whatever the caller sent; before it has scored the accessor, the caller's value or `0` |
+| `human_present` | `Bool` | awzy | Whether a person is there to answer a challenge now: yes for a `Human`, no for a service account unless the enforcement point says so |
+| `on_behalf_of` | `Human`, optional | awzy | The person a service account acts for, from its validated token. Absent when it acts on its own authority |
+| `assigned` | `Bool`, optional | awzy | Whether the accessor is on open work that links the resource. Absent when awzy doesn't know |
+| `client` | `String`, optional | The enforcement point | The calling software, such as `browser`, `cli`, or `mcp` (awzy-gateway sets `mcp`). A hint that an agent may be using a person's own credentials |
+
+When an agent acts for a person, the check runs twice, once as each, and each sees its own
+`risk_score` and `assigned`. See [How awzy decides](/concepts/how-awzy-decides/).
+
+## Decisions
+
+A decision's **verdict** is `allow`, `deny`, or `challenge`. A challenge lists one or more
+**kinds**, and every one must be passed:
+
+| Kind | What it asks |
+| --- | --- |
+| `justification` | The person says why |
+| `verification` | The person uses their security key |
+| `approval` | Someone policy allows approves it |
+| `biometric` | Reserved; not issued yet |
+
+Passing a challenge creates a **grant**: the exact request (same accessor, action, and resource)
+is allowed for 15 minutes, so the caller can retry it. A rejected challenge denies the request
+until it expires. A decision also records its **mode**: in `monitor` the verdict is recorded but
+the request is allowed. See [Monitor, then enforce](/concepts/monitor-and-enforce/).
+
 ## Records
 
 | Record | QID prefix | What it is |
 | --- | --- | --- |
 | Decision | `decision_` | One verdict on one check, with the policies that produced it. See [How awzy decides](/concepts/how-awzy-decides/) |
-| Policy bundle | `policy_bundle_` | A signed, versioned set of your Cedar policies. See [Writing policies](/guides/writing-policies/) |
+| Policy bundle | `policy_bundle_` | A signed, versioned set of your Cedar policies: a `draft`, the one `active` bundle, or `superseded` by a later one. See [Writing policies](/guides/writing-policies/) |
 | Challenge | `challenge_` | What an accessor must pass before retrying: a justification, a security key, or an approval |
 | Containment | `containment_` | An accessor whose access is revoked until someone lifts it. See [Challenges and containment](/concepts/challenges-and-containment/) |
 | Security key | `security_key_` | A person's registered WebAuthn key, used to answer verification challenges |
 | Event | `event_` | One thing an accessor did, as an app or cloud audit log recorded it |
+| Enforcement change | | A switch between monitor and enforce: which mode, who switched it, and when. Kept as an append-only history |
+| Break-glass event | | A rollback signed with an admin's break-glass key, outside the portal and your IdP: which key, why, and which bundle version it restored |
+| Risk score | | One per accessor, replaced on each scoring run, with the reasons behind it |
 
 All of them stay in your cloud account.
 

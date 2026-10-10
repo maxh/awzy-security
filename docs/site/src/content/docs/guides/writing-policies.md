@@ -48,6 +48,9 @@ when { context has on_behalf_of && !context.human_present && context.risk_score 
 | `on_behalf_of` | The person an agent acts for, when it acts for one. |
 | `human_present` | Whether someone is there to answer a challenge. |
 | `assigned` | Whether the accessor has open work on this resource. |
+| `client` | The calling software, such as `browser`, `cli`, or `mcp`, as the enforcement point saw it. Optional. |
+
+Every field, with its type and who sets it: [Domain model](/reference/domain-model/#request-context).
 
 ## Publishing
 
