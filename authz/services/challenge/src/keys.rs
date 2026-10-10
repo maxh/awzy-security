@@ -134,7 +134,7 @@ impl SecurityKeys {
     /// A person's keys in use, oldest first.
     pub async fn list(&self, human: &str) -> Result<Vec<SecurityKey>, KeyError> {
         let rows =
-            sqlx::query("SELECT * FROM security_keys WHERE person_id = $1 AND removed_at IS NULL ORDER BY created_at")
+            sqlx::query("SELECT * FROM security_keys WHERE human_id = $1 AND removed_at IS NULL ORDER BY created_at")
                 .bind(human)
                 .fetch_all(&self.pool)
                 .await?;
@@ -143,7 +143,7 @@ impl SecurityKeys {
 
     async fn credential_ids(&self, human: &str) -> Result<Vec<Vec<u8>>, KeyError> {
         let rows = sqlx::query(
-            "SELECT credential_id FROM security_keys WHERE person_id = $1 AND removed_at IS NULL ORDER BY created_at",
+            "SELECT credential_id FROM security_keys WHERE human_id = $1 AND removed_at IS NULL ORDER BY created_at",
         )
         .bind(human)
         .fetch_all(&self.pool)
@@ -161,7 +161,7 @@ impl SecurityKeys {
         let id = CeremonyId::new();
         let challenge = random_challenge();
         sqlx::query(
-            "INSERT INTO webauthn_ceremonies (id, person_id, purpose, challenge, challenge_id, authorized_by, expires_at) \
+            "INSERT INTO webauthn_ceremonies (id, human_id, purpose, challenge, challenge_id, authorized_by, expires_at) \
              VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(secs => $7))",
         )
         .bind(id.uuid())
@@ -181,7 +181,7 @@ impl SecurityKeys {
         let id: CeremonyId = id.parse().map_err(|_| KeyError::BadCeremony)?;
         let row = sqlx::query(
             "UPDATE webauthn_ceremonies SET used_at = now() \
-             WHERE id = $1 AND person_id = $2 AND purpose = $3 AND used_at IS NULL AND expires_at > now() \
+             WHERE id = $1 AND human_id = $2 AND purpose = $3 AND used_at IS NULL AND expires_at > now() \
              RETURNING challenge, challenge_id, authorized_by",
         )
         .bind(id.uuid())
@@ -208,7 +208,7 @@ impl SecurityKeys {
     ) -> Result<SecurityKeyId, KeyError> {
         let row = sqlx::query(
             "SELECT id, public_key, sign_count FROM security_keys \
-             WHERE credential_id = $1 AND person_id = $2 AND removed_at IS NULL FOR UPDATE",
+             WHERE credential_id = $1 AND human_id = $2 AND removed_at IS NULL FOR UPDATE",
         )
         .bind(&a.credential_id)
         .bind(human)
@@ -307,7 +307,7 @@ impl SecurityKeys {
         let mut tx = self.pool.begin().await?;
         // Serializes enrollment per person, so two "first keys" can't both skip authorization.
         sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))").bind(human).execute(&mut *tx).await?;
-        let has_keys = sqlx::query("SELECT 1 FROM security_keys WHERE person_id = $1 AND removed_at IS NULL LIMIT 1")
+        let has_keys = sqlx::query("SELECT 1 FROM security_keys WHERE human_id = $1 AND removed_at IS NULL LIMIT 1")
             .bind(human)
             .fetch_optional(&mut *tx)
             .await?
@@ -316,7 +316,7 @@ impl SecurityKeys {
             return Err(KeyError::NeedsExistingKey { human: human.into() });
         }
         let row = sqlx::query(
-            "INSERT INTO security_keys (id, person_id, credential_id, public_key, sign_count, name, added_with) \
+            "INSERT INTO security_keys (id, human_id, credential_id, public_key, sign_count, name, added_with) \
              VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (credential_id) DO NOTHING RETURNING *",
         )
         .bind(SecurityKeyId::new().uuid())
@@ -345,7 +345,7 @@ impl SecurityKeys {
         let with = self.check_assertion(&mut tx, human, &spent.challenge, authorization).await?;
         let row = sqlx::query(
             "UPDATE security_keys SET removed_at = now(), removed_with = $3, removed_by = $2 \
-             WHERE id = $1 AND person_id = $2 AND removed_at IS NULL RETURNING *",
+             WHERE id = $1 AND human_id = $2 AND removed_at IS NULL RETURNING *",
         )
         .bind(id.uuid())
         .bind(human)
@@ -404,7 +404,7 @@ impl SecurityKeys {
 fn key_from_row(row: &PgRow) -> Result<SecurityKey, sqlx::Error> {
     Ok(SecurityKey {
         id: SecurityKeyId::from_uuid(row.try_get("id")?),
-        human_id: row.try_get("person_id")?,
+        human_id: row.try_get("human_id")?,
         name: row.try_get("name")?,
         added_with: row.try_get::<Option<uuid::Uuid>, _>("added_with")?.map(SecurityKeyId::from_uuid),
         created_at: row.try_get("created_at")?,

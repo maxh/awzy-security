@@ -14,6 +14,7 @@ const MIGRATIONS: &[(u32, &str, &str)] = &[
     (3, "delegation", include_str!("../migrations/0003_delegation.sql")),
     (4, "enforcement_mode", include_str!("../migrations/0004_enforcement_mode.sql")),
     (5, "events", include_str!("../migrations/0005_events.sql")),
+    (6, "human_policy_ids", include_str!("../migrations/0006_human_policy_ids.sql")),
 ];
 
 /// Values substituted into migrations.
