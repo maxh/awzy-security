@@ -1,7 +1,7 @@
 # service-auth · service-to-service authentication
 
 How awzy's services inside an install prove who is calling, with Kubernetes service-account
-tokens ([ADR 0054](../../../docs/adr/0054-services-authenticate-with-kubernetes-service-account-tokens.md)).
+tokens ([ADR 0055](../../../docs/adr/0055-services-authenticate-with-kubernetes-service-account-tokens.md)).
 Part of [awzy-authz](../../README.md).
 
 - **Receiving:** `Verifier::from_env("awzy-context")` checks a caller's token against the

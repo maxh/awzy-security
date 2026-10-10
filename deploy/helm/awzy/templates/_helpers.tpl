@@ -33,7 +33,7 @@ spec:
     spec:
       serviceAccountName: {{ .serviceAccount | default "awzy" }}
       {{- with .tokens }}
-      # Service tokens this workload sends, one per service it calls (ADR 0054).
+      # Service tokens this workload sends, one per service it calls (ADR 0055).
       volumes:
         - name: awzy-service-tokens
           projected:
