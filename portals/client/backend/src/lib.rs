@@ -14,6 +14,7 @@ mod decisions;
 pub mod directory;
 mod dry_run;
 mod enforcement;
+mod investigations;
 mod mcp;
 mod node;
 mod policies;
@@ -159,6 +160,7 @@ pub struct ClientPortalQuery(
     awzy_bot::AwzyBotQuery,
     challenges::ChallengeQuery,
     security_keys::SecurityKeyQuery,
+    investigations::InvestigationQuery,
 );
 
 #[derive(MergedObject, Default)]
@@ -170,6 +172,7 @@ pub struct ClientPortalMutation(
     awzy_bot::AwzyBotMutation,
     challenges::ChallengeMutation,
     security_keys::SecurityKeyMutation,
+    investigations::InvestigationMutation,
 );
 
 pub type ClientPortalSchema = Schema<ClientPortalQuery, ClientPortalMutation, EmptySubscription>;

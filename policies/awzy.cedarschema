@@ -45,7 +45,7 @@ entity McpTool in [McpServer] {
 };
 
 // An area of the client portal and its MCP server: "decisions", "policies", "enforcement",
-// "directory", or "challenges" (ADR 0020).
+// "directory", "challenges", or "investigations" (ADR 0020).
 entity PortalArea {
   // Set by the portal; "confidential" for every area.
   sensitivity: String,

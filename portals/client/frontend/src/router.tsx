@@ -1,5 +1,12 @@
 import { PageErrorBoundary, PortalShell, ShellNavLink } from "@awzy/ui";
-import { IconAddressBook, IconFileCode, IconHandStop, IconListCheck, IconShieldCheck } from "@tabler/icons-react";
+import {
+  IconAddressBook,
+  IconFileCode,
+  IconHandStop,
+  IconListCheck,
+  IconSearch,
+  IconShieldCheck,
+} from "@tabler/icons-react";
 import {
   createRootRoute,
   createRoute,
@@ -14,6 +21,7 @@ import { ChallengesPage } from "./ChallengesPage";
 import { DecisionsPage } from "./DecisionsPage";
 import { DirectoryPage } from "./DirectoryPage";
 import { EnforcementPage } from "./EnforcementPage";
+import { InvestigationsPage } from "./InvestigationsPage";
 import { PoliciesPage } from "./PoliciesPage";
 import { Account } from "./session";
 
@@ -51,6 +59,12 @@ function Nav() {
         icon={<IconHandStop {...icon} />}
         active={pathname.startsWith("/challenges")}
         renderRoot={(props) => <Link to="/challenges" {...props} />}
+      />
+      <ShellNavLink
+        label="Investigations"
+        icon={<IconSearch {...icon} />}
+        active={pathname.startsWith("/investigations")}
+        renderRoot={(props) => <Link to="/investigations" {...props} />}
       />
     </>
   );
@@ -108,6 +122,12 @@ const challengesRoute = createRoute({
   component: ChallengesPage,
 });
 
+const investigationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/investigations",
+  component: InvestigationsPage,
+});
+
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
     indexRoute,
@@ -116,6 +136,7 @@ export const router = createRouter({
     enforcementRoute,
     directoryRoute,
     challengesRoute,
+    investigationsRoute,
   ]),
 });
 
