@@ -18,7 +18,9 @@ use tonic::transport::Channel;
 /// The reason recorded when an approver rejected the request. Not a Cedar policy.
 pub const CHALLENGE_REJECTED: &str = "challenge-rejected";
 
-const RESOLVE_TIMEOUT: Duration = Duration::from_millis(250);
+/// Generous: a challenge verdict waits on a person anyway, and the first call after a PDP starts
+/// also opens the connection. The same limit as an awzy-context lookup (ADR 0044).
+const RESOLVE_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// What awzy-challenge said about one challenged request.
 #[derive(Debug, Clone, PartialEq, Eq)]
