@@ -209,6 +209,16 @@ impl Install {
     async fn created_at(&self) -> UtcTimestamp {
         UtcTimestamp(self.0.created_at)
     }
+
+    /// When it was retired; null while it's active.
+    async fn retired_at(&self) -> Option<UtcTimestamp> {
+        self.0.retired_at.map(UtcTimestamp)
+    }
+
+    /// The staff member who retired it.
+    async fn retired_by(&self) -> Option<Actor> {
+        self.0.retired_by.as_deref().map(|u| Actor(awzy_model::Actor::awzy_staff(u)))
+    }
 }
 
 /// One awzy service (or ClickHouse) running in an install.
@@ -364,6 +374,19 @@ pub struct RegisterInstallPayload {
     pub install: Install,
     /// The install's reporting token. Shown once: put it in the install's values now.
     pub reporting_token: String,
+    /// Its pull token for the release registry (ADR 0028), shown once like the reporting token.
+    /// Null when this portal doesn't issue pull tokens.
+    pub pull_token: Option<String>,
+}
+
+#[derive(InputObject)]
+pub struct RetireInstallInput {
+    pub install_qid: ID,
+}
+
+#[derive(SimpleObject)]
+pub struct RetireInstallPayload {
+    pub install: Install,
 }
 
 #[derive(Default)]
@@ -385,10 +408,21 @@ impl FleetMutation {
         match store(ctx)?.register(&new, &staff.username).await {
             Ok((record, token)) => {
                 tracing::info!(install = %record.id, client = %record.client, environment = %record.environment, by = %staff.username, "install registered");
-                Ok(RegisterInstallPayload { install: Install(record), reporting_token: token })
+                let pull_token = store(ctx)?.issue_pull_token(record.id, &staff.username).await?;
+                Ok(RegisterInstallPayload { install: Install(record), reporting_token: token, pull_token })
             }
             Err(e @ (RegisterError::Invalid(_) | RegisterError::Exists { .. })) => Err(e.to_string().into()),
             Err(e) => Err(e.into()),
         }
+    }
+
+    /// Retires an install: its reporting and pull tokens stop working at once, it leaves the
+    /// fleet views, and its client and environment can be registered again.
+    async fn retire_install(&self, ctx: &Context<'_>, input: RetireInstallInput) -> Result<RetireInstallPayload> {
+        let staff = ctx.data::<Staff>().map_err(|_| "sign in first")?;
+        let id: InstallId = input.install_qid.parse().map_err(|_| "not an install ID")?;
+        let record = store(ctx)?.retire(id, &staff.username).await?.ok_or("no active install with that ID")?;
+        tracing::warn!(install = %record.id, client = %record.client, environment = %record.environment, by = %staff.username, "install retired");
+        Ok(RetireInstallPayload { install: Install(record) })
     }
 }

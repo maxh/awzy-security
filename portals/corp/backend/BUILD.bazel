@@ -12,6 +12,7 @@ awzy_service(
         "//libs/server",
         "//libs/telemetry",
         "//libs/portal",
+        "//portals/corp/registry",
     ],
     extra_binaries = [
         "awzy-corp-user",

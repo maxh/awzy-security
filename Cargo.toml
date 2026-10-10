@@ -97,6 +97,7 @@ awzy-context = { path = "authz/services/context" }
 awzy-gateway = { path = "authz/services/gateway" }
 awzy-heartbeat = { path = "libs/heartbeat" }
 awzy-portal = { path = "libs/portal" }
+awzy-registry = { path = "portals/corp/registry" }
 awzy-authz-proto = { path = "authz/libs/proto" }
 awzy-llm = { path = "libs/llm" }
 awzy-identity = { path = "authz/libs/identity" }

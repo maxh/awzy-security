@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<736b7cb5e2f1e4b246a273722f307801>>
+ * @generated SignedSource<<90d0b02b790217847d511652644d3a50>>
  * @lightSyntaxTransform
  */
 
@@ -35,6 +35,10 @@ export type InstallPageQuery$data = {
     } | null | undefined;
     readonly pinnedVersion?: string | null | undefined;
     readonly region?: string;
+    readonly retiredAt?: string | null | undefined;
+    readonly retiredBy?: {
+      readonly label: string;
+    } | null | undefined;
     readonly services?: ReadonlyArray<{
       readonly healthy: boolean;
       readonly imageDigest: string | null | undefined;
@@ -77,7 +81,16 @@ v2 = {
   "name": "chartVersion",
   "storageKey": null
 },
-v3 = {
+v3 = [
+  {
+    "alias": null,
+    "args": null,
+    "kind": "ScalarField",
+    "name": "label",
+    "storageKey": null
+  }
+],
+v4 = {
   "kind": "InlineFragment",
   "selections": [
     {
@@ -144,15 +157,7 @@ v3 = {
       "kind": "LinkedField",
       "name": "createdBy",
       "plural": false,
-      "selections": [
-        {
-          "alias": null,
-          "args": null,
-          "kind": "ScalarField",
-          "name": "label",
-          "storageKey": null
-        }
-      ],
+      "selections": (v3/*:: as any*/),
       "storageKey": null
     },
     {
@@ -160,6 +165,23 @@ v3 = {
       "args": null,
       "kind": "ScalarField",
       "name": "createdAt",
+      "storageKey": null
+    },
+    {
+      "alias": null,
+      "args": null,
+      "kind": "ScalarField",
+      "name": "retiredAt",
+      "storageKey": null
+    },
+    {
+      "alias": null,
+      "args": null,
+      "concreteType": "Actor",
+      "kind": "LinkedField",
+      "name": "retiredBy",
+      "plural": false,
+      "selections": (v3/*:: as any*/),
       "storageKey": null
     },
     {
@@ -306,7 +328,7 @@ return {
         "name": "node",
         "plural": false,
         "selections": [
-          (v3/*:: as any*/)
+          (v4/*:: as any*/)
         ],
         "storageKey": null
       }
@@ -335,7 +357,7 @@ return {
             "name": "__typename",
             "storageKey": null
           },
-          (v3/*:: as any*/),
+          (v4/*:: as any*/),
           {
             "alias": null,
             "args": null,
@@ -349,16 +371,16 @@ return {
     ]
   },
   "params": {
-    "cacheID": "6d56f4b436cdb3de1493813e0d697580",
+    "cacheID": "5ee87055a013971c0b9706bad26264e8",
     "id": null,
     "metadata": {},
     "name": "InstallPageQuery",
     "operationKind": "query",
-    "text": "query InstallPageQuery(\n  $id: ID!\n) {\n  node(id: $id) {\n    __typename\n    ... on Install {\n      client\n      environment\n      cloud\n      region\n      channel\n      pinnedVersion\n      health\n      chartVersion\n      lastSeenAt\n      createdBy {\n        label\n      }\n      createdAt\n      services {\n        name\n        version\n        imageDigest\n        replicasReady\n        replicasDesired\n        restarts24h\n        healthy\n      }\n      metrics {\n        decisionsPerSecond\n        pdpP99Ms\n        errorRate\n        kafkaLag\n        clickhouseDiskUsedPercent\n      }\n      versionHistory {\n        chartVersion\n        firstSeenAt\n      }\n    }\n    id\n  }\n}\n"
+    "text": "query InstallPageQuery(\n  $id: ID!\n) {\n  node(id: $id) {\n    __typename\n    ... on Install {\n      client\n      environment\n      cloud\n      region\n      channel\n      pinnedVersion\n      health\n      chartVersion\n      lastSeenAt\n      createdBy {\n        label\n      }\n      createdAt\n      retiredAt\n      retiredBy {\n        label\n      }\n      services {\n        name\n        version\n        imageDigest\n        replicasReady\n        replicasDesired\n        restarts24h\n        healthy\n      }\n      metrics {\n        decisionsPerSecond\n        pdpP99Ms\n        errorRate\n        kafkaLag\n        clickhouseDiskUsedPercent\n      }\n      versionHistory {\n        chartVersion\n        firstSeenAt\n      }\n    }\n    id\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "d28d390cad2c3cc0fab6c48da80a9a5b";
+(node as any).hash = "b743bc21e25028c7f78c75710dd4aaff";
 
 export default node;

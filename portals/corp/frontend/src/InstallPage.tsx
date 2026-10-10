@@ -1,11 +1,12 @@
 import { EmptyState, PageHeader, PageLoader, Section, Stat, StatusBadge } from "@awzy/ui";
-import { Group, SimpleGrid, Stack, Table, Text } from "@mantine/core";
-import { IconBox, IconHistory } from "@tabler/icons-react";
-import { Link, useParams } from "@tanstack/react-router";
-import { Suspense } from "react";
-import { graphql, useLazyLoadQuery } from "react-relay";
+import { Alert, Button, Group, Modal, SimpleGrid, Stack, Table, Text } from "@mantine/core";
+import { IconArchive, IconBox, IconHistory } from "@tabler/icons-react";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { Suspense, useState } from "react";
+import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
 
 import type { InstallPageQuery } from "./__generated__/InstallPageQuery.graphql";
+import type { InstallPageRetireMutation } from "./__generated__/InstallPageRetireMutation.graphql";
 import { ago, channelLabel, formatTime, healthOf, shortDigest } from "./format";
 import { InstallCharts } from "./InstallCharts";
 
@@ -44,6 +45,10 @@ function Install({ id }: { id: string }) {
               label
             }
             createdAt
+            retiredAt
+            retiredBy {
+              label
+            }
             services {
               name
               version
@@ -97,14 +102,22 @@ function Install({ id }: { id: string }) {
             </Text>
           </>
         }
-        badge={<StatusBadge tone={health.tone}>{health.label}</StatusBadge>}
+        badge={
+          i.retiredAt ? (
+            <StatusBadge tone="neutral">Retired</StatusBadge>
+          ) : (
+            <StatusBadge tone={health.tone}>{health.label}</StatusBadge>
+          )
+        }
         description={
           <>
             {i.cloud?.toUpperCase()} {i.region} · {channelLabel(i.channel ?? "", i.pinnedVersion)} channel · last
             heartbeat {ago(i.lastSeenAt)} · registered by {i.createdBy?.label}
             {i.createdAt ? ` on ${formatTime(i.createdAt)}` : ""}
+            {i.retiredAt ? ` · retired by ${i.retiredBy?.label ?? "staff"} on ${formatTime(i.retiredAt)}` : ""}
           </>
         }
+        actions={i.retiredAt ? undefined : <RetireButton id={id} name={`${i.client} / ${i.environment}`} />}
       />
       <Stack gap="lg">
         <SimpleGrid cols={{ base: 2, md: 3, lg: 6 }}>
@@ -194,6 +207,57 @@ function Install({ id }: { id: string }) {
           )}
         </Section>
       </Stack>
+    </>
+  );
+}
+
+/** Retires the install after a confirmation: its tokens stop working at once. */
+function RetireButton({ id, name }: { id: string; name: string }) {
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const [commit, isRetiring] = useMutation<InstallPageRetireMutation>(graphql`
+    mutation InstallPageRetireMutation($input: RetireInstallInput!) {
+      retireInstall(input: $input) {
+        install {
+          id
+          retiredAt
+        }
+      }
+    }
+  `);
+  const retire = () =>
+    commit({
+      variables: { input: { installQid: id } },
+      onCompleted: () => void navigate({ to: "/installs" }),
+      onError: (e) => setError(e.message),
+    });
+  return (
+    <>
+      <Button variant="default" color="red" leftSection={<IconArchive size={16} />} onClick={() => setConfirming(true)}>
+        Retire install
+      </Button>
+      <Modal opened={confirming} onClose={() => setConfirming(false)} title={<Text fw={600}>Retire {name}?</Text>}>
+        <Stack gap="sm">
+          <Text size="sm">
+            Its reporting and pull tokens stop working at once: it can't send heartbeats or pull releases. It leaves the
+            installs list, its history stays, and the same client and environment can be registered again.
+          </Text>
+          {error && (
+            <Alert color="red" title="Not retired">
+              {error}
+            </Alert>
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+            <Button color="red" loading={isRetiring} onClick={retire}>
+              Retire
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </>
   );
 }

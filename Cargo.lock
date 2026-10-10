@@ -806,6 +806,7 @@ dependencies = [
  "awzy-heartbeat",
  "awzy-model",
  "awzy-portal",
+ "awzy-registry",
  "awzy-server",
  "awzy-telemetry",
  "axum",

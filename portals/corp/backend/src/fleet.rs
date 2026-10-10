@@ -4,6 +4,8 @@
 //! sends a heartbeat every minute to `POST /v1/heartbeat` with that token. Only what the fixed
 //! schema in `awzy_heartbeat` allows is accepted and stored.
 
+use std::sync::Arc;
+
 use argon2::password_hash::rand_core::{OsRng, RngCore};
 use awzy_heartbeat::Heartbeat;
 use awzy_model::InstallId;
@@ -114,6 +116,9 @@ pub struct InstallRecord {
     pub created_at: DateTime<Utc>,
     pub last_seen_at: Option<DateTime<Utc>>,
     pub last_heartbeat: Option<Heartbeat>,
+    /// When staff retired it: its tokens stop working and it leaves the fleet views.
+    pub retired_at: Option<DateTime<Utc>>,
+    pub retired_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,11 +188,13 @@ impl InstallRecord {
             created_at: row.try_get("created_at")?,
             last_seen_at: row.try_get("last_seen_at")?,
             last_heartbeat: row.try_get::<Option<Json<Heartbeat>>, _>("last_heartbeat")?.map(|j| j.0),
+            retired_at: row.try_get("retired_at")?,
+            retired_by: row.try_get("retired_by")?,
         })
     }
 }
 
-const COLUMNS: &str = "id, client, environment, cloud, region, channel, pinned_version, created_by, created_at, last_seen_at, last_heartbeat";
+const COLUMNS: &str = "id, client, environment, cloud, region, channel, pinned_version, created_by, created_at, last_seen_at, last_heartbeat, retired_at, retired_by";
 
 fn token_hash(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
@@ -229,11 +236,45 @@ pub struct Sample {
 #[derive(Clone)]
 pub struct FleetStore {
     pool: PgPool,
+    /// The registry proxy's pull tokens (ADR 0028), when this portal issues them.
+    pull_tokens: Option<Arc<awzy_registry::tokens::TokenStore>>,
 }
 
 impl FleetStore {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        Self { pool, pull_tokens: None }
+    }
+
+    /// Issue and revoke installs' registry pull tokens along with their registration.
+    pub fn with_pull_tokens(mut self, tokens: awzy_registry::tokens::TokenStore) -> Self {
+        self.pull_tokens = Some(Arc::new(tokens));
+        self
+    }
+
+    /// A new pull token for `id`, replacing any it had; None when this portal doesn't issue them.
+    pub async fn issue_pull_token(&self, id: InstallId, by: &str) -> Result<Option<String>, sqlx::Error> {
+        match &self.pull_tokens {
+            Some(tokens) => tokens.create(id, by).await.map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// Retires an install: its reporting and pull tokens stop working, it leaves the fleet
+    /// views, and its client and environment can be registered again. None if there's no
+    /// active install with that ID.
+    pub async fn retire(&self, id: InstallId, by: &str) -> Result<Option<InstallRecord>, sqlx::Error> {
+        let row = sqlx::query(&format!(
+            "UPDATE installs SET retired_at = now(), retired_by = $2 WHERE id = $1 AND retired_at IS NULL RETURNING {COLUMNS}"
+        ))
+        .bind(id.uuid())
+        .bind(by)
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(row) = row else { return Ok(None) };
+        if let Some(tokens) = &self.pull_tokens {
+            tokens.revoke(id).await?;
+        }
+        InstallRecord::from_row(&row).map(Some)
     }
 
     pub async fn migrate(&self) -> Result<(), sqlx::migrate::MigrateError> {
@@ -272,11 +313,13 @@ impl FleetStore {
 
     /// Ordered by registration. `after`: continue after this install.
     pub async fn list(&self, after: Option<InstallId>, limit: i64) -> Result<Vec<InstallRecord>, sqlx::Error> {
-        let rows = sqlx::query(&format!("SELECT {COLUMNS} FROM installs WHERE id > $1 ORDER BY id LIMIT $2"))
-            .bind(after.map(|a| a.uuid()).unwrap_or_default())
-            .bind(limit)
-            .fetch_all(&self.pool)
-            .await?;
+        let rows = sqlx::query(&format!(
+            "SELECT {COLUMNS} FROM installs WHERE id > $1 AND retired_at IS NULL ORDER BY id LIMIT $2"
+        ))
+        .bind(after.map(|a| a.uuid()).unwrap_or_default())
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
         rows.iter().map(InstallRecord::from_row).collect()
     }
 
@@ -292,10 +335,11 @@ impl FleetStore {
 
     /// The install a reporting token belongs to.
     pub async fn authenticate(&self, token: &str) -> Result<Option<InstallId>, sqlx::Error> {
-        let id: Option<Uuid> = sqlx::query_scalar("SELECT id FROM installs WHERE token_sha256 = $1")
-            .bind(token_hash(token))
-            .fetch_optional(&self.pool)
-            .await?;
+        let id: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM installs WHERE token_sha256 = $1 AND retired_at IS NULL")
+                .bind(token_hash(token))
+                .fetch_optional(&self.pool)
+                .await?;
         Ok(id.map(InstallId::from_uuid))
     }
 
@@ -368,9 +412,11 @@ impl FleetStore {
         .await
     }
 
-    /// Every registered install.
+    /// Every install that isn't retired.
     pub async fn all_installs(&self) -> Result<Vec<InstallRecord>, sqlx::Error> {
-        let rows = sqlx::query(&format!("SELECT {COLUMNS} FROM installs ORDER BY id")).fetch_all(&self.pool).await?;
+        let rows = sqlx::query(&format!("SELECT {COLUMNS} FROM installs WHERE retired_at IS NULL ORDER BY id"))
+            .fetch_all(&self.pool)
+            .await?;
         rows.iter().map(InstallRecord::from_row).collect()
     }
 
@@ -567,6 +613,31 @@ pub(crate) mod tests {
         assert_eq!(store.authenticate("awzyrt_wrong").await.unwrap(), None);
         assert!(matches!(store.register(&new_install("acme", "prod"), "max").await, Err(RegisterError::Exists { .. })));
         assert_eq!(install.health(Utc::now()), Health::NeverReported);
+    }
+
+    #[tokio::test]
+    async fn a_retired_install_stops_authenticating_and_frees_its_name() {
+        let Some(store) = test_store().await else { return };
+        let url = std::env::var("AWZY_TEST_POSTGRES_URL").unwrap();
+        let registry_schema = format!("test_registry_{}", Uuid::now_v7().simple());
+        let pull_tokens = awzy_registry::tokens::TokenStore::connect(&url, &registry_schema).await.unwrap();
+        let store = store.with_pull_tokens(pull_tokens);
+
+        let (old, reporting) = store.register(&new_install("acme", "demo"), "max").await.unwrap();
+        let pull = store.issue_pull_token(old.id, "max").await.unwrap().expect("this store issues pull tokens");
+        let registry = store.pull_tokens.clone().unwrap();
+        assert!(registry.check(old.id, &pull).await.unwrap());
+
+        let retired = store.retire(old.id, "max").await.unwrap().expect("it was active");
+        assert_eq!(retired.retired_by.as_deref(), Some("max"));
+        assert_eq!(store.authenticate(&reporting).await.unwrap(), None, "its reporting token stops working");
+        assert!(!registry.check(old.id, &pull).await.unwrap(), "and so does its pull token");
+        assert!(store.retire(old.id, "max").await.unwrap().is_none(), "retiring twice changes nothing");
+        assert!(store.all_installs().await.unwrap().iter().all(|i| i.id != old.id), "it leaves the fleet");
+        assert!(store.get(old.id).await.unwrap().is_some(), "but its record stays");
+
+        let (new, _) = store.register(&new_install("acme", "demo"), "max").await.unwrap();
+        assert_ne!(new.id, old.id, "the same client and environment register again, as a new install");
     }
 
     fn beat(install: InstallId, p99: f64, dps: f64, ready: u32) -> Heartbeat {
