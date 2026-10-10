@@ -1,4 +1,4 @@
-# 0054. Services in an install authenticate to each other with Kubernetes service-account tokens
+# 0055. Services in an install authenticate to each other with Kubernetes service-account tokens
 
 - Status: Accepted
 - Date: 2026-10-10
