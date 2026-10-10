@@ -527,12 +527,11 @@ pub struct EvaluationRequest {
 pub fn router(state: AppState) -> Router {
     let guard =
         awzy_service_auth::Guard::new(state.service_auth.clone(), awzy_service_auth::Allowed::AnyServiceAccount);
-    let decide = Router::new()
+    Router::new()
         .route("/v1/access/evaluation", post(evaluate))
         .with_state(state.clone())
         .merge(grpc::router(state.clone()))
-        .route_layer(axum::middleware::from_fn_with_state(guard, awzy_service_auth::require));
-    decide
+        .route_layer(axum::middleware::from_fn_with_state(guard, awzy_service_auth::require))
 }
 
 async fn evaluate(
