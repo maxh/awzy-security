@@ -4,10 +4,12 @@
 //! accounts, registered by the client's admins through the client portal (`/v1/service-accounts`;
 //! ADR 0033); the snapshot of all of them the PDPs load (`GET /v1/principals`; ADR 0031); and
 //! resources and work items, written by connectors ([`resources`]; demo plan step 2), served to
-//! PDPs by ID (ADR 0044) and classified in the background ([`classify`]; ADR 0047). The Kafka
-//! change feed comes next.
+//! PDPs by ID (ADR 0044) and classified in the background ([`classify`]; ADR 0047); and what
+//! awzy-reasoner works out about principals: risk scores ([`risk`]; ADR 0056) and investigations
+//! ([`investigations`]; ADR 0070). The Kafka change feed comes next.
 
 pub mod classify;
+pub mod investigations;
 pub mod resources;
 pub mod risk;
 pub mod scim;
@@ -191,6 +193,14 @@ impl Access {
 /// portal, which authorizes changes), resources and work items at `/v1/resources` and
 /// `/v1/work-items` (for connectors), and SCIM at `/scim/v2` behind `scim_token`. Every route but
 /// SCIM's needs a service token its group allows (`access`).
+/// Callers in either group.
+fn either(a: &Allowed, b: &Allowed) -> Allowed {
+    match (a, b) {
+        (Allowed::Only(a), Allowed::Only(b)) => Allowed::Only(a.iter().chain(b).cloned().collect()),
+        _ => Allowed::AnyServiceAccount,
+    }
+}
+
 pub fn router(store: ContextStore, scim_token: &str, access: &Access) -> Router {
     let guarded = |r: Router, allowed: &Allowed| r.route_layer(from_fn_with_state(access.guard(allowed), require));
     let readers = Router::new().route("/v1/principals", get(principals)).with_state(store.clone());
@@ -206,6 +216,10 @@ pub fn router(store: ContextStore, scim_token: &str, access: &Access) -> Router 
         .merge(guarded(resources::write_router(store.clone()), &access.writers))
         // The reasoner's scores (ADR 0056): the backend writes them, like resources.
         .merge(guarded(risk::router(store.clone()), &access.writers))
+        // Its investigations (ADR 0070): it writes them and reads its own back, and the client
+        // portal reads them.
+        .merge(guarded(investigations::write_router(store.clone()), &access.writers))
+        .merge(guarded(investigations::read_router(store.clone()), &either(&access.writers, &access.directory)))
         .merge(guarded(directory, &access.directory))
         .merge(scim::router(store, scim_token))
 }

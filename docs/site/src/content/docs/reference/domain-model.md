@@ -120,6 +120,7 @@ the request is allowed. See [Monitor, then enforce](/concepts/monitor-and-enforc
 | Enforcement change | | A switch between monitor and enforce: which mode, who switched it, and when. Kept as an append-only history |
 | Break-glass event | | A rollback signed with an admin's break-glass key, outside the portal and your IdP: which key, why, and which bundle version it restored |
 | Risk score | | One per accessor, replaced on each scoring run, with the reasons behind it |
+| Investigation | `investigation_` | A model's look into one accessor the reasoner flagged: what it found, the evidence it cited, and what awzy's checks let it do. Off until you turn investigations on |
 
 All of them stay in your cloud account.
 
