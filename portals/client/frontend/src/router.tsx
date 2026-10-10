@@ -1,4 +1,5 @@
-import { PageErrorBoundary, PortalShell } from "@awzy/ui";
+import { PageErrorBoundary, PortalShell, ShellNavLink } from "@awzy/ui";
+import { IconAddressBook, IconFileCode, IconHandStop, IconListCheck, IconShieldCheck } from "@tabler/icons-react";
 import {
   createRootRoute,
   createRoute,
@@ -17,27 +18,40 @@ import { PoliciesPage } from "./PoliciesPage";
 import { Account } from "./session";
 
 function Nav() {
-  const linkProps = {
-    style: { color: "inherit", textDecoration: "none" },
-    activeProps: { style: { color: "inherit", textDecoration: "none", fontWeight: 600 } },
-  };
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const icon = { size: 18, stroke: 1.6 };
   return (
     <>
-      <Link to="/decisions" {...linkProps}>
-        Decisions
-      </Link>
-      <Link to="/policies" {...linkProps}>
-        Policies
-      </Link>
-      <Link to="/enforcement" {...linkProps}>
-        Enforcement
-      </Link>
-      <Link to="/directory" {...linkProps}>
-        Directory
-      </Link>
-      <Link to="/challenges" {...linkProps}>
-        Challenges
-      </Link>
+      <ShellNavLink
+        label="Decisions"
+        icon={<IconListCheck {...icon} />}
+        active={pathname.startsWith("/decisions")}
+        renderRoot={(props) => <Link to="/decisions" {...props} />}
+      />
+      <ShellNavLink
+        label="Policies"
+        icon={<IconFileCode {...icon} />}
+        active={pathname.startsWith("/policies")}
+        renderRoot={(props) => <Link to="/policies" {...props} />}
+      />
+      <ShellNavLink
+        label="Enforcement"
+        icon={<IconShieldCheck {...icon} />}
+        active={pathname.startsWith("/enforcement")}
+        renderRoot={(props) => <Link to="/enforcement" {...props} />}
+      />
+      <ShellNavLink
+        label="Directory"
+        icon={<IconAddressBook {...icon} />}
+        active={pathname.startsWith("/directory")}
+        renderRoot={(props) => <Link to="/directory" {...props} />}
+      />
+      <ShellNavLink
+        label="Challenges"
+        icon={<IconHandStop {...icon} />}
+        active={pathname.startsWith("/challenges")}
+        renderRoot={(props) => <Link to="/challenges" {...props} />}
+      />
     </>
   );
 }
@@ -46,7 +60,7 @@ function Root() {
   // A page that fails to load shows its error inside the shell; navigating away starts fresh.
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
-    <PortalShell title="awzy client portal" audience="client" nav={<Nav />} account={<Account />}>
+    <PortalShell product="Client portal" audience="client" nav={<Nav />} account={<Account />}>
       <PageErrorBoundary key={pathname}>
         <Outlet />
       </PageErrorBoundary>

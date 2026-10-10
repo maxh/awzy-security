@@ -1,4 +1,6 @@
-import { Anchor, Badge, Card, Center, Group, Loader, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
+import { EmptyState, PageHeader, PageLoader, Section, Stat, StatusBadge } from "@awzy/ui";
+import { Group, SimpleGrid, Stack, Table, Text } from "@mantine/core";
+import { IconBox, IconHistory } from "@tabler/icons-react";
 import { Link, useParams } from "@tanstack/react-router";
 import { Suspense } from "react";
 import { graphql, useLazyLoadQuery } from "react-relay";
@@ -11,37 +13,17 @@ import { InstallCharts } from "./InstallCharts";
 export function InstallPage() {
   const { installId } = useParams({ from: "/installs/$installId" });
   return (
-    <Stack gap="md">
-      <Anchor component={Link} to="/installs" size="sm">
-        ← All installs
-      </Anchor>
-      <Suspense
-        fallback={
-          <Center p="xl">
-            <Loader />
-          </Center>
-        }
-      >
-        <Install id={installId} />
-      </Suspense>
-    </Stack>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <Card withBorder padding="sm">
-      <Text size="xs" c="dimmed">
-        {label}
-      </Text>
-      <Text fw={600}>{value}</Text>
-    </Card>
+    <Suspense fallback={<PageLoader />}>
+      <Install id={installId} />
+    </Suspense>
   );
 }
 
 function num(v: number | null | undefined, unit = "", digits = 1): string {
   return v == null ? "—" : `${v.toFixed(digits)}${unit}`;
 }
+
+const back = { label: "Installs", renderRoot: (props: Record<string, unknown>) => <Link to="/installs" {...props} /> };
 
 function Install({ id }: { id: string }) {
   const data = useLazyLoadQuery<InstallPageQuery>(
@@ -88,94 +70,128 @@ function Install({ id }: { id: string }) {
     { fetchPolicy: "store-and-network" },
   );
   const i = data.node;
-  if (!i || i.client === undefined) return <Text>No install with ID {id}.</Text>;
+  if (!i || i.client === undefined) {
+    return (
+      <>
+        <PageHeader title="Install not found" back={back} />
+        <Text c="dimmed">No install has the ID {id}.</Text>
+      </>
+    );
+  }
   const health = healthOf(i.health ?? "");
   const m = i.metrics;
+  const services = i.services ?? [];
+  const history = i.versionHistory ?? [];
 
   return (
-    <Stack gap="lg">
-      <Group gap="sm">
-        <Title order={3}>
-          {i.client} / {i.environment}
-        </Title>
-        <Badge color={health.color} variant="light">
-          {health.label}
-        </Badge>
-      </Group>
-      <Text size="sm" c="dimmed">
-        {i.cloud} {i.region} · {channelLabel(i.channel ?? "", i.pinnedVersion)} channel · chart{" "}
-        {i.chartVersion ?? "unknown"} · last heartbeat {ago(i.lastSeenAt)} · registered by {i.createdBy}{" "}
-        {i.createdAt ? formatTime(i.createdAt) : ""}
-      </Text>
+    <>
+      <PageHeader
+        back={back}
+        title={
+          <>
+            {i.client}{" "}
+            <Text span inherit c="dimmed" fw={500}>
+              / {i.environment}
+            </Text>
+          </>
+        }
+        badge={<StatusBadge tone={health.tone}>{health.label}</StatusBadge>}
+        description={
+          <>
+            {i.cloud?.toUpperCase()} {i.region} · {channelLabel(i.channel ?? "", i.pinnedVersion)} channel · last
+            heartbeat {ago(i.lastSeenAt)} · registered by {i.createdBy}
+            {i.createdAt ? ` on ${formatTime(i.createdAt)}` : ""}
+          </>
+        }
+      />
+      <Stack gap="lg">
+        <SimpleGrid cols={{ base: 2, md: 3, lg: 6 }}>
+          <Stat
+            label="Chart"
+            value={
+              <Text ff="monospace" fz="sm" fw={600}>
+                {i.chartVersion ?? "—"}
+              </Text>
+            }
+          />
+          <Stat
+            label="Decisions/s"
+            value={m?.decisionsPerSecond == null ? "—" : m.decisionsPerSecond.toLocaleString()}
+          />
+          <Stat label="PDP p99" value={num(m?.pdpP99Ms, " ms")} />
+          <Stat label="Error rate" value={m?.errorRate == null ? "—" : `${(m.errorRate * 100).toFixed(2)}%`} />
+          <Stat label="Kafka lag" value={m?.kafkaLag == null ? "—" : m.kafkaLag.toLocaleString()} />
+          <Stat label="ClickHouse disk" value={num(m?.clickhouseDiskUsedPercent, "%", 0)} />
+        </SimpleGrid>
 
-      <SimpleGrid cols={{ base: 2, md: 5 }}>
-        <Metric
-          label="Decisions/s"
-          value={m?.decisionsPerSecond == null ? "—" : m.decisionsPerSecond.toLocaleString()}
-        />
-        <Metric label="PDP p99" value={num(m?.pdpP99Ms, " ms")} />
-        <Metric label="Error rate" value={m?.errorRate == null ? "—" : `${(m.errorRate * 100).toFixed(2)}%`} />
-        <Metric label="Kafka lag" value={m?.kafkaLag == null ? "—" : m.kafkaLag.toLocaleString()} />
-        <Metric label="ClickHouse disk" value={num(m?.clickhouseDiskUsedPercent, "%", 0)} />
-      </SimpleGrid>
+        <InstallCharts id={id} />
 
-      <InstallCharts id={id} />
+        <Section title="Deployed services" description="What the install's reporter saw running." flush>
+          {services.length === 0 ? (
+            <EmptyState icon={<IconBox size={22} />} title="No services reported yet" />
+          ) : (
+            <Table.ScrollContainer minWidth={720}>
+              <Table style={{ whiteSpace: "nowrap" }}>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Service</Table.Th>
+                    <Table.Th>Health</Table.Th>
+                    <Table.Th>Version</Table.Th>
+                    <Table.Th>Image</Table.Th>
+                    <Table.Th ta="right">Ready</Table.Th>
+                    <Table.Th ta="right">Restarts (24h)</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {services.map((s) => (
+                    <Table.Tr key={s.name}>
+                      <Table.Td ff="monospace" fz="sm" fw={500}>
+                        {s.name}
+                      </Table.Td>
+                      <Table.Td>
+                        <StatusBadge tone={s.healthy ? "success" : "danger"}>
+                          {s.healthy ? "Ready" : "Not ready"}
+                        </StatusBadge>
+                      </Table.Td>
+                      <Table.Td ff="monospace" fz="xs">
+                        {s.version ?? "—"}
+                      </Table.Td>
+                      <Table.Td ff="monospace" fz="xs" c="dimmed">
+                        {shortDigest(s.imageDigest) || "—"}
+                      </Table.Td>
+                      <Table.Td ta="right">
+                        {s.replicasReady}/{s.replicasDesired}
+                      </Table.Td>
+                      <Table.Td ta="right">{s.restarts24h ?? "—"}</Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
+          )}
+        </Section>
 
-      <Stack gap="xs">
-        <Title order={4}>Deployed services</Title>
-        {(i.services ?? []).length === 0 ? (
-          <Text c="dimmed">This install hasn't reported its services yet.</Text>
-        ) : (
-          <Table>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Service</Table.Th>
-                <Table.Th>Version</Table.Th>
-                <Table.Th>Image</Table.Th>
-                <Table.Th>Ready</Table.Th>
-                <Table.Th>Restarts (24h)</Table.Th>
-                <Table.Th>Health</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {(i.services ?? []).map((s) => (
-                <Table.Tr key={s.name}>
-                  <Table.Td ff="monospace">{s.name}</Table.Td>
-                  <Table.Td>{s.version ?? "—"}</Table.Td>
-                  <Table.Td ff="monospace">{shortDigest(s.imageDigest) || "—"}</Table.Td>
-                  <Table.Td>
-                    {s.replicasReady}/{s.replicasDesired}
-                  </Table.Td>
-                  <Table.Td>{s.restarts24h ?? "—"}</Table.Td>
-                  <Table.Td>
-                    <Badge color={s.healthy ? "teal" : "red"} variant="light">
-                      {s.healthy ? "ready" : "not ready"}
-                    </Badge>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        )}
+        <Section title="Version history" description="Each chart version the install reported, newest first." flush>
+          {history.length === 0 ? (
+            <EmptyState icon={<IconHistory size={22} />} title="No chart version reported yet" />
+          ) : (
+            <Table>
+              <Table.Tbody>
+                {history.map((v) => (
+                  <Table.Tr key={v.chartVersion}>
+                    <Table.Td ff="monospace" fz="sm">
+                      {v.chartVersion}
+                    </Table.Td>
+                    <Table.Td c="dimmed" fz="sm">
+                      <Group gap={4}>First seen {formatTime(v.firstSeenAt)}</Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          )}
+        </Section>
       </Stack>
-
-      <Stack gap="xs">
-        <Title order={4}>Version history</Title>
-        {(i.versionHistory ?? []).length === 0 ? (
-          <Text c="dimmed">No chart version reported yet.</Text>
-        ) : (
-          <Table>
-            <Table.Tbody>
-              {(i.versionHistory ?? []).map((v) => (
-                <Table.Tr key={v.chartVersion}>
-                  <Table.Td>{v.chartVersion}</Table.Td>
-                  <Table.Td>first seen {formatTime(v.firstSeenAt)}</Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        )}
-      </Stack>
-    </Stack>
+    </>
   );
 }

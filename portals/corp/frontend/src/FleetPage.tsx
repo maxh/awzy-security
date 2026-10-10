@@ -1,61 +1,76 @@
+import { EmptyState, PageHeader, PageLoader, Section, StatusBadge } from "@awzy/ui";
 import {
   Alert,
-  Badge,
+  Anchor,
   Button,
-  Center,
   Code,
   Group,
-  Loader,
   Modal,
   Select,
   Stack,
   Table,
   Text,
   TextInput,
-  Title,
+  Tooltip,
 } from "@mantine/core";
+import { IconPlus, IconRefresh, IconServer2 } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { type FormEvent, Suspense, useState } from "react";
 import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
 
 import type { FleetPageQuery } from "./__generated__/FleetPageQuery.graphql";
 import type { FleetPageRegisterMutation, ReleaseChannel } from "./__generated__/FleetPageRegisterMutation.graphql";
-import { ago, channelLabel, healthOf } from "./format";
+import { ago, channelLabel, formatTime, healthOf } from "./format";
 
 /** Every registered install, with its health and what it last reported (ADR 0026). */
 export function FleetPage() {
   const [fetchKey, setFetchKey] = useState(0);
   const [registering, setRegistering] = useState(false);
+  const register = () => setRegistering(true);
   return (
-    <Stack gap="md">
-      <Group justify="space-between">
-        <Title order={3}>Installs</Title>
-        <Group>
-          <Button variant="default" onClick={() => setFetchKey((k) => k + 1)}>
-            Refresh
-          </Button>
-          <Button onClick={() => setRegistering(true)}>Register install</Button>
-        </Group>
-      </Group>
-      <Suspense
-        fallback={
-          <Center p="xl">
-            <Loader />
-          </Center>
+    <>
+      <PageHeader
+        title="Installs"
+        description="Every registered install, with the health and numbers its last heartbeat reported."
+        actions={
+          <>
+            <Button variant="default" leftSection={<IconRefresh size={16} />} onClick={() => setFetchKey((k) => k + 1)}>
+              Refresh
+            </Button>
+            <Button leftSection={<IconPlus size={16} />} onClick={register}>
+              Register install
+            </Button>
+          </>
         }
-      >
-        <Fleet fetchKey={fetchKey} />
-      </Suspense>
+      />
+      <Section flush>
+        <Suspense fallback={<PageLoader />}>
+          <Fleet fetchKey={fetchKey} onRegister={register} />
+        </Suspense>
+      </Section>
       <RegisterInstall
         opened={registering}
         onClose={() => setRegistering(false)}
         onRegistered={() => setFetchKey((k) => k + 1)}
       />
-    </Stack>
+    </>
   );
 }
 
-function Fleet({ fetchKey }: { fetchKey: number }) {
+/** A figure, or a dimmed dash when the install hasn't reported it. */
+function Figure({ children }: { children: string | null }) {
+  return children == null ? (
+    <Text c="dimmed" span inherit>
+      —
+    </Text>
+  ) : (
+    <Text span inherit style={{ fontVariantNumeric: "tabular-nums" }}>
+      {children}
+    </Text>
+  );
+}
+
+function Fleet({ fetchKey, onRegister }: { fetchKey: number; onRegister: () => void }) {
   const data = useLazyLoadQuery<FleetPageQuery>(
     graphql`
       query FleetPageQuery {
@@ -90,64 +105,95 @@ function Fleet({ fetchKey }: { fetchKey: number }) {
   const installs = data.installs.edges.map((e) => e.node);
   if (installs.length === 0) {
     return (
-      <Text c="dimmed">
-        No installs yet. Register one, then put its ID and reporting token in the install's values.
-      </Text>
+      <EmptyState
+        icon={<IconServer2 size={22} />}
+        title="No installs yet"
+        description="Register an install to get its ID and reporting token, then put both in the install's reporter settings."
+        action={
+          <Button leftSection={<IconPlus size={16} />} onClick={onRegister}>
+            Register install
+          </Button>
+        }
+      />
     );
   }
   return (
-    <Table striped highlightOnHover>
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th>Install</Table.Th>
-          <Table.Th>Cloud</Table.Th>
-          <Table.Th>Channel</Table.Th>
-          <Table.Th>Version</Table.Th>
-          <Table.Th>Health</Table.Th>
-          <Table.Th>Services</Table.Th>
-          <Table.Th>PDP p99</Table.Th>
-          <Table.Th>Decisions/s</Table.Th>
-          <Table.Th>Last seen</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
-        {installs.map((i) => {
-          const health = healthOf(i.health);
-          const healthy = i.services.filter((s) => s.healthy).length;
-          return (
-            <Table.Tr key={i.id}>
-              <Table.Td>
-                <Link to="/installs/$installId" params={{ installId: i.id }}>
-                  <b>{i.client}</b> / {i.environment}
-                </Link>
-              </Table.Td>
-              <Table.Td>
-                {i.cloud} {i.region}
-              </Table.Td>
-              <Table.Td>{channelLabel(i.channel, i.pinnedVersion)}</Table.Td>
-              <Table.Td>
-                {i.chartVersion ?? (
-                  <Text c="dimmed" span>
-                    —
+    <Table.ScrollContainer minWidth={900}>
+      <Table style={{ whiteSpace: "nowrap" }}>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Install</Table.Th>
+            <Table.Th>Health</Table.Th>
+            <Table.Th>Cloud</Table.Th>
+            <Table.Th>Channel</Table.Th>
+            <Table.Th>Version</Table.Th>
+            <Table.Th>Services</Table.Th>
+            <Table.Th ta="right">PDP p99</Table.Th>
+            <Table.Th ta="right">Decisions/s</Table.Th>
+            <Table.Th>Last seen</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {installs.map((i) => {
+            const health = healthOf(i.health);
+            const healthy = i.services.filter((s) => s.healthy).length;
+            return (
+              <Table.Tr key={i.id}>
+                <Table.Td>
+                  <Anchor
+                    fw={600}
+                    underline="hover"
+                    renderRoot={(props) => <Link to="/installs/$installId" params={{ installId: i.id }} {...props} />}
+                  >
+                    {i.client}
+                  </Anchor>
+                  <Text size="xs" c="dimmed">
+                    {i.environment}
                   </Text>
-                )}
-              </Table.Td>
-              <Table.Td>
-                <Badge color={health.color} variant="light">
-                  {health.label}
-                </Badge>
-              </Table.Td>
-              <Table.Td>{i.services.length > 0 ? `${healthy}/${i.services.length} healthy` : "—"}</Table.Td>
-              <Table.Td>{i.metrics?.pdpP99Ms != null ? `${i.metrics.pdpP99Ms.toFixed(1)} ms` : "—"}</Table.Td>
-              <Table.Td>
-                {i.metrics?.decisionsPerSecond != null ? i.metrics.decisionsPerSecond.toLocaleString() : "—"}
-              </Table.Td>
-              <Table.Td>{ago(i.lastSeenAt)}</Table.Td>
-            </Table.Tr>
-          );
-        })}
-      </Table.Tbody>
-    </Table>
+                </Table.Td>
+                <Table.Td>
+                  <StatusBadge tone={health.tone}>{health.label}</StatusBadge>
+                </Table.Td>
+                <Table.Td>
+                  <Text size="sm">{i.cloud.toUpperCase()}</Text>
+                  <Text size="xs" c="dimmed">
+                    {i.region}
+                  </Text>
+                </Table.Td>
+                <Table.Td>{channelLabel(i.channel, i.pinnedVersion)}</Table.Td>
+                <Table.Td ff="monospace" fz="xs">
+                  <Figure>{i.chartVersion ?? null}</Figure>
+                </Table.Td>
+                <Table.Td>
+                  <Figure>{i.services.length > 0 ? `${healthy}/${i.services.length} ready` : null}</Figure>
+                </Table.Td>
+                <Table.Td ta="right">
+                  <Figure>{i.metrics?.pdpP99Ms != null ? `${i.metrics.pdpP99Ms.toFixed(1)} ms` : null}</Figure>
+                </Table.Td>
+                <Table.Td ta="right">
+                  <Figure>
+                    {i.metrics?.decisionsPerSecond != null ? i.metrics.decisionsPerSecond.toLocaleString() : null}
+                  </Figure>
+                </Table.Td>
+                <Table.Td>
+                  {i.lastSeenAt ? (
+                    <Tooltip label={formatTime(i.lastSeenAt)}>
+                      <Text size="sm" span>
+                        {ago(i.lastSeenAt)}
+                      </Text>
+                    </Tooltip>
+                  ) : (
+                    <Text size="sm" c="dimmed" span>
+                      Never
+                    </Text>
+                  )}
+                </Table.Td>
+              </Table.Tr>
+            );
+          })}
+        </Table.Tbody>
+      </Table>
+    </Table.ScrollContainer>
   );
 }
 
@@ -214,7 +260,7 @@ function RegisterInstall({
   };
 
   return (
-    <Modal opened={opened} onClose={close} title="Register an install" size="lg">
+    <Modal opened={opened} onClose={close} title={<Text fw={600}>Register an install</Text>} size="lg">
       {result ? (
         <Stack>
           <Alert color="yellow" title="Copy the reporting token now">

@@ -1,3 +1,4 @@
+import { PageHeader } from "@awzy/ui";
 import {
   Alert,
   Badge,
@@ -33,12 +34,15 @@ export function PoliciesPage() {
   const onChanged = () => setFetchKey((k) => k + 1);
   return (
     <Stack gap="md">
-      <Group justify="space-between">
-        <Title order={3}>Policies</Title>
-        <Suspense fallback={null}>
-          <AskAwzyBotButton onClick={() => setBotOpen(true)} />
-        </Suspense>
-      </Group>
+      <PageHeader
+        title="Policies"
+        description="The Cedar policy bundles the PDPs enforce: drafts, dry runs, and what's published."
+        actions={
+          <Suspense fallback={null}>
+            <AskAwzyBotButton onClick={() => setBotOpen(true)} />
+          </Suspense>
+        }
+      />
       {/* Kept mounted while closed, so the conversation survives closing the drawer. */}
       <Drawer
         opened={botOpen}

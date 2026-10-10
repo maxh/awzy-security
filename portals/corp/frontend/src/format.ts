@@ -1,16 +1,18 @@
 /** Shared display helpers. */
 
-export const HEALTH = {
-  OK: { label: "ok", color: "teal" },
-  DEGRADED: { label: "degraded", color: "orange" },
-  NOT_REPORTING: { label: "not reporting", color: "red" },
-  NEVER_REPORTED: { label: "never reported", color: "gray" },
-} as const;
+import type { Tone } from "@awzy/ui";
 
-export type HealthValue = keyof typeof HEALTH;
+// An install that has never reported is a warning, not a neutral state: it was registered and
+// something is keeping its heartbeat from arriving.
+export const HEALTH: Record<string, { label: string; tone: Tone }> = {
+  OK: { label: "Healthy", tone: "success" },
+  DEGRADED: { label: "Degraded", tone: "warning" },
+  NOT_REPORTING: { label: "Not reporting", tone: "danger" },
+  NEVER_REPORTED: { label: "Never reported", tone: "warning" },
+};
 
-export function healthOf(h: string): (typeof HEALTH)[HealthValue] {
-  return HEALTH[h as HealthValue] ?? { label: h.toLowerCase(), color: "gray" };
+export function healthOf(h: string): { label: string; tone: Tone } {
+  return HEALTH[h] ?? { label: h.toLowerCase(), tone: "neutral" };
 }
 
 /** A UtcTimestamp in the viewer's locale and time zone. */

@@ -1,4 +1,5 @@
-import { PageErrorBoundary, PortalShell } from "@awzy/ui";
+import { PageErrorBoundary, PortalShell, ShellNavLink } from "@awzy/ui";
+import { IconPackage, IconServer2 } from "@tabler/icons-react";
 import {
   createRootRoute,
   createRoute,
@@ -15,18 +16,21 @@ import { ReleasesPage } from "./ReleasesPage";
 import { Account } from "./session";
 
 function Nav() {
-  const linkProps = {
-    style: { color: "inherit", textDecoration: "none" },
-    activeProps: { style: { color: "inherit", textDecoration: "none", fontWeight: 600 } },
-  };
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
     <>
-      <Link to="/installs" {...linkProps}>
-        Installs
-      </Link>
-      <Link to="/releases" {...linkProps}>
-        Releases
-      </Link>
+      <ShellNavLink
+        label="Installs"
+        icon={<IconServer2 size={18} stroke={1.6} />}
+        active={pathname.startsWith("/installs")}
+        renderRoot={(props) => <Link to="/installs" {...props} />}
+      />
+      <ShellNavLink
+        label="Releases"
+        icon={<IconPackage size={18} stroke={1.6} />}
+        active={pathname.startsWith("/releases")}
+        renderRoot={(props) => <Link to="/releases" {...props} />}
+      />
     </>
   );
 }
@@ -35,7 +39,7 @@ function Root() {
   // A page that fails to load shows its error inside the shell; navigating away starts fresh.
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
-    <PortalShell title="awzy corp portal" audience="corp" nav={<Nav />} account={<Account />}>
+    <PortalShell product="Corp portal" audience="corp" nav={<Nav />} account={<Account />}>
       <PageErrorBoundary key={pathname}>
         <Outlet />
       </PageErrorBoundary>

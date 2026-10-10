@@ -1,3 +1,4 @@
+import { PageHeader } from "@awzy/ui";
 import {
   Alert,
   Badge,
@@ -64,7 +65,10 @@ export function ChallengesPage() {
   const refresh = () => setFetchKey((k) => k + 1);
   return (
     <Stack gap="md">
-      <Title order={3}>Challenges</Title>
+      <PageHeader
+        title="Challenges"
+        description="Requests waiting for a person to verify, justify, or approve them, and the people and agents contained."
+      />
       {justified && <JustifiedNotice justified={justified} onClose={() => setJustified(null)} />}
       <Suspense fallback={<Loading />}>
         <Challenges

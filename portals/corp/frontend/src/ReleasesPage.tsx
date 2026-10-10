@@ -1,4 +1,6 @@
-import { Badge, Center, Group, Loader, Stack, Table, Text, Title } from "@mantine/core";
+import { EmptyState, PageHeader, PageLoader, Section, StatusBadge } from "@awzy/ui";
+import { Anchor, Group, Table } from "@mantine/core";
+import { IconPackage } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { Suspense } from "react";
 import { graphql, useLazyLoadQuery } from "react-relay";
@@ -9,21 +11,16 @@ import { channelLabel, healthOf } from "./format";
 /** Which chart versions are running, and where: the rollout view. */
 export function ReleasesPage() {
   return (
-    <Stack gap="md">
-      <Title order={3}>Releases</Title>
-      <Suspense
-        fallback={
-          <Center p="xl">
-            <Loader />
-          </Center>
-        }
-      >
-        <Releases />
-      </Suspense>
-    </Stack>
+    <>
+      <PageHeader title="Releases" description="Which chart versions installs are running, and where." />
+      <Section flush>
+        <Suspense fallback={<PageLoader />}>
+          <Releases />
+        </Suspense>
+      </Section>
+    </>
   );
 }
-
 function Releases() {
   const data = useLazyLoadQuery<ReleasesPageQuery>(
     graphql`
@@ -45,29 +42,49 @@ function Releases() {
     {},
     { fetchPolicy: "store-and-network" },
   );
-  if (data.releases.length === 0) return <Text c="dimmed">No install has reported a chart version yet.</Text>;
+  if (data.releases.length === 0) {
+    return (
+      <EmptyState
+        icon={<IconPackage size={22} />}
+        title="No releases running yet"
+        description="A version shows up here once an install reports running it."
+      />
+    );
+  }
   return (
     <Table>
       <Table.Thead>
         <Table.Tr>
-          <Table.Th>Version</Table.Th>
-          <Table.Th>Installs</Table.Th>
+          <Table.Th w={220}>Version</Table.Th>
+          <Table.Th ta="right" w={100}>
+            Installs
+          </Table.Th>
           <Table.Th>Running it</Table.Th>
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>
         {data.releases.map((r) => (
           <Table.Tr key={r.version}>
-            <Table.Td ff="monospace">{r.version}</Table.Td>
-            <Table.Td>{r.installCount}</Table.Td>
+            <Table.Td ff="monospace" fz="sm">
+              {r.version}
+            </Table.Td>
+            <Table.Td ta="right">{r.installCount}</Table.Td>
             <Table.Td>
-              <Group gap="xs">
+              <Group gap="md">
                 {r.installs.map((i) => (
-                  <Badge key={i.id} color={healthOf(i.health).color} variant="light" style={{ textTransform: "none" }}>
-                    <Link to="/installs/$installId" params={{ installId: i.id }} style={{ color: "inherit" }}>
-                      {i.client}/{i.environment} · {channelLabel(i.channel, i.pinnedVersion)}
-                    </Link>
-                  </Badge>
+                  <Group key={i.id} gap={6}>
+                    <StatusBadge tone={healthOf(i.health).tone}>{healthOf(i.health).label}</StatusBadge>
+                    <Anchor
+                      size="sm"
+                      underline="hover"
+                      renderRoot={(props) => <Link to="/installs/$installId" params={{ installId: i.id }} {...props} />}
+                    >
+                      {i.client}/{i.environment}
+                    </Anchor>
+                    <span style={{ color: "var(--mantine-color-dimmed)", fontSize: 12 }}>
+                      {channelLabel(i.channel, i.pinnedVersion)}
+                    </span>
+                  </Group>
                 ))}
               </Group>
             </Table.Td>

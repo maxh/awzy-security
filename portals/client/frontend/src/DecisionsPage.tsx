@@ -1,17 +1,5 @@
-import {
-  Badge,
-  Button,
-  Center,
-  Drawer,
-  Group,
-  Loader,
-  Select,
-  Stack,
-  Table,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
+import { PageHeader } from "@awzy/ui";
+import { Badge, Button, Center, Drawer, Group, Loader, Select, Stack, Table, Text, TextInput } from "@mantine/core";
 import { type FormEvent, Suspense, useState } from "react";
 import { graphql, useLazyLoadQuery, usePaginationFragment } from "react-relay";
 
@@ -29,7 +17,10 @@ export function DecisionsPage() {
 
   return (
     <Stack gap="md">
-      <Title order={3}>Decisions</Title>
+      <PageHeader
+        title="Decisions"
+        description="Every allow, deny, and challenge the PDPs decided, with the policies behind each one."
+      />
       <Filters onApply={setFilter} />
       <Suspense
         fallback={
