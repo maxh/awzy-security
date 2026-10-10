@@ -35,6 +35,23 @@ choose, so policies can treat it with care.
 **Actions** are `read` and `write` on a `Resource`, `call` on an `McpTool`, `view` and
 `administer` on a `PortalArea`, and `approve` for approving someone else's challenged request.
 
+### Work items
+
+A **work item** is open work in your systems: a ticket, an account, a project, a statement of
+work. Connectors copy them into awzy-context with the ID and source they have there (a Jira key,
+say), each with its assignees (people and service accounts, by their IDs) and the resources the
+work needs.
+
+Work items aren't Cedar entities, so policies never see one directly. They reach policies as one
+fact per check, `context.assigned`: whether this check's principal is assigned to open work that
+links the resource or a folder above it. It's absent when awzy doesn't know, so test it with
+`context has assigned`:
+
+```cedar
+forbid (principal is ServiceAccount, action == Action::"read", resource)
+when { context has assigned && !context.assigned };
+```
+
 ## Records
 
 | Record | QID prefix | What it is |
