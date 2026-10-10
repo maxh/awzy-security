@@ -89,7 +89,7 @@ impl Allowed {
 }
 
 enum Keys {
-    Cluster(Jwks),
+    Cluster(Box<Jwks>),
     Fixed(HashMap<String, DecodingKey>),
 }
 
@@ -130,7 +130,7 @@ impl Verifier {
         let ca = std::fs::read(CLUSTER_CA).map_err(|e| anyhow::anyhow!("reading {CLUSTER_CA}: {e}"))?;
         let jwks = Jwks::new(CLUSTER_JWKS, Some(&ca))?.with_bearer_file(POD_TOKEN);
         tracing::info!(audience, %issuer, "checking service tokens");
-        Ok(Self::with_keys(audience, &issuer, Keys::Cluster(jwks)))
+        Ok(Self::with_keys(audience, &issuer, Keys::Cluster(Box::new(jwks))))
     }
 
     /// Fixed keys, by key ID: for tests.
@@ -230,6 +230,7 @@ pub async fn require(State(guard): State<Guard>, req: Request, next: Next) -> Re
 }
 
 /// The tokens a workload sends, one per audience, as the chart mounts them.
+#[derive(Clone)]
 pub struct TokenSource(Option<PathBuf>);
 
 impl TokenSource {
