@@ -16,13 +16,15 @@ awzy_service(
         "//libs/telemetry",
     ],
     # The tests score awzy-classify against the generator's ground truth (ADR 0047), and run the
-    # scenarios end to end through awzy-context, the PDP, and awzy-gateway.
+    # scenarios end to end through awzy-context, the PDP, and awzy-gateway, with awzy-reasoner's
+    # scores.
     test_deps = [
         "//authz/libs/classify",
         "//authz/libs/proto",
         "//authz/services/context",
         "//authz/services/gateway",
         "//authz/services/pdp",
+        "//authz/services/reasoner",
         "//libs/model",
     ],
 )

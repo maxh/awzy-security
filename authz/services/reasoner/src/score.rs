@@ -1,6 +1,9 @@
 //! Deterministic risk scores (ADR 0056): a principal's last day against its own recent days and
-//! against its team's last day. No LLM, so the same activity always scores the same, and a
+//! against its team's last day, and what it opened that neither it nor its team had (ADR 0062).
+//! No LLM, so the same activity always scores the same, and a
 //! later LLM investigation can raise a score but has this one as its floor.
+
+use crate::activity::HISTORY_DAYS;
 
 /// What one principal did in one day.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -8,6 +11,9 @@ pub struct Day {
     pub accesses: u64,
     pub resources: u64,
     pub denied: u64,
+    /// Resources opened that neither the principal nor its team had opened before (ADR 0062).
+    /// Only counted for the last day.
+    pub unfamiliar: u64,
 }
 
 /// A score from 0 to 100 and what raised it.
@@ -23,6 +29,12 @@ const MOST_PER_COMPARISON: f64 = 50.0;
 /// Points per denied request in the last day, and the most denials can add.
 const POINTS_PER_DENIAL: u64 = 5;
 const MOST_FOR_DENIALS: u64 = 20;
+/// Unfamiliar resources a day may hold before they count (the odd document from another team),
+/// the points for each one past that, and the most they can add: on their own, enough to make
+/// a principal's risk elevated, never enough to challenge everything it does.
+const USUAL_UNFAMILIAR: u64 = 2;
+const POINTS_PER_UNFAMILIAR: u64 = 10;
+const MOST_FOR_UNFAMILIAR: u64 = 50;
 /// Active days of history before a principal's own baseline counts.
 const MIN_BASELINE_DAYS: usize = 5;
 /// Other active members a team needs to be a peer group.
@@ -61,6 +73,14 @@ pub fn score(last_day: Day, baseline: &[Day], peers: &[Day]) -> Score {
         }
     }
 
+    if last_day.unfamiliar > USUAL_UNFAMILIAR {
+        points += ((last_day.unfamiliar - USUAL_UNFAMILIAR) * POINTS_PER_UNFAMILIAR).min(MOST_FOR_UNFAMILIAR) as f64;
+        reasons.push(format!(
+            "opened {} resources that neither it nor its team had opened in {HISTORY_DAYS} days",
+            last_day.unfamiliar
+        ));
+    }
+
     if last_day.denied > 0 {
         points += (last_day.denied * POINTS_PER_DENIAL).min(MOST_FOR_DENIALS) as f64;
         reasons.push(format!("{} requests denied in the last day", last_day.denied));
@@ -80,7 +100,7 @@ mod tests {
     use super::*;
 
     fn day(resources: u64) -> Day {
-        Day { accesses: resources * 2, resources, denied: 0 }
+        Day { accesses: resources * 2, resources, ..Day::default() }
     }
 
     #[test]
@@ -111,6 +131,21 @@ mod tests {
     #[test]
     fn a_quiet_day_that_doubles_is_still_quiet() {
         assert_eq!(score(day(4), &[day(2); 20], &[day(1); 5]).score, 0);
+    }
+
+    #[test]
+    fn unfamiliar_territory_raises_risk_to_elevated_and_no_further() {
+        // The suddenly foolish administrator's basic questions: an ordinary amount of reading, but
+        // seven documents nobody on the team has needed in a month.
+        let s = score(Day { unfamiliar: 7, ..day(12) }, &[day(12); 20], &[day(11), day(12), day(13)]);
+        assert_eq!(s.score, 50, "{s:?}");
+        assert!(s.reasons[0].contains("neither it nor its team"), "{s:?}");
+        assert_eq!(score(Day { unfamiliar: 40, ..day(12) }, &[day(12); 20], &[]).score, 50);
+    }
+
+    #[test]
+    fn the_odd_document_from_another_team_is_ordinary() {
+        assert_eq!(score(Day { unfamiliar: 2, ..day(12) }, &[day(12); 20], &[]).score, 0);
     }
 
     #[test]

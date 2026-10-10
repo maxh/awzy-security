@@ -1170,6 +1170,7 @@ dependencies = [
  "awzy-gateway",
  "awzy-model",
  "awzy-pdp",
+ "awzy-reasoner",
  "awzy-service-auth",
  "awzy-telemetry",
  "axum",

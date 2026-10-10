@@ -1,15 +1,20 @@
-//! The demo plan's scenarios that challenges answer (step 6): the curious contractor, and the
-//! first half of the rogue agent. Each is a few accesses at fixed times on top of an ordinary day,
-//! with what awzy should do about each, so detection can be scored (demo plan, "Detection").
+//! The demo plan's scenarios: the curious contractor and the first half of the rogue agent, which
+//! challenges answer (step 6), and the suddenly foolish administrator, which needs awzy-reasoner's
+//! risk too (step 7). Each is a few accesses at fixed times on top of an ordinary day, with what
+//! awzy should do about each, so detection can be scored (demo plan, "Detection").
 //!
-//! The rogue agent's second half, containment after slower analysis, waits for awzy-reasoner
-//! (step 7).
+//! Still to come: the rogue agent's containment and the peer outlier.
 
 use crate::{
     activity::{Access, Why, READ},
     driver::Outcome,
     org::cast,
+    world::BASIC_QUESTIONS,
 };
+
+/// When the scenarios count on awzy-reasoner having scored the day so far: after the foolish
+/// administrator's questions, before his operations.
+pub const REASONER_RUNS_AT: u32 = 10 * 60 + 45;
 
 /// What awzy should do with a scenario's access.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,6 +23,8 @@ pub enum Expect {
     Challenge(&'static [&'static str]),
     /// Deny it outright: nothing permits it.
     Deny,
+    /// Let it through: on its own, it's ordinary.
+    Allow,
 }
 
 impl Expect {
@@ -27,6 +34,7 @@ impl Expect {
         match (self, outcome) {
             (Expect::Challenge(_), Outcome::Blocked(v)) => v == "challenge",
             (Expect::Deny, Outcome::Blocked(v)) => v == "deny",
+            (Expect::Allow, Outcome::Ran) => true,
             _ => false,
         }
     }
@@ -84,10 +92,49 @@ pub fn rogue_agent() -> Vec<Step> {
     }]
 }
 
+/// Lee, an IT administrator, looks up engineering's introductions for new starters, which nobody
+/// in IT has needed in a month, then IT's runbook, and then runs its high-risk operations within a
+/// minute, as an agent working with his credentials would. Each of those is ordinary on its own.
+/// awzy-reasoner turns the questions into elevated risk (ADR 0062), and with it each operation
+/// asks for his security key, which an agent can't touch.
+pub fn foolish_admin() -> Vec<Step> {
+    let lee = cast("it-admin").expect("cast");
+    let step = |minute: u32, tool: &'static str, resource: String, expect: Expect| Step {
+        scenario: "foolish-admin",
+        access: Access {
+            minute,
+            subject: lee.clone(),
+            on_behalf_of: None,
+            human_present: true,
+            team: "it-admin",
+            tool,
+            resource,
+            why: Why::Scenario("foolish-admin"),
+        },
+        expect,
+    };
+    let mut steps: Vec<Step> = BASIC_QUESTIONS
+        .iter()
+        .enumerate()
+        .map(|(i, (id, _, _))| step(10 * 60 + 2 * i as u32, READ, format!("synthetic:doc:{id}"), Expect::Allow))
+        .collect();
+    steps.push(step(10 * 60 + 30, READ, "synthetic:doc:production-admin-runbook".into(), Expect::Allow));
+    let verify = Expect::Challenge(&["verification"]);
+    for (tool, target) in [
+        ("disable_mfa", "domain-admin"),
+        ("rotate_admin_credentials", "domain-admin"),
+        ("export_directory", "directory"),
+    ] {
+        steps.push(step(11 * 60, tool, target.into(), verify));
+    }
+    steps
+}
+
 /// Every scenario step, in time order.
 pub fn all() -> Vec<Step> {
     let mut steps = curious_contractor();
     steps.extend(rogue_agent());
+    steps.extend(foolish_admin());
     steps.sort_by_key(|s| s.access.minute);
     steps
 }
@@ -98,8 +145,8 @@ pub struct Detection {
     /// Scenario steps whose outcome was the expected one, and all of them.
     pub caught: usize,
     pub steps: usize,
-    /// Ordinary accesses (assigned work and the accessor's team) that were challenged: false
-    /// positives. Noise is out of pattern and not counted either way.
+    /// Ordinary accesses (assigned work, the accessor's team, and IT's operations) that were
+    /// challenged: false positives. Noise is out of pattern and not counted either way.
     pub ordinary_challenged: usize,
     pub ordinary: usize,
 }
@@ -112,8 +159,13 @@ impl Detection {
         }
     }
 
+    /// Counts `access` if it's ordinary work. The scenarios' own accessors don't count on the day:
+    /// once awzy flags the foolish administrator, his routine operations ask for his key too.
     pub fn add_ordinary(&mut self, access: &Access, outcome: &Outcome) {
-        if matches!(access.why, Why::Assigned | Why::Team) {
+        if all().iter().any(|s| s.access.subject == access.subject) {
+            return;
+        }
+        if matches!(access.why, Why::Assigned | Why::Team | Why::Admin) {
             self.ordinary += 1;
             if *outcome == Outcome::Blocked("challenge".into()) {
                 self.ordinary_challenged += 1;
@@ -124,9 +176,18 @@ impl Detection {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{BTreeMap, HashMap, HashSet};
+
+    use awzy_reasoner::{
+        activity::{History, Opened, Openers, Principal},
+        score::Day,
+        score_all,
+    };
+
     use super::*;
     use crate::{
-        org::{generate, Profile},
+        activity::{day, server_of, ADMIN, ADMIN_TOOLS, DRIVE},
+        org::{generate, Company, Profile},
         world::{scenario_resources, work_items},
     };
 
@@ -135,7 +196,7 @@ mod tests {
         let c = generate(Profile::Demo, 1);
         let docs: Vec<String> = scenario_resources(&c).into_iter().map(|r| r.id).collect();
         let work = work_items(&c, Profile::Demo, c.seed);
-        for step in all() {
+        for step in all().into_iter().filter(|s| s.access.tool == READ) {
             assert!(docs.contains(&step.access.resource), "{} is a scenario document", step.access.resource);
             let who = step.access.on_behalf_of.as_ref().unwrap_or(&step.access.subject);
             let linked = work
@@ -154,24 +215,116 @@ mod tests {
         d.add_step(&steps[0], &Outcome::Blocked("challenge".into()));
         d.add_step(&steps[1], &Outcome::Ran);
         let mut ordinary = steps[0].access.clone();
+        ordinary.subject = "someone.else@larkspur.example".into();
         ordinary.why = Why::Team;
         d.add_ordinary(&ordinary, &Outcome::Blocked("challenge".into()));
         d.add_ordinary(&ordinary, &Outcome::Ran);
         ordinary.why = Why::Noise;
         d.add_ordinary(&ordinary, &Outcome::Blocked("challenge".into()));
         assert_eq!(d, Detection { caught: 1, steps: 2, ordinary_challenged: 1, ordinary: 2 });
+        // The scenarios' own accessors aren't ordinary on the day.
+        d.add_ordinary(&steps[0].access, &Outcome::Ran);
+        assert_eq!(d.ordinary, 2);
+    }
+
+    /// What awzy-reasoner would read from ClickHouse at `minute` of day 0: the `days` ordinary days
+    /// before, and day 0 up to `minute`, with the scenario steps before it when `scenarios`.
+    /// Denials aside: every access counts as having run.
+    fn reasoner_view(company: &Company, days: u32, minute: u32, scenarios: bool) -> (History, Opened) {
+        let principal = |a: &Access| -> Principal {
+            let kind = if a.on_behalf_of.is_some() || !a.human_present { "ServiceAccount" } else { "Human" };
+            (kind.to_string(), a.subject.clone())
+        };
+        let mut history = History::new();
+        let (mut before, mut last_day): (BTreeMap<String, Openers>, BTreeMap<String, Openers>) = Default::default();
+        for ago in 0..=days {
+            let mut accesses = day(company, Profile::Demo, ago);
+            if ago == 0 {
+                accesses.retain(|a| a.minute < minute);
+                if scenarios {
+                    accesses.extend(all().into_iter().map(|s| s.access).filter(|a| a.minute < minute));
+                }
+            }
+            let mut per: HashMap<Principal, (u64, HashSet<String>)> = HashMap::new();
+            for a in &accesses {
+                let p = principal(a);
+                let opens_a_resource = server_of(a.tool) == DRIVE;
+                let id = if opens_a_resource { a.resource.clone() } else { format!("{ADMIN}/{}", a.tool) };
+                let entry = per.entry(p.clone()).or_default();
+                entry.0 += 1;
+                entry.1.insert(id.clone());
+                if opens_a_resource {
+                    let openers = if ago == 0 { &mut last_day } else { &mut before };
+                    openers.entry(id).or_default().last_day.insert(p);
+                }
+            }
+            for (p, (n, resources)) in per {
+                let d = Day { accesses: n, resources: resources.len() as u64, ..Day::default() };
+                history.entry(p).or_default().insert(ago, d);
+            }
+        }
+        let opened = last_day
+            .into_iter()
+            .map(|(id, today)| {
+                let earlier = before.remove(&id).map(|o| o.last_day).unwrap_or_default();
+                (id, Openers { before: earlier, last_day: today.last_day })
+            })
+            .collect();
+        (history, opened)
+    }
+
+    /// Each person's team, and each agent's, as awzy-context's principals snapshot gives them.
+    fn teams(company: &Company) -> HashMap<Principal, String> {
+        let people = company.people.iter().map(|p| (("Human".to_string(), p.user_name.clone()), p.team.to_string()));
+        let agents = company
+            .service_accounts
+            .iter()
+            .map(|sa| (("ServiceAccount".to_string(), sa.id.clone()), sa.groups[0].clone()));
+        people.chain(agents).collect()
+    }
+
+    /// Scores above this make high-risk operations ask for a security key (base.cedar).
+    const ELEVATED: i32 = 40;
+
+    #[test]
+    fn the_foolish_administrators_questions_raise_his_risk_and_nobody_elses() {
+        let c = generate(Profile::Demo, 1);
+        let (history, opened) = reasoner_view(&c, 20, REASONER_RUNS_AT, true);
+        let lee = ("Human".to_string(), cast("it-admin").unwrap());
+        for s in score_all(&history, &opened, &teams(&c)) {
+            if s.principal == lee {
+                assert!(
+                    s.score.score > ELEVATED && s.score.score <= 80,
+                    "elevated, short of challenging everything: {s:?}"
+                );
+            } else {
+                assert!(s.score.score <= ELEVATED, "{s:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn an_ordinary_day_raises_nobodys_risk() {
+        let c = generate(Profile::Demo, 1);
+        let (history, opened) = reasoner_view(&c, 20, 24 * 60, false);
+        let scores = score_all(&history, &opened, &teams(&c));
+        assert!(scores.len() > 150, "{}", scores.len());
+        let elevated: Vec<_> = scores.iter().filter(|s| s.score.score > ELEVATED).collect();
+        assert!(elevated.is_empty(), "{elevated:?}");
     }
 
     /// Larkspur end to end: awzy-context (on Postgres) with the synthetic directory and world, a
-    /// PDP in enforce mode loading people and documents from it, larkspur-drive, and awzy-gateway in
-    /// front, all in-process. Run with `--config=local-stack`; skips otherwise.
+    /// PDP in enforce mode loading people, documents, and risk scores from it, larkspur-drive and
+    /// larkspur-admin, and awzy-gateway in front, all in-process. awzy-reasoner's scores are
+    /// computed from the generated days rather than read from ClickHouse, and written to
+    /// awzy-context as the reasoner writes them. Run with `--config=local-stack`; skips otherwise.
     #[tokio::test]
     async fn the_scenarios_run_end_to_end() {
         use std::{str::FromStr, sync::Arc, time::Duration};
 
         use sqlx::postgres::{PgConnectOptions, PgPool, PgPoolOptions};
 
-        use crate::{activity::day, driver::Driver, push::ContextClient};
+        use crate::{driver::Driver, push::ContextClient};
 
         let Ok(url) = std::env::var("AWZY_TEST_POSTGRES_URL") else {
             eprintln!("skipping: AWZY_TEST_POSTGRES_URL is not set");
@@ -214,18 +367,22 @@ mod tests {
         assert!(principals.is_ready(), "the PDP loaded Larkspur's people");
         let state = awzy_pdp::AppState::new(awzy_pdp::shared(awzy_pdp::Pdp::with_defaults().unwrap()))
             .with_enforcement(Arc::new(awzy_pdp::Enforcement::fixed(awzy_model::EnforcementMode::Enforce)))
-            .with_principals(principals)
+            .with_principals(principals.clone())
             .with_resources(Arc::new(awzy_pdp::resources::Resources::from_context(context.clone())));
         let pdp = serve(awzy_pdp::router(state)).await;
 
-        // larkspur-drive, and the gateway in front of it.
-        let drive = serve(crate::drive::router(ContextClient::new(&context, ""))).await;
+        // larkspur-drive and larkspur-admin, and the gateway in front of them.
+        let drive = serve(crate::drive::router(ContextClient::new(&context, "")).merge(crate::admin::router())).await;
+        let admin_tools: serde_json::Map<String, serde_json::Value> =
+            ADMIN_TOOLS.iter().map(|(t, s)| (t.to_string(), serde_json::json!(s))).collect();
         std::env::set_var("AWZY_TEST_GATEWAY_SECRET", "dev-secret");
         let config: awzy_gateway::GatewayConfig = serde_json::from_value(serde_json::json!({
             "token": { "issuer": "https://idp.local", "audience": "awzy-gateway", "hs256_secret_env": "AWZY_TEST_GATEWAY_SECRET" },
             "upstreams": [{ "name": "larkspur-drive", "url": format!("{drive}/mcp"), "default_sensitivity": "internal",
                 "tools": { "read_document": "internal", "list_folder": "internal" },
-                "resource_tools": { "read_document": { "argument": "id" }, "list_folder": { "argument": "id" } } }],
+                "resource_tools": { "read_document": { "argument": "id" }, "list_folder": { "argument": "id" } } },
+              { "name": "larkspur-admin", "url": format!("{drive}/admin/mcp"), "default_sensitivity": "crown_jewels",
+                "tools": admin_tools }],
             "service_account_registry": "awzy-context",
         }))
         .unwrap();
@@ -234,12 +391,28 @@ mod tests {
             awzy_service_auth::grpc_channel(channel, "awzy-pdp"),
         );
         let gateway = serve(awzy_gateway::router(awzy_gateway::GatewayState::new(config, pdp_client).unwrap())).await;
-        let driver =
-            Driver::new(&format!("{gateway}/mcp/larkspur-drive"), b"dev-secret", "https://idp.local", "awzy-gateway");
+        let driver = Driver::new(&format!("{gateway}/mcp"), b"dev-secret", "https://idp.local", "awzy-gateway");
+        let reasoner = awzy_reasoner::context::ContextClient::new(&context, awzy_service_auth::TokenSource::off());
 
         // Every scenario step gets what the demo plan says awzy should do.
         let mut detection = Detection::default();
+        let mut scored = false;
         for (i, step) in all().iter().enumerate() {
+            if !scored && step.access.minute >= REASONER_RUNS_AT {
+                // awzy-reasoner's run: the morning so far against the month before.
+                let (history, opened) = reasoner_view(&company, 20, REASONER_RUNS_AT, true);
+                let scores = score_all(&history, &opened, &reasoner.teams().await.unwrap());
+                reasoner.put(&scores).await.unwrap();
+                let lee = awzy_model::EntityRef::new("Human", cast("it-admin").unwrap());
+                for _ in 0..100 {
+                    if principals.risk_of(&[&lee]).values().any(|r| *r > ELEVATED as i64) {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+                assert!(!principals.risk_of(&[&lee]).is_empty(), "the PDP has Lee's score");
+                scored = true;
+            }
             let outcome = driver.send(&step.access, i as u64).await;
             assert!(
                 step.expect.met_by(&outcome),
@@ -261,7 +434,7 @@ mod tests {
             detection.add_ordinary(a, &outcome);
         }
         eprintln!("detection: {detection:?}");
-        assert_eq!((detection.caught, detection.steps), (3, 3));
+        assert_eq!((detection.caught, detection.steps), (all().len(), all().len()));
         assert!(detection.ordinary > 150, "{detection:?}");
         assert_eq!(detection.ordinary_challenged, 0, "no ordinary work challenged: {detection:?}");
     }

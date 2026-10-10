@@ -1,5 +1,6 @@
 //! Drives Larkspur's activity ([`crate::activity`]) through awzy-gateway as real MCP tool calls
-//! on larkspur-drive (demo plan step 5b), so every access is a PDP decision on a real document.
+//! on larkspur-drive and larkspur-admin (demo plan step 5b), so every access is a PDP decision on
+//! a real document or operation.
 //!
 //! Tokens are signed here with the gateway's development secret (`hs256_secret_env` in its
 //! config): `sub` is the person, `act.sub` the agent acting for them, and an agent on its own
@@ -19,7 +20,7 @@ use hyper_util::{
 use jsonwebtoken::{encode, EncodingKey, Header};
 use serde_json::{json, Value};
 
-use crate::activity::Access;
+use crate::activity::{server_of, Access};
 
 type HttpClient = Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>;
 
@@ -27,8 +28,8 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Where the calls go and how their tokens are signed.
 pub struct Driver {
-    /// The gateway's MCP endpoint for larkspur-drive, e.g. http://127.0.0.1:8086/mcp/larkspur-drive.
-    endpoint: String,
+    /// The gateway's MCP endpoints, before the upstream's name: e.g. http://127.0.0.1:8086/mcp.
+    mcp: String,
     key: EncodingKey,
     issuer: String,
     audience: String,
@@ -64,12 +65,12 @@ impl Tally {
 }
 
 impl Driver {
-    pub fn new(endpoint: &str, secret: &[u8], issuer: &str, audience: &str) -> Self {
+    pub fn new(mcp: &str, secret: &[u8], issuer: &str, audience: &str) -> Self {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let https =
             hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_or_http().enable_http1().build();
         Self {
-            endpoint: endpoint.to_string(),
+            mcp: mcp.trim_end_matches('/').to_string(),
             key: EncodingKey::from_secret(secret),
             issuer: issuer.to_string(),
             audience: audience.to_string(),
@@ -115,7 +116,7 @@ impl Driver {
         });
         let req = Request::builder()
             .method(Method::POST)
-            .uri(&self.endpoint)
+            .uri(format!("{}/{}", self.mcp, server_of(a.tool)))
             .header(header::AUTHORIZATION, format!("Bearer {}", self.token(a)?))
             .header(header::CONTENT_TYPE, "application/json")
             .header(header::ACCEPT, "application/json, text/event-stream")
@@ -216,7 +217,7 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        let d = Driver::new(&format!("http://{addr}/mcp/larkspur-drive"), b"dev", "https://idp.local", "awzy-gateway");
+        let d = Driver::new(&format!("http://{addr}/mcp"), b"dev", "https://idp.local", "awzy-gateway");
 
         let nora = "nora.patel@larkspur.example";
         assert_eq!(d.send(&access(nora, None, true, "synthetic:doc:notes"), 1).await, Outcome::Ran);

@@ -1,10 +1,12 @@
 //! Larkspur's everyday activity (demo plan step 5b): who opens what, as tool calls on
-//! larkspur-drive. Each day is generated from the seed, so a run can be repeated exactly.
+//! larkspur-drive, and IT's operations on larkspur-admin. Each day is generated from the seed, so
+//! a run can be repeated exactly.
 //!
 //! People mostly open what their open work links and their team's documents, in working hours,
 //! with a little ordinary noise: a document from another team, a late night. Agents act for
 //! their owners on the same kind of material (SalesGenie for Nora on her accounts), or on their
-//! own authority when nobody is there (FinanceSummarizer on the month's reports).
+//! own authority when nobody is there (FinanceSummarizer on the month's reports). IT's
+//! administrators run a few high-risk operations as part of their job.
 //!
 //! Each access carries why the generator chose it ([`Why`]), the ground truth that detection is
 //! later scored against: `Noise` is ordinary but out of pattern, and nothing here is an attack.
@@ -22,6 +24,28 @@ use crate::{
 pub const READ: &str = "read_document";
 pub const LIST: &str = "list_folder";
 
+/// The MCP servers the activity calls, by their upstream names in awzy-gateway.
+pub const DRIVE: &str = "larkspur-drive";
+pub const ADMIN: &str = "larkspur-admin";
+
+/// larkspur-admin's tools and how sensitive each is, as awzy-gateway is configured with them. The
+/// crown jewels are the high-risk operations (ADR 0062).
+pub const ADMIN_TOOLS: &[(&str, &str)] = &[
+    ("reset_password", "confidential"),
+    ("disable_mfa", "crown_jewels"),
+    ("rotate_admin_credentials", "crown_jewels"),
+    ("export_directory", "crown_jewels"),
+];
+
+/// The server that serves `tool`.
+pub fn server_of(tool: &str) -> &'static str {
+    if ADMIN_TOOLS.iter().any(|(t, _)| *t == tool) {
+        ADMIN
+    } else {
+        DRIVE
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Why {
     /// Linked from the accessor's open work: an account, a ticket, a statement of work.
@@ -30,6 +54,8 @@ pub enum Why {
     Team,
     /// Ordinary but out of pattern: another team's document.
     Noise,
+    /// An IT administrator's routine operation.
+    Admin,
     /// Part of a demo plan scenario, named ([`crate::scenarios`]).
     Scenario(&'static str),
 }
@@ -47,6 +73,7 @@ pub struct Access {
     /// The subject's team (a person's own, or the person it acts for), sent as the token's groups.
     pub team: &'static str,
     pub tool: &'static str,
+    /// The resource a drive tool opens, or what an admin tool operates on (a person, a system).
     pub resource: String,
     pub why: Why,
 }
@@ -55,6 +82,9 @@ pub struct Access {
 const READS_PER_PERSON: usize = 12;
 /// How many tool calls an agent makes in a day.
 const CALLS_PER_AGENT: usize = 25;
+/// The team whose members run larkspur-admin's operations, and how many each runs a day at most.
+pub const ADMIN_TEAM: &str = "it-admin";
+const MOST_ADMIN_OPS: usize = 3;
 /// Out of 100: another team's document; a late-night access.
 const NOISE: usize = 5;
 const LATE: usize = 3;
@@ -115,6 +145,28 @@ pub fn day(company: &Company, profile: Profile, day: u32) -> Vec<Access> {
                 tool: tool_for(&resource),
                 resource,
                 why,
+            });
+        }
+    }
+    // After everything else, so adding them left the rest of each day as it was.
+    for i in by_team.get(ADMIN_TEAM).into_iter().flatten() {
+        let p = &company.people[*i];
+        for _ in 0..1 + rng.below(MOST_ADMIN_OPS) {
+            let (tool, _) = *rng_pick(&mut rng, ADMIN_TOOLS);
+            let target = match tool {
+                "rotate_admin_credentials" => rng_pick(&mut rng, &["domain-admin", "backup-service"]).to_string(),
+                "export_directory" => "directory".to_string(),
+                _ => rng_pick(&mut rng, &company.people).user_name.clone(),
+            };
+            out.push(Access {
+                minute: minute(&mut rng),
+                subject: p.user_name.clone(),
+                on_behalf_of: None,
+                human_present: true,
+                team: p.team,
+                tool,
+                resource: target,
+                why: Why::Admin,
             });
         }
     }
@@ -224,13 +276,25 @@ mod tests {
         assert!(accesses.windows(2).all(|w| w[0].minute <= w[1].minute), "in time order");
 
         let ids = all_ids(&c);
-        assert!(accesses.iter().all(|a| ids.contains(&a.resource)), "every access is to something that exists");
+        let opened = accesses.iter().filter(|a| a.why != Why::Admin);
+        assert!(opened.clone().all(|a| ids.contains(&a.resource)), "every access is to something that exists");
         let share = |why: Why| accesses.iter().filter(|a| a.why == why).count() * 100 / accesses.len();
         assert!((2..=10).contains(&share(Why::Noise)), "noise {}%", share(Why::Noise));
         assert!(share(Why::Assigned) > 20, "assigned {}%", share(Why::Assigned));
         let working = accesses.iter().filter(|a| (8 * 60..18 * 60).contains(&a.minute)).count();
         assert!(working * 100 / accesses.len() > 90, "mostly in working hours");
         assert!(accesses.iter().any(|a| a.tool == LIST) && accesses.iter().any(|a| a.tool == READ));
+    }
+
+    #[test]
+    fn it_runs_high_risk_operations_as_routine() {
+        let c = generate(Profile::Demo, 1);
+        let ops: Vec<Access> = (0..5).flat_map(|d| day(&c, Profile::Demo, d)).filter(|a| a.why == Why::Admin).collect();
+        assert!(ops.iter().all(|a| a.team == ADMIN_TEAM && server_of(a.tool) == ADMIN));
+        assert!(ops.iter().any(|a| a.tool == "export_directory" || a.tool == "disable_mfa"), "{ops:?}");
+        let admins = c.people.iter().filter(|p| p.team == ADMIN_TEAM).count();
+        assert!((admins * 5..=admins * 5 * MOST_ADMIN_OPS).contains(&ops.len()), "{}", ops.len());
+        assert_eq!(server_of(READ), DRIVE);
     }
 
     #[test]

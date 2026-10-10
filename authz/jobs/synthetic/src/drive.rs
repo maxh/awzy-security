@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 
 use crate::push::ContextClient;
 
-const PROTOCOL_VERSION: &str = "2025-06-18";
+pub(crate) const PROTOCOL_VERSION: &str = "2025-06-18";
 
 pub fn router(context: ContextClient) -> Router {
     Router::new().route("/mcp", post(mcp)).with_state(Arc::new(context))
@@ -98,7 +98,7 @@ async fn list_folder(context: &ContextClient, id: &str) -> anyhow::Result<String
     Ok(if lines.is_empty() { format!("{id} is empty") } else { lines.join("\n") })
 }
 
-fn tool_error(text: &str) -> Value {
+pub(crate) fn tool_error(text: &str) -> Value {
     json!({ "isError": true, "content": [{ "type": "text", "text": text }] })
 }
 
