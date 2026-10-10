@@ -1,7 +1,7 @@
 load("//tools:rust.bzl", "awzy_service")
 
 # The synthetic company the demo, local development, scenario tests, and scale tests run on
-# (docs/demo-plan.md, ADR 0039). Sends it to awzy-context through the same APIs an IdP and the
+# (docs/demo-plan.md, ADR 0039). Demo-only: nothing outside authz/demo may depend on it (ADR 0063). Sends it to awzy-context through the same APIs an IdP and the
 # connectors use.
 awzy_service(
     name = "synthetic",
@@ -10,7 +10,7 @@ awzy_service(
     # Medium: the scenario test loads all of Larkspur into awzy-context and runs it through the PDP
     # and awzy-gateway, which takes longer than a minute when the whole suite runs at once.
     test_size = "medium",
-    visibility = ["//tools:client_side"],
+    visibility = ["//tools:demo_only"],
     deps = [
         "//authz/libs/service-auth",
         "//libs/telemetry",

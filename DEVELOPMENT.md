@@ -348,7 +348,7 @@ synthetic company, run larkspur-drive (an MCP server over awzy-context's documen
 as an upstream:
 
 ```sh
-AWZY_CONTEXT_URL=http://127.0.0.1:8084 bazel run //authz/jobs/synthetic:awzy-synthetic -- drive   # :8095/mcp
+AWZY_CONTEXT_URL=http://127.0.0.1:8084 bazel run //authz/demo/synthetic:awzy-synthetic -- drive   # :8095/mcp
 ```
 
 ```json
@@ -371,7 +371,7 @@ page. Run the gateway with `"service_account_registry": "awzy-context"` and the 
 
 ```sh
 AWZY_GATEWAY_URL=http://127.0.0.1:8086 AWZY_GATEWAY_DEV_SECRET=dev-secret \
-  bazel run //authz/jobs/synthetic:awzy-synthetic -- activity --rate 20 --days 1
+  bazel run //authz/demo/synthetic:awzy-synthetic -- activity --rate 20 --days 1
 ```
 
 The driver signs each call's token with the gateway's dev secret (issuer `https://idp.local`,
@@ -383,13 +383,13 @@ awzy-reasoner scores his questions before his operations, which come a few hundr
 so run the reasoner with a short `AWZY_REASONER_INTERVAL_SECS` (30) and the history below. The run ends with a `detection` line: scenario steps caught, and ordinary
 accesses challenged. Switch the install to enforce first, because in monitor mode the gateway
 allows everything and nothing is caught. Leave them out with `--no-scenarios`. To run them end
-to end without any of this, `bazel test --config=local-stack //authz/jobs/synthetic:synthetic_test`.
+to end without any of this, `bazel test --config=local-stack //authz/demo/synthetic:synthetic_test`.
 
 For baselines, send a backdated month of the same activity to awzy-intake (demo plan step 5c):
 
 ```sh
 AWZY_INTAKE_URL=http://127.0.0.1:8085 AWZY_INTAKE_TOKEN=... \
-  bazel run //authz/jobs/synthetic:awzy-synthetic -- history --days 30
+  bazel run //authz/demo/synthetic:awzy-synthetic -- history --days 30
 ```
 
 ### Signing in locally
@@ -464,8 +464,8 @@ seed always gives the same company; running it again replaces rather than duplic
 ```sh
 # With awzy-context running as above (same AWZY_SCIM_TOKEN):
 AWZY_CONTEXT_URL=http://127.0.0.1:8084 AWZY_SCIM_TOKEN=... \
-  bazel run //authz/jobs/synthetic:awzy-synthetic -- all --profile demo --seed 1
-bazel run //authz/jobs/synthetic:awzy-synthetic -- directory --print   # just print it
+  bazel run //authz/demo/synthetic:awzy-synthetic -- all --profile demo --seed 1
+bazel run //authz/demo/synthetic:awzy-synthetic -- directory --print   # just print it
 ```
 
 `--profile scale` makes about 10,000 people, 200 agents, and a million documents, for the scale
