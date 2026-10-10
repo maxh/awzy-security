@@ -1,4 +1,4 @@
-//! The gateway's own metrics at `/metrics` (ADR 0066): what happened to each checked call, and
+//! The gateway's own metrics at `/metrics` (ADR 0068): what happened to each checked call, and
 //! especially what an outage of awzy-pdp did (ADR 0030).
 
 use awzy_server::metrics::{Counter, Source};
