@@ -20,5 +20,15 @@
 {{- $env = append $env (dict "name" "AWZY_CHALLENGE_WEBAUTHN_ORIGINS" "value" $origin) }}
 {{- $env = append $env (dict "name" "AWZY_CHALLENGE_WEBAUTHN_RP_ID" "value" .) }}
 {{- end }}
+{{- /* Telling people what's waiting for them in the client's Slack (ADR 0073): with a bot-token
+Secret and the security team's channel. Links go to the portal's public URL. */}}
+{{- with .Values.challenge.slack }}{{- if and .tokenSecret .securityChannel }}
+{{- $url := $.Values.clientPortal.publicUrl | default (printf "https://%s" (required "clientPortal.hostname or publicUrl is required for Slack notifications" $.Values.clientPortal.hostname)) | trimSuffix "/" }}
+{{- $env = concat $env (list
+  (dict "name" "AWZY_CHALLENGE_PORTAL_URL" "value" $url)
+  (dict "name" "AWZY_CHALLENGE_SLACK_SECURITY_CHANNEL" "value" .securityChannel)
+  (dict "name" "AWZY_CHALLENGE_SLACK_TOKEN" "valueFrom" (dict "secretKeyRef" (dict "name" .tokenSecret "key" "token")))
+) }}
+{{- end }}{{- end }}
 {{ include "awzy.service" (dict "root" . "name" "awzy-challenge" "namespace" $sys "values" .Values.challenge
   "tokens" (list "awzy-pdp") "env" $env) }}

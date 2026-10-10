@@ -156,6 +156,13 @@ impl ChallengeService for Service {
         let r = self.store.resolve(decision_id, &request, required, answerer, req.open).await.map_err(status)?;
         if let Some(id) = r.challenge_id {
             tracing::info!(challenge_id = %id, %decision_id, kinds = %required.without(r.passed).joined(), "challenge open");
+            // Tell people only about a new challenge, not each retry (ADR 0073).
+            let owner = Some(req.resource_owner_id.as_str()).filter(|o| !o.is_empty());
+            if r.opened {
+                if let Err(e) = self.store.notify_opened(id, owner).await {
+                    tracing::warn!(challenge_id = %id, error = %e, "couldn't record who to tell about a challenge");
+                }
+            }
         }
         Ok(Response::new(ResolveResponse {
             passed: challenges_to_wire(r.passed),
@@ -221,6 +228,9 @@ impl ChallengeService for Service {
         })?;
         let c = self.store.decide(id, &decided_by, req.approve, &req.note).await.map_err(status)?;
         tracing::info!(challenge_id = %c.id, decided_by = %decided_by, approve = req.approve, "challenge decided");
+        if let Err(e) = self.store.notify_decided(&c, req.approve).await {
+            tracing::warn!(challenge_id = %c.id, error = %e, "couldn't record who to tell about a decision");
+        }
         Ok(Response::new(DecideResponse { challenge: Some(challenge_to_wire(c)) }))
     }
 
@@ -229,6 +239,11 @@ impl ChallengeService for Service {
         let subject = required_ref(req.subject, "subject")?;
         let created_by = actor(req.created_by_actor, &req.created_by, "created_by_actor")?;
         let (c, created) = self.store.contain(&subject, &req.reason, &created_by, req.monitor).await.map_err(status)?;
+        if created {
+            if let Err(e) = self.store.notify_contained(&c).await {
+                tracing::warn!(containment_id = %c.id, error = %e, "couldn't record who to tell about a containment");
+            }
+        }
         if created && c.monitor {
             tracing::info!(containment_id = %c.id, subject = ?c.subject, created_by = %c.created_by, reason = %c.reason, "accessor would be contained (monitor)");
         } else if created {

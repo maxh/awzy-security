@@ -124,6 +124,13 @@ challenge:
   # a passed one allows the request. Seconds.
   pendingSeconds: 86400
   grantSeconds: 900
+  # Slack (ADR 0073): people are told what's waiting for them, and the security team about
+  # approvals and containments. Off until both are set: a Secret in the system namespace with key
+  # "token" (the bot token of the Slack app the client installed, with the users:read.email and
+  # chat:write scopes), and the security team's channel ID.
+  slack:
+    tokenSecret: ""
+    securityChannel: ""
   resources:
     requests: { cpu: 100m, memory: 128Mi }
     limits: { memory: 256Mi }

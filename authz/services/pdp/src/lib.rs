@@ -455,14 +455,14 @@ impl AppState {
             None => Decision { policies: contained, ..replay::unregistered() },
             Some(replay::Assembled::Unregistered) => replay::unregistered(),
             Some(replay::Assembled::Ready { entities, assignees, risk }) => {
-                let answerer = challenges::answerer(req, &entities);
+                let parties = challenges::parties(req, &entities);
                 let entities = pdp.entities(entities)?;
                 let facts = Facts { assignees: assignees.as_deref(), risk: Some(&risk) };
                 let decision = pdp.decide_with(req, &entities, &facts, Challenges::default())?;
                 match decision.verdict {
                     // In monitor nothing is sent, so there's nothing to resolve (ADR 0007).
                     Verdict::Challenge { challenges } if mode == EnforcementMode::Enforce => {
-                        self.resolve_challenge(&pdp, req, &entities, &facts, decision, challenges, answerer).await?
+                        self.resolve_challenge(&pdp, req, &entities, &facts, decision, challenges, parties).await?
                     }
                     _ => decision,
                 }
@@ -486,12 +486,12 @@ impl AppState {
         facts: &Facts<'_>,
         mut decision: Decision,
         required: awzy_model::Challenges,
-        answerer: Option<String>,
+        parties: challenges::Parties,
     ) -> Result<Decision, CheckError> {
         if !self.challenges.is_configured() {
             return Ok(decision);
         }
-        let resolution = match self.challenges.resolve(decision.id, req, required, answerer.as_deref()).await {
+        let resolution = match self.challenges.resolve(decision.id, req, required, &parties).await {
             Ok(r) => r,
             Err(error) => {
                 tracing::warn!(%error, decision_id = %decision.id, "couldn't open a challenge; the verdict stands");
