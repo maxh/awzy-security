@@ -1,31 +1,26 @@
-import { PageHeader } from "@awzy/ui";
-import { Alert, Badge, Button, Center, Group, Loader, Modal, Stack, Table, Text, Title } from "@mantine/core";
+import { EmptyState, PageHeader, PageLoader, Section, Stat, StatusBadge } from "@awzy/ui";
+import { Alert, Button, Group, Modal, SimpleGrid, Stack, Table, Text } from "@mantine/core";
+import { IconHistory, IconShieldCheck } from "@tabler/icons-react";
 import { Suspense, useState } from "react";
 import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
 
 import type { EnforcementPageQuery } from "./__generated__/EnforcementPageQuery.graphql";
 import type { EnforcementPageSetModeMutation } from "./__generated__/EnforcementPageSetModeMutation.graphql";
-import { entityLabel, formatTime } from "./format";
+import { Entity, formatTime, Time } from "./format";
 
-/** Monitor vs. enforce (ADR 0007): what enforcing would change, and the switch. */
+/** Monitor or enforce for the whole install (ADR 0007), and what enforcing would change. */
 export function EnforcementPage() {
   const [fetchKey, setFetchKey] = useState(0);
   return (
-    <Stack gap="md">
+    <>
       <PageHeader
         title="Enforcement"
         description="Whether decisions are enforced or only recorded, and what enforcing would have denied (ADR 0007)."
       />
-      <Suspense
-        fallback={
-          <Center p="xl">
-            <Loader />
-          </Center>
-        }
-      >
+      <Suspense fallback={<PageLoader />}>
         <Enforcement fetchKey={fetchKey} onChanged={() => setFetchKey((k) => k + 1)} />
       </Suspense>
-    </Stack>
+    </>
   );
 }
 
@@ -110,104 +105,111 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
 
   return (
     <Stack gap="lg">
-      <Group gap="sm" align="center">
-        <Badge size="xl" color={enforcing ? "red" : "blue"} variant="light">
-          {enforcing ? "Enforcing" : "Monitoring"}
-        </Badge>
-        <Text c="dimmed">
-          {current.changedAt
-            ? `since ${formatTime(current.changedAt)} by ${current.changedBy}`
-            : "New installs start in monitor mode and stay there until an admin switches them."}
-        </Text>
-      </Group>
-      <Text>
-        {enforcing
-          ? "Enforcement points apply every verdict: denies block, challenges are sent."
-          : "awzy decides every request and records the verdict, but enforcement points allow everything and send no challenges. Review what would have been denied before you enforce."}
-      </Text>
+      <Section
+        title="Mode"
+        actions={
+          data.canSwitch ? (
+            <Button color={enforcing ? "blue" : "red"} onClick={() => setConfirming(true)}>
+              {enforcing ? "Switch back to monitor" : "Switch to enforce"}
+            </Button>
+          ) : undefined
+        }
+      >
+        <Stack gap="xs">
+          <Group gap="sm">
+            <StatusBadge tone={enforcing ? "danger" : "info"}>{enforcing ? "Enforcing" : "Monitoring"}</StatusBadge>
+            <Text size="sm" c="dimmed">
+              {current.changedAt
+                ? `since ${formatTime(current.changedAt)} by ${current.changedBy}`
+                : "New installs start in monitor mode and stay there until an admin switches them."}
+            </Text>
+          </Group>
+          <Text size="sm" maw={760}>
+            {enforcing
+              ? "Enforcement points apply every verdict: denies block, challenges are sent."
+              : "awzy decides every request and records the verdict, but enforcement points allow everything and send no challenges. Review what would have been denied before you enforce."}
+          </Text>
+          {!data.canSwitch && (
+            <Text size="xs" c="dimmed">
+              You can't switch modes. Policy decides who can, through the PDP.
+            </Text>
+          )}
+        </Stack>
+      </Section>
 
-      <Stack gap="xs">
-        <Title order={4}>Since {formatTime(s.since)}</Title>
-        <Table withTableBorder w="fit-content">
-          <Table.Tbody>
-            <Table.Tr>
-              <Table.Td>Decisions</Table.Td>
-              <Table.Td ta="right">{s.total}</Table.Td>
-              <Table.Td />
-            </Table.Tr>
-            <Table.Tr>
-              <Table.Td>Would have been denied (monitored)</Table.Td>
-              <Table.Td ta="right">{s.wouldDeny}</Table.Td>
-              <Table.Td c="dimmed">{percent(s.wouldDeny, s.monitored)} of monitored</Table.Td>
-            </Table.Tr>
-            <Table.Tr>
-              <Table.Td>Would have been challenged (monitored)</Table.Td>
-              <Table.Td ta="right">{s.wouldChallenge}</Table.Td>
-              <Table.Td c="dimmed">{percent(s.wouldChallenge, s.monitored)} of monitored</Table.Td>
-            </Table.Tr>
-            <Table.Tr>
-              <Table.Td>Denied (enforced)</Table.Td>
-              <Table.Td ta="right">{s.enforcedDeny}</Table.Td>
-              <Table.Td />
-            </Table.Tr>
-            <Table.Tr>
-              <Table.Td>Challenged (enforced)</Table.Td>
-              <Table.Td ta="right">{s.enforcedChallenge}</Table.Td>
-              <Table.Td />
-            </Table.Tr>
-          </Table.Tbody>
-        </Table>
-      </Stack>
+      <div>
+        <Text size="sm" c="dimmed" mb="xs">
+          Since {formatTime(s.since)}
+        </Text>
+        <SimpleGrid cols={{ base: 2, md: 5 }}>
+          <Stat label="Decisions" value={s.total.toLocaleString()} />
+          <Stat
+            label="Would deny"
+            value={s.wouldDeny.toLocaleString()}
+            hint={`${percent(s.wouldDeny, s.monitored)} of monitored`}
+          />
+          <Stat
+            label="Would challenge"
+            value={s.wouldChallenge.toLocaleString()}
+            hint={`${percent(s.wouldChallenge, s.monitored)} of monitored`}
+          />
+          <Stat label="Denied" value={s.enforcedDeny.toLocaleString()} hint="enforced" />
+          <Stat label="Challenged" value={s.enforcedChallenge.toLocaleString()} hint="enforced" />
+        </SimpleGrid>
+      </div>
 
       {!enforcing && (
-        <Stack gap="xs">
-          <Title order={4}>Recent would-deny decisions</Title>
+        <Section
+          title="Recent would-deny decisions"
+          description="The Decisions page lists all of them: filter by mode Monitored and verdict Deny."
+          flush
+        >
           {data.wouldDeny.edges.length === 0 ? (
-            <Text c="dimmed">None in the last 24 hours.</Text>
+            <EmptyState icon={<IconShieldCheck size={22} />} title="None in the last 24 hours" />
           ) : (
-            <Table>
-              <Table.Tbody>
-                {data.wouldDeny.edges.map(({ node: d }) => (
-                  <Table.Tr key={d.id}>
-                    <Table.Td style={{ whiteSpace: "nowrap" }}>{formatTime(d.at)}</Table.Td>
-                    <Table.Td>{entityLabel(d.subject)}</Table.Td>
-                    <Table.Td>{d.action}</Table.Td>
-                    <Table.Td>{entityLabel(d.resource)}</Table.Td>
-                    <Table.Td>
-                      <Text size="sm" ff="monospace">
-                        {d.policies.join(", ") || "denied by default"}
-                      </Text>
-                    </Table.Td>
+            <Table.ScrollContainer minWidth={720}>
+              <Table style={{ whiteSpace: "nowrap" }}>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Time</Table.Th>
+                    <Table.Th>Subject</Table.Th>
+                    <Table.Th>Action</Table.Th>
+                    <Table.Th>Resource</Table.Th>
+                    <Table.Th>Policies</Table.Th>
                   </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
+                </Table.Thead>
+                <Table.Tbody>
+                  {data.wouldDeny.edges.map(({ node: d }) => (
+                    <Table.Tr key={d.id}>
+                      <Table.Td>
+                        <Time at={d.at} />
+                      </Table.Td>
+                      <Table.Td>
+                        <Entity e={d.subject} />
+                      </Table.Td>
+                      <Table.Td>{d.action}</Table.Td>
+                      <Table.Td>
+                        <Entity e={d.resource} />
+                      </Table.Td>
+                      <Table.Td ff="monospace" fz="xs">
+                        {d.policies.join(", ") || "denied by default"}
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
           )}
-          <Text size="sm" c="dimmed">
-            The Decisions page lists all of them: filter by mode Monitored and verdict Deny.
-          </Text>
-        </Stack>
+        </Section>
       )}
-
-      <Group>
-        {data.canSwitch ? (
-          <Button color={enforcing ? "blue" : "red"} onClick={() => setConfirming(true)}>
-            {enforcing ? "Switch back to monitor" : "Switch to enforce"}
-          </Button>
-        ) : (
-          <Text size="sm" c="dimmed">
-            You can't switch modes. Policy decides who can, through the PDP.
-          </Text>
-        )}
-      </Group>
 
       <Modal
         opened={confirming}
         onClose={() => setConfirming(false)}
-        title={enforcing ? "Switch back to monitor?" : "Start enforcing?"}
+        title={<Text fw={600}>{enforcing ? "Switch back to monitor?" : "Start enforcing?"}</Text>}
       >
         <Stack gap="sm">
-          <Text>
+          <Text size="sm">
             {enforcing
               ? "Enforcement points will allow every request again and stop sending challenges. Decisions are still recorded."
               : `Enforcement points will start applying verdicts within about 10 seconds. At the last 24 hours' rate, ${percent(
@@ -231,24 +233,34 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
         </Stack>
       </Modal>
 
-      <Stack gap="xs">
-        <Title order={4}>History</Title>
+      <Section title="History" flush>
         {data.enforcementHistory.length === 0 ? (
-          <Text c="dimmed">Never switched.</Text>
+          <EmptyState icon={<IconHistory size={22} />} title="Never switched" />
         ) : (
           <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>When</Table.Th>
+                <Table.Th>Mode</Table.Th>
+                <Table.Th>By</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
             <Table.Tbody>
               {data.enforcementHistory.map((c, i) => (
                 <Table.Tr key={i}>
                   <Table.Td>{c.changedAt ? formatTime(c.changedAt) : ""}</Table.Td>
-                  <Table.Td>{c.mode === "ENFORCE" ? "Enforce" : "Monitor"}</Table.Td>
+                  <Table.Td>
+                    <StatusBadge tone={c.mode === "ENFORCE" ? "danger" : "info"}>
+                      {c.mode === "ENFORCE" ? "Enforce" : "Monitor"}
+                    </StatusBadge>
+                  </Table.Td>
                   <Table.Td>{c.changedBy}</Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
           </Table>
         )}
-      </Stack>
+      </Section>
     </Stack>
   );
 }

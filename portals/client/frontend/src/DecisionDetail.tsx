@@ -1,9 +1,10 @@
-import { Badge, Code, Group, Stack, Text, Title } from "@mantine/core";
+import { Code, Divider, Group, Stack, Text } from "@mantine/core";
+import type { ReactNode } from "react";
 import { graphql, useFragment, useLazyLoadQuery } from "react-relay";
 
 import type { DecisionDetail_decision$key } from "./__generated__/DecisionDetail_decision.graphql";
 import type { DecisionDetailQuery } from "./__generated__/DecisionDetailQuery.graphql";
-import { entityLabel, formatTime, prettyJson, VERDICT_COLOR, verdictLabel } from "./format";
+import { entityLabel, formatTime, prettyJson, VerdictBadge } from "./format";
 
 /** Explains one decision: what was asked, the verdict, and the policies that produced it. */
 export function DecisionDetail({ id }: { id: string }) {
@@ -68,17 +69,13 @@ function DecisionView({ decision }: { decision: DecisionDetail_decision$key }) {
   return (
     <Stack gap="md">
       <Group gap="sm">
-        <Badge
-          size="lg"
-          color={VERDICT_COLOR[d.verdict as keyof typeof VERDICT_COLOR]}
-          variant={d.mode === "MONITOR" ? "outline" : "light"}
-        >
-          {verdictLabel(d.verdict, d.mode, d.challenges)}
-        </Badge>
-        <Text c="dimmed">{formatTime(d.at)}</Text>
+        <VerdictBadge verdict={d.verdict} mode={d.mode} challenges={d.challenges} />
+        <Text size="sm" c="dimmed">
+          {formatTime(d.at)}
+        </Text>
       </Group>
 
-      <Stack gap={4}>
+      <Stack gap={6}>
         <Field label="Subject" value={entityLabel(d.subject)} />
         {d.onBehalfOf && <Field label="Acting for" value={entityLabel(d.onBehalfOf.person)} />}
         <Field label="Person present" value={d.humanPresent ? "yes" : "no"} />
@@ -92,23 +89,22 @@ function DecisionView({ decision }: { decision: DecisionDetail_decision$key }) {
         <Field label="Decision ID" value={d.id} />
       </Stack>
 
-      <Stack gap={4}>
-        <Title order={5}>Context</Title>
+      <Divider />
+      <Stack gap={6}>
+        <Heading>Context</Heading>
         <Code block>{prettyJson(d.context)}</Code>
       </Stack>
 
-      <Stack gap={4}>
-        <Title order={5}>Why{d.onBehalfOf ? ` (${entityLabel(d.subject)})` : ""}</Title>
+      <Stack gap={6}>
+        <Heading>Why{d.onBehalfOf ? ` (${entityLabel(d.subject)})` : ""}</Heading>
         <PolicyList policies={d.determiningPolicies} />
       </Stack>
 
       {d.onBehalfOf && (
-        <Stack gap={4}>
+        <Stack gap={6}>
           <Group gap="sm">
-            <Title order={5}>Could {entityLabel(d.onBehalfOf.person)} do this?</Title>
-            <Badge color={VERDICT_COLOR[d.onBehalfOf.verdict as keyof typeof VERDICT_COLOR]} variant="light">
-              {d.onBehalfOf.verdict.toLowerCase()}
-            </Badge>
+            <Heading>Could {entityLabel(d.onBehalfOf.person)} do this?</Heading>
+            <VerdictBadge verdict={d.onBehalfOf.verdict} mode="ENFORCE" />
           </Group>
           <Text size="sm" c="dimmed">
             A service account acting for someone gets at most what they could do, so the stricter of the two checks
@@ -139,10 +135,18 @@ function PolicyList({ policies }: { policies: ReadonlyArray<{ readonly id: strin
   );
 }
 
+function Heading({ children }: { children: ReactNode }) {
+  return (
+    <Text size="xs" fw={600} tt="uppercase" c="dimmed" style={{ letterSpacing: "0.04em" }}>
+      {children}
+    </Text>
+  );
+}
+
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <Group gap="xs" wrap="nowrap">
-      <Text size="sm" c="dimmed" w={110}>
+      <Text size="sm" c="dimmed" w={120} style={{ flexShrink: 0 }}>
         {label}
       </Text>
       <Text size="sm" ff="monospace" style={{ wordBreak: "break-all" }}>

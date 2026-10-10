@@ -1,18 +1,15 @@
-import { Alert, Badge, Center, Group, Loader, Stack, Table, Text } from "@mantine/core";
+import { StatusBadge, type Tone } from "@awzy/ui";
+import { Alert, Center, Group, Loader, Stack, Table, Text } from "@mantine/core";
 import { Suspense } from "react";
 import { graphql, useLazyLoadQuery } from "react-relay";
 
 import type { DryRunReportQuery } from "./__generated__/DryRunReportQuery.graphql";
 
-const VERDICT_COLOR: Record<string, string> = { allow: "teal", deny: "red" };
+const VERDICT_TONE: Record<string, Tone> = { allow: "success", deny: "danger" };
 
 function VerdictBadge({ verdict }: { verdict: string }) {
-  const color = VERDICT_COLOR[verdict] ?? (verdict.startsWith("challenge") ? "orange" : "gray");
-  return (
-    <Badge color={color} variant="light" style={{ textTransform: "none" }}>
-      {verdict}
-    </Badge>
-  );
+  const tone = VERDICT_TONE[verdict] ?? (verdict.startsWith("challenge") ? "warning" : "neutral");
+  return <StatusBadge tone={tone}>{verdict}</StatusBadge>;
 }
 
 /**
@@ -110,7 +107,7 @@ function Report({ draftId }: { draftId: string }) {
               {c.decisions.toLocaleString()} decisions, {c.requests.toLocaleString()} distinct requests
             </Text>
           </Group>
-          <Table fz="sm" withTableBorder>
+          <Table fz="sm" withTableBorder highlightOnHover={false}>
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Who</Table.Th>
