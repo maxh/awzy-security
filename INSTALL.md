@@ -95,6 +95,9 @@ Bootstrap takes:
 | `ingress` | The portal hostname and the Let's Encrypt contact |
 | `client_portal` | Your IdP's issuer, JWKS URL, and the portal's public URL |
 | `awzy_bot` | Whether Awzy Bot runs; needs Claude enabled in the install account's Bedrock |
+| `investigations`, `investigation_budget` | Whether awzy-reasoner investigates the people it flags, and its monthly token budget and privileged groups; needs Claude in Bedrock |
+| `llm_model` | The Bedrock model ID for both, when the default isn't reachable directly |
+| `slack` | Your Slack app's bot token and the security team's channel, for notifications; `null` for none |
 | `demo_idp`, `demo_data` | **Demo installs only:** the dev IdP and the synthetic company |
 
 ```sh
