@@ -9,7 +9,14 @@ pub use scalars::UtcTimestamp;
 
 use async_graphql::{http::GraphiQLSource, ObjectType, Schema, SubscriptionType};
 use async_graphql_axum::GraphQL;
-use axum::{response::Html, routing::get, Router};
+use axum::{
+    extract::Request,
+    http::{header, HeaderValue},
+    middleware::{self, Next},
+    response::{Html, Response},
+    routing::get,
+    Router,
+};
 use tower_http::services::{ServeDir, ServeFile};
 
 /// Serves `schema` at `/graphql`: POST for queries, GET for GraphiQL during development.
@@ -36,7 +43,33 @@ pub fn frontend_dir_from_env() -> Option<PathBuf> {
 /// Paths that are not files get `index.html`, so client-side routes survive a reload.
 pub fn with_frontend(app: Router, dir: &Path) -> Router {
     let index = ServeFile::new(dir.join("index.html"));
-    app.fallback_service(ServeDir::new(dir).fallback(index))
+    let frontend =
+        Router::new().fallback_service(ServeDir::new(dir).fallback(index)).layer(middleware::from_fn(cache_policy));
+    app.fallback_service(frontend)
+}
+
+/// Vite names everything under `/assets/` by its content hash, so those never change and are
+/// cached for good. Everything else is `index.html`, which must be fetched again on every load,
+/// or a browser keeps running the previous release. Bazel gives every built file the same
+/// modification time, and `index.html` stays the same size from release to release, so
+/// ServeDir's ETag (time and size) wouldn't change either: it's removed, and so are the
+/// browser's conditional headers, including ones for an ETag cached before this.
+async fn cache_policy(mut req: Request, next: Next) -> Response {
+    let hashed = req.uri().path().starts_with("/assets/");
+    if !hashed {
+        req.headers_mut().remove(header::IF_NONE_MATCH);
+        req.headers_mut().remove(header::IF_MODIFIED_SINCE);
+    }
+    let mut res = next.run(req).await;
+    let headers = res.headers_mut();
+    if hashed && res.status().is_success() {
+        headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=31536000, immutable"));
+    } else {
+        headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+        headers.remove(header::ETAG);
+        headers.remove(header::LAST_MODIFIED);
+    }
+    res
 }
 
 #[cfg(test)]
@@ -64,6 +97,37 @@ mod tests {
         assert_eq!(get_body(app(), "/assets/app.js").await, (200, "console.log(1)".into()));
         assert_eq!(get_body(app(), "/policies/123").await, (200, "<html>portal</html>".into()));
         assert_eq!(get_body(app(), "/api").await, (200, "api".into()));
+
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn every_load_gets_the_current_index_and_assets_are_cached_for_good() {
+        let dir = std::env::temp_dir().join(format!("awzy-portal-cache-test-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("assets")).unwrap();
+        std::fs::write(dir.join("index.html"), "<html>portal</html>").unwrap();
+        std::fs::write(dir.join("assets/app-3f1a.js"), "console.log(1)").unwrap();
+        let app = || with_frontend(Router::new(), &dir);
+        let get = |path: &str, etag: Option<&str>| {
+            let mut req = Request::get(path);
+            if let Some(etag) = etag {
+                req = req
+                    .header(header::IF_NONE_MATCH, etag)
+                    .header(header::IF_MODIFIED_SINCE, "Sat, 01 Jan 2000 00:00:00 GMT");
+            }
+            req.body(Body::empty()).unwrap()
+        };
+
+        for path in ["/", "/installs/install_1"] {
+            let res = app().oneshot(get(path, None)).await.unwrap();
+            assert_eq!(res.headers()[header::CACHE_CONTROL], "no-cache", "{path}");
+            assert!(res.headers().get(header::ETAG).is_none() && res.headers().get(header::LAST_MODIFIED).is_none());
+            // A browser holding an ETag from an earlier release still gets the page, not a 304.
+            let res = app().oneshot(get(path, Some("\"386d4380.00000000-4c6\""))).await.unwrap();
+            assert_eq!(res.status(), 200, "{path}");
+        }
+        let res = app().oneshot(get("/assets/app-3f1a.js", None)).await.unwrap();
+        assert_eq!(res.headers()[header::CACHE_CONTROL], "public, max-age=31536000, immutable");
 
         std::fs::remove_dir_all(dir).unwrap();
     }
