@@ -10,6 +10,9 @@ Design: [ADR 0054](../../../docs/adr/0054-challenges-and-containments-over-grpc.
 - **Justification:** the answerer writes why they need the access.
 - **Approval:** someone else whom the PDP allows to `approve` the resource. A rejection denies
   the request until it expires.
+- **Verification:** a touch of a security key the answerer enrolled (WebAuthn, ES256 only;
+  [ADR 0059](../../../docs/adr/0059-security-keys-for-verification-challenges.md)). A first key
+  enrolls on the person's sign-in; adding or removing one needs a key they already have.
 - **Containments** revoke an accessor's access until a person lifts them. Every PDP follows
   `WatchContainments` (the whole list on change, with a heartbeat every 500 ms) and denies
   contained accessors without evaluating policy.
@@ -20,11 +23,13 @@ Design: [ADR 0054](../../../docs/adr/0054-challenges-and-containments-over-grpc.
 | --- | --- | --- |
 | `AWZY_CHALLENGE_GRANT_SECS` | 900 | How long a passed challenge allows its request |
 | `AWZY_CHALLENGE_PENDING_SECS` | 86400 | How long a challenge waits, and a rejection blocks |
+| `AWZY_CHALLENGE_WEBAUTHN_ORIGINS` | unset | The portal's origins, comma-separated, e.g. `https://portal.example.com` |
+| `AWZY_CHALLENGE_WEBAUTHN_RP_ID` | unset | The portal's hostname; unset turns security keys off |
 | `AWZY_PDP_ADDR` | unset | The PDP that decides who may approve; unset refuses approvals |
 | `AWZY_POSTGRES_URL` | required | Its own database |
 
 Not yet:
-- WebAuthn verification and biometric checks
+- Biometric checks
 - The LLM check of a justification against the resource; it can't pass a challenge alone on
   high-sensitivity resources, which also need a security key or an approval
 - Prompts over Slack, Teams, or email

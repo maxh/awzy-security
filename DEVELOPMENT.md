@@ -285,6 +285,12 @@ request comes back with a `challenge_qid`. The person answers it on the Challeng
 Locally, `AWZY_CHALLENGE_GRANT_SECS` and `AWZY_CHALLENGE_PENDING_SECS` shorten how long a pass
 lasts and how long a challenge waits.
 
+Security keys (ADR 0059) need a relying party: add `AWZY_CHALLENGE_WEBAUTHN_RP_ID=localhost` and
+`AWZY_CHALLENGE_WEBAUTHN_ORIGINS=https://localhost:5173` (the Vite dev server) to awzy-challenge.
+Browsers only offer WebAuthn on a secure origin, and an RP ID must be a domain, so open the portal
+at `localhost`, not `127.0.0.1`. Without a hardware key, Chrome's DevTools can add a virtual one
+(More tools, WebAuthn).
+
 ### MCP gateway (first enforcement point)
 
 `awzy-gateway` sits in front of MCP servers at `/mcp/{upstream}`. It validates the caller's bearer

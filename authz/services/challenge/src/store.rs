@@ -301,30 +301,56 @@ impl ChallengeStore {
             )));
         }
         let mut tx = self.pool.begin().await?;
-        let c = lock(&mut tx, id).await?;
-        c.ensure_answerable(ChallengeKind::Justification)?;
-        if c.answerer_id.as_deref() != Some(answered_by) {
-            return Err(StoreError::NotAllowed(match &c.answerer_id {
-                Some(answerer) => format!("only {answerer} can justify challenge {id}"),
-                None => format!("challenge {id} has no one to justify it; it can only be approved"),
-            }));
-        }
-        let passed = c.passed.with(ChallengeKind::Justification);
+        let c = lock_for_answerer(&mut tx, id, answered_by, ChallengeKind::Justification).await?;
+        sqlx::query("UPDATE challenges SET justification = $2 WHERE id = $1")
+            .bind(id.uuid())
+            .bind(text)
+            .execute(&mut *tx)
+            .await?;
+        let c = self.mark_passed(&mut tx, &c, ChallengeKind::Justification).await?;
+        tx.commit().await?;
+        Ok(c)
+    }
+
+    /// Opens a transaction for a caller that checks something of its own before passing a kind
+    /// (a security key's assertion).
+    pub(crate) async fn begin(&self) -> Result<Transaction<'static, Postgres>, sqlx::Error> {
+        self.pool.begin().await
+    }
+
+    /// Locks challenge `id` for `person` to answer `kind`, in the caller's transaction.
+    pub(crate) async fn lock_for(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        id: ChallengeId,
+        person: &str,
+        kind: ChallengeKind,
+    ) -> Result<Challenge, StoreError> {
+        lock_for_answerer(tx, id, person, kind).await
+    }
+
+    /// Records `kind` as passed on locked challenge `c`, and passes the challenge if nothing is
+    /// left: the request is then granted for the grant lifetime.
+    pub(crate) async fn mark_passed(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        c: &Challenge,
+        kind: ChallengeKind,
+    ) -> Result<Challenge, StoreError> {
+        let passed = c.passed.with(kind);
         let row = sqlx::query(
-            "UPDATE challenges SET justification = $2, passed = $3, \
-                status = CASE WHEN $4 THEN 'passed' ELSE status END, \
-                passed_at = CASE WHEN $4 THEN now() END, \
-                grant_expires_at = CASE WHEN $4 THEN now() + make_interval(secs => $5) END \
+            "UPDATE challenges SET passed = $2, \
+                status = CASE WHEN $3 THEN 'passed' ELSE status END, \
+                passed_at = CASE WHEN $3 THEN now() END, \
+                grant_expires_at = CASE WHEN $3 THEN now() + make_interval(secs => $4) END \
              WHERE id = $1 RETURNING *",
         )
-        .bind(id.uuid())
-        .bind(text)
+        .bind(c.id.uuid())
         .bind(kind_names(passed))
         .bind(c.kinds.without(passed).is_empty())
         .bind(self.lifetimes.grant.as_secs_f64())
-        .fetch_one(&mut *tx)
+        .fetch_one(&mut **tx)
         .await?;
-        tx.commit().await?;
         Ok(challenge_from_row(&row)?)
     }
 
@@ -347,25 +373,16 @@ impl ChallengeStore {
             )));
         }
         let note = Some(note.trim()).filter(|n| !n.is_empty());
-        let row = if approve {
-            let passed = c.passed.with(ChallengeKind::Approval);
-            sqlx::query(
-                "UPDATE challenges SET decided_by = $2, decision_note = $3, passed = $4, \
-                    status = CASE WHEN $5 THEN 'passed' ELSE status END, \
-                    passed_at = CASE WHEN $5 THEN now() END, \
-                    grant_expires_at = CASE WHEN $5 THEN now() + make_interval(secs => $6) END \
-                 WHERE id = $1 RETURNING *",
-            )
-            .bind(id.uuid())
-            .bind(decided_by)
-            .bind(note)
-            .bind(kind_names(passed))
-            .bind(c.kinds.without(passed).is_empty())
-            .bind(self.lifetimes.grant.as_secs_f64())
-            .fetch_one(&mut *tx)
-            .await?
+        let c = if approve {
+            sqlx::query("UPDATE challenges SET decided_by = $2, decision_note = $3 WHERE id = $1")
+                .bind(id.uuid())
+                .bind(decided_by)
+                .bind(note)
+                .execute(&mut *tx)
+                .await?;
+            self.mark_passed(&mut tx, &c, ChallengeKind::Approval).await?
         } else {
-            sqlx::query(
+            let row = sqlx::query(
                 "UPDATE challenges SET decided_by = $2, decision_note = $3, status = 'rejected', \
                     expires_at = now() + make_interval(secs => $4) \
                  WHERE id = $1 RETURNING *",
@@ -375,10 +392,11 @@ impl ChallengeStore {
             .bind(note)
             .bind(self.lifetimes.pending.as_secs_f64())
             .fetch_one(&mut *tx)
-            .await?
+            .await?;
+            challenge_from_row(&row)?
         };
         tx.commit().await?;
-        Ok(challenge_from_row(&row)?)
+        Ok(c)
     }
 
     /// Contains `subject`. Returns the containment and whether it is new: an accessor already
@@ -495,6 +513,24 @@ async fn lock(tx: &mut Transaction<'_, Postgres>, id: ChallengeId) -> Result<Cha
         .await?
         .ok_or(StoreError::ChallengeNotFound(id))?;
     Ok(challenge_from_row(&row)?)
+}
+
+/// Locks challenge `id` and checks `person` may answer `kind` on it now.
+async fn lock_for_answerer(
+    tx: &mut Transaction<'_, Postgres>,
+    id: ChallengeId,
+    person: &str,
+    kind: ChallengeKind,
+) -> Result<Challenge, StoreError> {
+    let c = lock(tx, id).await?;
+    c.ensure_answerable(kind)?;
+    if c.answerer_id.as_deref() != Some(person) {
+        return Err(StoreError::NotAllowed(match &c.answerer_id {
+            Some(answerer) => format!("only {answerer} can answer challenge {id} with {}", kind.as_str()),
+            None => format!("challenge {id} has no one to answer it; it can only be approved"),
+        }));
+    }
+    Ok(c)
 }
 
 /// Bumps the feed version and tells every replica's feed, in the caller's transaction, so the

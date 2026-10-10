@@ -6,11 +6,15 @@ use std::{pin::Pin, sync::Arc};
 use awzy_authz_proto::{
     challenge::v1::{
         challenge_service_server::{ChallengeService, ChallengeServiceServer},
-        Challenge as WireChallenge, ChallengeStatus as WireStatus, ContainRequest, ContainResponse,
-        Containment as WireContainment, DecideRequest, DecideResponse, GetChallengeRequest, GetChallengeResponse,
-        JustifyRequest, JustifyResponse, LiftRequest, LiftResponse, ListChallengesRequest, ListChallengesResponse,
-        ListContainmentsRequest, ListContainmentsResponse, ResolveRequest, ResolveResponse, WatchContainmentsRequest,
-        WatchContainmentsResponse,
+        Assertion as WireAssertion, BeginKeyChangeRequest, BeginKeyChangeResponse, BeginKeyRegistrationRequest,
+        BeginKeyRegistrationResponse, BeginVerificationRequest, BeginVerificationResponse, Challenge as WireChallenge,
+        ChallengeStatus as WireStatus, ContainRequest, ContainResponse, Containment as WireContainment, DecideRequest,
+        DecideResponse, FinishKeyRegistrationRequest, FinishKeyRegistrationResponse, FinishVerificationRequest,
+        FinishVerificationResponse, GetChallengeRequest, GetChallengeResponse, JustifyRequest, JustifyResponse,
+        LiftRequest, LiftResponse, ListChallengesRequest, ListChallengesResponse, ListContainmentsRequest,
+        ListContainmentsResponse, ListSecurityKeysRequest, ListSecurityKeysResponse, RemoveSecurityKeyRequest,
+        RemoveSecurityKeyResponse, ResetSecurityKeyRequest, ResetSecurityKeyResponse, ResolveRequest, ResolveResponse,
+        SecurityKey as WireKey, WatchContainmentsRequest, WatchContainmentsResponse,
     },
     challenges_from_wire, challenges_to_wire,
     prost_types::Timestamp,
@@ -25,6 +29,7 @@ use tonic::{Request, Response, Status};
 use crate::{
     approvals::{ApprovalError, Approvals},
     feed::{Feed, HEARTBEAT},
+    keys::{Assertion, KeyError, SecurityKey, SecurityKeys},
     store::{Challenge, ChallengeStatus, ChallengeStore, Containment, RequestKey, StoreError},
 };
 
@@ -76,14 +81,35 @@ impl Access {
         let mut rules = group(&["Resolve", "WatchContainments"], &self.pdps);
         rules.extend(group(&["ListContainments"], &pdps_or_containers));
         rules.extend(group(&["GetChallenge", "ListChallenges", "Justify", "Decide"], &self.people));
+        // Security keys (ADR 0059): only the portal, which authenticates the person they belong to.
+        rules.extend(group(
+            &[
+                "ListSecurityKeys",
+                "BeginKeyChange",
+                "BeginKeyRegistration",
+                "FinishKeyRegistration",
+                "RemoveSecurityKey",
+                "ResetSecurityKey",
+                "BeginVerification",
+                "FinishVerification",
+            ],
+            &self.people,
+        ));
         rules.extend(group(&["Contain", "Lift"], &self.containers));
         PathGuard::new(self.verifier.clone(), rules)
     }
 }
 
+/// `keys`: None when no WebAuthn relying party is configured; the security-key RPCs then refuse.
 /// `access`: who may call which methods.
-pub fn router(store: Arc<ChallengeStore>, feed: Arc<Feed>, approvals: Arc<Approvals>, access: &Access) -> Router {
-    tonic::service::Routes::new(ChallengeServiceServer::new(Service { store, feed, approvals }))
+pub fn router(
+    store: Arc<ChallengeStore>,
+    feed: Arc<Feed>,
+    approvals: Arc<Approvals>,
+    keys: Option<Arc<SecurityKeys>>,
+    access: &Access,
+) -> Router {
+    tonic::service::Routes::new(ChallengeServiceServer::new(Service { store, feed, approvals, keys }))
         .into_axum_router()
         .route_layer(axum::middleware::from_fn_with_state(access.guard(), require_by_path))
 }
@@ -92,6 +118,7 @@ struct Service {
     store: Arc<ChallengeStore>,
     feed: Arc<Feed>,
     approvals: Arc<Approvals>,
+    keys: Option<Arc<SecurityKeys>>,
 }
 
 type FeedStream = Pin<Box<dyn Stream<Item = Result<WatchContainmentsResponse, Status>> + Send>>;
@@ -214,6 +241,105 @@ impl ChallengeService for Service {
         }))
     }
 
+    async fn list_security_keys(
+        &self,
+        req: Request<ListSecurityKeysRequest>,
+    ) -> Result<Response<ListSecurityKeysResponse>, Status> {
+        let person = required(req.into_inner().person_id, "person_id")?;
+        let keys = self.keys()?.list(&person).await.map_err(key_status)?;
+        Ok(Response::new(ListSecurityKeysResponse { keys: keys.into_iter().map(key_to_wire).collect() }))
+    }
+
+    async fn begin_key_change(
+        &self,
+        req: Request<BeginKeyChangeRequest>,
+    ) -> Result<Response<BeginKeyChangeResponse>, Status> {
+        let person = required(req.into_inner().person_id, "person_id")?;
+        let c = self.keys()?.begin_key_change(&person).await.map_err(key_status)?;
+        Ok(Response::new(BeginKeyChangeResponse {
+            ceremony_qid: c.id.to_string(),
+            options_json: c.options.to_string(),
+        }))
+    }
+
+    async fn begin_key_registration(
+        &self,
+        req: Request<BeginKeyRegistrationRequest>,
+    ) -> Result<Response<BeginKeyRegistrationResponse>, Status> {
+        let req = req.into_inner();
+        let person = required(req.person_id, "person_id")?;
+        let authorization = req.authorization.map(assertion);
+        let c = self.keys()?.begin_registration(&person, authorization.as_ref()).await.map_err(key_status)?;
+        Ok(Response::new(BeginKeyRegistrationResponse {
+            ceremony_qid: c.id.to_string(),
+            options_json: c.options.to_string(),
+        }))
+    }
+
+    async fn finish_key_registration(
+        &self,
+        req: Request<FinishKeyRegistrationRequest>,
+    ) -> Result<Response<FinishKeyRegistrationResponse>, Status> {
+        let req = req.into_inner();
+        let person = required(req.person_id, "person_id")?;
+        let key = self
+            .keys()?
+            .finish_registration(&person, &req.ceremony_qid, &req.name, &req.client_data_json, &req.attestation_object)
+            .await
+            .map_err(key_status)?;
+        tracing::warn!(key_id = %key.id, person = %person, added_with = ?key.added_with, "security key added");
+        Ok(Response::new(FinishKeyRegistrationResponse { key: Some(key_to_wire(key)) }))
+    }
+
+    async fn remove_security_key(
+        &self,
+        req: Request<RemoveSecurityKeyRequest>,
+    ) -> Result<Response<RemoveSecurityKeyResponse>, Status> {
+        let req = req.into_inner();
+        let person = required(req.person_id, "person_id")?;
+        let authorization =
+            req.authorization.map(assertion).ok_or_else(|| Status::invalid_argument("authorization is required"))?;
+        let key =
+            self.keys()?.remove(&person, qid(&req.security_key_qid)?, &authorization).await.map_err(key_status)?;
+        tracing::warn!(key_id = %key.id, person = %person, "security key removed");
+        Ok(Response::new(RemoveSecurityKeyResponse { key: Some(key_to_wire(key)) }))
+    }
+
+    async fn reset_security_key(
+        &self,
+        req: Request<ResetSecurityKeyRequest>,
+    ) -> Result<Response<ResetSecurityKeyResponse>, Status> {
+        let req = req.into_inner();
+        let key = self.keys()?.reset(qid(&req.security_key_qid)?, &req.removed_by).await.map_err(key_status)?;
+        tracing::warn!(key_id = %key.id, person = %key.person_id, removed_by = %req.removed_by, "security key reset by an admin");
+        Ok(Response::new(ResetSecurityKeyResponse { key: Some(key_to_wire(key)) }))
+    }
+
+    async fn begin_verification(
+        &self,
+        req: Request<BeginVerificationRequest>,
+    ) -> Result<Response<BeginVerificationResponse>, Status> {
+        let req = req.into_inner();
+        let person = required(req.person_id, "person_id")?;
+        let c = self.keys()?.begin_verification(&person, qid(&req.challenge_qid)?).await.map_err(key_status)?;
+        Ok(Response::new(BeginVerificationResponse {
+            ceremony_qid: c.id.to_string(),
+            options_json: c.options.to_string(),
+        }))
+    }
+
+    async fn finish_verification(
+        &self,
+        req: Request<FinishVerificationRequest>,
+    ) -> Result<Response<FinishVerificationResponse>, Status> {
+        let req = req.into_inner();
+        let person = required(req.person_id, "person_id")?;
+        let a = req.assertion.map(assertion).ok_or_else(|| Status::invalid_argument("assertion is required"))?;
+        let c = self.keys()?.finish_verification(&person, &a).await.map_err(key_status)?;
+        tracing::info!(challenge_id = %c.id, person = %person, status = c.status.as_str(), "challenge verified with a security key");
+        Ok(Response::new(FinishVerificationResponse { challenge: Some(challenge_to_wire(c)) }))
+    }
+
     type WatchContainmentsStream = FeedStream;
 
     async fn watch_containments(
@@ -248,6 +374,14 @@ impl ChallengeService for Service {
 }
 
 impl Service {
+    fn keys(&self) -> Result<&SecurityKeys, Status> {
+        self.keys.as_deref().ok_or_else(|| {
+            Status::failed_precondition(
+                "security keys are off: awzy-challenge has no WebAuthn relying party (AWZY_CHALLENGE_WEBAUTHN_RP_ID)",
+            )
+        })
+    }
+
     /// Publishes a change made here at once, without waiting for the notification round trip.
     async fn refresh_feed(&self) {
         if let Err(error) = self.feed.refresh(&self.store).await {
@@ -258,6 +392,54 @@ impl Service {
 
 fn qid<T: std::str::FromStr<Err = awzy_model::QidError>>(s: &str) -> Result<T, Status> {
     s.parse().map_err(|e: awzy_model::QidError| Status::invalid_argument(e.to_string()))
+}
+
+fn required(s: String, what: &str) -> Result<String, Status> {
+    if s.is_empty() {
+        Err(Status::invalid_argument(format!("{what} is required")))
+    } else {
+        Ok(s)
+    }
+}
+
+fn assertion(a: WireAssertion) -> Assertion {
+    Assertion {
+        ceremony_id: a.ceremony_qid,
+        credential_id: a.credential_id,
+        client_data_json: a.client_data_json,
+        authenticator_data: a.authenticator_data,
+        signature: a.signature,
+    }
+}
+
+fn key_status(e: KeyError) -> Status {
+    match e {
+        KeyError::Challenge(e) => status(e),
+        KeyError::WebAuthn(_) | KeyError::UnknownKey { .. } | KeyError::NeedsExistingKey { .. } => {
+            Status::permission_denied(e.to_string())
+        }
+        KeyError::NoKeys { .. } | KeyError::BadCeremony => Status::failed_precondition(e.to_string()),
+        KeyError::NotFound(_) => Status::not_found(e.to_string()),
+        KeyError::AlreadyRegistered => Status::already_exists(e.to_string()),
+        KeyError::Invalid(_) => Status::invalid_argument(e.to_string()),
+        KeyError::Db(error) => {
+            tracing::error!(%error, "security key store failed");
+            Status::internal("challenge store unavailable")
+        }
+    }
+}
+
+fn key_to_wire(k: SecurityKey) -> WireKey {
+    WireKey {
+        qid: k.id.to_string(),
+        person_id: k.person_id,
+        name: k.name,
+        added_with_qid: k.added_with.map(|id| id.to_string()).unwrap_or_default(),
+        created_at: Some(ts(k.created_at)),
+        last_used_at: k.last_used_at.map(ts),
+        removed_at: k.removed_at.map(ts),
+        removed_by: k.removed_by.unwrap_or_default(),
+    }
 }
 
 fn required_ref(r: Option<awzy_authz_proto::authz::v1::EntityRef>, what: &str) -> Result<EntityRef, Status> {
@@ -369,7 +551,7 @@ mod tests {
         let approvals = Arc::new(Approvals::Only(vec!["carol".into()]));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let endpoint = format!("http://{}", listener.local_addr().unwrap());
-        let app = router(store, feed, approvals, &Access::off());
+        let app = router(store, feed, approvals, None, &Access::off());
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let client = ChallengeServiceClient::connect(endpoint.clone()).await.unwrap();
         (endpoint, client)

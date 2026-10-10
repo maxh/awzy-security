@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<ebe18640926b3a96416fa54b50108053>>
+ * @generated SignedSource<<d0168825e6d1468602432c5168831cff>>
  * @lightSyntaxTransform
  */
 
@@ -13,6 +13,12 @@ export type ChallengeStatus = "EXPIRED" | "PASSED" | "PENDING" | "REJECTED" | "%
 export type ChallengesPageQuery$variables = Record<PropertyKey, never>;
 export type ChallengesPageQuery$data = {
   readonly canAdminister: boolean;
+  readonly mySecurityKeys: ReadonlyArray<{
+    readonly createdAt: string | null | undefined;
+    readonly id: string;
+    readonly lastUsedAt: string | null | undefined;
+    readonly name: string;
+  }>;
   readonly pending: ReadonlyArray<{
     readonly action: string;
     readonly expiresAt: string | null | undefined;
@@ -113,7 +119,14 @@ v5 = {
   "selections": (v1/*:: as any*/),
   "storageKey": null
 },
-v6 = [
+v6 = {
+  "alias": null,
+  "args": null,
+  "kind": "ScalarField",
+  "name": "createdAt",
+  "storageKey": null
+},
+v7 = [
   {
     "alias": "canAdminister",
     "args": [
@@ -201,13 +214,7 @@ v6 = [
         "name": "status",
         "storageKey": null
       },
-      {
-        "alias": null,
-        "args": null,
-        "kind": "ScalarField",
-        "name": "createdAt",
-        "storageKey": null
-      },
+      (v6/*:: as any*/),
       {
         "alias": null,
         "args": null,
@@ -224,6 +231,33 @@ v6 = [
       }
     ],
     "storageKey": "myChallenges(first:20)"
+  },
+  {
+    "alias": null,
+    "args": null,
+    "concreteType": "SecurityKey",
+    "kind": "LinkedField",
+    "name": "mySecurityKeys",
+    "plural": true,
+    "selections": [
+      (v0/*:: as any*/),
+      {
+        "alias": null,
+        "args": null,
+        "kind": "ScalarField",
+        "name": "name",
+        "storageKey": null
+      },
+      (v6/*:: as any*/),
+      {
+        "alias": null,
+        "args": null,
+        "kind": "ScalarField",
+        "name": "lastUsedAt",
+        "storageKey": null
+      }
+    ],
+    "storageKey": null
   }
 ];
 return {
@@ -232,7 +266,7 @@ return {
     "kind": "Fragment",
     "metadata": null,
     "name": "ChallengesPageQuery",
-    "selections": (v6/*:: as any*/),
+    "selections": (v7/*:: as any*/),
     "type": "Query",
     "abstractKey": null
   },
@@ -241,19 +275,19 @@ return {
     "argumentDefinitions": [],
     "kind": "Operation",
     "name": "ChallengesPageQuery",
-    "selections": (v6/*:: as any*/)
+    "selections": (v7/*:: as any*/)
   },
   "params": {
-    "cacheID": "1857bbe6088edae8389652e9cfd753d9",
+    "cacheID": "169b4f5a2befb149ea695fc7337a742c",
     "id": null,
     "metadata": {},
     "name": "ChallengesPageQuery",
     "operationKind": "query",
-    "text": "query ChallengesPageQuery {\n  canAdminister: viewerCan(action: ADMINISTER, area: CHALLENGES)\n  pending: myChallenges(status: PENDING) {\n    id\n    subject {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    kinds\n    passed\n    expiresAt\n  }\n  recent: myChallenges(first: 20) {\n    id\n    subject {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    status\n    createdAt\n    decidedBy\n    grantExpiresAt\n  }\n}\n"
+    "text": "query ChallengesPageQuery {\n  canAdminister: viewerCan(action: ADMINISTER, area: CHALLENGES)\n  pending: myChallenges(status: PENDING) {\n    id\n    subject {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    kinds\n    passed\n    expiresAt\n  }\n  recent: myChallenges(first: 20) {\n    id\n    subject {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    status\n    createdAt\n    decidedBy\n    grantExpiresAt\n  }\n  mySecurityKeys {\n    id\n    name\n    createdAt\n    lastUsedAt\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "dbd2e7d15054cfcee8c362afe741c656";
+(node as any).hash = "adf00951a1fc936978ecdad88dda7f9f";
 
 export default node;

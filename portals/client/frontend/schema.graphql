@@ -32,6 +32,40 @@ type AskAwzyBotPayload {
 	refused: Boolean!
 }
 
+"""
+A `navigator.credentials.get()` response.
+"""
+input AssertionInput {
+	ceremonyQid: ID!
+	"""
+	`rawId`, base64url.
+	"""
+	credentialId: String!
+	"""
+	`response.clientDataJSON`, base64url.
+	"""
+	clientDataJson: String!
+	"""
+	`response.authenticatorData`, base64url.
+	"""
+	authenticatorData: String!
+	"""
+	`response.signature`, base64url.
+	"""
+	signature: String!
+}
+
+input BeginChallengeVerificationInput {
+	challengeQid: ID!
+}
+
+input BeginSecurityKeyRegistrationInput {
+	"""
+	Required once you have a key: an assertion over a `beginSecurityKeyChange` ceremony.
+	"""
+	authorization: AssertionInput
+}
+
 type Challenge implements Node {
 	"""
 	QID: challenge_<uuid>.
@@ -335,6 +369,26 @@ input EntityRefInput {
 	id: String!
 }
 
+input FinishChallengeVerificationInput {
+	assertion: AssertionInput!
+}
+
+input FinishSecurityKeyRegistrationInput {
+	ceremonyQid: ID!
+	"""
+	What to call the key, e.g. "YubiKey on my keychain".
+	"""
+	name: String!
+	"""
+	`response.clientDataJSON`, base64url.
+	"""
+	clientDataJson: String!
+	"""
+	`response.attestationObject`, base64url.
+	"""
+	attestationObject: String!
+}
+
 input JustifyChallengeInput {
 	challengeQid: ID!
 	"""
@@ -388,6 +442,31 @@ type Mutation {
 	"""
 	containAccessor(input: ContainAccessorInput!): ContainmentPayload!
 	liftContainment(input: LiftContainmentInput!): ContainmentPayload!
+	"""
+	For someone who already has a key: a ceremony whose assertion authorizes adding or
+	removing one.
+	"""
+	beginSecurityKeyChange: WebAuthnCeremony!
+	"""
+	A registration ceremony. Your first key needs nothing else; a later one needs
+	`authorization` from a key you have.
+	"""
+	beginSecurityKeyRegistration(input: BeginSecurityKeyRegistrationInput!): WebAuthnCeremony!
+	finishSecurityKeyRegistration(input: FinishSecurityKeyRegistrationInput!): SecurityKeyPayload!
+	removeSecurityKey(input: RemoveSecurityKeyInput!): SecurityKeyPayload!
+	"""
+	Removes someone's lost key, so they can enroll a first key again. For those who
+	administer challenges.
+	"""
+	resetSecurityKey(input: ResetSecurityKeyInput!): SecurityKeyPayload!
+	"""
+	An assertion ceremony for a verification challenge sent to you.
+	"""
+	beginChallengeVerification(input: BeginChallengeVerificationInput!): WebAuthnCeremony!
+	"""
+	Passes the verification with your key's assertion.
+	"""
+	finishChallengeVerification(input: FinishChallengeVerificationInput!): ChallengePayload!
 }
 
 interface Node {
@@ -671,6 +750,14 @@ type Query {
 	Containments, newest first. For those who administer challenges.
 	"""
 	containments(activeOnly: Boolean! = true, first: Int): [Containment!]!
+	"""
+	The signed-in person's security keys.
+	"""
+	mySecurityKeys: [SecurityKey!]!
+	"""
+	Someone's security keys, to reset a lost one. For those who administer challenges.
+	"""
+	securityKeys(personId: String!): [SecurityKey!]!
 }
 
 input RegisterServiceAccountInput {
@@ -691,12 +778,46 @@ type RegisterServiceAccountPayload {
 	serviceAccount: ServiceAccount!
 }
 
+input RemoveSecurityKeyInput {
+	securityKeyQid: ID!
+	"""
+	An assertion over a `beginSecurityKeyChange` ceremony, from any of your keys.
+	"""
+	authorization: AssertionInput!
+}
+
 input RemoveServiceAccountInput {
 	id: String!
 }
 
 type RemoveServiceAccountPayload {
 	removedId: String!
+}
+
+input ResetSecurityKeyInput {
+	securityKeyQid: ID!
+}
+
+type SecurityKey {
+	"""
+	QID: security_key_<uuid>.
+	"""
+	id: ID!
+	personId: String!
+	"""
+	What the person called it.
+	"""
+	name: String!
+	"""
+	The key that authorized adding this one; null for a person's first key.
+	"""
+	addedWithQid: String
+	createdAt: UtcTimestamp
+	lastUsedAt: UtcTimestamp
+}
+
+type SecurityKeyPayload {
+	securityKey: SecurityKey!
 }
 
 """
@@ -750,6 +871,21 @@ type ViewerInfo {
 	For a service account acting for someone: that person's ID.
 	"""
 	onBehalfOf: String
+}
+
+"""
+One WebAuthn ceremony for the browser to run.
+"""
+type WebAuthnCeremony {
+	"""
+	Pass back with the browser's response.
+	"""
+	ceremonyQid: ID!
+	"""
+	The options for `navigator.credentials.create()` or `.get()`, as WebAuthn's JSON (binary
+	fields base64url).
+	"""
+	optionsJson: String!
 }
 
 """

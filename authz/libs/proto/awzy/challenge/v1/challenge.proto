@@ -29,6 +29,22 @@ service ChallengeService {
   // The active containments, for a PDP: the whole list on connect and on every change, and a
   // heartbeat in between, so a PDP knows when its copy may be stale.
   rpc WatchContainments(WatchContainmentsRequest) returns (stream WatchContainmentsResponse);
+
+  // Security keys (WebAuthn, ADR 0059). Each Begin returns a single-use ceremony and the options
+  // for the browser's navigator.credentials call; the matching Finish takes its response.
+  rpc ListSecurityKeys(ListSecurityKeysRequest) returns (ListSecurityKeysResponse);
+  // For someone who already has a key: an assertion ceremony that authorizes adding or removing
+  // one.
+  rpc BeginKeyChange(BeginKeyChangeRequest) returns (BeginKeyChangeResponse);
+  // A person's first key needs no authorization; any later one needs a key-change assertion.
+  rpc BeginKeyRegistration(BeginKeyRegistrationRequest) returns (BeginKeyRegistrationResponse);
+  rpc FinishKeyRegistration(FinishKeyRegistrationRequest) returns (FinishKeyRegistrationResponse);
+  rpc RemoveSecurityKey(RemoveSecurityKeyRequest) returns (RemoveSecurityKeyResponse);
+  // An admin removes a lost key; the person can then enroll a first key again.
+  rpc ResetSecurityKey(ResetSecurityKeyRequest) returns (ResetSecurityKeyResponse);
+  // Passing a verification challenge with a security key.
+  rpc BeginVerification(BeginVerificationRequest) returns (BeginVerificationResponse);
+  rpc FinishVerification(FinishVerificationRequest) returns (FinishVerificationResponse);
 }
 
 enum ChallengeStatus {
@@ -197,4 +213,116 @@ message WatchContainmentsResponse {
   // True when `active` is the whole list at `version`; false for a heartbeat.
   bool changed = 2;
   repeated Containment active = 3;
+}
+
+message SecurityKey {
+  // QID: security_key_<uuid>.
+  string qid = 1;
+  string person_id = 2;
+  string name = 3;
+  // The key that authorized adding this one; empty for a person's first key.
+  string added_with_qid = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp last_used_at = 6;
+  google.protobuf.Timestamp removed_at = 7;
+  string removed_by = 8;
+}
+
+// A browser's navigator.credentials.get() response.
+message Assertion {
+  // QID: ceremony_<uuid>, from the Begin call it answers.
+  string ceremony_qid = 1;
+  bytes credential_id = 2;
+  bytes client_data_json = 3;
+  bytes authenticator_data = 4;
+  bytes signature = 5;
+}
+
+message ListSecurityKeysRequest {
+  string person_id = 1;
+}
+
+message ListSecurityKeysResponse {
+  repeated SecurityKey keys = 1;
+}
+
+message BeginKeyChangeRequest {
+  // The signed-in person.
+  string person_id = 1;
+}
+
+message BeginKeyChangeResponse {
+  // QID: ceremony_<uuid>.
+  string ceremony_qid = 1;
+  // PublicKeyCredentialRequestOptions as JSON, binary fields base64url.
+  string options_json = 2;
+}
+
+message BeginKeyRegistrationRequest {
+  string person_id = 1;
+  // Required once the person has a key: an assertion over a BeginKeyChange ceremony.
+  Assertion authorization = 2;
+}
+
+message BeginKeyRegistrationResponse {
+  string ceremony_qid = 1;
+  // PublicKeyCredentialCreationOptions as JSON, binary fields base64url.
+  string options_json = 2;
+}
+
+message FinishKeyRegistrationRequest {
+  string ceremony_qid = 1;
+  string person_id = 2;
+  // What the person calls the key, e.g. "YubiKey on my keychain".
+  string name = 3;
+  bytes client_data_json = 4;
+  bytes attestation_object = 5;
+}
+
+message FinishKeyRegistrationResponse {
+  SecurityKey key = 1;
+}
+
+message RemoveSecurityKeyRequest {
+  // QID: security_key_<uuid>.
+  string security_key_qid = 1;
+  string person_id = 2;
+  // An assertion over a BeginKeyChange ceremony, from any of the person's keys.
+  Assertion authorization = 3;
+}
+
+message RemoveSecurityKeyResponse {
+  SecurityKey key = 1;
+}
+
+message ResetSecurityKeyRequest {
+  // QID: security_key_<uuid>.
+  string security_key_qid = 1;
+  // The admin removing it.
+  string removed_by = 2;
+}
+
+message ResetSecurityKeyResponse {
+  SecurityKey key = 1;
+}
+
+message BeginVerificationRequest {
+  // QID: challenge_<uuid>. Must ask for verification and be sent to person_id.
+  string challenge_qid = 1;
+  string person_id = 2;
+}
+
+message BeginVerificationResponse {
+  string ceremony_qid = 1;
+  // PublicKeyCredentialRequestOptions as JSON, binary fields base64url.
+  string options_json = 2;
+}
+
+message FinishVerificationRequest {
+  string person_id = 1;
+  Assertion assertion = 2;
+}
+
+message FinishVerificationResponse {
+  Challenge challenge = 1;
 }

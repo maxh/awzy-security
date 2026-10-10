@@ -15,7 +15,14 @@ awzy-telemetry.workspace = true
 awzy-authz-proto.workspace = true
 awzy-model.workspace = true
 awzy-service-auth.workspace = true
+base64.workspace = true
 chrono.workspace = true
+ciborium.workspace = true
+getrandom.workspace = true
+p256.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 tonic.workspace = true
@@ -23,4 +30,3 @@ uuid.workspace = true
 
 [dev-dependencies]
 awzy-pdp.workspace = true
-serde_json.workspace = true

@@ -9,7 +9,9 @@
 pub mod approvals;
 mod feed;
 mod grpc;
+pub mod keys;
 mod store;
+pub mod webauthn;
 
 pub use feed::{Feed, HEARTBEAT};
 pub use grpc::{router, Access};
