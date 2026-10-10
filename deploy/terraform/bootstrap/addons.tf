@@ -125,10 +125,24 @@ resource "helm_release" "config" {
         auth      = { issuer = var.client_portal.issuer, jwksUrl = var.client_portal.jwks_url }
         publicUrl = coalesce(var.client_portal.public_url, "https://${var.ingress.hostname}")
         hostname  = var.ingress.hostname
-        awzyBot   = { enabled = var.awzy_bot && local.c.cloud == "aws", region = local.c.region }
+        awzyBot   = { enabled = var.awzy_bot && local.c.cloud == "aws", region = local.c.region, model = var.llm_model }
       }
-      reasoner = { investigations = { enabled = var.investigations && local.c.cloud == "aws", region = local.c.region } }
-      gateway  = { name = "awzy", namespace = local.namespaces.ops }
+      reasoner = {
+        investigations = {
+          enabled          = var.investigations && local.c.cloud == "aws"
+          region           = local.c.region
+          model            = var.llm_model
+          monthlyTokens    = var.investigation_budget.monthly_tokens
+          privilegedGroups = var.investigation_budget.privileged_groups
+        }
+      }
+      challenge = {
+        slack = var.slack == null ? { tokenSecret = "", securityChannel = "" } : {
+          tokenSecret     = "awzy-slack-token"
+          securityChannel = nonsensitive(var.slack.security_channel)
+        }
+      }
+      gateway = { name = "awzy", namespace = local.namespaces.ops }
     }
   })]
 

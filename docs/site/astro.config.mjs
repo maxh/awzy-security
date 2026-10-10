@@ -24,9 +24,19 @@ export default defineConfig({
             "concepts/monitor-and-enforce",
             "concepts/challenges-and-containment",
             "concepts/risk",
+            "concepts/investigations",
           ],
         },
-        { label: "Guides", items: ["guides/install", "guides/upgrading", "guides/writing-policies"] },
+        {
+          label: "Guides",
+          items: [
+            "guides/install",
+            "guides/upgrading",
+            "guides/writing-policies",
+            "guides/mcp-gateway",
+            "guides/optional-features",
+          ],
+        },
         {
           label: "Reference",
           items: [

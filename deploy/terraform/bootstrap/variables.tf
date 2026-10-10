@@ -58,6 +58,31 @@ variable "investigations" {
   default     = false
 }
 
+variable "investigation_budget" {
+  description = "Investigations' limits (ADR 0071): the most tokens a calendar month spends, and the groups whose members are only ever proposed for containment"
+  type = object({
+    monthly_tokens    = optional(number, 2000000)
+    privileged_groups = optional(list(string), ["it", "security"])
+  })
+  default = {}
+}
+
+variable "llm_model" {
+  description = "The Bedrock model ID for Awzy Bot and investigations, when the default (anthropic.claude-opus-5-5) isn't reachable directly, e.g. a cross-region profile like us.anthropic.claude-opus-5-5"
+  type        = string
+  default     = ""
+}
+
+variable "slack" {
+  description = "Notifications in your Slack (ADR 0073): the bot token of the Slack app you installed (scopes users:read.email and chat:write) and the security team's channel ID. Null leaves them off"
+  type = object({
+    token            = string
+    security_channel = string
+  })
+  default   = null
+  sensitive = true
+}
+
 variable "demo_idp" {
   description = "DEMO INSTALLS ONLY (ADR 0032): sign the client portal in against the dev IdP at https://<hostname>/idp"
   type        = bool

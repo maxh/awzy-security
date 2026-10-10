@@ -45,3 +45,34 @@ short window; a rejected or expired one becomes a deny.
 A containment revokes one person's or agent's access everywhere, until someone lifts it. Every
 PDP applies it within seconds, and enforcement points that are cut off from the PDP never replay
 a cached allow for a contained accessor. Each containment records who made it and why.
+
+A contained person's agents are stopped with them: a request an agent makes for someone who is
+contained is denied too.
+
+### Automated containments
+
+awzy-reasoner contains a person on its own when three things happen to them in the same 24 hours:
+
+1. their [risk score](/concepts/risk/) is elevated, above 40;
+2. a challenge sent to them was rejected, whether for their own request or for an agent acting
+   for them;
+3. they, or an agent acting for them, tried to move data out: an event whose action is
+   `download`, `export`, `send_external`, or `share_external`, as your apps report it through
+   awzy-intake.
+
+Each of these happens in ordinary work. The containment comes from all three together. It records
+the evidence as its reason, and it's made by `AwzyService::awzy-reasoner`, so you can tell it from
+one a person made. awzy-reasoner checks every 15 minutes, never lifts a containment, and won't
+contain someone again within a day of a person lifting or dismissing one.
+
+**They start in monitor.** Automated containments have their own mode, apart from the
+install's, set on the client portal's Enforcement page:
+
+- **Monitor** (the default): the containment is recorded but not applied. It appears on the
+  Challenges page as **Would contain**, where you can contain the person yourself or dismiss the
+  record. PDPs never see it.
+- **Enforce:** the containment applies at once, everywhere, until someone lifts it.
+
+Leave it in monitor until the would-contains you've reviewed are ones you'd have made.
+[Investigations](/concepts/investigations/) can recommend containments too, and those go through
+the same mode.

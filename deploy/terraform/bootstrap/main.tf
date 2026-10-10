@@ -113,6 +113,16 @@ resource "kubernetes_secret_v1" "clickhouse_reasoner" {
   data = { password = random_password.clickhouse_reasoner.result }
 }
 
+# awzy-challenge's Slack bot token, for notifications (ADR 0073).
+resource "kubernetes_secret_v1" "slack_token" {
+  count = var.slack == null ? 0 : 1
+  metadata {
+    name      = "awzy-slack-token"
+    namespace = kubernetes_namespace_v1.awzy["system"].metadata[0].name
+  }
+  data = { token = var.slack.token }
+}
+
 # The reporter sends heartbeats to the corp portal with this token (ADR 0026).
 resource "kubernetes_secret_v1" "reporting_token" {
   count = var.reporter == null ? 0 : 1
