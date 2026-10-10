@@ -11,7 +11,7 @@ awzy works with two kinds of thing, and names them so they can't be confused:
 - **awzy's own records:** decisions, policy bundles, challenges, containments. awzy creates them
   and gives each a [QID](#qids). Fields holding one end in `_qid` (`decision_qid`).
 
-## Entities
+## Entities from your systems
 
 These are the Cedar entity types your policies see. awzy-context keeps them up to date from your
 IdP (over SCIM) and from connectors to your apps.
@@ -107,7 +107,7 @@ is allowed for 15 minutes, so the caller can retry it. A rejected challenge deni
 until it expires. A decision also records its **mode**: in `monitor` the verdict is recorded but
 the request is allowed. See [Monitor, then enforce](/concepts/monitor-and-enforce/).
 
-## Records
+## awzy's own records
 
 | Record | QID prefix | What it is |
 | --- | --- | --- |

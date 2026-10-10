@@ -78,6 +78,9 @@ bazel build --config=lint //...                    # clippy
   (`delegation_never_exceeds_the_person`).
 - **Comments and docs** explain why, briefly, in plain sentences. Match the comment density of the
   surrounding code. Doc comments on public items say what they're for, not how.
+- **Public docs** (`docs/site/`, and `INSTALL.md`, which the site publishes) describe the product
+  for clients and never cite ADRs; the site's build fails if one does. ADRs are for people working
+  on awzy: cite them in code, `DEVELOPMENT.md`, and the plans.
 - **Architecture decisions** get an ADR: copy the shape of a recent one in `docs/adr/` and take
   the next number (`ls docs/adr | tail -1`). Accepted ADRs aren't edited; a change of mind is a
   new ADR that supersedes or amends the old one.

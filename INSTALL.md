@@ -2,7 +2,7 @@
 
 How to install awzy in your own cloud account. Developing awzy is in
 [DEVELOPMENT.md](DEVELOPMENT.md); why an install looks the way it does is in
-[docs/deployment-plan.md](docs/deployment-plan.md) and the ADRs it links.
+[docs/deployment-plan.md](docs/deployment-plan.md).
 
 > **Untested as written.** This runbook was written from the Terraform and the chart before the
 > first full install. It will be corrected during the example client's first install
@@ -11,14 +11,14 @@ How to install awzy in your own cloud account. Developing awzy is in
 
 An install runs entirely in your account. awzy (the vendor) holds no credential for it: the
 install pulls signed releases from awzy's registry and sends a heartbeat out, and nothing comes
-in (ADR 0009, ADR 0026, ADR 0028). AWS is the only cloud so far.
+in. AWS is the only cloud so far.
 
 It has two layers, applied in order:
 
 | Layer | Module | What it makes |
 | --- | --- | --- |
 | Cloud | [`deploy/terraform/aws/install`](deploy/terraform/aws/install) | VPC, EKS, Aurora Postgres, MSK (Kafka), ElastiCache (Valkey), an S3 bucket, a KMS key, and Pod Identity roles. Outputs `install_contract`. |
-| Cluster | [`deploy/terraform/bootstrap`](deploy/terraform/bootstrap) | Namespaces, Secrets, Argo CD, Kyverno, External Secrets, the ClickHouse operator, Envoy Gateway, and cert-manager, then an Argo CD Application for the awzy chart. Never cloud-specific (ADR 0015). |
+| Cluster | [`deploy/terraform/bootstrap`](deploy/terraform/bootstrap) | Namespaces, Secrets, Argo CD, Kyverno, External Secrets, the ClickHouse operator, Envoy Gateway, and cert-manager, then an Argo CD Application for the awzy chart. Never cloud-specific. |
 
 You call both from your own Terraform, as
 [`examples/example-client`](deploy/terraform/examples/example-client) does.
@@ -44,8 +44,8 @@ release channel (`stable`, `fast`, or a pinned version). Registration gives you,
 | Credential | Used for |
 | --- | --- |
 | Install ID (`install_<uuid>`) | The registry user name, and the install's identity in heartbeats |
-| Pull token | Pulling signed images and the chart from `registry.awzysecurity.com` (ADR 0028) |
-| Reporting token | The heartbeat awzy-reporter sends (ADR 0026) |
+| Pull token | Pulling signed images and the chart from `registry.awzysecurity.com` |
+| Reporting token | The heartbeat awzy-reporter sends |
 
 Keep all three in your own secret store. The example client keeps them as JSON
 (`install_id`, `pull_token`, `reporting_token`) in its management account's Secrets Manager as
@@ -62,7 +62,7 @@ cp deployment.env.example deployment.env     # gitignored; fill in accounts, Reg
 source deployment.env
 ```
 
-Its settings are `TF_VAR_*` variables plus `TF_CLI_ARGS_init` for the state backend (ADR 0053).
+Its settings are `TF_VAR_*` variables plus `TF_CLI_ARGS_init` for the state backend.
 Back the file up, since it's the only record of what the deployment targets:
 `tools/deployment-env push example-client`.
 
@@ -108,10 +108,10 @@ It makes these Secrets, none of which leave the cluster:
 | Secret | Namespaces | For |
 | --- | --- | --- |
 | `awzy-clickhouse` | data, portal | ClickHouse's admin user |
-| `awzy-clickhouse-reporter` | data, system | awzy-reporter's read-only user: disk sizes and Kafka positions (ADR 0042) |
-| `awzy-clickhouse-reasoner` | data, system | awzy-reasoner's read-only user: decisions and events (ADR 0056) |
+| `awzy-clickhouse-reporter` | data, system | awzy-reporter's read-only user: disk sizes and Kafka positions |
+| `awzy-clickhouse-reasoner` | data, system | awzy-reasoner's read-only user: decisions and events |
 | `awzy-reporting-token` | system | The heartbeat, when `reporter` is set |
-| `awzy-scim-token` | system | Your IdP's SCIM provisioning (ADR 0031) |
+| `awzy-scim-token` | system | Your IdP's SCIM provisioning |
 | `awzy-registry`, `awzy-chart-repo` | system, data, portal, Kyverno, ops | Pulling images and the chart |
 
 Postgres credentials stay in Secrets Manager, where RDS keeps them; External Secrets reads them
@@ -137,7 +137,7 @@ the cluster on it.
 - **Pods:** `kubectl get pods -n awzy-system -n awzy-portal -n awzy-data` are all ready.
 - **Images:** `kubectl get clusterpolicy awzy-verify-images` is ready. In the awzy namespaces
   it refuses any image that isn't from `registry_prefix` with the release key's signature,
-  including third-party ones, which awzy mirrors and signs (ADR 0057):
+  including third-party ones, which awzy mirrors and signs:
   `kubectl -n awzy-system run unsigned --image=busybox` is refused.
 - **A decision:** port-forward the PDP and ask it something (the request shape is in
   [DEVELOPMENT.md](DEVELOPMENT.md#pdp)):
@@ -146,7 +146,7 @@ the cluster on it.
   curl -s localhost:8080/v1/access/evaluation -H 'content-type: application/json' -d '{…}'
   ```
   Every install starts in `monitor` mode: decisions are made and recorded, and nothing is
-  blocked until an admin switches a scope to enforce (ADR 0007).
+  blocked until an admin switches a scope to enforce.
 - **Heartbeat:** the install shows as reporting in the corp portal within a minute.
 - **The portal:** `https://<hostname>` signs you in through your IdP.
 
