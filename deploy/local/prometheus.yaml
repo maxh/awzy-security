@@ -1,4 +1,4 @@
-# Scrapes awzy services running on the host with `bazel run` (DEVELOPMENT.md's ports). A
+# Scrapes awzy services running on the host with `bazel run`, on DEVELOPMENT.md's local ports. A
 # service that isn't running shows as down, which is expected locally.
 global:
   scrape_interval: 5s
@@ -18,5 +18,13 @@ scrape_configs:
     static_configs: [{ targets: ["host.docker.internal:8083"] }]
   - job_name: awzy-context
     static_configs: [{ targets: ["host.docker.internal:8084"] }]
+  - job_name: awzy-intake
+    static_configs: [{ targets: ["host.docker.internal:8085"] }]
   - job_name: awzy-gateway
     static_configs: [{ targets: ["host.docker.internal:8086"] }]
+  - job_name: awzy-reasoner
+    static_configs: [{ targets: ["host.docker.internal:8087"] }]
+  - job_name: awzy-connectors
+    static_configs: [{ targets: ["host.docker.internal:8088"] }]
+  - job_name: awzy-reporter
+    static_configs: [{ targets: ["host.docker.internal:8089"] }]
