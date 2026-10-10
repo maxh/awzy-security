@@ -341,7 +341,10 @@ type DirectoryGroup {
 	The group's ID in policies, e.g. Group::"security".
 	"""
 	name: String!
-	people: Int!
+	"""
+	Humans directly in it.
+	"""
+	humans: Int!
 	"""
 	Groups nested in it.
 	"""
@@ -354,8 +357,8 @@ type DirectoryGroup {
 }
 
 type DirectorySummary {
-	people: Int!
-	activePeople: Int!
+	humans: Int!
+	activeHumans: Int!
 	groups: Int!
 	serviceAccounts: Int!
 	"""
@@ -451,6 +454,26 @@ input FinishSecurityKeyRegistrationInput {
 	`response.attestationObject`, base64url.
 	"""
 	attestationObject: String!
+}
+
+"""
+A person, as the IdP provisioned them: a `Human` in policies.
+"""
+type Human {
+	"""
+	Their ID in policies and tokens.
+	"""
+	userName: String!
+	displayName: String
+	"""
+	False once deprovisioned: denied everything.
+	"""
+	active: Boolean!
+	"""
+	Groups they're directly in.
+	"""
+	groups: [String!]!
+	updatedAt: UtcTimestamp!
 }
 
 type Investigation {
@@ -618,7 +641,7 @@ interface Node {
 }
 
 type OnBehalfOf {
-	person: EntityRef!
+	human: EntityRef!
 	verdict: Verdict!
 	policies: [String!]!
 	determiningPolicies: [PolicySource!]!
@@ -644,26 +667,6 @@ type PageInfo {
 	When paginating forwards, the cursor to continue.
 	"""
 	endCursor: String
-}
-
-"""
-A person, as the IdP provisioned them.
-"""
-type Person {
-	"""
-	Their ID in policies and tokens.
-	"""
-	userName: String!
-	displayName: String
-	"""
-	False once deprovisioned: denied everything.
-	"""
-	active: Boolean!
-	"""
-	Groups they're directly in.
-	"""
-	groups: [String!]!
-	updatedAt: UtcTimestamp!
 }
 
 type PolicyBundle implements Node {
@@ -871,9 +874,9 @@ type Query {
 	enforcementSummary(since: UtcTimestamp): EnforcementSummary!
 	directorySummary: DirectorySummary!
 	"""
-	People by userName; `search` matches userName or display name.
+	Humans by userName; `search` matches userName or display name.
 	"""
-	people(search: String, first: Int! = 200): [Person!]!
+	humans(search: String, first: Int! = 200): [Human!]!
 	groups: [DirectoryGroup!]!
 	serviceAccounts: [ServiceAccount!]!
 	"""

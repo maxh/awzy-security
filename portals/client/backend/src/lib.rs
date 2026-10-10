@@ -235,7 +235,7 @@ pub(crate) mod testing {
         format!("http://{addr}")
     }
 
-    pub(crate) fn person(id: &str, group: &str) -> Viewer {
+    pub(crate) fn human(id: &str, group: &str) -> Viewer {
         Viewer(Arc::new(awzy_identity::Accessor::human(id, None, &[group.to_string()])))
     }
 
@@ -280,7 +280,7 @@ mod tests {
             super::schema_with(super::Services { pdp: Some(super::testing::pdp().await), ..Default::default() });
         let err = super::testing::run_err(
             &schema,
-            &super::testing::person("alice", "security"),
+            &super::testing::human("alice", "security"),
             "{ activePolicyBundle { id } }",
         )
         .await;

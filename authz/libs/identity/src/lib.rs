@@ -399,9 +399,9 @@ mod tests {
             verifier.accessor(Some(&bearer(entra_app)), &DeferToPdp).await.unwrap().subject.kind,
             "ServiceAccount"
         );
-        let person = token(&key, "k1", claims("bob", json!({ "client_id": "portal" })));
+        let human = token(&key, "k1", claims("bob", json!({ "client_id": "portal" })));
         assert_eq!(
-            verifier.accessor(Some(&bearer(person)), &DeferToPdp).await.unwrap().subject,
+            verifier.accessor(Some(&bearer(human)), &DeferToPdp).await.unwrap().subject,
             EntityRef::new("Human", "bob")
         );
     }

@@ -369,7 +369,7 @@ pub(crate) mod tests {
             context: None,
             bot: None,
         });
-        let alice = testing::person("alice", "security");
+        let alice = testing::human("alice", "security");
         let run = |q: String| {
             let (schema, alice) = (schema.clone(), alice.clone());
             async move { testing::run(&schema, &alice, q).await }
@@ -436,7 +436,7 @@ pub(crate) mod tests {
             context: None,
             bot: None,
         });
-        let bob = testing::person("bob", "engineering");
+        let bob = testing::human("bob", "engineering");
 
         let err = testing::run_err(&schema, &bob, "{ policyBundles { id } }").await;
         assert!(err.starts_with("bob may not view policies (decision decision_"), "{err}");
@@ -450,7 +450,7 @@ pub(crate) mod tests {
 
         let can = testing::run(&schema, &bob, "{ viewer { id kind } viewerCan(action: VIEW, area: DECISIONS) }").await;
         assert_eq!(can, serde_json::json!({ "viewer": { "id": "bob", "kind": "Human" }, "viewerCan": false }));
-        let alice = testing::person("alice", "security");
+        let alice = testing::human("alice", "security");
         let can = testing::run(&schema, &alice, "{ viewerCan(action: ADMINISTER, area: ENFORCEMENT) }").await;
         assert_eq!(can["viewerCan"], true);
 

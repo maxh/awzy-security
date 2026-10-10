@@ -343,10 +343,10 @@ impl ChallengeStore {
         &self,
         tx: &mut Transaction<'_, Postgres>,
         id: ChallengeId,
-        person: &str,
+        human: &str,
         kind: ChallengeKind,
     ) -> Result<Challenge, StoreError> {
-        lock_for_answerer(tx, id, person, kind).await
+        lock_for_answerer(tx, id, human, kind).await
     }
 
     /// Records `kind` as passed on locked challenge `c`, and passes the challenge if nothing is
@@ -553,12 +553,12 @@ async fn lock(tx: &mut Transaction<'_, Postgres>, id: ChallengeId) -> Result<Cha
 async fn lock_for_answerer(
     tx: &mut Transaction<'_, Postgres>,
     id: ChallengeId,
-    person: &str,
+    human: &str,
     kind: ChallengeKind,
 ) -> Result<Challenge, StoreError> {
     let c = lock(tx, id).await?;
     c.ensure_answerable(kind)?;
-    if c.answerer_id.as_deref() != Some(person) {
+    if c.answerer_id.as_deref() != Some(human) {
         return Err(StoreError::NotAllowed(match &c.answerer_id {
             Some(answerer) => format!("only {answerer} can answer challenge {id} with {}", kind.as_str()),
             None => format!("challenge {id} has no one to answer it; it can only be approved"),

@@ -21,7 +21,7 @@ IdP (over SCIM) and from connectors to your apps.
 | `Human` | A person, by your IdP's ID for them | `active`; member of `Group`s |
 | `ServiceAccount` | Anything non-human with its own credentials: a backend service, a scheduled job, an AI agent. Registered in awzy-context; one that isn't is denied before any policy runs | `owner` (the accountable `Human`), `ai` |
 | `Group` | A group or team from your IdP. Groups can nest | |
-| `Resource` | Something people access: a document, a folder, a project. Resources nest | `sensitivity`, `unclassified`, `owner`, and sharing: `shared_people`, `shared_groups` (can read), `writer_people`, `writer_groups` (can also change), `shared_with_everyone` |
+| `Resource` | Something people access: a document, a folder, a project. Resources nest | `sensitivity`, `unclassified`, `owner`, and sharing: `shared_humans`, `shared_groups` (can read), `writer_humans`, `writer_groups` (can also change), `shared_with_everyone` |
 | `McpServer`, `McpTool` | An MCP server behind awzy-gateway, and its tools (`<server>/<tool>`) | `sensitivity` |
 | `PortalArea` | An area of the client portal: `decisions`, `policies`, `enforcement`, `directory`, `challenges`, `investigations` | `sensitivity` |
 

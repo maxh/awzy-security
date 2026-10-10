@@ -60,10 +60,14 @@ static OPTIONAL_RESOURCE_ATTRS: std::sync::LazyLock<Vec<(&'static str, serde_jso
         vec![
             ("unclassified", serde_json::json!(true)),
             ("owner", human.clone()),
-            ("shared_people", serde_json::json!([human.clone()])),
+            ("shared_humans", serde_json::json!([human.clone()])),
             ("shared_groups", serde_json::json!([group.clone()])),
-            ("writer_people", serde_json::json!([human])),
+            ("writer_humans", serde_json::json!([human.clone()])),
             ("writer_groups", serde_json::json!([group])),
+            // The names before ADR 0074. awzy-context sends both for a release, and a bundle's
+            // schema declares one pair, so the other is dropped here.
+            ("shared_people", serde_json::json!([human.clone()])),
+            ("writer_people", serde_json::json!([human])),
             ("shared_with_everyone", serde_json::json!(true)),
         ]
     });
@@ -614,6 +618,32 @@ mod tests {
     }
 
     #[test]
+    fn a_bundle_from_before_humans_still_sees_who_a_resource_is_shared_with() {
+        let old_schema =
+            DEFAULT_SCHEMA.replace("shared_humans", "shared_people").replace("writer_humans", "writer_people");
+        let policies = r#"
+            permit (principal is Human, action == Action::"read", resource)
+            when { resource has shared_people && resource.shared_people.contains(principal) };
+        "#;
+        let human = |id: &str| json!({ "__entity": { "type": "Human", "id": id } });
+        // What awzy-context sends while both names are in use (ADR 0074).
+        let shared = |pdp: &Pdp| {
+            pdp.entities(json!([
+                { "uid": { "type": "Human", "id": "sam" }, "attrs": {}, "parents": [] },
+                { "uid": { "type": "Resource", "id": "plan" }, "parents": [], "attrs": {
+                    "sensitivity": "internal",
+                    "shared_people": [human("sam")], "shared_humans": [human("sam")],
+                    "writer_people": [], "writer_humans": [] } },
+            ]))
+            .unwrap()
+        };
+        let old = Pdp::new(&old_schema, policies).unwrap();
+        assert_eq!(old.decide(&read("sam", "plan", 0), &shared(&old)).unwrap().verdict, Verdict::Allow);
+        let new = Pdp::with_defaults().unwrap();
+        assert!(new.decide(&read("sam", "plan", 0), &shared(&new)).is_ok(), "the old names are dropped, not an error");
+    }
+
+    #[test]
     fn assignment_is_checked_for_the_agent_and_the_person_it_acts_for() {
         let policies = r#"
             @id("anyone-reads")
@@ -779,8 +809,8 @@ mod tests {
         let doc = |id: &str, tier: &str, owner: &str, groups: &[&str], writers: &[&str]| {
             json!({ "uid": { "type": "Resource", "id": id }, "parents": [], "attrs": {
                 "sensitivity": tier, "owner": human(owner),
-                "shared_people": [], "shared_groups": groups.iter().map(|g| group(g)).collect::<Vec<_>>(),
-                "writer_people": [], "writer_groups": writers.iter().map(|g| group(g)).collect::<Vec<_>>(),
+                "shared_humans": [], "shared_groups": groups.iter().map(|g| group(g)).collect::<Vec<_>>(),
+                "writer_humans": [], "writer_groups": writers.iter().map(|g| group(g)).collect::<Vec<_>>(),
                 "shared_with_everyone": false } })
         };
         pdp.entities(json!([
@@ -967,7 +997,7 @@ mod tests {
         let bob = state.check(&read("bob", "board-deck", 1), entities.clone()).await.unwrap();
         assert_eq!((bob.verdict, bob.policies.clone()), (Verdict::Allow, vec!["security-team-read".to_string()]));
         let alice = state.check(&read("alice", "board-deck", 1), entities).await.unwrap();
-        assert_eq!((alice.verdict, alice.policies), (Verdict::Deny, vec!["deactivated-people".to_string()]));
+        assert_eq!((alice.verdict, alice.policies), (Verdict::Deny, vec!["deactivated-humans".to_string()]));
 
         // A service account awzy-context doesn't know is denied, whatever the request says.
         let rogue = json!([{ "uid": { "type": "ServiceAccount", "id": "rogue-bot" }, "attrs": {}, "parents": [{ "type": "Group", "id": "security" }] }]);

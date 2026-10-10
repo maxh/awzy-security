@@ -177,7 +177,7 @@ pub struct OnBehalfOf(pub DecisionRow);
 
 #[Object]
 impl OnBehalfOf {
-    async fn person(&self) -> EntityRef {
+    async fn human(&self) -> EntityRef {
         EntityRef { kind: self.0.on_behalf_of_type.clone(), id: self.0.on_behalf_of_id.clone() }
     }
 
@@ -505,7 +505,7 @@ mod tests {
             context: None,
             bot: None,
         });
-        let alice = crate::testing::person("alice", "security");
+        let alice = crate::testing::human("alice", "security");
         let run = |q: &str| {
             let (schema, alice, q) = (schema.clone(), alice.clone(), q.to_string());
             async move { crate::testing::run(&schema, &alice, q).await }

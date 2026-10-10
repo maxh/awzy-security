@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<9ac979d079b98c27c75bbe998fc75cac>>
+ * @generated SignedSource<<659efb54069fd4753dd22fea77c87b99>>
  * @lightSyntaxTransform
  */
 
@@ -8,11 +8,11 @@
 // @ts-nocheck
 
 import { ConcreteRequest } from 'relay-runtime';
-export type DirectoryPagePeopleQuery$variables = {
+export type DirectoryPageHumansQuery$variables = {
   search?: string | null | undefined;
 };
-export type DirectoryPagePeopleQuery$data = {
-  readonly people: ReadonlyArray<{
+export type DirectoryPageHumansQuery$data = {
+  readonly humans: ReadonlyArray<{
     readonly active: boolean;
     readonly displayName: string | null | undefined;
     readonly groups: ReadonlyArray<string>;
@@ -20,9 +20,9 @@ export type DirectoryPagePeopleQuery$data = {
     readonly userName: string;
   }>;
 };
-export type DirectoryPagePeopleQuery = {
-  response: DirectoryPagePeopleQuery$data;
-  variables: DirectoryPagePeopleQuery$variables;
+export type DirectoryPageHumansQuery = {
+  response: DirectoryPageHumansQuery$data;
+  variables: DirectoryPageHumansQuery$variables;
 };
 
 const node: ConcreteRequest = (function(){
@@ -48,9 +48,9 @@ v1 = [
         "variableName": "search"
       }
     ],
-    "concreteType": "Person",
+    "concreteType": "Human",
     "kind": "LinkedField",
-    "name": "people",
+    "name": "humans",
     "plural": true,
     "selections": [
       {
@@ -97,7 +97,7 @@ return {
     "argumentDefinitions": (v0/*:: as any*/),
     "kind": "Fragment",
     "metadata": null,
-    "name": "DirectoryPagePeopleQuery",
+    "name": "DirectoryPageHumansQuery",
     "selections": (v1/*:: as any*/),
     "type": "Query",
     "abstractKey": null
@@ -106,20 +106,20 @@ return {
   "operation": {
     "argumentDefinitions": (v0/*:: as any*/),
     "kind": "Operation",
-    "name": "DirectoryPagePeopleQuery",
+    "name": "DirectoryPageHumansQuery",
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "13223b6e8e498ed6fa528101f3dbe9ec",
+    "cacheID": "45f13ffb51b9a085c32a9ec2a277513e",
     "id": null,
     "metadata": {},
-    "name": "DirectoryPagePeopleQuery",
+    "name": "DirectoryPageHumansQuery",
     "operationKind": "query",
-    "text": "query DirectoryPagePeopleQuery(\n  $search: String\n) {\n  people(search: $search, first: 200) {\n    userName\n    displayName\n    active\n    groups\n    updatedAt\n  }\n}\n"
+    "text": "query DirectoryPageHumansQuery(\n  $search: String\n) {\n  humans(search: $search, first: 200) {\n    userName\n    displayName\n    active\n    groups\n    updatedAt\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "fb7068b6bedc38707a4ad53087a7bd32";
+(node as any).hash = "0353b3abbdf5ca75898043e564f1ed84";
 
 export default node;

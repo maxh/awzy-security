@@ -40,7 +40,7 @@ const MAX_TEXT: usize = 20_000;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Share {
-    /// person | group | domain | anyone
+    /// human | group | domain | anyone. `person`, the name before ADR 0074, still reads as `human`.
     pub kind: String,
     /// A userName, a group name, or a domain; empty for `anyone`.
     #[serde(default)]
@@ -197,7 +197,7 @@ impl ResourceInput {
             }
         }
         for share in &self.sharing {
-            let kinds = ["person", "group", "domain", "anyone"];
+            let kinds = ["human", "person", "group", "domain", "anyone"];
             let roles = ["reader", "commenter", "writer", "owner"];
             if !kinds.contains(&share.kind.as_str()) || !roles.contains(&share.role.as_str()) {
                 return Err(invalid(format!("{}: sharing kind or role {share:?} isn't known", self.id)));
@@ -559,16 +559,16 @@ fn entity_sharing<'a>(r: &Resource, sharing: impl Iterator<Item = &'a Share>) ->
     use std::collections::BTreeSet;
     let parents: Vec<Value> = r.parent.iter().map(|p| json!({ "type": entity_type::RESOURCE, "id": p })).collect();
     // Sorted and deduplicated, so an entity is the same however its shares were written.
-    let (mut people, mut groups, mut writer_people, mut writer_groups) =
+    let (mut humans, mut groups, mut writer_humans, mut writer_groups) =
         (BTreeSet::new(), BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
     let mut everyone = false;
     for share in sharing {
         let writes = matches!(share.role.as_str(), "writer" | "owner");
         match share.kind.as_str() {
-            "person" => {
-                people.insert(share.id.as_str());
+            "human" | "person" => {
+                humans.insert(share.id.as_str());
                 if writes {
-                    writer_people.insert(share.id.as_str());
+                    writer_humans.insert(share.id.as_str());
                 }
             }
             "group" => {
@@ -588,11 +588,15 @@ fn entity_sharing<'a>(r: &Resource, sharing: impl Iterator<Item = &'a Share>) ->
     let mut attrs = json!({
         "sensitivity": r.effective_sensitivity().unwrap_or(DEFAULT_SENSITIVITY),
         "unclassified": r.effective_sensitivity().is_none(),
-        "shared_people": refs(entity_type::HUMAN, people),
+        "shared_humans": refs(entity_type::HUMAN, humans.clone()),
         "shared_groups": refs(entity_type::GROUP, groups),
-        "writer_people": refs(entity_type::HUMAN, writer_people),
+        "writer_humans": refs(entity_type::HUMAN, writer_humans.clone()),
         "writer_groups": refs(entity_type::GROUP, writer_groups),
         "shared_with_everyone": everyone,
+        // The names before ADR 0074, for bundles published under them. The PDP drops whichever
+        // pair its schema doesn't declare. Removed in a later release.
+        "shared_people": refs(entity_type::HUMAN, humans),
+        "writer_people": refs(entity_type::HUMAN, writer_humans),
     });
     if let Some(owner) = &r.owner {
         attrs["owner"] = json!({ "__entity": { "type": entity_type::HUMAN, "id": owner } });
@@ -884,22 +888,26 @@ mod tests {
             updated_at: now,
             classification: None,
         };
-        let doc = resource("doc", Some("folder"), vec![share("person", "sam", "reader")]);
+        let doc = resource("doc", Some("folder"), vec![share("human", "sam", "reader")]);
         let folder = resource("folder", None, vec![share("group", "engineering", "writer")]);
         let chain = chain_entities(&[doc, folder]);
         let names = |v: &Value| -> Vec<String> {
             v.as_array().unwrap().iter().map(|e| e["__entity"]["id"].as_str().unwrap().to_string()).collect()
         };
         let a = &chain[0]["attrs"];
-        assert_eq!(names(&a["shared_people"]), ["sam"]);
+        assert_eq!(names(&a["shared_humans"]), ["sam"]);
+        assert_eq!(names(&a["shared_people"]), ["sam"], "also under the name before ADR 0074, for a release");
         assert_eq!(names(&a["shared_groups"]), ["engineering"], "inherited from its folder");
         assert_eq!(names(&a["writer_groups"]), ["engineering"], "a writer on the folder writes the document");
         assert_eq!(
-            (names(&a["writer_people"]).len(), &a["shared_with_everyone"]),
+            (names(&a["writer_humans"]).len(), &a["shared_with_everyone"]),
             (0, &json!(false)),
             "sam only reads"
         );
-        assert_eq!(names(&chain[1]["attrs"]["shared_people"]).len(), 0, "a folder doesn't inherit from its document");
+        assert_eq!(names(&chain[1]["attrs"]["shared_humans"]).len(), 0, "a folder doesn't inherit from its document");
+
+        let older = resource("older", None, vec![share("person", "sam", "writer")]);
+        assert_eq!(names(&entity(&older)["attrs"]["writer_humans"]), ["sam"], "an older connector's `person` share");
 
         let public = resource("public", None, vec![share("anyone", "", "reader"), share("group", "x", "reader")]);
         assert_eq!(entity(&public)["attrs"]["shared_with_everyone"], true);
@@ -922,8 +930,9 @@ mod tests {
             json!({ "uid": { "type": "Resource", "id": "synthetic:doc:1" },
                      "attrs": { "sensitivity": "confidential", "unclassified": false,
                                 "owner": { "__entity": { "type": "Human", "id": "nora.patel@larkspur.example" } },
-                                "shared_people": [], "shared_groups": [{ "__entity": { "type": "Group", "id": "sales" } }],
-                                "writer_people": [], "writer_groups": [], "shared_with_everyone": false },
+                                "shared_humans": [], "shared_groups": [{ "__entity": { "type": "Group", "id": "sales" } }],
+                                "writer_humans": [], "writer_groups": [], "shared_with_everyone": false,
+                                "shared_people": [], "writer_people": [] },
                      "parents": [{ "type": "Resource", "id": "synthetic:folder:sales" }] })
         );
 

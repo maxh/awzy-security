@@ -55,8 +55,8 @@ impl Approvals {
             Self::Pdp(client) => client.clone(),
             Self::Off => return Err(ApprovalError::Unavailable("awzy-challenge has no PDP (AWZY_PDP_ADDR)".into())),
             #[cfg(test)]
-            Self::Only(people) => {
-                return if people.contains(&approver.id) {
+            Self::Only(humans) => {
+                return if humans.contains(&approver.id) {
                     Ok(())
                 } else {
                     Err(ApprovalError::Refused(format!("{} may not approve", approver.id)))
@@ -64,8 +64,8 @@ impl Approvals {
             }
         };
         let mut context = serde_json::Map::new();
-        if let Some(person) = approving_for {
-            context.insert("approving_for".into(), json!({ "__entity": { "type": entity_type::HUMAN, "id": person } }));
+        if let Some(human) = approving_for {
+            context.insert("approving_for".into(), json!({ "__entity": { "type": entity_type::HUMAN, "id": human } }));
         }
         let res = client
             .check(CheckRequest {

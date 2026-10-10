@@ -144,7 +144,7 @@ impl Reasoner {
         evidence.exfiltration = contain::load_exfiltration(&self.clickhouse, as_of).await?;
         for p in contain::proposals(scores, &evidence) {
             c.contain(&p, mode).await?;
-            tracing::warn!(person = %p.person, mode = mode.as_str(), reason = %p.reason, "automated containment");
+            tracing::warn!(human = %p.human, mode = mode.as_str(), reason = %p.reason, "automated containment");
         }
         Ok(evidence)
     }

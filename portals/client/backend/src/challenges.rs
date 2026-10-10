@@ -42,7 +42,7 @@ pub(crate) fn grpc(s: tonic::Status) -> async_graphql::Error {
 }
 
 /// The signed-in person, or an error for a service account.
-pub(crate) fn answering_person(viewer: &Viewer) -> Result<String> {
+pub(crate) fn answering_human(viewer: &Viewer) -> Result<String> {
     if viewer.subject.kind != entity_type::HUMAN || viewer.on_behalf_of.is_some() {
         return Err(
             format!("{} can't answer challenges; only the person can, in the portal", viewer.actor().label()).into()
@@ -272,7 +272,7 @@ impl ChallengeQuery {
         first: Option<i32>,
     ) -> Result<Vec<Challenge>> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
-        let me = answering_person(&viewer)?;
+        let me = answering_human(&viewer)?;
         list(ctx, me, status, first).await
     }
 
@@ -371,7 +371,7 @@ impl ChallengeMutation {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req = JustifyRequest {
             challenge_qid: input.challenge_qid.0,
-            answered_by_actor: Some(awzy_model::Actor::human(answering_person(&viewer)?).into()),
+            answered_by_actor: Some(awzy_model::Actor::human(answering_human(&viewer)?).into()),
             justification: input.justification,
             ..Default::default()
         };
@@ -443,7 +443,7 @@ mod tests {
     use tonic::transport::Channel;
 
     use super::*;
-    use crate::testing::{pdp, pdp_endpoint, person, run, run_err};
+    use crate::testing::{human, pdp, pdp_endpoint, run, run_err};
 
     /// The schema with a PDP and an awzy-challenge in a fresh Postgres schema.
     async fn setup() -> Option<(crate::ClientPortalSchema, ChallengeClient)> {
@@ -502,7 +502,7 @@ mod tests {
         let Some((schema, mut client)) = setup().await else { return };
         let id = open(&mut client, "bob", WireKind::Justification).await;
         let (bob, carol, alice) =
-            (person("bob", "engineering"), person("carol", "engineering"), person("alice", "security"));
+            (human("bob", "engineering"), human("carol", "engineering"), human("alice", "security"));
 
         let mine = run(&schema, &bob, "{ myChallenges(status: PENDING) { id kinds status } }").await;
         assert_eq!(mine["myChallenges"], json!([{ "id": id, "kinds": ["JUSTIFICATION"], "status": "PENDING" }]));
@@ -529,7 +529,7 @@ mod tests {
         let Some((schema, mut client)) = setup().await else { return };
         let id = open(&mut client, "bob", WireKind::Approval).await;
         let (bob, carol, alice) =
-            (person("bob", "engineering"), person("carol", "engineering"), person("alice", "security"));
+            (human("bob", "engineering"), human("carol", "engineering"), human("alice", "security"));
 
         assert!(run_err(&schema, &bob, "{ challenges { id } }").await.contains("may not administer challenges"));
         let pending = run(&schema, &alice, "{ challenges(status: PENDING) { id subject { id } } }").await;
@@ -571,7 +571,7 @@ mod tests {
     #[tokio::test]
     async fn security_keys_start_with_the_portals_relying_party() {
         let Some((schema, mut client)) = setup().await else { return };
-        let bob = person("bob", "engineering");
+        let bob = human("bob", "engineering");
         assert_eq!(run(&schema, &bob, "{ mySecurityKeys { id } }").await["mySecurityKeys"], json!([]));
 
         let begin =
@@ -592,7 +592,7 @@ mod tests {
         let change = "mutation { beginSecurityKeyChange { ceremonyQid } }";
         assert!(run_err(&schema, &bob, change).await.contains("has no security key"));
         // Someone else can't start a verification of bob's challenge.
-        let carol = person("carol", "engineering");
+        let carol = human("carol", "engineering");
         assert!(run_err(&schema, &carol, verify.as_str()).await.contains("only bob can answer"));
     }
 
@@ -601,8 +601,8 @@ mod tests {
         let mut agent = awzy_identity::Accessor::human("bob", None, &[]);
         agent.subject = awzy_model::EntityRef::new("ServiceAccount", "sales-genie");
         agent.on_behalf_of = Some(awzy_model::EntityRef::new("Human", "bob"));
-        let err = answering_person(&Viewer(Arc::new(agent))).unwrap_err();
+        let err = answering_human(&Viewer(Arc::new(agent))).unwrap_err();
         assert!(err.message.contains("sales-genie for bob can't answer challenges"), "{}", err.message);
-        assert_eq!(answering_person(&crate::testing::person("bob", "engineering")).unwrap(), "bob");
+        assert_eq!(answering_human(&crate::testing::human("bob", "engineering")).unwrap(), "bob");
     }
 }

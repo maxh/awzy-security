@@ -62,14 +62,14 @@ pub struct Assertion {
 pub enum KeyError {
     #[error("{0}")]
     WebAuthn(#[from] WebAuthnError),
-    #[error("{person} has no security key; add one on the Challenges page first")]
-    NoKeys { person: String },
-    #[error("{person} already has a security key, so a new one must be authorized with it")]
-    NeedsExistingKey { person: String },
+    #[error("{human} has no security key; add one on the Challenges page first")]
+    NoKeys { human: String },
+    #[error("{human} already has a security key, so a new one must be authorized with it")]
+    NeedsExistingKey { human: String },
     #[error("that ceremony is unknown, expired, already used, or for something else; start again")]
     BadCeremony,
-    #[error("that security key isn't one of {person}'s")]
-    UnknownKey { person: String },
+    #[error("that security key isn't one of {human}'s")]
+    UnknownKey { human: String },
     #[error("security key {0} not found")]
     NotFound(SecurityKeyId),
     #[error("that security key is already registered")]
@@ -132,20 +132,20 @@ impl SecurityKeys {
     }
 
     /// A person's keys in use, oldest first.
-    pub async fn list(&self, person: &str) -> Result<Vec<SecurityKey>, KeyError> {
+    pub async fn list(&self, human: &str) -> Result<Vec<SecurityKey>, KeyError> {
         let rows =
             sqlx::query("SELECT * FROM security_keys WHERE person_id = $1 AND removed_at IS NULL ORDER BY created_at")
-                .bind(person)
+                .bind(human)
                 .fetch_all(&self.pool)
                 .await?;
         Ok(rows.iter().map(key_from_row).collect::<Result<_, _>>()?)
     }
 
-    async fn credential_ids(&self, person: &str) -> Result<Vec<Vec<u8>>, KeyError> {
+    async fn credential_ids(&self, human: &str) -> Result<Vec<Vec<u8>>, KeyError> {
         let rows = sqlx::query(
             "SELECT credential_id FROM security_keys WHERE person_id = $1 AND removed_at IS NULL ORDER BY created_at",
         )
-        .bind(person)
+        .bind(human)
         .fetch_all(&self.pool)
         .await?;
         Ok(rows.iter().map(|r| r.try_get("credential_id")).collect::<Result<_, _>>()?)
@@ -153,7 +153,7 @@ impl SecurityKeys {
 
     async fn issue(
         &self,
-        person: &str,
+        human: &str,
         purpose: Purpose,
         challenge_id: Option<ChallengeId>,
         authorized_by: Option<SecurityKeyId>,
@@ -165,7 +165,7 @@ impl SecurityKeys {
              VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(secs => $7))",
         )
         .bind(id.uuid())
-        .bind(person)
+        .bind(human)
         .bind(purpose.as_str())
         .bind(&challenge)
         .bind(challenge_id.map(|c| c.uuid()))
@@ -177,7 +177,7 @@ impl SecurityKeys {
     }
 
     /// Marks the ceremony used, committed on its own, before its response is checked.
-    async fn spend(&self, id: &str, person: &str, purpose: Purpose) -> Result<Spent, KeyError> {
+    async fn spend(&self, id: &str, human: &str, purpose: Purpose) -> Result<Spent, KeyError> {
         let id: CeremonyId = id.parse().map_err(|_| KeyError::BadCeremony)?;
         let row = sqlx::query(
             "UPDATE webauthn_ceremonies SET used_at = now() \
@@ -185,7 +185,7 @@ impl SecurityKeys {
              RETURNING challenge, challenge_id, authorized_by",
         )
         .bind(id.uuid())
-        .bind(person)
+        .bind(human)
         .bind(purpose.as_str())
         .fetch_optional(&self.pool)
         .await?
@@ -202,7 +202,7 @@ impl SecurityKeys {
     async fn check_assertion(
         &self,
         tx: &mut Transaction<'_, Postgres>,
-        person: &str,
+        human: &str,
         challenge: &[u8],
         a: &Assertion,
     ) -> Result<SecurityKeyId, KeyError> {
@@ -211,10 +211,10 @@ impl SecurityKeys {
              WHERE credential_id = $1 AND person_id = $2 AND removed_at IS NULL FOR UPDATE",
         )
         .bind(&a.credential_id)
-        .bind(person)
+        .bind(human)
         .fetch_optional(&mut **tx)
         .await?
-        .ok_or_else(|| KeyError::UnknownKey { person: person.into() })?;
+        .ok_or_else(|| KeyError::UnknownKey { human: human.into() })?;
         let id = SecurityKeyId::from_uuid(row.try_get("id")?);
         let count: i64 = row.try_get("sign_count")?;
         let asserted = self.rp.verify_assertion(
@@ -246,12 +246,12 @@ impl SecurityKeys {
 
     /// Step one of adding or removing a key, for someone who already has one: an assertion
     /// ceremony over their keys.
-    pub async fn begin_key_change(&self, person: &str) -> Result<Ceremony, KeyError> {
-        let ids = self.credential_ids(person).await?;
+    pub async fn begin_key_change(&self, human: &str) -> Result<Ceremony, KeyError> {
+        let ids = self.credential_ids(human).await?;
         if ids.is_empty() {
-            return Err(KeyError::NoKeys { person: person.into() });
+            return Err(KeyError::NoKeys { human: human.into() });
         }
-        let (id, challenge) = self.issue(person, Purpose::KeyChange, None, None).await?;
+        let (id, challenge) = self.issue(human, Purpose::KeyChange, None, None).await?;
         Ok(Ceremony { id, options: self.request_options(&challenge, &ids) })
     }
 
@@ -259,27 +259,27 @@ impl SecurityKeys {
     /// a key-change ceremony.
     pub async fn begin_registration(
         &self,
-        person: &str,
+        human: &str,
         authorization: Option<&Assertion>,
     ) -> Result<Ceremony, KeyError> {
-        let ids = self.credential_ids(person).await?;
+        let ids = self.credential_ids(human).await?;
         let authorized_by = match (ids.is_empty(), authorization) {
             (true, _) => None,
-            (false, None) => return Err(KeyError::NeedsExistingKey { person: person.into() }),
+            (false, None) => return Err(KeyError::NeedsExistingKey { human: human.into() }),
             (false, Some(a)) => {
-                let spent = self.spend(&a.ceremony_id, person, Purpose::KeyChange).await?;
+                let spent = self.spend(&a.ceremony_id, human, Purpose::KeyChange).await?;
                 let mut tx = self.pool.begin().await?;
-                let key = self.check_assertion(&mut tx, person, &spent.challenge, a).await?;
+                let key = self.check_assertion(&mut tx, human, &spent.challenge, a).await?;
                 tx.commit().await?;
                 Some(key)
             }
         };
-        let (id, challenge) = self.issue(person, Purpose::Register, None, authorized_by).await?;
+        let (id, challenge) = self.issue(human, Purpose::Register, None, authorized_by).await?;
         let options = json!({
             "challenge": b64(&challenge),
             "rp": { "id": self.rp.id(), "name": "awzy" },
             // Opaque and stable per person, without putting their ID on the key.
-            "user": { "id": b64(&Sha256::digest(person.as_bytes())), "name": person, "displayName": person },
+            "user": { "id": b64(&Sha256::digest(human.as_bytes())), "name": human, "displayName": human },
             "pubKeyCredParams": [{ "type": "public-key", "alg": ES256 }],
             "excludeCredentials": credential_descriptors(&ids),
             "authenticatorSelection": { "residentKey": "discouraged", "userVerification": "discouraged" },
@@ -292,7 +292,7 @@ impl SecurityKeys {
     /// Checks the browser's `create()` response and saves the key.
     pub async fn finish_registration(
         &self,
-        person: &str,
+        human: &str,
         ceremony_id: &str,
         name: &str,
         client_data_json: &[u8],
@@ -302,25 +302,25 @@ impl SecurityKeys {
         if name.is_empty() || name.chars().count() > 100 {
             return Err(KeyError::Invalid("name the key (up to 100 characters)".into()));
         }
-        let spent = self.spend(ceremony_id, person, Purpose::Register).await?;
+        let spent = self.spend(ceremony_id, human, Purpose::Register).await?;
         let cred = self.rp.verify_registration(&spent.challenge, client_data_json, attestation_object)?;
         let mut tx = self.pool.begin().await?;
         // Serializes enrollment per person, so two "first keys" can't both skip authorization.
-        sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))").bind(person).execute(&mut *tx).await?;
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))").bind(human).execute(&mut *tx).await?;
         let has_keys = sqlx::query("SELECT 1 FROM security_keys WHERE person_id = $1 AND removed_at IS NULL LIMIT 1")
-            .bind(person)
+            .bind(human)
             .fetch_optional(&mut *tx)
             .await?
             .is_some();
         if has_keys && spent.authorized_by.is_none() {
-            return Err(KeyError::NeedsExistingKey { person: person.into() });
+            return Err(KeyError::NeedsExistingKey { human: human.into() });
         }
         let row = sqlx::query(
             "INSERT INTO security_keys (id, person_id, credential_id, public_key, sign_count, name, added_with) \
              VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (credential_id) DO NOTHING RETURNING *",
         )
         .bind(SecurityKeyId::new().uuid())
-        .bind(person)
+        .bind(human)
         .bind(&cred.credential_id)
         .bind(&cred.public_key)
         .bind(i64::from(cred.sign_count))
@@ -336,19 +336,19 @@ impl SecurityKeys {
     /// Removes one of `person`'s keys, authorized by an assertion from any of their keys.
     pub async fn remove(
         &self,
-        person: &str,
+        human: &str,
         id: SecurityKeyId,
         authorization: &Assertion,
     ) -> Result<SecurityKey, KeyError> {
-        let spent = self.spend(&authorization.ceremony_id, person, Purpose::KeyChange).await?;
+        let spent = self.spend(&authorization.ceremony_id, human, Purpose::KeyChange).await?;
         let mut tx = self.pool.begin().await?;
-        let with = self.check_assertion(&mut tx, person, &spent.challenge, authorization).await?;
+        let with = self.check_assertion(&mut tx, human, &spent.challenge, authorization).await?;
         let row = sqlx::query(
             "UPDATE security_keys SET removed_at = now(), removed_with = $3, removed_by = $2 \
              WHERE id = $1 AND person_id = $2 AND removed_at IS NULL RETURNING *",
         )
         .bind(id.uuid())
-        .bind(person)
+        .bind(human)
         .bind(with.uuid())
         .fetch_optional(&mut *tx)
         .await?
@@ -375,26 +375,26 @@ impl SecurityKeys {
 
     /// An assertion ceremony for verification challenge `challenge_id`, which `person` must be
     /// the one to answer.
-    pub async fn begin_verification(&self, person: &str, challenge_id: ChallengeId) -> Result<Ceremony, KeyError> {
+    pub async fn begin_verification(&self, human: &str, challenge_id: ChallengeId) -> Result<Ceremony, KeyError> {
         // Checked now so the person learns at once; checked again, locked, when they finish.
         let mut tx = self.challenges.begin().await?;
-        self.challenges.lock_for(&mut tx, challenge_id, person, ChallengeKind::Verification).await?;
+        self.challenges.lock_for(&mut tx, challenge_id, human, ChallengeKind::Verification).await?;
         tx.rollback().await?;
-        let ids = self.credential_ids(person).await?;
+        let ids = self.credential_ids(human).await?;
         if ids.is_empty() {
-            return Err(KeyError::NoKeys { person: person.into() });
+            return Err(KeyError::NoKeys { human: human.into() });
         }
-        let (id, challenge) = self.issue(person, Purpose::Verify, Some(challenge_id), None).await?;
+        let (id, challenge) = self.issue(human, Purpose::Verify, Some(challenge_id), None).await?;
         Ok(Ceremony { id, options: self.request_options(&challenge, &ids) })
     }
 
     /// Passes the verification on the ceremony's challenge with the browser's `get()` response.
-    pub async fn finish_verification(&self, person: &str, a: &Assertion) -> Result<Challenge, KeyError> {
-        let spent = self.spend(&a.ceremony_id, person, Purpose::Verify).await?;
+    pub async fn finish_verification(&self, human: &str, a: &Assertion) -> Result<Challenge, KeyError> {
+        let spent = self.spend(&a.ceremony_id, human, Purpose::Verify).await?;
         let challenge_id = spent.challenge_id.ok_or(KeyError::BadCeremony)?;
         let mut tx = self.challenges.begin().await?;
-        let c = self.challenges.lock_for(&mut tx, challenge_id, person, ChallengeKind::Verification).await?;
-        self.check_assertion(&mut tx, person, &spent.challenge, a).await?;
+        let c = self.challenges.lock_for(&mut tx, challenge_id, human, ChallengeKind::Verification).await?;
+        self.check_assertion(&mut tx, human, &spent.challenge, a).await?;
         let c = self.challenges.mark_passed(&mut tx, &c, ChallengeKind::Verification).await?;
         tx.commit().await?;
         Ok(c)
@@ -452,13 +452,13 @@ mod tests {
 
     async fn enroll(
         keys: &SecurityKeys,
-        person: &str,
+        human: &str,
         key: &SoftKey,
         authorization: Option<&Assertion>,
     ) -> Result<SecurityKey, KeyError> {
-        let ceremony = keys.begin_registration(person, authorization).await?;
+        let ceremony = keys.begin_registration(human, authorization).await?;
         let (client, object) = key.register(&challenge_of(&ceremony));
-        keys.finish_registration(person, &ceremony.id.to_string(), "YubiKey", &client, &object).await
+        keys.finish_registration(human, &ceremony.id.to_string(), "YubiKey", &client, &object).await
     }
 
     #[tokio::test]

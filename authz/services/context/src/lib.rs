@@ -114,15 +114,16 @@ async fn delete_service_account(
 }
 
 #[derive(Deserialize)]
-struct PeopleParams {
+struct HumansParams {
     search: Option<String>,
     limit: Option<i64>,
 }
 
-async fn directory_people(State(store): State<ContextStore>, Query(p): Query<PeopleParams>) -> Response {
+async fn directory_humans(State(store): State<ContextStore>, Query(p): Query<HumansParams>) -> Response {
     let search = p.search.as_deref().map(str::trim).filter(|s| !s.is_empty());
-    match store.directory_people(search, p.limit.unwrap_or(200).clamp(1, 1000)).await {
-        Ok(people) => Json(json!({ "people": people })).into_response(),
+    match store.directory_humans(search, p.limit.unwrap_or(200).clamp(1, 1000)).await {
+        // `people` is the name before ADR 0074, for a client portal that predates it.
+        Ok(humans) => Json(json!({ "humans": humans, "people": humans })).into_response(),
         Err(e) => internal(e),
     }
 }
@@ -206,7 +207,9 @@ pub fn router(store: ContextStore, scim_token: &str, access: &Access) -> Router 
     let readers = Router::new().route("/v1/principals", get(principals)).with_state(store.clone());
     let directory = Router::new()
         .route("/v1/directory/summary", get(directory_summary))
-        .route("/v1/directory/people", get(directory_people))
+        .route("/v1/directory/humans", get(directory_humans))
+        // The route before ADR 0074, for a client portal that predates it. Removed in a later release.
+        .route("/v1/directory/people", get(directory_humans))
         .route("/v1/directory/groups", get(directory_groups))
         .route("/v1/service-accounts", get(list_service_accounts))
         .route("/v1/service-accounts/{id}", axum::routing::put(put_service_account).delete(delete_service_account))
@@ -356,14 +359,14 @@ mod tests {
         );
         assert_eq!(entity(&snap, "bob@acme.com")["parents"], json!([]), "removed from staff");
 
-        let (_, people) = send(&app, "GET", "/v1/directory/people?search=ali", None).await;
-        assert_eq!(people["people"][0]["user_name"], "alice@acme.com");
-        assert_eq!(people["people"][0]["groups"], json!(["security"]));
+        let (_, humans) = send(&app, "GET", "/v1/directory/people?search=ali", None).await;
+        assert_eq!(humans["people"][0]["user_name"], "alice@acme.com");
+        assert_eq!(humans["people"][0]["groups"], json!(["security"]));
         let (_, groups) = send(&app, "GET", "/v1/directory/groups", None).await;
         let staff_row = groups["groups"].as_array().unwrap().iter().find(|g| g["name"] == "staff").unwrap().clone();
         assert_eq!((staff_row["people"].clone(), staff_row["groups"].clone()), (json!(0), json!(1)));
         let (_, summary) = send(&app, "GET", "/v1/directory/summary", None).await;
-        assert_eq!((summary["people"].clone(), summary["active_people"].clone()), (json!(2), json!(1)));
+        assert_eq!((summary["humans"].clone(), summary["active_humans"].clone()), (json!(2), json!(1)));
 
         let (status, _) = send(&app, "DELETE", &format!("/scim/v2/Users/{bob_id}"), None).await;
         assert_eq!(status, StatusCode::NO_CONTENT);

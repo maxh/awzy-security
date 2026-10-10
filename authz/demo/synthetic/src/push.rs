@@ -39,7 +39,7 @@ pub struct ContextClient {
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Summary {
-    pub people: usize,
+    pub humans: usize,
     pub groups: usize,
     pub service_accounts: usize,
 }
@@ -126,17 +126,17 @@ impl ContextClient {
     /// (contained groups first), then service accounts, whose owners must exist.
     pub async fn push(&self, company: &Company) -> anyhow::Result<Summary> {
         let mut ids: HashMap<String, String> = HashMap::new();
-        for p in &company.people {
+        for p in &company.humans {
             let manager_id = p.manager.as_ref().and_then(|m| ids.get(m)).map(String::as_str);
             let id = self.upsert("Users", "userName", &scim::user(p, manager_id)).await?;
             ids.insert(p.user_name.clone(), id);
         }
-        tracing::info!(people = company.people.len(), "people provisioned");
+        tracing::info!(humans = company.humans.len(), "people provisioned");
 
         let mut group_ids: HashMap<String, String> = HashMap::new();
         for g in &company.groups {
-            let people = g.people.iter().map(|p| ids[p].clone());
-            let members: Vec<String> = people.chain(g.groups.iter().map(|n| group_ids[n].clone())).collect();
+            let humans = g.humans.iter().map(|p| ids[p].clone());
+            let members: Vec<String> = humans.chain(g.groups.iter().map(|n| group_ids[n].clone())).collect();
             let id = self.upsert("Groups", "displayName", &scim::group(&g.name, &members)).await?;
             group_ids.insert(g.name.clone(), id);
         }
@@ -153,7 +153,7 @@ impl ContextClient {
         tracing::info!(service_accounts = company.service_accounts.len(), "service accounts registered");
 
         Ok(Summary {
-            people: company.people.len(),
+            humans: company.humans.len(),
             groups: company.groups.len(),
             service_accounts: company.service_accounts.len(),
         })
@@ -189,15 +189,15 @@ impl ContextClient {
         let mut resources = self.resources(&fixed).await?;
 
         let mut pending: Vec<Resource> = Vec::with_capacity(2 * BATCH);
-        for index in 0..company.people.len() {
-            pending.extend(world::person_documents(company, profile, company.seed, index));
+        for index in 0..company.humans.len() {
+            pending.extend(world::human_documents(company, profile, company.seed, index));
             if pending.len() >= BATCH {
                 let full = pending.len() / BATCH * BATCH;
                 resources += self.resources(&pending[..full]).await?;
                 pending = pending.split_off(full);
             }
             if index % 1000 == 999 {
-                tracing::info!(people = index + 1, resources, "documents sent");
+                tracing::info!(humans = index + 1, resources, "documents sent");
             }
         }
         resources += self.resources(&pending).await?;
@@ -348,10 +348,10 @@ mod tests {
         let client = ContextClient::new(&url, "token");
 
         let summary = client.push(&company).await.unwrap();
-        assert_eq!(summary.people, company.people.len());
+        assert_eq!(summary.humans, company.humans.len());
         {
             let f = state.lock().unwrap();
-            assert_eq!(f.users.len(), company.people.len());
+            assert_eq!(f.users.len(), company.humans.len());
             assert_eq!(f.groups.len(), company.groups.len());
             assert_eq!(f.service_accounts.len(), 4);
             assert_eq!(f.replaced, 0);
@@ -363,8 +363,8 @@ mod tests {
         // A second run replaces instead of duplicating.
         client.push(&company).await.unwrap();
         let f = state.lock().unwrap();
-        assert_eq!(f.users.len(), company.people.len());
-        assert_eq!(f.replaced, company.people.len() + company.groups.len());
+        assert_eq!(f.users.len(), company.humans.len());
+        assert_eq!(f.replaced, company.humans.len() + company.groups.len());
     }
 
     #[tokio::test]

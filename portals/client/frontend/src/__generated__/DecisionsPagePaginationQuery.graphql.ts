@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<dc528596e437e7c8016f79c683377b42>>
+ * @generated SignedSource<<8bf25dc711ecfe30d9f849bedb42064a>>
  * @lightSyntaxTransform
  */
 
@@ -160,7 +160,7 @@ return {
                         "args": null,
                         "concreteType": "EntityRef",
                         "kind": "LinkedField",
-                        "name": "person",
+                        "name": "human",
                         "plural": false,
                         "selections": (v3/*:: as any*/),
                         "storageKey": null
@@ -275,16 +275,16 @@ return {
     ]
   },
   "params": {
-    "cacheID": "aba379b6337348e98b76c0839464faab",
+    "cacheID": "b7b7060e8e2c6f451ed79c3b3419a5be",
     "id": null,
     "metadata": {},
     "name": "DecisionsPagePaginationQuery",
     "operationKind": "query",
-    "text": "query DecisionsPagePaginationQuery(\n  $after: String\n  $filter: DecisionFilter\n  $first: Int = 50\n) {\n  ...DecisionsPage_decisions_G9cLv\n}\n\nfragment DecisionsPage_decisions_G9cLv on Query {\n  decisions(filter: $filter, first: $first, after: $after) {\n    edges {\n      node {\n        id\n        at\n        subject {\n          type\n          id\n        }\n        onBehalfOf {\n          person {\n            type\n            id\n          }\n        }\n        action\n        resource {\n          type\n          id\n        }\n        verdict\n        mode\n        challenges\n        policies\n        __typename\n      }\n      cursor\n    }\n    pageInfo {\n      endCursor\n      hasNextPage\n    }\n  }\n}\n"
+    "text": "query DecisionsPagePaginationQuery(\n  $after: String\n  $filter: DecisionFilter\n  $first: Int = 50\n) {\n  ...DecisionsPage_decisions_G9cLv\n}\n\nfragment DecisionsPage_decisions_G9cLv on Query {\n  decisions(filter: $filter, first: $first, after: $after) {\n    edges {\n      node {\n        id\n        at\n        subject {\n          type\n          id\n        }\n        onBehalfOf {\n          human {\n            type\n            id\n          }\n        }\n        action\n        resource {\n          type\n          id\n        }\n        verdict\n        mode\n        challenges\n        policies\n        __typename\n      }\n      cursor\n    }\n    pageInfo {\n      endCursor\n      hasNextPage\n    }\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "507d669ccf51a4b1b690907cf31cf33c";
+(node as any).hash = "982978d5aefb142e5b1ee8cd2ec7bac6";
 
 export default node;

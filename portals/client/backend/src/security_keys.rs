@@ -16,7 +16,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 
 use crate::{
     access::{require, PortalAction, PortalArea},
-    challenges::{answering_person, client, grpc, time, Challenge, ChallengePayload},
+    challenges::{answering_human, client, grpc, time, Challenge, ChallengePayload},
 };
 
 fn bytes(field: &str, b64: &str) -> Result<Vec<u8>> {
@@ -153,7 +153,7 @@ impl SecurityKeyQuery {
     /// The signed-in person's security keys.
     async fn my_security_keys(&self, ctx: &Context<'_>) -> Result<Vec<SecurityKey>> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
-        let human_id = answering_person(&viewer)?;
+        let human_id = answering_human(&viewer)?;
         let keys = client(ctx)?.list_security_keys(ListSecurityKeysRequest { human_id }).await.map_err(grpc)?;
         Ok(keys.into_inner().keys.into_iter().map(SecurityKey).collect())
     }
@@ -175,7 +175,7 @@ impl SecurityKeyMutation {
     /// removing one.
     async fn begin_security_key_change(&self, ctx: &Context<'_>) -> Result<WebAuthnCeremony> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
-        let req = BeginKeyChangeRequest { human_id: answering_person(&viewer)? };
+        let req = BeginKeyChangeRequest { human_id: answering_human(&viewer)? };
         let res = client(ctx)?.begin_key_change(req).await.map_err(grpc)?.into_inner();
         Ok(ceremony(res.ceremony_qid, res.options_json))
     }
@@ -189,7 +189,7 @@ impl SecurityKeyMutation {
     ) -> Result<WebAuthnCeremony> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req = BeginKeyRegistrationRequest {
-            human_id: answering_person(&viewer)?,
+            human_id: answering_human(&viewer)?,
             authorization: input.authorization.map(AssertionInput::wire).transpose()?,
         };
         let res = client(ctx)?.begin_key_registration(req).await.map_err(grpc)?.into_inner();
@@ -204,7 +204,7 @@ impl SecurityKeyMutation {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req = FinishKeyRegistrationRequest {
             ceremony_qid: input.ceremony_qid.0,
-            human_id: answering_person(&viewer)?,
+            human_id: answering_human(&viewer)?,
             name: input.name,
             client_data_json: bytes("clientDataJson", &input.client_data_json)?,
             attestation_object: bytes("attestationObject", &input.attestation_object)?,
@@ -220,7 +220,7 @@ impl SecurityKeyMutation {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req = RemoveSecurityKeyRequest {
             security_key_qid: input.security_key_qid.0,
-            human_id: answering_person(&viewer)?,
+            human_id: answering_human(&viewer)?,
             authorization: Some(input.authorization.wire()?),
         };
         key(client(ctx)?.remove_security_key(req).await.map_err(grpc)?.into_inner().key)
@@ -246,7 +246,7 @@ impl SecurityKeyMutation {
     ) -> Result<WebAuthnCeremony> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req =
-            BeginVerificationRequest { challenge_qid: input.challenge_qid.0, human_id: answering_person(&viewer)? };
+            BeginVerificationRequest { challenge_qid: input.challenge_qid.0, human_id: answering_human(&viewer)? };
         let res = client(ctx)?.begin_verification(req).await.map_err(grpc)?.into_inner();
         Ok(ceremony(res.ceremony_qid, res.options_json))
     }
@@ -258,10 +258,8 @@ impl SecurityKeyMutation {
         input: FinishChallengeVerificationInput,
     ) -> Result<ChallengePayload> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
-        let req = FinishVerificationRequest {
-            human_id: answering_person(&viewer)?,
-            assertion: Some(input.assertion.wire()?),
-        };
+        let req =
+            FinishVerificationRequest { human_id: answering_human(&viewer)?, assertion: Some(input.assertion.wire()?) };
         let c = client(ctx)?.finish_verification(req).await.map_err(grpc)?.into_inner().challenge;
         Ok(ChallengePayload { challenge: Challenge(c.ok_or("awzy-challenge returned no challenge")?) })
     }

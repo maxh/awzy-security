@@ -322,8 +322,8 @@ impl<M: ModelProvider> Investigations<M> {
             {
                 let mode = c.mode().await?;
                 let reason = format!("awzy-reasoner investigation {qid}: {}", run.outcome.summary);
-                c.contain(&crate::contain::Proposal { person: f.principal.1.clone(), reason }, mode).await?;
-                tracing::warn!(investigation = %qid, person = %f.principal.1, mode = mode.as_str(), "containment from an investigation");
+                c.contain(&crate::contain::Proposal { human: f.principal.1.clone(), reason }, mode).await?;
+                tracing::warn!(investigation = %qid, human = %f.principal.1, mode = mode.as_str(), "containment from an investigation");
             }
         }
         Ok(ran)

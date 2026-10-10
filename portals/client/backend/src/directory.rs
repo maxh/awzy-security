@@ -1,4 +1,4 @@
-//! The directory: people and groups the client's IdP provisions, and the service accounts the
+//! The directory: humans and groups the client's IdP provisions, and the service accounts the
 //! client's admins register (ADR 0031, ADR 0033). Read from awzy-context; people and groups are
 //! read-only here because the IdP owns them.
 
@@ -80,7 +80,7 @@ pub(crate) fn context<'a>(ctx: &Context<'a>) -> Result<&'a ContextClient> {
 // ---- What awzy-context sends
 
 #[derive(Deserialize)]
-struct WirePerson {
+struct WireHuman {
     user_name: String,
     display_name: Option<String>,
     active: bool,
@@ -91,7 +91,8 @@ struct WirePerson {
 #[derive(Deserialize)]
 struct WireGroup {
     name: String,
-    people: i64,
+    #[serde(alias = "people")]
+    humans: i64,
     groups: i64,
     parents: Vec<String>,
     updated_at: DateTime<Utc>,
@@ -99,8 +100,11 @@ struct WireGroup {
 
 #[derive(Deserialize)]
 struct WireSummary {
-    people: i64,
-    active_people: i64,
+    // awzy-context before ADR 0074 says `people` and `active_people`.
+    #[serde(alias = "people")]
+    humans: i64,
+    #[serde(alias = "active_people")]
+    active_humans: i64,
     groups: i64,
     service_accounts: i64,
     last_provisioned_at: Option<DateTime<Utc>>,
@@ -121,9 +125,9 @@ struct WireServiceAccount {
 
 // ---- GraphQL
 
-/// A person, as the IdP provisioned them.
+/// A person, as the IdP provisioned them: a `Human` in policies.
 #[derive(SimpleObject)]
-pub struct Person {
+pub struct Human {
     /// Their ID in policies and tokens.
     pub user_name: String,
     pub display_name: Option<String>,
@@ -138,7 +142,8 @@ pub struct Person {
 pub struct DirectoryGroup {
     /// The group's ID in policies, e.g. Group::"security".
     pub name: String,
-    pub people: i64,
+    /// Humans directly in it.
+    pub humans: i64,
     /// Groups nested in it.
     pub groups: i64,
     /// Groups it is nested in.
@@ -148,8 +153,8 @@ pub struct DirectoryGroup {
 
 #[derive(SimpleObject)]
 pub struct DirectorySummary {
-    pub people: i64,
-    pub active_people: i64,
+    pub humans: i64,
+    pub active_humans: i64,
     pub groups: i64,
     pub service_accounts: i64,
     /// When the IdP last changed a person or group.
@@ -197,34 +202,37 @@ impl DirectoryQuery {
         require(ctx, PortalAction::View, PortalArea::Directory).await?;
         let s: WireSummary = context(ctx)?.get("/v1/directory/summary").await?;
         Ok(DirectorySummary {
-            people: s.people,
-            active_people: s.active_people,
+            humans: s.humans,
+            active_humans: s.active_humans,
             groups: s.groups,
             service_accounts: s.service_accounts,
             last_provisioned_at: s.last_provisioned_at.map(UtcTimestamp),
         })
     }
 
-    /// People by userName; `search` matches userName or display name.
-    async fn people(
+    /// Humans by userName; `search` matches userName or display name.
+    async fn humans(
         &self,
         ctx: &Context<'_>,
         search: Option<String>,
         #[graphql(default = 200)] first: i32,
-    ) -> Result<Vec<Person>> {
+    ) -> Result<Vec<Human>> {
         require(ctx, PortalAction::View, PortalArea::Directory).await?;
+        // The route every awzy-context serves during the rename (ADR 0074); `/v1/directory/humans`
+        // once no older one runs.
         let mut path = format!("/v1/directory/people?limit={}", first.clamp(1, 1000));
         if let Some(s) = search.filter(|s| !s.trim().is_empty()) {
             path.push_str(&format!("&search={}", urlencode(s.trim())));
         }
         #[derive(Deserialize)]
         struct Wire {
-            people: Vec<WirePerson>,
+            #[serde(alias = "people")]
+            humans: Vec<WireHuman>,
         }
         let w: Wire = context(ctx)?.get(&path).await?;
-        Ok(w.people
+        Ok(w.humans
             .into_iter()
-            .map(|p| Person {
+            .map(|p| Human {
                 user_name: p.user_name,
                 display_name: p.display_name,
                 active: p.active,
@@ -245,7 +253,7 @@ impl DirectoryQuery {
             .into_iter()
             .map(|g| DirectoryGroup {
                 name: g.name,
-                people: g.people,
+                humans: g.humans,
                 groups: g.groups,
                 parents: g.parents,
                 updated_at: UtcTimestamp(g.updated_at),
@@ -408,12 +416,13 @@ mod tests {
             ..Default::default()
         };
         let schema = crate::schema_with(services);
-        let alice = testing::person("alice", "security");
-        let bob = testing::person("bob", "engineering");
+        let alice = testing::human("alice", "security");
+        let bob = testing::human("bob", "engineering");
 
-        let d = testing::run(&schema, &alice, "{ directorySummary { people activePeople lastProvisionedAt } people(search: \"ali\") { userName groups active } }").await;
-        assert_eq!(d["directorySummary"]["activePeople"], 1);
-        assert_eq!(d["people"][0], json!({ "userName": "alice", "groups": ["security"], "active": true }));
+        let d = testing::run(&schema, &alice, "{ directorySummary { humans activeHumans lastProvisionedAt } humans(search: \"ali\") { userName groups active } }").await;
+        // The fake answers with the names before ADR 0074, as an older awzy-context does.
+        assert_eq!(d["directorySummary"]["activeHumans"], 1);
+        assert_eq!(d["humans"][0], json!({ "userName": "alice", "groups": ["security"], "active": true }));
 
         let register = r#"mutation { registerServiceAccount(input: { id: "sales-genie", owner: "bob", ai: true, groups: ["engineering"], description: "Drafts emails" }) { serviceAccount { id owner ai createdBy { type id } } } }"#;
         let r = testing::run(&schema, &alice, register).await;
@@ -425,7 +434,7 @@ mod tests {
 
         let err = testing::run_err(&schema, &bob, register).await;
         assert!(err.starts_with("bob may not administer directory"), "{err}");
-        let err = testing::run_err(&schema, &bob, "{ people { userName } }").await;
+        let err = testing::run_err(&schema, &bob, "{ humans { userName } }").await;
         assert!(err.starts_with("bob may not view directory"), "{err}");
         assert_eq!(seen.lock().unwrap().len(), 1, "bob's attempt never reached awzy-context");
     }

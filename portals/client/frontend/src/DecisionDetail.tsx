@@ -36,7 +36,7 @@ function DecisionView({ decision }: { decision: DecisionDetail_decision$key }) {
           id
         }
         onBehalfOf {
-          person {
+          human {
             type
             id
           }
@@ -77,7 +77,7 @@ function DecisionView({ decision }: { decision: DecisionDetail_decision$key }) {
 
       <Stack gap={6}>
         <Field label="Subject" value={entityLabel(d.subject)} />
-        {d.onBehalfOf && <Field label="Acting for" value={entityLabel(d.onBehalfOf.person)} />}
+        {d.onBehalfOf && <Field label="Acting for" value={entityLabel(d.onBehalfOf.human)} />}
         <Field label="Person present" value={d.humanPresent ? "yes" : "no"} />
         <Field label="Action" value={d.action} />
         <Field label="Resource" value={entityLabel(d.resource)} />
@@ -103,7 +103,7 @@ function DecisionView({ decision }: { decision: DecisionDetail_decision$key }) {
       {d.onBehalfOf && (
         <Stack gap={6}>
           <Group gap="sm">
-            <Heading>Could {entityLabel(d.onBehalfOf.person)} do this?</Heading>
+            <Heading>Could {entityLabel(d.onBehalfOf.human)} do this?</Heading>
             <VerdictBadge verdict={d.onBehalfOf.verdict} mode="ENFORCE" />
           </Group>
           <Text size="sm" c="dimmed">

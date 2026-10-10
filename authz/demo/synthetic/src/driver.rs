@@ -86,8 +86,8 @@ impl Driver {
             "groups": [a.team], "awzy_human_present": a.human_present,
         });
         match &a.on_behalf_of {
-            Some(person) => {
-                claims["sub"] = json!(person);
+            Some(human) => {
+                claims["sub"] = json!(human);
                 claims["act"] = json!({ "sub": a.subject });
             }
             None => {
@@ -181,9 +181,9 @@ mod tests {
     fn tokens_say_who_acts_for_whom() {
         let d = Driver::new("http://unused", b"dev", "https://idp.local", "awzy-gateway");
         let nora = "nora.patel@larkspur.example";
-        let person = claims(&d, &access(nora, None, true, "x"));
-        assert_eq!((person["sub"].as_str(), person.get("act")), (Some(nora), None));
-        assert_eq!(person["groups"], json!(["sales-northeast-finserv"]));
+        let human = claims(&d, &access(nora, None, true, "x"));
+        assert_eq!((human["sub"].as_str(), human.get("act")), (Some(nora), None));
+        assert_eq!(human["groups"], json!(["sales-northeast-finserv"]));
 
         let delegated = claims(&d, &access("sales-genie", Some(nora), true, "x"));
         assert_eq!((delegated["sub"].as_str(), delegated["act"]["sub"].as_str()), (Some(nora), Some("sales-genie")));

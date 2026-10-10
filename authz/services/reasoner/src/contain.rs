@@ -45,7 +45,7 @@ pub struct Evidence {
 /// A person to contain, and why.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Proposal {
-    pub person: String,
+    pub human: String,
     pub reason: String,
 }
 
@@ -55,12 +55,12 @@ pub fn proposals(scores: &[Scored], evidence: &Evidence) -> Vec<Proposal> {
         .iter()
         .filter(|s| s.principal.0 == "Human" && s.score.score > ELEVATED)
         .filter_map(|s| {
-            let person = &s.principal.1;
-            if evidence.decided.contains(person) {
+            let human = &s.principal.1;
+            if evidence.decided.contains(human) {
                 return None;
             }
-            let rejected = evidence.rejected.get(person).filter(|r| !r.is_empty())?;
-            let exfiltration = evidence.exfiltration.get(person).filter(|e| !e.is_empty())?;
+            let rejected = evidence.rejected.get(human).filter(|r| !r.is_empty())?;
+            let exfiltration = evidence.exfiltration.get(human).filter(|e| !e.is_empty())?;
             let reason = format!(
                 "awzy-reasoner, in the last day: risk {} ({}); {}; {}",
                 s.score.score,
@@ -68,14 +68,14 @@ pub fn proposals(scores: &[Scored], evidence: &Evidence) -> Vec<Proposal> {
                 rejected.join("; "),
                 exfiltration.join("; "),
             );
-            Some(Proposal { person: person.clone(), reason })
+            Some(Proposal { human: human.clone(), reason })
         })
         .collect()
 }
 
 #[derive(Debug, clickhouse::Row, serde::Deserialize)]
 struct ExfiltrationRow {
-    person: String,
+    human: String,
     agent: String,
     action: String,
     resource_id: String,
@@ -85,7 +85,7 @@ struct ExfiltrationRow {
 // A person's own events, and their agents' on their behalf.
 const EXFILTRATION_QUERY: &str = "
 SELECT
-    if(on_behalf_of_type = 'Human', on_behalf_of_id, subject_id) AS person,
+    if(on_behalf_of_type = 'Human', on_behalf_of_id, subject_id) AS human,
     if(on_behalf_of_type = 'Human', subject_id, '') AS agent,
     action,
     resource_id,
@@ -109,7 +109,7 @@ pub async fn load_exfiltration(
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for r in rows {
         let by = if r.agent.is_empty() { String::new() } else { format!(" through {}", r.agent) };
-        out.entry(r.person).or_default().push(format!("{} of {} in {}{by}", r.action, r.resource_id, r.system));
+        out.entry(r.human).or_default().push(format!("{} of {} in {}{by}", r.action, r.resource_id, r.system));
     }
     Ok(out)
 }
@@ -179,7 +179,7 @@ impl Containments {
     /// Contains `p`, or records that it would have when `mode` is monitor.
     pub async fn contain(&self, p: &Proposal, mode: EnforcementMode) -> anyhow::Result<()> {
         let req = ContainRequest {
-            subject: Some(EntityRef::new("Human", p.person.as_str()).into()),
+            subject: Some(EntityRef::new("Human", p.human.as_str()).into()),
             reason: p.reason.clone(),
             created_by_actor: Some(awzy_model::Actor::awzy("awzy-reasoner").into()),
             monitor: mode == EnforcementMode::Monitor,
@@ -202,8 +202,8 @@ mod tests {
         }
     }
 
-    fn evidence(people: &[&str]) -> Evidence {
-        let of = |what: &str| people.iter().map(|p| (p.to_string(), vec![format!("{what} for {p}")])).collect();
+    fn evidence(humans: &[&str]) -> Evidence {
+        let of = |what: &str| humans.iter().map(|p| (p.to_string(), vec![format!("{what} for {p}")])).collect();
         Evidence { rejected: of("a rejected challenge"), exfiltration: of("an export"), decided: BTreeSet::new() }
     }
 

@@ -13,7 +13,7 @@ use crate::{
     activity::{Access, Why, LIST, READ},
     driver::Outcome,
     org::{cast, Company, Profile},
-    world::{person_documents, work_items, BASIC_QUESTIONS, OUTSIDE_HER_ACCOUNTS},
+    world::{human_documents, work_items, BASIC_QUESTIONS, OUTSIDE_HER_ACCOUNTS},
 };
 
 /// When the scenarios count on awzy-reasoner having scored the day so far: after the foolish
@@ -132,7 +132,7 @@ pub fn rogue_agent(company: &Company, profile: Profile) -> Vec<Step> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Exfiltration {
     pub minute: u32,
-    pub person: String,
+    pub human: String,
     /// One of awzy-reasoner's exfiltration actions (ADR 0066).
     pub action: &'static str,
     pub resource: String,
@@ -144,7 +144,7 @@ pub struct Exfiltration {
 pub fn exfiltration() -> Vec<Exfiltration> {
     vec![Exfiltration {
         minute: 15 * 60 + 20,
-        person: cast("sales-northeast-finserv").expect("cast"),
+        human: cast("sales-northeast-finserv").expect("cast"),
         action: "export",
         resource: "synthetic:folder:sales-northeast-finserv/accounts".into(),
         system: "larkspur-drive",
@@ -214,9 +214,9 @@ pub fn peer_outlier(company: &Company, profile: Profile) -> Vec<Step> {
         expect,
     };
     // Finance's documents, a teammate at a time, so the reads spread over the team's work.
-    let team: Vec<Vec<String>> = (0..company.people.len())
-        .filter(|&i| company.people[i].team == "finance")
-        .map(|i| person_documents(company, profile, company.seed, i).into_iter().map(|d| d.id).collect())
+    let team: Vec<Vec<String>> = (0..company.humans.len())
+        .filter(|&i| company.humans[i].team == "finance")
+        .map(|i| human_documents(company, profile, company.seed, i).into_iter().map(|d| d.id).collect())
         .collect();
     let longest = team.iter().map(Vec::len).max().unwrap_or_default();
     let documents = (0..longest).flat_map(|k| team.iter().filter_map(move |docs| docs.get(k).cloned()));
@@ -397,12 +397,12 @@ mod tests {
 
     /// Each person's team, and each agent's, as awzy-context's principals snapshot gives them.
     fn teams(company: &Company) -> HashMap<Principal, String> {
-        let people = company.people.iter().map(|p| (("Human".to_string(), p.user_name.clone()), p.team.to_string()));
+        let humans = company.humans.iter().map(|p| (("Human".to_string(), p.user_name.clone()), p.team.to_string()));
         let agents = company
             .service_accounts
             .iter()
             .map(|sa| (("ServiceAccount".to_string(), sa.id.clone()), sa.groups[0].clone()));
-        people.chain(agents).collect()
+        humans.chain(agents).collect()
     }
 
     /// Scores above this make high-risk operations ask for a security key (base.cedar).
@@ -443,10 +443,10 @@ mod tests {
         let exported: std::collections::BTreeMap<String, Vec<String>> = exfiltration()
             .into_iter()
             .filter(|e| e.minute < REASONER_CONTAINS_AT)
-            .map(|e| (e.person, vec![format!("{} of {}", e.action, e.resource)]))
+            .map(|e| (e.human, vec![format!("{} of {}", e.action, e.resource)]))
             .collect();
         let evidence = Evidence { rejected: rejected.into(), exfiltration: exported.clone(), ..Evidence::default() };
-        let contained: Vec<String> = proposals(&scores, &evidence).into_iter().map(|p| p.person).collect();
+        let contained: Vec<String> = proposals(&scores, &evidence).into_iter().map(|p| p.human).collect();
         assert_eq!(contained, vec![nora.clone()]);
 
         // Any one of the three alone contains no one.
@@ -633,7 +633,7 @@ mod tests {
                     .into_iter()
                     .find(|c| c.resource.as_ref().is_some_and(|r| r.id == "synthetic:doc:strategic-plan-fy27"))
                     .expect("SalesGenie's request for the plan is waiting");
-                let owner = company.people.iter().find(|p| p.team == "strategy").unwrap().user_name.clone();
+                let owner = company.humans.iter().find(|p| p.team == "strategy").unwrap().user_name.clone();
                 challenge_client
                     .decide(DecideRequest {
                         challenge_qid: plan.qid,
@@ -652,11 +652,11 @@ mod tests {
                 let mut evidence = containing.evidence(chrono::Utc::now()).await.unwrap();
                 for e in exfiltration().into_iter().filter(|e| e.minute < REASONER_CONTAINS_AT) {
                     let what = format!("{} of {} in {}", e.action, e.resource, e.system);
-                    evidence.exfiltration.entry(e.person).or_default().push(what);
+                    evidence.exfiltration.entry(e.human).or_default().push(what);
                 }
                 let proposals = awzy_reasoner::contain::proposals(&scores, &evidence);
                 let nora = cast("sales-northeast-finserv").unwrap();
-                assert_eq!(proposals.iter().map(|p| p.person.as_str()).collect::<Vec<_>>(), vec![nora.as_str()]);
+                assert_eq!(proposals.iter().map(|p| p.human.as_str()).collect::<Vec<_>>(), vec![nora.as_str()]);
                 for p in &proposals {
                     containing.contain(p, awzy_model::EnforcementMode::Enforce).await.unwrap();
                 }

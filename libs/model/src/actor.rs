@@ -55,8 +55,8 @@ impl Actor {
     }
 
     /// The same actor acting for `person`.
-    pub fn for_person(mut self, person: impl Into<String>) -> Self {
-        self.on_behalf_of = Some(EntityRef::new(entity_type::HUMAN, person));
+    pub fn for_human(mut self, human: impl Into<String>) -> Self {
+        self.on_behalf_of = Some(EntityRef::new(entity_type::HUMAN, human));
         self
     }
 
@@ -70,11 +70,11 @@ impl Actor {
         if let Some(key) = s.strip_prefix("break-glass:") {
             return Self::new(EntityRef::new(actor_type::BREAK_GLASS_KEY, key), None);
         }
-        if let Some(person) = s.strip_prefix("Awzy Bot for ") {
-            return Self::awzy("awzy-bot").for_person(person);
+        if let Some(human) = s.strip_prefix("Awzy Bot for ") {
+            return Self::awzy("awzy-bot").for_human(human);
         }
-        if let Some((account, person)) = s.split_once(" for ") {
-            return Self::new(EntityRef::new(entity_type::SERVICE_ACCOUNT, account), None).for_person(person);
+        if let Some((account, human)) = s.split_once(" for ") {
+            return Self::new(EntityRef::new(entity_type::SERVICE_ACCOUNT, account), None).for_human(human);
         }
         if s.starts_with("awzy-") || s == "unknown" {
             return Self::awzy(s);
@@ -97,7 +97,7 @@ impl Actor {
         };
         // The person's half never contains " for " (a type and an ID), so the last one splits.
         match s.rsplit_once(" for ") {
-            Some((subject, person)) if entity(person).is_some() => Some(Self::new(entity(subject)?, entity(person))),
+            Some((subject, human)) if entity(human).is_some() => Some(Self::new(entity(subject)?, entity(human))),
             _ => Some(Self::new(entity(s)?, None)),
         }
     }
@@ -123,8 +123,8 @@ mod tests {
         for actor in [
             Actor::human("alice@larkspur.example"),
             Actor::awzy("awzy-reasoner"),
-            Actor::awzy("awzy-bot").for_person("alice"),
-            Actor::new(EntityRef::new(entity_type::SERVICE_ACCOUNT, "sales-genie"), None).for_person("bob"),
+            Actor::awzy("awzy-bot").for_human("alice"),
+            Actor::new(EntityRef::new(entity_type::SERVICE_ACCOUNT, "sales-genie"), None).for_human("bob"),
             Actor::new(EntityRef::new(actor_type::BREAK_GLASS_KEY, "sha256:ab12"), None),
             Actor::awzy_staff("max"),
         ] {
@@ -137,9 +137,9 @@ mod tests {
         assert_eq!(Actor::parse("alice"), Actor::human("alice"));
         assert_eq!(
             Actor::parse("sales-genie for alice"),
-            Actor::new(EntityRef::new(entity_type::SERVICE_ACCOUNT, "sales-genie"), None).for_person("alice")
+            Actor::new(EntityRef::new(entity_type::SERVICE_ACCOUNT, "sales-genie"), None).for_human("alice")
         );
-        assert_eq!(Actor::parse("Awzy Bot for alice"), Actor::awzy("awzy-bot").for_person("alice"));
+        assert_eq!(Actor::parse("Awzy Bot for alice"), Actor::awzy("awzy-bot").for_human("alice"));
         assert_eq!(
             Actor::parse("break-glass:sha256:ab12").subject,
             EntityRef::new(actor_type::BREAK_GLASS_KEY, "sha256:ab12")

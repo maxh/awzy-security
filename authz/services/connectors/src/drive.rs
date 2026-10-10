@@ -163,7 +163,7 @@ pub fn sharing(perms: &[Permission], domain: &str, groups: &HashMap<String, Stri
         let email = p.email_address.as_deref().map(str::to_lowercase);
         match (p.kind.as_str(), email) {
             ("user", Some(email)) if in_domain(&email) => {
-                shares.push(json!({ "kind": "person", "id": email, "role": role }));
+                shares.push(json!({ "kind": "human", "id": email, "role": role }));
             }
             ("group", Some(email)) if in_domain(&email) => {
                 let id = groups.get(&email).cloned().unwrap_or(email);
@@ -511,7 +511,7 @@ mod tests {
         assert_eq!(
             shares,
             vec![
-                json!({ "kind": "person", "id": "priya@larkspur.example", "role": "writer" }),
+                json!({ "kind": "human", "id": "priya@larkspur.example", "role": "writer" }),
                 json!({ "kind": "group", "id": "finance", "role": "reader" }),
                 json!({ "kind": "domain", "id": "larkspur.example", "role": "reader" }),
                 json!({ "kind": "anyone", "id": "", "role": "reader" }),
@@ -556,7 +556,7 @@ mod tests {
             (r["id"].as_str(), r["parent"].as_str(), r["kind"].as_str()),
             (Some("gdrive:f1"), Some("gdrive:d1"), Some("document"))
         );
-        assert_eq!(r["sharing"], json!([{ "kind": "person", "id": "sam@larkspur.example", "role": "writer" }]));
+        assert_eq!(r["sharing"], json!([{ "kind": "human", "id": "sam@larkspur.example", "role": "writer" }]));
     }
 
     /// A fake Google (Drive and the Admin directory) and a fake awzy-context, sharing state.

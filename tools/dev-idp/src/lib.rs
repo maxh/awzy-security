@@ -286,7 +286,7 @@ async fn token(State(idp): State<DevIdp>, Form(p): Form<TokenParams>) -> Respons
                 return oauth_error("invalid_request", "subject_token and actor are required");
             };
             match idp.validate(&subject_token).and_then(|c| c["sub"].as_str().map(str::to_string)) {
-                Some(person) => token_response(idp.token(&person, Some(&actor), json!({})), None),
+                Some(human) => token_response(idp.token(&human, Some(&actor), json!({})), None),
                 None => oauth_error("invalid_grant", "subject_token is not a valid token from this IdP"),
             }
         }
@@ -352,10 +352,10 @@ mod tests {
     #[tokio::test]
     async fn token_exchange_names_the_account_and_the_person() {
         let idp = idp();
-        let person = idp.token("bob", None, json!({}));
+        let human = idp.token("bob", None, json!({}));
         let (status, res) = post_form(
             router(idp.clone()),
-            &format!("grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange&subject_token={person}&actor=sales-genie"),
+            &format!("grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange&subject_token={human}&actor=sales-genie"),
         )
         .await;
         assert_eq!(status, StatusCode::OK);

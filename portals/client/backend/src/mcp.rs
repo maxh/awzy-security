@@ -342,14 +342,14 @@ impl ClientPortalMcp {
             .ok_or_else(|| ErrorData::invalid_params(format!("{id} is not in the decision log"), None))?;
         let policy = self.services.policy.clone();
         let own = decisions::explain(policy.clone(), row.policy_version, &row.policies).await.map_err(internal)?;
-        let person =
+        let human =
             decisions::explain(policy, row.policy_version, &row.on_behalf_of_policies).await.map_err(internal)?;
         Ok(Json(Explanation {
             decision: summary_of(&row),
             context: row.context.clone(),
             summary: explain_sentence(&row, &own),
             determining_policies: own.into_iter().map(|p| PolicySourceOut { id: p.id, source: p.source }).collect(),
-            on_behalf_of_policies: person.into_iter().map(|p| PolicySourceOut { id: p.id, source: p.source }).collect(),
+            on_behalf_of_policies: human.into_iter().map(|p| PolicySourceOut { id: p.id, source: p.source }).collect(),
         }))
     }
 
@@ -493,19 +493,19 @@ fn rfc3339(t: DateTime<Utc>) -> String {
 /// One sentence on why the verdict came out as it did. For a delegated request, says when the
 /// person's own check is what decided it.
 pub(crate) fn explain_sentence(row: &DecisionRow, own: &[decisions::PolicySource]) -> String {
-    let person = format!("{}::{}", row.on_behalf_of_type, row.on_behalf_of_id);
+    let human = format!("{}::{}", row.on_behalf_of_type, row.on_behalf_of_id);
     if !row.on_behalf_of_id.is_empty() && row.on_behalf_of_verdict == "deny" && row.verdict == "deny" {
         let subject_alone = if row.policies.is_empty() {
             "and the service account couldn't either"
         } else {
             "even though the service account could"
         };
-        return format!("Denied: {person} couldn't do this themselves, {subject_alone}. A service account acting for someone gets at most what they could do.");
+        return format!("Denied: {human} couldn't do this themselves, {subject_alone}. A service account acting for someone gets at most what they could do.");
     }
     match (row.verdict.as_str(), own.is_empty()) {
         ("deny", true) => "Denied by default: no policy permitted this action.".to_string(),
         ("allow", _) if row.on_behalf_of_id.is_empty() => format!("Allowed by {}.", ids(own)),
-        ("allow", _) => format!("Allowed by {}, and {person} could do it themselves.", ids(own)),
+        ("allow", _) => format!("Allowed by {}, and {human} could do it themselves.", ids(own)),
         ("challenge", _) => format!(
             "Allowed only after {} challenges, required by {}.",
             decisions::split_challenges(&row.challenge).join(" and "),
@@ -589,7 +589,7 @@ mod tests {
     }
 
     fn alice() -> Extension<Parts> {
-        signed_in(testing::person("alice", "security"))
+        signed_in(testing::human("alice", "security"))
     }
 
     #[tokio::test]
@@ -618,7 +618,7 @@ mod tests {
         assert!(draft.id.starts_with("policy_bundle_"));
         assert!(mcp.get_active_policy_bundle(alice()).await.unwrap().0.bundle.is_none(), "proposing never publishes");
 
-        let bob = signed_in(testing::person("bob", "engineering"));
+        let bob = signed_in(testing::human("bob", "engineering"));
         let Err(err) =
             mcp.propose_policy(bob, Parameters(ProposePolicyParams { policies: String::new(), schema: None })).await
         else {

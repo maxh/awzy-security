@@ -3,14 +3,14 @@
 
 use serde_json::{json, Value};
 
-use crate::org::{Kind, Person};
+use crate::org::{Human, Kind};
 
 pub const USER_SCHEMA: &str = "urn:ietf:params:scim:schemas:core:2.0:User";
 pub const GROUP_SCHEMA: &str = "urn:ietf:params:scim:schemas:core:2.0:Group";
 pub const ENTERPRISE_SCHEMA: &str = "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User";
 
 /// `manager_id` is the manager's SCIM ID, known once the manager has been provisioned.
-pub fn user(p: &Person, manager_id: Option<&str>) -> Value {
+pub fn user(p: &Human, manager_id: Option<&str>) -> Value {
     let mut enterprise = json!({
         "employeeNumber": p.employee_number,
         "organization": "Larkspur Capital",
@@ -51,14 +51,14 @@ mod tests {
     #[test]
     fn users_look_like_an_idp_sent_them() {
         let c = generate(Profile::Demo, 1);
-        let contractor = c.people.iter().find(|p| p.kind == Kind::Contractor && p.manager.is_some()).unwrap();
+        let contractor = c.humans.iter().find(|p| p.kind == Kind::Contractor && p.manager.is_some()).unwrap();
         let u = user(contractor, Some("mgr-id"));
         assert_eq!(u["userName"], contractor.user_name);
         assert_eq!(u["userType"], "Contractor");
         assert_eq!(u[ENTERPRISE_SCHEMA]["manager"]["value"], "mgr-id");
         assert_eq!(u[ENTERPRISE_SCHEMA]["department"], "engineering");
         assert_eq!(u["urn:larkspur:contract"]["endDate"], "2027-03-31");
-        let ceo = c.people.iter().find(|p| p.manager.is_none()).unwrap();
+        let ceo = c.humans.iter().find(|p| p.manager.is_none()).unwrap();
         assert!(user(ceo, None)[ENTERPRISE_SCHEMA].get("manager").is_none());
     }
 

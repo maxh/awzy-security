@@ -63,8 +63,8 @@ pub fn event(date: NaiveDate, a: &Access) -> Value {
         e["resource"] = json!({ "type": "McpTool", "id": format!("{ADMIN}/{}", a.tool) });
         e["attributes"]["target"] = json!(a.resource);
     }
-    if let Some(person) = &a.on_behalf_of {
-        e["on_behalf_of"] = json!({ "type": "Human", "id": person });
+    if let Some(human) = &a.on_behalf_of {
+        e["on_behalf_of"] = json!({ "type": "Human", "id": human });
     }
     e
 }
@@ -74,7 +74,7 @@ pub fn exfiltration_event(at: DateTime<Utc>, e: &crate::scenarios::Exfiltration)
     json!({
         "at": at.to_rfc3339(),
         "system": e.system,
-        "subject": { "type": "Human", "id": e.person },
+        "subject": { "type": "Human", "id": e.human },
         "action": e.action,
         "resource": { "type": "Resource", "id": e.resource },
         "outcome": "success",
@@ -170,8 +170,8 @@ mod tests {
         assert_eq!(e["subject"], json!({ "type": "ServiceAccount", "id": "sales-genie" }));
         assert_eq!(e["on_behalf_of"], json!({ "type": "Human", "id": nora }));
         assert!(e["at"].as_str().unwrap().starts_with("2026-10-08T"));
-        let person = day.iter().find(|a| a.on_behalf_of.is_none() && a.human_present).unwrap();
-        let p = event(date("2026-10-08"), person);
+        let human = day.iter().find(|a| a.on_behalf_of.is_none() && a.human_present).unwrap();
+        let p = event(date("2026-10-08"), human);
         assert_eq!(p["subject"]["type"], "Human");
         assert!(p.get("on_behalf_of").is_none());
         let alone = day.iter().find(|a| a.subject == "finance-summarizer").unwrap();
