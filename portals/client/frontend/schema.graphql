@@ -171,6 +171,32 @@ enum ChallengeStatus {
 	EXPIRED
 }
 
+"""
+One piece of evidence the finding relied on.
+"""
+type CitedEvidence {
+	"""
+	The evidence's ID: a decision or challenge QID, an event's ID, or a resource ID.
+	"""
+	evidenceId: String!
+	"""
+	What the model said it shows.
+	"""
+	why: String!
+}
+
+input CloseInvestigationInput {
+	investigationQid: ID!
+	"""
+	What the review found.
+	"""
+	reason: String!
+}
+
+type CloseInvestigationPayload {
+	investigation: Investigation!
+}
+
 input ContainAccessorInput {
 	subject: EntityRefInput!
 	reason: String!
@@ -427,6 +453,80 @@ input FinishSecurityKeyRegistrationInput {
 	attestationObject: String!
 }
 
+type Investigation {
+	"""
+	QID: investigation_<uuid>.
+	"""
+	id: ID!
+	"""
+	The person or service account it's about.
+	"""
+	subject: EntityRef!
+	"""
+	Why the reasoner opened it.
+	"""
+	trigger: String!
+	"""
+	The deterministic risk score when it ran: the floor for its risk.
+	"""
+	floor: Int!
+	status: InvestigationStatus!
+	verdict: InvestigationVerdict!
+	risk: Int!
+	summary: String!
+	evidence: [CitedEvidence!]!
+	containment: InvestigationContainment!
+	"""
+	What awzy's checks changed in the model's finding.
+	"""
+	notes: [String!]!
+	model: String!
+	inputTokens: Int!
+	outputTokens: Int!
+	startedAt: UtcTimestamp!
+	finishedAt: UtcTimestamp!
+	closedBy: Actor
+	closedAt: UtcTimestamp
+	closeReason: String
+}
+
+enum InvestigationContainment {
+	"""
+	None was recommended, or awzy's checks dropped it.
+	"""
+	NONE
+	"""
+	For a person to decide: the accessor is privileged.
+	"""
+	PROPOSE
+	"""
+	Sent to automated containments, which apply it only when enforcing.
+	"""
+	RECOMMEND
+}
+
+enum InvestigationStatus {
+	"""
+	A person has to decide: a proposed containment, or benign about someone the scores flag.
+	"""
+	NEEDS_REVIEW
+	"""
+	Nothing for a person to do.
+	"""
+	DONE
+	"""
+	A person reviewed and closed it.
+	"""
+	CLOSED
+}
+
+enum InvestigationVerdict {
+	MALICIOUS
+	SUSPICIOUS
+	BENIGN
+	INCONCLUSIVE
+}
+
 input JustifyChallengeInput {
 	challengeQid: ID!
 	"""
@@ -507,6 +607,10 @@ type Mutation {
 	Passes the verification with your key's assertion.
 	"""
 	finishChallengeVerification(input: FinishChallengeVerificationInput!): ChallengePayload!
+	"""
+	Closes an investigation once a person has reviewed it. It stays, with who closed it and why.
+	"""
+	closeInvestigation(input: CloseInvestigationInput!): CloseInvestigationPayload!
 }
 
 interface Node {
@@ -707,6 +811,10 @@ enum PortalArea {
 	`view`: answer your own challenges. `administer`: every challenge, and containments.
 	"""
 	CHALLENGES
+	"""
+	`view`: awzy-reasoner's investigations (ADR 0071). `administer`: close them.
+	"""
+	INVESTIGATIONS
 }
 
 input PublishPolicyBundleInput {
@@ -798,6 +906,14 @@ type Query {
 	Someone's security keys, to reset a lost one. For those who administer challenges.
 	"""
 	securityKeys(humanId: String!): [SecurityKey!]!
+	"""
+	Investigations, newest first, optionally only those with one status.
+	"""
+	investigations(status: InvestigationStatus, first: Int! = 50): [Investigation!]!
+	"""
+	One investigation by its QID.
+	"""
+	investigation(id: ID!): Investigation
 }
 
 input RegisterServiceAccountInput {

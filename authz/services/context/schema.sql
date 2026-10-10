@@ -44,12 +44,15 @@ CREATE TABLE public.investigations (
     output_tokens bigint DEFAULT 0 NOT NULL,
     started_at timestamp with time zone NOT NULL,
     finished_at timestamp with time zone DEFAULT now() NOT NULL,
+    closed_by text,
+    closed_at timestamp with time zone,
+    close_reason text,
     CONSTRAINT investigations_containment_check CHECK ((containment = ANY (ARRAY['none'::text, 'propose'::text, 'recommend'::text]))),
     CONSTRAINT investigations_floor_check CHECK (((floor >= 0) AND (floor <= 100))),
     CONSTRAINT investigations_input_tokens_check CHECK ((input_tokens >= 0)),
     CONSTRAINT investigations_output_tokens_check CHECK ((output_tokens >= 0)),
     CONSTRAINT investigations_risk_check CHECK (((risk >= 0) AND (risk <= 100))),
-    CONSTRAINT investigations_status_check CHECK ((status = ANY (ARRAY['needs_review'::text, 'done'::text]))),
+    CONSTRAINT investigations_status_check CHECK ((status = ANY (ARRAY['needs_review'::text, 'done'::text, 'closed'::text]))),
     CONSTRAINT investigations_verdict_check CHECK ((verdict = ANY (ARRAY['malicious'::text, 'suspicious'::text, 'benign'::text, 'inconclusive'::text])))
 );
 

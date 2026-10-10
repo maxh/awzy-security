@@ -1,10 +1,11 @@
 //! Investigations from awzy-reasoner (ADR 0071): a model's checked finding about one principal
-//! (ADR 0067). The reasoner writes each one at `POST /v1/investigations`; it and, later, the
-//! client portal read them back, and the reasoner counts their tokens against the monthly budget.
+//! (ADR 0067). The reasoner writes each one at `POST /v1/investigations`; it and the client portal
+//! read them back, the reasoner counts their tokens against the monthly budget, and a person
+//! closes one from the portal.
 
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -87,6 +88,21 @@ pub struct Investigation {
     #[serde(flatten)]
     pub input: InvestigationInput,
     pub finished_at: DateTime<Utc>,
+    /// Who closed it (an actor's typed text, ADR 0060), when, and why; null while open.
+    pub closed_by: Option<String>,
+    pub closed_at: Option<DateTime<Utc>>,
+    pub close_reason: Option<String>,
+}
+
+/// Why closing failed.
+#[derive(Debug, thiserror::Error)]
+pub enum CloseError {
+    #[error("no such investigation")]
+    NotFound,
+    #[error("the investigation is already closed")]
+    AlreadyClosed,
+    #[error(transparent)]
+    Db(#[from] sqlx::Error),
 }
 
 /// Tokens spent on investigations since a time.
@@ -132,6 +148,9 @@ fn from_row(row: &PgRow) -> Result<Investigation, sqlx::Error> {
             started_at: row.try_get("started_at")?,
         },
         finished_at: row.try_get("finished_at")?,
+        closed_by: row.try_get("closed_by")?,
+        closed_at: row.try_get("closed_at")?,
+        close_reason: row.try_get("close_reason")?,
     })
 }
 
@@ -193,6 +212,31 @@ impl ContextStore {
         row.as_ref().map(from_row).transpose()
     }
 
+    /// Closes `id`, as `by`, for `reason`.
+    pub async fn close_investigation(
+        &self,
+        id: InvestigationId,
+        by: &str,
+        reason: &str,
+    ) -> Result<Investigation, CloseError> {
+        let row = sqlx::query(
+            "UPDATE investigations SET status = 'closed', closed_by = $2, closed_at = now(), close_reason = $3
+             WHERE id = $1 AND status <> 'closed' RETURNING *",
+        )
+        .bind(id.uuid())
+        .bind(by)
+        .bind(reason)
+        .fetch_optional(self.pool())
+        .await?;
+        match row {
+            Some(row) => Ok(from_row(&row)?),
+            None => Err(match self.investigation(id).await? {
+                Some(_) => CloseError::AlreadyClosed,
+                None => CloseError::NotFound,
+            }),
+        }
+    }
+
     /// Tokens spent on investigations finished after `since`.
     pub async fn investigation_usage(&self, since: DateTime<Utc>) -> Result<Usage, sqlx::Error> {
         let (investigations, input_tokens, output_tokens): (i64, i64, i64) = sqlx::query_as(
@@ -249,6 +293,42 @@ async fn usage(State(store): State<ContextStore>, Query(p): Query<UsageParams>) 
         Ok(u) => Json(json!({ "usage": u })).into_response(),
         Err(e) => unavailable(e),
     }
+}
+
+#[derive(Deserialize)]
+struct CloseInput {
+    reason: String,
+}
+
+/// Closes an investigation. `x-awzy-actor` names who did it, as the client portal authorized them.
+async fn close(
+    State(store): State<ContextStore>,
+    Path(qid): Path<String>,
+    headers: HeaderMap,
+    Json(input): Json<CloseInput>,
+) -> Response {
+    let Ok(id) = qid.parse::<InvestigationId>() else {
+        return (StatusCode::BAD_REQUEST, "not an investigation QID").into_response();
+    };
+    let reason = input.reason.trim();
+    if reason.is_empty() || reason.len() > 2000 {
+        return (StatusCode::BAD_REQUEST, "a reason of 1 to 2,000 characters is required").into_response();
+    }
+    let by = crate::actor(&headers);
+    match store.close_investigation(id, &by, reason).await {
+        Ok(i) => {
+            tracing::info!(investigation = %i.qid, %by, "investigation closed");
+            Json(json!({ "investigation": i })).into_response()
+        }
+        Err(CloseError::NotFound) => (StatusCode::NOT_FOUND, "no such investigation").into_response(),
+        Err(CloseError::AlreadyClosed) => (StatusCode::CONFLICT, "already closed").into_response(),
+        Err(CloseError::Db(e)) => unavailable(e),
+    }
+}
+
+/// `POST /v1/investigations/{qid}/close`: a person closes one, through the client portal.
+pub fn close_router(store: ContextStore) -> Router {
+    Router::new().route("/v1/investigations/{qid}/close", post(close)).with_state(store)
 }
 
 /// `POST /v1/investigations`: the reasoner records one.
@@ -317,5 +397,15 @@ mod tests {
 
         let usage = store.investigation_usage(before).await.unwrap();
         assert_eq!((usage.investigations, usage.input_tokens, usage.output_tokens), (2, 1500, 150));
+
+        // A person closes Nora's, once.
+        let closed = store.close_investigation(id, "Human::carol", "Talked to her manager; expected").await.unwrap();
+        assert_eq!(closed.input.status, "closed");
+        assert_eq!((closed.closed_by.as_deref(), closed.close_reason.is_some()), (Some("Human::carol"), true));
+        assert!(matches!(store.close_investigation(id, "Human::carol", "again").await, Err(CloseError::AlreadyClosed)));
+        assert!(matches!(
+            store.close_investigation(InvestigationId::new(), "Human::carol", "x").await,
+            Err(CloseError::NotFound)
+        ));
     }
 }

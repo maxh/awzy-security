@@ -72,7 +72,7 @@ async fn list_service_accounts(State(store): State<ContextStore>) -> Response {
 
 /// Who did it, from `x-awzy-actor` (an actor's typed text, ADR 0060), as the caller authorized
 /// them. Stored in the typed form whatever the caller sent.
-fn actor(headers: &HeaderMap) -> String {
+pub(crate) fn actor(headers: &HeaderMap) -> String {
     let text = headers.get("x-awzy-actor").and_then(|v| v.to_str().ok()).unwrap_or("unknown");
     awzy_model::Actor::parse(text).to_string()
 }
@@ -220,6 +220,8 @@ pub fn router(store: ContextStore, scim_token: &str, access: &Access) -> Router 
         // portal reads them.
         .merge(guarded(investigations::write_router(store.clone()), &access.writers))
         .merge(guarded(investigations::read_router(store.clone()), &either(&access.writers, &access.directory)))
+        // A person closes one in the client portal.
+        .merge(guarded(investigations::close_router(store.clone()), &access.directory))
         .merge(guarded(directory, &access.directory))
         .merge(scim::router(store, scim_token))
 }

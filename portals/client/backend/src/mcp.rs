@@ -232,8 +232,70 @@ pub struct Proposal {
     pub next_step: String,
 }
 
+#[derive(Deserialize, JsonSchema, Default)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct ListInvestigationsParams {
+    /// Only these: needs_review (a person has to decide), done, or closed.
+    pub status: Option<String>,
+    /// How many to return, newest first. Defaults to 20, at most 200.
+    pub limit: Option<u32>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct GetInvestigationParams {
+    /// `investigation_<uuid>`
+    pub investigation_qid: String,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct InvestigationList {
+    /// Each with its subject, verdict, risk, summary, cited evidence, containment, and status.
+    pub investigations: Vec<serde_json::Value>,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct InvestigationOut {
+    /// None when there's no such investigation.
+    pub investigation: Option<serde_json::Value>,
+}
+
 #[tool_router(server_handler)]
 impl ClientPortalMcp {
+    #[tool(
+        name = "list_investigations",
+        description = "awzy-reasoner's investigations of accessors it flagged, newest first: what the model found, the evidence it cited, and what awzy's checks let it do. Filter by status: needs_review, done, or closed. Read-only."
+    )]
+    async fn list_investigations(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(p): Parameters<ListInvestigationsParams>,
+    ) -> Result<Json<InvestigationList>, ErrorData> {
+        self.allow(&parts, PortalAction::View, PortalArea::Investigations).await?;
+        if let Some(s) = p.status.as_deref().filter(|s| !["needs_review", "done", "closed"].contains(s)) {
+            return Err(ErrorData::invalid_params(format!("status is needs_review, done, or closed, not {s:?}"), None));
+        }
+        let limit = p.limit.unwrap_or(20).min(200) as i32;
+        let list = crate::investigations::list(self.context()?, p.status.as_deref(), limit).await.map_err(internal)?;
+        Ok(Json(InvestigationList { investigations: list.iter().map(crate::investigations::to_json).collect() }))
+    }
+
+    #[tool(
+        name = "get_investigation",
+        description = "One investigation by its QID: its subject, why it was opened, the verdict, risk, summary, the evidence it cited, what awzy's checks changed, and whether a person has closed it. Read-only."
+    )]
+    async fn get_investigation(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(p): Parameters<GetInvestigationParams>,
+    ) -> Result<Json<InvestigationOut>, ErrorData> {
+        self.allow(&parts, PortalAction::View, PortalArea::Investigations).await?;
+        let found = crate::investigations::get(self.context()?, &p.investigation_qid).await.map_err(internal)?;
+        Ok(Json(InvestigationOut { investigation: found.as_ref().map(crate::investigations::to_json) }))
+    }
+
     #[tool(
         name = "search_decisions",
         description = "Search authorization decisions, newest first. Filter by subject, resource, verdict, and time (last 24 hours by default, at most 30 days)."
@@ -397,6 +459,13 @@ impl ClientPortalMcp {
             .clickhouse
             .as_ref()
             .ok_or_else(|| ErrorData::internal_error("ClickHouse is not configured (AWZY_CLICKHOUSE_URL)", None))
+    }
+
+    fn context(&self) -> Result<&crate::directory::ContextClient, ErrorData> {
+        self.services
+            .context
+            .as_ref()
+            .ok_or_else(|| ErrorData::internal_error("awzy-context is not configured (AWZY_CONTEXT_ADDR)", None))
     }
 
     fn policy(&self) -> Result<crate::PolicyClient, ErrorData> {
@@ -701,6 +770,8 @@ mod tests {
                 "explain_decision",
                 "get_active_policy_bundle",
                 "get_enforcement",
+                "get_investigation",
+                "list_investigations",
                 "list_policy_bundles",
                 "propose_policy",
                 "search_decisions"

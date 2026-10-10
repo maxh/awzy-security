@@ -69,6 +69,8 @@ pub enum PortalArea {
     Directory,
     /// `view`: answer your own challenges. `administer`: every challenge, and containments.
     Challenges,
+    /// `view`: awzy-reasoner's investigations (ADR 0071). `administer`: close them.
+    Investigations,
 }
 
 impl PortalArea {
@@ -79,6 +81,7 @@ impl PortalArea {
             Self::Enforcement => "enforcement",
             Self::Directory => "directory",
             Self::Challenges => "challenges",
+            Self::Investigations => "investigations",
         }
     }
 }

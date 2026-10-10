@@ -39,7 +39,7 @@ impl ContextClient {
         }
     }
 
-    async fn call(
+    pub(crate) async fn call(
         &self,
         method: &str,
         path: &str,
@@ -63,14 +63,14 @@ impl ContextClient {
         Ok((status, res.into_body().collect().await?.to_bytes()))
     }
 
-    async fn get<T: DeserializeOwned>(&self, path: &str) -> anyhow::Result<T> {
+    pub(crate) async fn get<T: DeserializeOwned>(&self, path: &str) -> anyhow::Result<T> {
         let (status, body) = self.call("GET", path, None, None).await?;
         anyhow::ensure!(status == 200, "awzy-context answered {status}: {}", String::from_utf8_lossy(&body));
         Ok(serde_json::from_slice(&body)?)
     }
 }
 
-fn context<'a>(ctx: &Context<'a>) -> Result<&'a ContextClient> {
+pub(crate) fn context<'a>(ctx: &Context<'a>) -> Result<&'a ContextClient> {
     ctx.data::<crate::Services>()?
         .context
         .as_ref()
