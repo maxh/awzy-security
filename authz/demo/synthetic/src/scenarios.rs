@@ -1,19 +1,22 @@
 //! The demo plan's scenarios: the curious contractor and the first half of the rogue agent, which
-//! challenges answer (step 6), and the suddenly foolish administrator, which needs awzy-reasoner's
-//! risk too (step 7). Each is a few accesses at fixed times on top of an ordinary day, with what
-//! awzy should do about each, so detection can be scored (demo plan, "Detection").
+//! challenges answer (step 6), and the suddenly foolish administrator and the peer outlier, which
+//! need awzy-reasoner's risk too (step 7). Each is a few accesses at fixed times on top of an
+//! ordinary day, with what awzy should do about each, so detection can be scored (demo plan,
+//! "Detection").
 //!
-//! Still to come: the rogue agent's containment and the peer outlier.
+//! Still to come: the rogue agent's containment.
+
+use std::collections::BTreeSet;
 
 use crate::{
     activity::{Access, Why, READ},
     driver::Outcome,
-    org::cast,
-    world::BASIC_QUESTIONS,
+    org::{cast, Company, Profile},
+    world::{person_documents, BASIC_QUESTIONS},
 };
 
 /// When the scenarios count on awzy-reasoner having scored the day so far: after the foolish
-/// administrator's questions, before his operations.
+/// administrator's questions and the peer outlier's morning, before what they do next.
 pub const REASONER_RUNS_AT: u32 = 10 * 60 + 45;
 
 /// What awzy should do with a scenario's access.
@@ -130,11 +133,57 @@ pub fn foolish_admin() -> Vec<Step> {
     steps
 }
 
+/// How many of finance's documents the peer outlier opens in a morning: about five times what an
+/// analyst opens in a whole day.
+pub const OUTLIER_READS: usize = 60;
+
+/// Riley, a finance analyst, opens sixty of his team's documents in a morning, each one his to
+/// read and none unusual on its own. awzy-reasoner sees about five times his usual day and his
+/// team's, which scores past 80 (ADR 0056), and from then on everything he opens asks for his
+/// security key, the client holdings export included.
+pub fn peer_outlier(company: &Company, profile: Profile) -> Vec<Step> {
+    let riley = cast("finance").expect("cast");
+    let step = |minute: u32, resource: String, expect: Expect| Step {
+        scenario: "peer-outlier",
+        access: Access {
+            minute,
+            subject: riley.clone(),
+            on_behalf_of: None,
+            human_present: true,
+            team: "finance",
+            tool: READ,
+            resource,
+            why: Why::Scenario("peer-outlier"),
+        },
+        expect,
+    };
+    // Finance's documents, a teammate at a time, so the reads spread over the team's work.
+    let team: Vec<Vec<String>> = (0..company.people.len())
+        .filter(|&i| company.people[i].team == "finance")
+        .map(|i| person_documents(company, profile, company.seed, i).into_iter().map(|d| d.id).collect())
+        .collect();
+    let longest = team.iter().map(Vec::len).max().unwrap_or_default();
+    let documents = (0..longest).flat_map(|k| team.iter().filter_map(move |docs| docs.get(k).cloned()));
+    let mut steps: Vec<Step> = documents
+        .take(OUTLIER_READS)
+        .enumerate()
+        .map(|(i, id)| step(8 * 60 + 30 + 2 * i as u32, id, Expect::Allow))
+        .collect();
+    let verify = Expect::Challenge(&["verification"]);
+    let after = steps.iter().take(2).map(|s| s.access.resource.clone()).collect::<Vec<_>>();
+    steps.push(step(11 * 60 + 20, "synthetic:doc:client-holdings-export".into(), verify));
+    for (i, id) in after.into_iter().enumerate() {
+        steps.push(step(11 * 60 + 21 + i as u32, id, verify));
+    }
+    steps
+}
+
 /// Every scenario step, in time order.
-pub fn all() -> Vec<Step> {
+pub fn all(company: &Company, profile: Profile) -> Vec<Step> {
     let mut steps = curious_contractor();
     steps.extend(rogue_agent());
     steps.extend(foolish_admin());
+    steps.extend(peer_outlier(company, profile));
     steps.sort_by_key(|s| s.access.minute);
     steps
 }
@@ -149,9 +198,16 @@ pub struct Detection {
     /// challenged: false positives. Noise is out of pattern and not counted either way.
     pub ordinary_challenged: usize,
     pub ordinary: usize,
+    /// Whose accesses aren't ordinary on the day: the scenarios' accessors.
+    pub actors: BTreeSet<String>,
 }
 
 impl Detection {
+    /// Scoring a day with `steps` in it.
+    pub fn new(steps: &[Step]) -> Self {
+        Self { actors: steps.iter().map(|s| s.access.subject.clone()).collect(), ..Self::default() }
+    }
+
     pub fn add_step(&mut self, step: &Step, outcome: &Outcome) {
         self.steps += 1;
         if step.expect.met_by(outcome) {
@@ -162,7 +218,7 @@ impl Detection {
     /// Counts `access` if it's ordinary work. The scenarios' own accessors don't count on the day:
     /// once awzy flags the foolish administrator, his routine operations ask for his key too.
     pub fn add_ordinary(&mut self, access: &Access, outcome: &Outcome) {
-        if all().iter().any(|s| s.access.subject == access.subject) {
+        if self.actors.contains(&access.subject) {
             return;
         }
         if matches!(access.why, Why::Assigned | Why::Team | Why::Admin) {
@@ -196,7 +252,10 @@ mod tests {
         let c = generate(Profile::Demo, 1);
         let docs: Vec<String> = scenario_resources(&c).into_iter().map(|r| r.id).collect();
         let work = work_items(&c, Profile::Demo, c.seed);
-        for step in all().into_iter().filter(|s| s.access.tool == READ) {
+        let outlier = cast("finance").unwrap();
+        // The peer outlier opens his own team's documents; every other step is about a scenario document.
+        for step in all(&c, Profile::Demo).into_iter().filter(|s| s.access.tool == READ && s.access.subject != outlier)
+        {
             assert!(docs.contains(&step.access.resource), "{} is a scenario document", step.access.resource);
             let who = step.access.on_behalf_of.as_ref().unwrap_or(&step.access.subject);
             let linked = work
@@ -205,13 +264,14 @@ mod tests {
                 .any(|w| w.resources.contains(&step.access.resource));
             assert!(!linked, "{} isn't linked from {who}'s work", step.access.resource);
         }
-        assert!(all().windows(2).all(|w| w[0].access.minute <= w[1].access.minute));
+        assert!(all(&c, Profile::Demo).windows(2).all(|w| w[0].access.minute <= w[1].access.minute));
     }
 
     #[test]
     fn detection_counts_what_was_caught_and_what_ordinary_work_paid() {
-        let mut d = Detection::default();
-        let steps = all();
+        let c = generate(Profile::Demo, 1);
+        let steps = all(&c, Profile::Demo);
+        let mut d = Detection::new(&steps);
         d.add_step(&steps[0], &Outcome::Blocked("challenge".into()));
         d.add_step(&steps[1], &Outcome::Ran);
         let mut ordinary = steps[0].access.clone();
@@ -221,7 +281,7 @@ mod tests {
         d.add_ordinary(&ordinary, &Outcome::Ran);
         ordinary.why = Why::Noise;
         d.add_ordinary(&ordinary, &Outcome::Blocked("challenge".into()));
-        assert_eq!(d, Detection { caught: 1, steps: 2, ordinary_challenged: 1, ordinary: 2 });
+        assert_eq!((d.caught, d.steps, d.ordinary_challenged, d.ordinary), (1, 2, 1, 2));
         // The scenarios' own accessors aren't ordinary on the day.
         d.add_ordinary(&steps[0].access, &Outcome::Ran);
         assert_eq!(d.ordinary, 2);
@@ -242,7 +302,9 @@ mod tests {
             if ago == 0 {
                 accesses.retain(|a| a.minute < minute);
                 if scenarios {
-                    accesses.extend(all().into_iter().map(|s| s.access).filter(|a| a.minute < minute));
+                    accesses.extend(
+                        all(company, Profile::Demo).into_iter().map(|s| s.access).filter(|a| a.minute < minute),
+                    );
                 }
             }
             let mut per: HashMap<Principal, (u64, HashSet<String>)> = HashMap::new();
@@ -287,16 +349,19 @@ mod tests {
     const ELEVATED: i32 = 40;
 
     #[test]
-    fn the_foolish_administrators_questions_raise_his_risk_and_nobody_elses() {
+    fn the_scenarios_raise_their_accessors_risk_and_nobody_elses() {
         let c = generate(Profile::Demo, 1);
         let (history, opened) = reasoner_view(&c, 20, REASONER_RUNS_AT, true);
-        let lee = ("Human".to_string(), cast("it-admin").unwrap());
+        let human = |team: &str| ("Human".to_string(), cast(team).unwrap());
+        let (lee, riley) = (human("it-admin"), human("finance"));
         for s in score_all(&history, &opened, &teams(&c)) {
             if s.principal == lee {
                 assert!(
                     s.score.score > ELEVATED && s.score.score <= 80,
                     "elevated, short of challenging everything: {s:?}"
                 );
+            } else if s.principal == riley {
+                assert!(s.score.score > 80, "high enough to challenge everything: {s:?}");
             } else {
                 assert!(s.score.score <= ELEVATED, "{s:?}");
             }
@@ -395,9 +460,10 @@ mod tests {
         let reasoner = awzy_reasoner::context::ContextClient::new(&context, awzy_service_auth::TokenSource::off());
 
         // Every scenario step gets what the demo plan says awzy should do.
-        let mut detection = Detection::default();
+        let steps = all(&company, Profile::Demo);
+        let mut detection = Detection::new(&steps);
         let mut scored = false;
-        for (i, step) in all().iter().enumerate() {
+        for (i, step) in steps.iter().enumerate() {
             if !scored && step.access.minute >= REASONER_RUNS_AT {
                 // awzy-reasoner's run: the morning so far against the month before.
                 let (history, opened) = reasoner_view(&company, 20, REASONER_RUNS_AT, true);
@@ -434,7 +500,7 @@ mod tests {
             detection.add_ordinary(a, &outcome);
         }
         eprintln!("detection: {detection:?}");
-        assert_eq!((detection.caught, detection.steps), (all().len(), all().len()));
+        assert_eq!((detection.caught, detection.steps), (steps.len(), steps.len()));
         assert!(detection.ordinary > 150, "{detection:?}");
         assert_eq!(detection.ordinary_challenged, 0, "no ordinary work challenged: {detection:?}");
     }

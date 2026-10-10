@@ -86,7 +86,7 @@ Injected into the activity at fixed times, from the paper unless noted:
 | **The curious contractor** | Stolen contractor credentials are used to open sensitive documents unrelated to the contractor's statement of work | High-risk accessor, low subject-matter crossover: a document-owner approval challenge |
 | **The rogue agent** | SalesGenie, prompted by a Northeast financial-services rep whose risk is rising, queries the highly confidential strategic plan; the rep then tries to export data | No valid work assignment: two challenges (the human confirms the agent's action, then asks the data owner); failing them, plus the slower analysis of recent accesses and exfiltration logs, leads to an automatic containment |
 | **The suddenly foolish administrator** | An admin asks basic questions about the system, then runs high-risk operations in rapid, agent-like succession | Risk attribute plus high-risk operation: a security-key challenge |
-| **The peer outlier** | One analyst opens 500% more files than the peer group in a week | The reasoner raises risk; a custom challenge or containment |
+| **The peer outlier** | One analyst opens about five times as many files as usual, and as the peer group, in a morning | The reasoner raises risk past 80, and everything the analyst opens asks for a security key |
 | **Ordinary work** (not from the paper) | People and agents doing their jobs, including legitimate cross-team access | Allowed, quickly, with few challenges: the false-positive baseline |
 
 The generator records which accesses belong to a scenario, so detection can be measured (below).
@@ -184,3 +184,6 @@ Each step is usable on its own and shows up in the demo:
    agent's containment, once awzy-reasoner exists. The foolish administrator runs end to end: awzy-reasoner
    scores his basic questions as elevated risk, and his high-risk operations on `larkspur-admin`
    ask for his security key ([ADR 0064](adr/0064-unfamiliar-territory-raises-risk-and-high-risk-operations-need-a-key.md)).
+   So does the peer outlier: Riley's morning of sixty finance documents scores past 80 against his
+   own days and his team's ([ADR 0056](adr/0056-awzy-scores-principals-risk-and-the-pdp-uses-it.md)), and
+   what he opens next asks for his security key. The rogue agent's containment is still to come.

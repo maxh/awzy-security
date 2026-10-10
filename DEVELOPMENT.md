@@ -378,8 +378,8 @@ The driver signs each call's token with the gateway's dev secret (issuer `https:
 audience `awzy-gateway`; override with `AWZY_TOKEN_ISSUER` and `AWZY_TOKEN_AUDIENCE`).
 
 The first day includes the demo plan's scenarios: the curious contractor, the rogue agent's
-first half, and the suddenly foolish administrator. awzy catches the administrator only if
-awzy-reasoner scores his questions before his operations, which come a few hundred calls later,
+first half, the suddenly foolish administrator, and the peer outlier. awzy catches the last two
+only if awzy-reasoner scores the morning before what they do next, a few hundred calls later,
 so run the reasoner with a short `AWZY_REASONER_INTERVAL_SECS` (30) and the history below. The run ends with a `detection` line: scenario steps caught, and ordinary
 accesses challenged. Switch the install to enforce first, because in monitor mode the gateway
 allows everything and nothing is caught. Leave them out with `--no-scenarios`. To run them end
