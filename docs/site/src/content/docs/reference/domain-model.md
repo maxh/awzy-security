@@ -23,7 +23,7 @@ IdP (over SCIM) and from connectors to your apps.
 | `Group` | A group or team from your IdP. Groups can nest | |
 | `Resource` | Something people access: a document, a folder, a project. Resources nest | `sensitivity`, `unclassified`, `owner`, and sharing: `shared_people`, `shared_groups` (can read), `writer_people`, `writer_groups` (can also change), `shared_with_everyone` |
 | `McpServer`, `McpTool` | An MCP server behind awzy-gateway, and its tools (`<server>/<tool>`) | `sensitivity` |
-| `PortalArea` | An area of the client portal: `decisions`, `policies`, `enforcement`, `directory`, `challenges` | `sensitivity` |
+| `PortalArea` | An area of the client portal: `decisions`, `policies`, `enforcement`, `directory`, `challenges`, `investigations` | `sensitivity` |
 
 `Human` and `ServiceAccount` are the **accessors**: the subject of every check. See
 [People, agents, and delegation](/concepts/principals-and-delegation/). A resource's sharing
