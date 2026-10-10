@@ -9,10 +9,19 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
-pattern='\b[0-9]{12}\b|ssoins-[0-9a-f]{8,}|[a-z0-9-]+\.awsapps\.com|install_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[A-Za-z0-9._%+-]+@awzysecurity\.com'
+# A cheap first pass over files; hits() decides what's really an identifier.
+prefilter='[0-9]{12}|ssoins-|awsapps\.com|install_[0-9a-f]{8}-|@awzysecurity\.com'
+uuid='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 allow=$(grep -vE '^\s*(#|$)' tools/ci/identifier-allowlist.txt | paste -sd'|' -)
 # Generated or binary-ish files whose long numbers are hashes and coordinates, not identifiers.
 skip=(':!*.lock' ':!*pnpm-lock.yaml' ':!*.svg' ':!*.png' ':!*/__generated__/*' ':!tools/ci/identifier-allowlist.txt')
+
+# The identifiers in one line. Account IDs are standalone 12-digit tokens, looked for after
+# removing UUIDs, whose last group is 12 digits too. No \b: GNU and BSD grep disagree on it.
+hits() {
+  printf '%s\n' "$1" | grep -oE "install_$uuid|ssoins-[0-9a-f]{8,}|[a-z0-9-]+\.awsapps\.com|[A-Za-z0-9._%+-]+@awzysecurity\.com" || true
+  printf '%s\n' "$1" | sed -E "s/$uuid//g" | grep -oE '[[:alnum:]]+' | grep -xE '[0-9]{12}' || true
+}
 
 # Reads "where<TAB>line" pairs; prints the ones holding a non-placeholder identifier.
 findings() {
@@ -23,7 +32,7 @@ findings() {
       echo "$hit" | grep -qE "$allow" && continue
       echo "$where: $hit"
       status=1
-    done < <(printf '%s\n' "$line" | grep -oE "$pattern" || true)
+    done < <(hits "$line")
   done
   return $status
 }
@@ -35,7 +44,7 @@ case "${1:-}" in
   --text)
     input=$(awk '{print "PR text\t"$0}') ;;
   "")
-    input=$(git grep -nE "$pattern" -- . "${skip[@]}" | sed -E 's/^([^:]+:[0-9]+):/\1\t/' || true) ;;
+    input=$(git grep -nE "$prefilter" -- . "${skip[@]}" | sed -E 's/^([^:]+:[0-9]+):/\1\t/' || true) ;;
   *) echo "usage: $0 [--staged | --text]" >&2; exit 2 ;;
 esac
 
