@@ -62,15 +62,26 @@ permit (
 @id("people-answer-their-challenges")
 permit (principal is Human, action == Action::"view", resource == PortalArea::"challenges");
 
-// Approval challenges (awzy-challenge): the security team approves. Clients add data owners and
-// managers as connectors bring those relationships in.
+// Approval challenges (awzy-challenge): the security team's people approve. Clients add data owners
+// and managers as connectors bring those relationships in, and agents by name (ADR 0065).
 @id("security-team-approves")
-permit (principal in Group::"security", action == Action::"approve", resource);
+permit (principal is Human in Group::"security", action == Action::"approve", resource);
 
 // Data owners approve access to what they own (ADR 0061).
 @id("owners-approve")
 permit (principal is Human, action == Action::"approve", resource is Resource)
 when { resource has owner && resource.owner == principal };
+
+// An agent never approves for the person it answers to, or the approval is that person's own
+// (ADR 0065). Without `approving_for` there's no telling, so it doesn't approve at all.
+@id("agents-never-approve-for-their-owner")
+forbid (principal is ServiceAccount, action == Action::"approve", resource)
+unless { context has approving_for && principal.owner != context.approving_for };
+
+// Crown jewels need a person's approval, whatever a client's policies let agents approve.
+@id("crown-jewels-need-a-person-to-approve")
+forbid (principal is ServiceAccount, action == Action::"approve", resource)
+when { resource.sensitivity == "crown_jewels" };
 
 // Deprovisioned in the IdP: no access, whatever their token says (ADR 0031).
 @id("deactivated-people")

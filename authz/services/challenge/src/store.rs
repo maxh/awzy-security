@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use awzy_model::{ChallengeId, ChallengeKind, Challenges, ContainmentId, DecisionId, EntityRef};
+use awzy_model::{Actor, ChallengeId, ChallengeKind, Challenges, ContainmentId, DecisionId, EntityRef};
 use chrono::{DateTime, Utc};
 use sqlx::{postgres::PgRow, PgPool, Postgres, Row, Transaction};
 
@@ -75,14 +75,13 @@ pub struct Challenge {
 }
 
 impl Challenge {
-    /// The people a request's own approval can't come from: whoever made it or answers for it.
-    fn parties(&self) -> impl Iterator<Item = &str> {
+    /// Who a request's own approval can't come from: whoever made it, the person it was for, and
+    /// whoever answers for it. A service account approving for its owner is the PDP's to refuse
+    /// (ADR 0065), since only it knows owners.
+    fn parties(&self) -> impl Iterator<Item = EntityRef> + '_ {
         let r = &self.request;
-        let human_subject = (r.subject.kind == awzy_model::entity_type::HUMAN).then_some(r.subject.id.as_str());
-        human_subject
-            .into_iter()
-            .chain(r.on_behalf_of.as_ref().map(|h| h.id.as_str()))
-            .chain(self.answerer_id.as_deref())
+        let human = |id: &str| EntityRef::new(awzy_model::entity_type::HUMAN, id);
+        std::iter::once(r.subject.clone()).chain(r.on_behalf_of.clone()).chain(self.answerer_id.as_deref().map(human))
     }
 
     fn ensure_answerable(&self, kind: ChallengeKind) -> Result<(), StoreError> {
@@ -367,7 +366,8 @@ impl ChallengeStore {
         let mut tx = self.pool.begin().await?;
         let c = lock(&mut tx, id).await?;
         c.ensure_answerable(ChallengeKind::Approval)?;
-        if c.parties().any(|p| p == decided_by) {
+        let approver = Actor::parse(decided_by).subject;
+        if c.parties().any(|p| p == approver) {
             return Err(StoreError::NotAllowed(format!(
                 "{decided_by} made or answers for the request in challenge {id}, so can't approve it"
             )));
@@ -747,6 +747,20 @@ pub(crate) mod tests {
         let id = store.resolve(DecisionId::new(), &human, required, Some("alice"), true).await.unwrap();
         let err = store.decide(id.challenge_id.unwrap(), "alice", true, "").await;
         assert!(matches!(err, Err(StoreError::NotAllowed(_))), "the person asking");
+    }
+
+    #[tokio::test]
+    async fn an_agent_approves_but_never_its_own_request() {
+        let Some(store) = test_store(Lifetimes::default()).await else { return };
+        let req = request(EntityRef::new("ServiceAccount", "sales-genie"), Some(EntityRef::new("Human", "bob")));
+        let required = of(&[ChallengeKind::Approval]);
+        let id = store.resolve(DecisionId::new(), &req, required, Some("bob"), true).await.unwrap();
+        let id = id.challenge_id.unwrap();
+        let err = store.decide(id, "ServiceAccount::sales-genie", true, "").await;
+        assert!(matches!(err, Err(StoreError::NotAllowed(_))), "the agent asking");
+
+        let c = store.decide(id, "ServiceAccount::overseer", true, "routine").await.unwrap();
+        assert_eq!((c.status, c.decided_by.as_deref()), (ChallengeStatus::Passed, Some("ServiceAccount::overseer")));
     }
 
     #[tokio::test]

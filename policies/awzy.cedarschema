@@ -68,6 +68,10 @@ type RequestContext = {
   // What the enforcement point observed about the calling software, e.g. "browser",
   // "cli", or an MCP client name. Helps spot agents using a person's own credentials.
   client?: String,
+  // Set by awzy-challenge on an `approve` check: the person who answers for the challenged
+  // request (the human asking, the person an agent acts for, or an unattended account's owner).
+  // A service account never approves for its own owner (ADR 0065).
+  approving_for?: Human,
 };
 
 action read, write appliesTo {
@@ -93,9 +97,10 @@ action view, administer appliesTo {
 
 // Approving someone else's challenged request for this resource (awzy-challenge). awzy-challenge
 // asks the PDP before recording an approval, and never accepts one from the person asking or the
-// person an agent acts for.
+// person an agent acts for. A service account, such as an overseer agent, approves only where a
+// policy lets it (ADR 0065).
 action approve appliesTo {
-  principal: [Human],
+  principal: [Human, ServiceAccount],
   resource: [Resource, McpTool, PortalArea],
   context: RequestContext,
 };

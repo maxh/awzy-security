@@ -453,7 +453,8 @@ type Mutation {
 	justifyChallenge(input: JustifyChallengeInput!): ChallengePayload!
 	"""
 	Approves or rejects someone else's request. awzy-challenge checks with the PDP that the
-	signed-in person may approve the resource.
+	signed-in person, or a service account such as an overseer agent (ADR 0065), may approve the
+	resource.
 	"""
 	decideChallenge(input: DecideChallengeInput!): ChallengePayload!
 	"""

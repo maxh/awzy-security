@@ -196,17 +196,27 @@ impl ChallengeService for Service {
 
     async fn decide(&self, req: Request<DecideRequest>) -> Result<Response<DecideResponse>, Status> {
         let req = req.into_inner();
-        let decided_by = person(req.decided_by_actor.clone(), &req.decided_by, "decided_by_actor")?;
+        let approver = approver(req.decided_by_actor.clone(), &req.decided_by)?;
+        // A person is stored by their bare ID, as before ADR 0060; anyone else in the typed form.
+        let decided_by = if approver.subject.kind == awzy_model::entity_type::HUMAN {
+            approver.subject.id.clone()
+        } else {
+            approver.to_string()
+        };
         let id = qid(&req.challenge_qid)?;
         // Checked before the store's own checks so a refusal names the policy decision; the store
         // then re-checks the challenge is still pending as it records the answer.
         let c = self.store.get(id).await.map_err(status)?;
-        self.approvals.check(&decided_by, &c.request.resource, req.approver_entities.clone()).await.map_err(
-            |e| match e {
-                ApprovalError::Refused(_) => Status::permission_denied(e.to_string()),
-                ApprovalError::Unavailable(_) => Status::unavailable(e.to_string()),
-            },
-        )?;
+        let checked = self.approvals.check(
+            &approver.subject,
+            &c.request.resource,
+            c.answerer_id.as_deref(),
+            req.approver_entities.clone(),
+        );
+        checked.await.map_err(|e| match e {
+            ApprovalError::Refused(_) => Status::permission_denied(e.to_string()),
+            ApprovalError::Unavailable(_) => Status::unavailable(e.to_string()),
+        })?;
         let c = self.store.decide(id, &decided_by, req.approve, &req.note).await.map_err(status)?;
         tracing::info!(challenge_id = %c.id, decided_by = %decided_by, approve = req.approve, "challenge decided");
         Ok(Response::new(DecideResponse { challenge: Some(challenge_to_wire(c)) }))
@@ -502,6 +512,19 @@ fn person(actor: Option<awzy_authz_proto::authz::v1::Actor>, text: &str, field: 
     }
 }
 
+/// Who may approve: a person, or a service account such as an overseer agent (ADR 0065), acting on
+/// its own authority. Policy decides whether it may approve this resource.
+fn approver(actor: Option<awzy_authz_proto::authz::v1::Actor>, text: &str) -> Result<awzy_model::Actor, Status> {
+    use awzy_model::entity_type::{HUMAN, SERVICE_ACCOUNT};
+    match awzy_authz_proto::actor_from_wire(actor, text) {
+        Some(a) if [HUMAN, SERVICE_ACCOUNT].contains(&a.subject.kind.as_str()) && a.on_behalf_of.is_none() => Ok(a),
+        Some(a) => Err(Status::invalid_argument(format!(
+            "decided_by_actor must be a person or a service account acting on its own authority, not {a}"
+        ))),
+        None => Err(Status::invalid_argument("decided_by_actor is required")),
+    }
+}
+
 fn ts(t: DateTime<Utc>) -> Timestamp {
     Timestamp { seconds: t.timestamp(), nanos: t.timestamp_subsec_nanos() as i32 }
 }
@@ -583,7 +606,7 @@ mod tests {
         let store = Arc::new(store);
         let feed = Arc::new(Feed::default());
         tokio::spawn(feed.clone().follow(store.clone()));
-        let approvals = Arc::new(Approvals::Only(vec!["carol".into()]));
+        let approvals = Arc::new(Approvals::Only(vec!["carol".into(), "overseer".into()]));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let endpoint = format!("http://{}", listener.local_addr().unwrap());
         let app = router(store, feed, approvals, None, &Access::off());
@@ -706,6 +729,30 @@ mod tests {
         let rejected = check(&state, "erin", "payroll").await;
         assert_eq!(rejected.verdict, Verdict::Deny);
         assert!(rejected.policies.contains(&awzy_pdp::challenges::CHALLENGE_REJECTED.to_string()));
+    }
+
+    #[tokio::test]
+    async fn an_overseer_agent_approves_on_its_own_authority() {
+        let Some(store) = test_store(Lifetimes::default()).await else { return };
+        let (endpoint, mut client) = serve(store).await;
+        let state = pdp(&endpoint).await;
+
+        let id = check(&state, "bob", "payroll").await.challenge_id.unwrap().to_string();
+        let overseer = awzy_model::EntityRef::new(awzy_model::entity_type::SERVICE_ACCOUNT, "overseer");
+        let decide = |actor: awzy_model::Actor| DecideRequest {
+            challenge_qid: id.clone(),
+            decided_by_actor: Some(actor.into()),
+            approve: true,
+            ..Default::default()
+        };
+        let for_someone =
+            client.decide(decide(awzy_model::Actor::new(overseer.clone(), None).for_person("carol"))).await;
+        assert_eq!(for_someone.unwrap_err().code(), Code::InvalidArgument, "approving is on its own authority");
+
+        let c = client.decide(decide(awzy_model::Actor::new(overseer, None))).await.unwrap().into_inner();
+        let by = c.challenge.unwrap().decided_by_actor.unwrap();
+        assert_eq!(by.subject.unwrap().r#type, "ServiceAccount");
+        assert_eq!(check(&state, "bob", "payroll").await.verdict, Verdict::Allow);
     }
 
     #[tokio::test]

@@ -702,6 +702,33 @@ mod tests {
     }
 
     #[test]
+    fn an_agent_approves_only_where_a_policy_names_it_and_never_for_its_owner() {
+        let approve = |agent: &str, what: &str, approving_for: Option<&str>| {
+            let mut req = AccessRequest { action: "approve".into(), ..sa_read(agent, None, what, 10) };
+            if let Some(h) = approving_for {
+                req.context.insert("approving_for".into(), json!({ "__entity": { "type": "Human", "id": h } }));
+            }
+            req
+        };
+        // ops-bot is in the security group, but the base policies let only its people approve.
+        let base = Pdp::with_defaults().unwrap();
+        assert_eq!(
+            base.decide(&approve("ops-bot", "design-doc", Some("bob")), &fixtures(&base)).unwrap().verdict,
+            Verdict::Deny
+        );
+
+        let overseer = format!(
+            "{DEFAULT_POLICIES}\n@id(\"ops-bot-approves\") permit (principal == ServiceAccount::\"ops-bot\", action == Action::\"approve\", resource);"
+        );
+        let pdp = Pdp::new(DEFAULT_SCHEMA, &overseer).unwrap();
+        let verdict = |req| pdp.decide(&req, &fixtures(&pdp)).unwrap().verdict;
+        assert_eq!(verdict(approve("ops-bot", "design-doc", Some("bob"))), Verdict::Allow);
+        assert_eq!(verdict(approve("ops-bot", "design-doc", Some("alice"))), Verdict::Deny, "alice owns ops-bot");
+        assert_eq!(verdict(approve("ops-bot", "design-doc", None)), Verdict::Deny, "no telling whose it is");
+        assert_eq!(verdict(approve("ops-bot", "board-deck", Some("bob"))), Verdict::Deny, "crown jewels need a person");
+    }
+
+    #[test]
     fn engineering_cannot_read_crown_jewels() {
         assert_eq!(decide(&read("bob", "board-deck", 10)).verdict, Verdict::Deny);
     }
