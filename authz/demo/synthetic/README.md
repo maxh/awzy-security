@@ -30,7 +30,8 @@ Generates Larkspur Capital, the synthetic company in the [demo plan](../../../do
   the client holdings export, which isn't shared with him) and the rogue agent's first half
   (SalesGenie, for Nora, on the overshared FY27 strategic plan); and (step 7) the suddenly foolish
   administrator (Lee reads engineering's introductions for new starters, then runs high-risk
-  operations within a minute). `activity` adds them to its first day and reports how many awzy
+  operations within a minute) and the peer outlier (Riley opens sixty of finance's documents in a
+  morning, about five times his day and his team's). `activity` adds them to its first day and reports how many awzy
   caught and how much ordinary work it challenged. A test runs them end to end through
   awzy-context, the PDP, larkspur-drive, larkspur-admin, and awzy-gateway, with awzy-reasoner's
   scores ([ADR 0061](../../../docs/adr/0061-ownership-and-sharing-in-the-resource-entity.md),

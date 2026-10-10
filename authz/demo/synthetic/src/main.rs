@@ -110,15 +110,20 @@ async fn activity(args: &[String]) -> anyhow::Result<()> {
 
     let company = generate(profile, seed);
     let mut tally = Tally::default();
-    let mut detection = Detection::default();
+    let steps = scenarios::all(&company, profile);
+    let mut detection = Detection::new(if with_scenarios { &steps } else { &[] });
     let mut tick = tokio::time::interval(std::time::Duration::from_secs_f64(1.0 / rate));
     let mut id = 0;
     for d in 0..days {
+        if d == 1 {
+            // After the scenarios' day, their accessors' work is ordinary again.
+            detection.actors.clear();
+        }
         // The scenarios happen on the first day, among its ordinary accesses.
         let mut calls: Vec<(activity::Access, Option<scenarios::Step>)> =
             activity::day(&company, profile, d).into_iter().map(|a| (a, None)).collect();
         if d == 0 && with_scenarios {
-            calls.extend(scenarios::all().into_iter().map(|s| (s.access.clone(), Some(s))));
+            calls.extend(steps.iter().map(|s| (s.access.clone(), Some(s.clone()))));
             calls.sort_by_key(|(a, _)| a.minute);
         }
         tracing::info!(day = d, calls = calls.len(), %endpoint, "replaying a day of activity");
