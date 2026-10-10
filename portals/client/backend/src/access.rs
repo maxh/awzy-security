@@ -7,8 +7,8 @@
 //! - Each operation is then checked with awzy-pdp as `view` or `administer` on a `PortalArea`.
 //! - Verdicts are always applied, even when the install is in monitor mode. Monitor mode is for
 //!   the client's own resources and must not open the portal that controls enforcement.
-//! - A challenge is refused until awzy-challenge exists. If the PDP can't be reached, the portal
-//!   refuses: it fails closed.
+//! - A challenge is refused until the portal has pages to answer one (ADR 0054). If the PDP
+//!   can't be reached, the portal refuses: it fails closed.
 
 use std::sync::Arc;
 

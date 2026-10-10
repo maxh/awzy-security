@@ -80,3 +80,12 @@ action view, administer appliesTo {
   resource: [PortalArea],
   context: RequestContext,
 };
+
+// Approving someone else's challenged request for this resource (awzy-challenge). awzy-challenge
+// asks the PDP before recording an approval, and never accepts one from the person asking or the
+// person an agent acts for.
+action approve appliesTo {
+  principal: [Human],
+  resource: [Resource, McpTool, PortalArea],
+  context: RequestContext,
+};

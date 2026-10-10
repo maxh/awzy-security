@@ -37,7 +37,7 @@ spec:
           env:
             - name: URL
               valueFrom: { secretKeyRef: { name: awzy-postgres, key: url } }
-            - { name: DATABASES, value: {{ .Values.postgres.contextDatabase | quote }} }
+            - { name: DATABASES, value: {{ printf "%s %s" .Values.postgres.challengeDatabase .Values.postgres.contextDatabase | quote }} }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

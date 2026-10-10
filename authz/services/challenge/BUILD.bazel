@@ -4,9 +4,14 @@ awzy_service(
     name = "challenge",
     crate_name = "awzy_challenge",
     binary_name = "awzy-challenge",
+    # Embedded by sqlx::migrate!.
+    compile_data = glob(["migrations/*.sql"]),
+    visibility = ["//tools:client_side"],
     deps = [
+        "//authz/libs/proto",
+        "//libs/model",
         "//libs/server",
         "//libs/telemetry",
     ],
-    visibility = ["//tools:client_side"],
+    test_deps = ["//authz/services/pdp"],
 )

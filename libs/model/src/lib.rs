@@ -4,7 +4,7 @@
 
 mod qid;
 
-pub use qid::{DecisionId, EventId, InstallId, PolicyBundleId, QidError};
+pub use qid::{ChallengeId, ContainmentId, DecisionId, EventId, InstallId, PolicyBundleId, QidError};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -120,6 +120,20 @@ impl Challenges {
         Self(self.0 | other.0)
     }
 
+    /// The kinds in both.
+    pub fn intersection(self, other: Challenges) -> Self {
+        Self(self.0 & other.0)
+    }
+
+    /// These kinds less `other`'s: what is still to pass once `other` is passed.
+    pub fn without(self, other: Challenges) -> Self {
+        Self(self.0 & !other.0)
+    }
+
+    pub fn contains(self, kind: ChallengeKind) -> bool {
+        self.0 & kind.bit() != 0
+    }
+
     pub fn is_empty(self) -> bool {
         self.0 == 0
     }
@@ -207,6 +221,10 @@ pub struct Decision {
     /// In monitor the enforcement point must allow; `verdict` is what would have happened.
     #[serde(default)]
     pub mode: EnforcementMode,
+    /// For an enforced challenge: the challenge awzy-challenge opened, which the person answers
+    /// before the request is retried.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub challenge_id: Option<ChallengeId>,
 }
 
 /// The second check a delegated request gets: could the person do this themselves?
@@ -353,6 +371,7 @@ mod tests {
             policies: vec!["high-risk-verify".into()],
             on_behalf_of: None,
             mode: EnforcementMode::Enforce,
+            challenge_id: None,
         };
         let v = serde_json::to_value(&d).unwrap();
         assert_eq!(
@@ -384,6 +403,7 @@ mod tests {
             policies: vec!["p".into()],
             on_behalf_of: Some(DelegationCheck { verdict: Verdict::Allow, policies: vec!["h".into()] }),
             mode: EnforcementMode::Monitor,
+            challenge_id: None,
         };
         let at = DateTime::from_timestamp_millis(1_700_000_000_123).unwrap();
         let r = DecisionRecord::new(&req, &d, 4, at);
@@ -426,5 +446,15 @@ mod tests {
     fn challenge_kind_parses() {
         assert_eq!(ChallengeKind::parse("approval"), Some(ChallengeKind::Approval));
         assert_eq!(ChallengeKind::parse("nope"), None);
+    }
+
+    #[test]
+    fn passing_some_challenges_leaves_the_rest() {
+        let required: Challenges = [ChallengeKind::Justification, ChallengeKind::Approval].into_iter().collect();
+        let passed: Challenges = [ChallengeKind::Approval, ChallengeKind::Verification].into_iter().collect();
+        assert_eq!(required.without(passed), Challenges::of(ChallengeKind::Justification));
+        assert_eq!(required.intersection(passed), Challenges::of(ChallengeKind::Approval));
+        assert!(required.contains(ChallengeKind::Approval) && !required.contains(ChallengeKind::Biometric));
+        assert!(required.without(required).is_empty());
     }
 }

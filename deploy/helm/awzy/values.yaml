@@ -19,7 +19,9 @@ postgres:
   host: ""
   port: 5432
   database: awzy
-  # awzy-context's database on the same server, created by the chart's database Job.
+  # awzy-context's and awzy-challenge's databases on the same server, created by the chart's
+  # database Job.
+  challengeDatabase: awzy_challenge
   contextDatabase: awzy_context
   # Secrets Manager secret (RDS-managed master credentials); External Secrets copies it.
   secretRef: ""
@@ -90,6 +92,17 @@ reporter:
   resources:
     requests: { cpu: 10m, memory: 32Mi }
     limits: { memory: 64Mi }
+
+# awzy-challenge: challenges and containments. Each PDP follows its containment feed.
+challenge:
+  replicas: 1
+  # How long a challenge waits for an answer (and a rejection blocks the request), and how long
+  # a passed one allows the request. Seconds.
+  pendingSeconds: 86400
+  grantSeconds: 900
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { memory: 256Mi }
 
 context:
   replicas: 1
