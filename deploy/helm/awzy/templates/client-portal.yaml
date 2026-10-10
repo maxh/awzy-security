@@ -34,4 +34,4 @@
 ) }}
 {{- end }}
 {{ include "awzy.service" (dict "root" . "name" "awzy-client-portal" "namespace" .Values.namespaces.portal "values" $p "env" $env
-  "tokens" (list "awzy-context")) }}
+  "tokens" (list "awzy-context" "awzy-pdp" "awzy-policy")) }}

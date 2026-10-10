@@ -12,6 +12,7 @@ awzy_service(
     compile_data = glob(["migrations/*.sql"]),
     visibility = ["//tools:client_side"],
     deps = [
+        "//authz/libs/service-auth",
         "//authz/services/pdp",
         "//authz/libs/proto",
         "//authz/libs/signing",

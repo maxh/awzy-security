@@ -25,6 +25,7 @@ use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use awzy_authz_proto::{
     authz::v1::authorizer_client::AuthorizerClient, policy::v1::policy_service_client::PolicyServiceClient,
 };
+use awzy_service_auth::{grpc_channel, AuthChannel};
 use axum::{
     extract::State,
     middleware,
@@ -36,15 +37,15 @@ use tonic::transport::Channel;
 
 pub const API_VERSION: &str = "0.1.0";
 
-pub(crate) type PolicyClient = PolicyServiceClient<Channel>;
+pub(crate) type PolicyClient = PolicyServiceClient<AuthChannel>;
 
 /// Backends the resolvers call. Any may be absent in development; resolvers that need a
 /// missing one return an error naming it. Without the PDP, nothing is authorized.
 #[derive(Clone, Default)]
 pub struct Services {
-    pub policy: Option<PolicyServiceClient<Channel>>,
+    pub policy: Option<PolicyServiceClient<AuthChannel>>,
     pub clickhouse: Option<clickhouse::Client>,
-    pub pdp: Option<AuthorizerClient<Channel>>,
+    pub pdp: Option<AuthorizerClient<AuthChannel>>,
     /// awzy-context, for the directory.
     pub context: Option<directory::ContextClient>,
     /// Awzy Bot's model (ADR 0048); None when the install hasn't turned it on.
@@ -60,8 +61,9 @@ impl Services {
                 Err(_) => None,
             })
         };
-        let policy = channel("AWZY_POLICY_ADDR")?.map(PolicyServiceClient::new);
-        let pdp = channel("AWZY_PDP_ADDR")?.map(AuthorizerClient::new);
+        // With this portal's service tokens for each (ADR 0054).
+        let policy = channel("AWZY_POLICY_ADDR")?.map(|c| PolicyServiceClient::new(grpc_channel(c, "awzy-policy")));
+        let pdp = channel("AWZY_PDP_ADDR")?.map(|c| AuthorizerClient::new(grpc_channel(c, "awzy-pdp")));
         let clickhouse = std::env::var("AWZY_CLICKHOUSE_URL").ok().map(|url| {
             let var = |k: &str, default: &str| std::env::var(k).unwrap_or_else(|_| default.to_string());
             clickhouse::Client::default()
@@ -75,7 +77,7 @@ impl Services {
     }
 }
 
-pub(crate) fn policy_client(ctx: &Context<'_>) -> async_graphql::Result<PolicyServiceClient<Channel>> {
+pub(crate) fn policy_client(ctx: &Context<'_>) -> async_graphql::Result<PolicyServiceClient<AuthChannel>> {
     ctx.data::<Services>()
         .ok()
         .and_then(|s| s.policy.clone())
@@ -196,7 +198,7 @@ pub(crate) mod testing {
 
     /// An in-process PDP with the default policies, in monitor mode: the portal must apply its
     /// verdicts anyway.
-    pub(crate) async fn pdp() -> AuthorizerClient<Channel> {
+    pub(crate) async fn pdp() -> AuthorizerClient<AuthChannel> {
         let enforcement = Arc::new(awzy_pdp::Enforcement::fixed(awzy_model::EnforcementMode::Monitor));
         let app = awzy_pdp::router(
             awzy_pdp::AppState::new(awzy_pdp::shared(awzy_pdp::Pdp::with_defaults().unwrap()))
@@ -205,7 +207,8 @@ pub(crate) mod testing {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        AuthorizerClient::connect(format!("http://{addr}")).await.unwrap()
+        let channel = Channel::from_shared(format!("http://{addr}")).unwrap().connect().await.unwrap();
+        AuthorizerClient::new(grpc_channel(channel, "awzy-pdp"))
     }
 
     pub(crate) fn person(id: &str, group: &str) -> Viewer {

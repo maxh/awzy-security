@@ -224,6 +224,8 @@ pub struct AppState {
     pub principals: Arc<principals::Principals>,
     /// Resources from awzy-context, if configured.
     pub resources: Arc<resources::Resources>,
+    /// Checks callers' service tokens (ADR 0054). Off in tests and local runs.
+    pub service_auth: Arc<awzy_service_auth::Verifier>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -249,6 +251,7 @@ impl AppState {
             metrics: Arc::default(),
             principals: Arc::new(principals::Principals::none()),
             resources: Arc::new(resources::Resources::none()),
+            service_auth: Arc::new(awzy_service_auth::Verifier::off()),
         }
     }
 
@@ -259,6 +262,11 @@ impl AppState {
 
     pub fn with_enforcement(mut self, enforcement: Arc<Enforcement>) -> Self {
         self.enforcement = enforcement;
+        self
+    }
+
+    pub fn with_service_auth(mut self, verifier: awzy_service_auth::Verifier) -> Self {
+        self.service_auth = Arc::new(verifier);
         self
     }
 
@@ -322,10 +330,19 @@ pub struct EvaluationRequest {
 
 /// HTTP (AuthZEN-style) and gRPC on one port. axum serves HTTP/1 and HTTP/2 cleartext,
 /// so gRPC clients connect to the same address.
+///
+/// Deciding needs a service token from any workload in the cluster (ADR 0054): enforcement points
+/// run anywhere, and the policies decide what they may do. `/metrics` stays open for the reporter.
 pub fn router(state: AppState) -> Router {
     let metrics = state.metrics.clone();
-    Router::new()
+    let guard =
+        awzy_service_auth::Guard::new(state.service_auth.clone(), awzy_service_auth::Allowed::AnyServiceAccount);
+    let decide = Router::new()
         .route("/v1/access/evaluation", post(evaluate))
+        .with_state(state.clone())
+        .merge(grpc::router(state.clone()))
+        .route_layer(axum::middleware::from_fn_with_state(guard, awzy_service_auth::require));
+    Router::new()
         .route(
             "/metrics",
             axum::routing::get(move || {
@@ -333,8 +350,7 @@ pub fn router(state: AppState) -> Router {
                 async move { ([(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4")], metrics.render()) }
             }),
         )
-        .with_state(state.clone())
-        .merge(grpc::router(state))
+        .merge(decide)
 }
 
 async fn evaluate(

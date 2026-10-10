@@ -11,14 +11,15 @@ use awzy_authz_proto::{
 use awzy_model::PolicyBundleId;
 use awzy_portal::UtcTimestamp;
 use chrono::DateTime;
-use tonic::{transport::Channel, Code};
+use tonic::Code;
 
 use crate::{
     access::{require, PortalAction::*, PortalArea},
     policy_client,
 };
 
-type PolicyClient = awzy_authz_proto::policy::v1::policy_service_client::PolicyServiceClient<Channel>;
+type PolicyClient =
+    awzy_authz_proto::policy::v1::policy_service_client::PolicyServiceClient<awzy_service_auth::AuthChannel>;
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq)]
 pub enum PolicyBundleStatus {
@@ -328,12 +329,14 @@ pub(crate) mod tests {
         }
     }
 
-    pub(crate) async fn serve_fake_policy(fake: FakePolicy) -> PolicyServiceClient<tonic::transport::Channel> {
+    pub(crate) async fn serve_fake_policy(fake: FakePolicy) -> PolicyServiceClient<awzy_service_auth::AuthChannel> {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let app = tonic::service::Routes::new(PolicyServiceServer::new(fake)).into_axum_router();
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        PolicyServiceClient::connect(format!("http://{addr}")).await.unwrap()
+        let channel =
+            tonic::transport::Channel::from_shared(format!("http://{addr}")).unwrap().connect().await.unwrap();
+        PolicyServiceClient::new(awzy_service_auth::grpc_channel(channel, "awzy-policy"))
     }
 
     #[tokio::test]

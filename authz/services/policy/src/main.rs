@@ -34,5 +34,7 @@ async fn main() -> anyhow::Result<()> {
             None
         }
     };
-    awzy_server::serve("awzy-policy", awzy_policy::router(Arc::new(store), break_glass)).await
+    // Who may call which methods (ADR 0054).
+    let access = awzy_policy::Access::from_env()?;
+    awzy_server::serve("awzy-policy", awzy_policy::router(Arc::new(store), break_glass, &access)).await
 }
