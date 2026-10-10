@@ -1,0 +1,12 @@
+load("//tools:rust.bzl", "awzy_service")
+
+awzy_service(
+    name = "reasoner",
+    crate_name = "awzy_reasoner",
+    binary_name = "awzy-reasoner",
+    deps = [
+        "//libs/server",
+        "//libs/telemetry",
+    ],
+    visibility = ["//tools:client_side"],
+)

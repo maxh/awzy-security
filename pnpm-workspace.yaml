@@ -1,0 +1,5 @@
+packages:
+  - portals/common/*
+  - portals/client/frontend
+  - portals/client/e2e
+  - portals/corp/frontend

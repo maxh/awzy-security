@@ -1,0 +1,13 @@
+load("//tools:rust.bzl", "awzy_service")
+
+awzy_service(
+    name = "intake",
+    crate_name = "awzy_intake",
+    binary_name = "awzy-intake",
+    deps = [
+        "//libs/model",
+        "//libs/server",
+        "//libs/telemetry",
+    ],
+    visibility = ["//tools:client_side"],
+)

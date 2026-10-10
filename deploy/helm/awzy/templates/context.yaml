@@ -1,0 +1,28 @@
+{{- $sys := .Values.namespaces.system -}}
+# awzy-context: people and groups from the client's IdP over SCIM (ADR 0031), served to the PDP
+# at /v1/principals. Only /scim/v2 is public, through the Gateway; the rest is in-cluster.
+{{ include "awzy.service" (dict "root" . "name" "awzy-context" "namespace" $sys "values" .Values.context
+  "env" (list
+    (dict "name" "AWZY_POSTGRES_URL" "valueFrom" (dict "secretKeyRef" (dict "name" "awzy-postgres" "key" "context_url")))
+    (dict "name" "AWZY_SCIM_TOKEN" "valueFrom" (dict "secretKeyRef" (dict "name" .Values.context.scimTokenSecret "key" "token")))
+  )) }}
+{{- if .Values.clientPortal.hostname }}
+---
+# Okta and Entra call SCIM from their own cloud, so it is public, on the portal's hostname.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: awzy-context-scim
+  namespace: {{ $sys }}
+spec:
+  parentRefs:
+    - name: {{ .Values.gateway.name }}
+      namespace: {{ .Values.gateway.namespace }}
+      sectionName: https
+  hostnames: [{{ .Values.clientPortal.hostname | quote }}]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: /scim/v2 }
+      backendRefs:
+        - { name: awzy-context, port: 8080 }
+{{- end }}

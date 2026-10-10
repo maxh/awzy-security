@@ -1,0 +1,39 @@
+{{- if .Values.demoData.enabled }}
+{{- $sys := .Values.namespaces.system }}
+# DEMO INSTALLS ONLY (ADR 0039). Provisions the synthetic company (docs/demo-plan.md) into
+# awzy-context after each sync: people and groups over SCIM, then AI service accounts, then its
+# resources and work items through the batch API. Safe to run again; existing records are
+# replaced.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: awzy-synthetic
+  namespace: {{ $sys }}
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: synthetic
+          image: {{ include "awzy.image" (dict "root" . "name" "awzy-synthetic") }}
+          args: [all, --profile, {{ .Values.demoData.profile | quote }}, --seed, {{ .Values.demoData.seed | quote }}]
+          env:
+            - { name: AWZY_CONTEXT_URL, value: "http://awzy-context.{{ $sys }}.svc:8080" }
+            - { name: AWZY_LOG_FORMAT, value: {{ .Values.logFormat | quote }} }
+            - name: AWZY_SCIM_TOKEN
+              valueFrom: { secretKeyRef: { name: {{ .Values.context.scimTokenSecret }}, key: token } }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+{{- end }}

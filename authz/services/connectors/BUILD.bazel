@@ -1,0 +1,12 @@
+load("//tools:rust.bzl", "awzy_service")
+
+awzy_service(
+    name = "connectors",
+    crate_name = "awzy_connectors",
+    binary_name = "awzy-connectors",
+    deps = [
+        "//libs/server",
+        "//libs/telemetry",
+    ],
+    visibility = ["//tools:client_side"],
+)

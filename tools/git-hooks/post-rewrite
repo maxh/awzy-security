@@ -1,0 +1,4 @@
+#!/bin/sh
+# After a rebase (or commit --amend): re-pin if a lockfile conflict was resolved.
+[ "${1:-}" = "rebase" ] || exit 0
+exec "$(git rev-parse --show-toplevel)/tools/git-hooks/repin-if-needed"

@@ -1,0 +1,12 @@
+# Code that runs in client clusters and may touch client data.
+# portals/corp is deliberately not in this group, so Bazel refuses to build
+# portals/corp code that depends on authz services or the data-store library.
+package_group(
+    name = "client_side",
+    packages = [
+        "//authz/...",
+        "//portals/client/...",
+        "//libs/...",
+        "//policies/...",
+    ],
+)

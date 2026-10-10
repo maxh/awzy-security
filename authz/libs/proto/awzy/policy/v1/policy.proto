@@ -1,0 +1,173 @@
+syntax = "proto3";
+
+// Versioned Cedar policy bundles: the client portal writes them, every PDP reads the active one.
+package awzy.policy.v1;
+
+import "awzy/authz/v1/authz.proto";
+import "google/protobuf/timestamp.proto";
+
+service PolicyService {
+  // Validates the bundle against its schema and stores it as a draft.
+  rpc CreateDraft(CreateDraftRequest) returns (CreateDraftResponse);
+  // Makes a draft the active bundle; the previous active bundle becomes superseded.
+  rpc Publish(PublishRequest) returns (PublishResponse);
+  // The active bundle, or `unchanged` when the caller already has that version.
+  rpc GetActive(GetActiveRequest) returns (GetActiveResponse);
+  rpc ListBundles(ListBundlesRequest) returns (ListBundlesResponse);
+  // One bundle by ID or version, e.g. the bundle a logged decision was made under.
+  rpc GetBundle(GetBundleRequest) returns (GetBundleResponse);
+
+  // Enforcement modes (ADR 0007). A scope with no recorded change is in monitor.
+  rpc GetEnforcement(GetEnforcementRequest) returns (GetEnforcementResponse);
+  rpc SetEnforcement(SetEnforcementRequest) returns (SetEnforcementResponse);
+  // Every switch of a scope, newest first.
+  rpc ListEnforcementChanges(ListEnforcementChangesRequest) returns (ListEnforcementChangesResponse);
+
+  // Break-glass: republishes an earlier bundle when a bad one locks admins out. Authenticated by
+  // a signature from a key enrolled at install time, not by the IdP or the PDP, so it works when
+  // either is what's broken. Every use is recorded.
+  rpc BreakGlassRollback(BreakGlassRollbackRequest) returns (BreakGlassRollbackResponse);
+}
+
+enum BundleStatus {
+  BUNDLE_STATUS_UNSPECIFIED = 0;
+  BUNDLE_STATUS_DRAFT = 1;
+  BUNDLE_STATUS_ACTIVE = 2;
+  BUNDLE_STATUS_SUPERSEDED = 3;
+}
+
+message PolicyBundle {
+  // QID: policy_bundle_<uuid>.
+  string id = 1;
+  // Increases with every bundle created. PDPs report the version they enforce.
+  int64 version = 2;
+  // Cedar schema (human-readable format).
+  string schema = 3;
+  // Cedar policies.
+  string policies = 4;
+  BundleStatus status = 5;
+  string created_by = 6;
+  google.protobuf.Timestamp created_at = 7;
+  string published_by = 8;
+  google.protobuf.Timestamp published_at = 9;
+  // ECDSA P-256 signature (DER) over the payload defined in awzy-signing, set when published.
+  // PDPs verify it before loading the bundle.
+  bytes signature = 10;
+  // Which key signed it: `sha256:<fingerprint>` of the public key.
+  string signing_key_id = 11;
+}
+
+message CreateDraftRequest {
+  string schema = 1;
+  string policies = 2;
+  string created_by = 3;
+}
+
+message CreateDraftResponse {
+  PolicyBundle bundle = 1;
+}
+
+message PublishRequest {
+  // QID: policy_bundle_<uuid>.
+  string id = 1;
+  string published_by = 2;
+}
+
+message PublishResponse {
+  PolicyBundle bundle = 1;
+}
+
+message GetActiveRequest {
+  // The version the caller enforces now; 0 if none.
+  int64 known_version = 1;
+}
+
+message GetActiveResponse {
+  // Unset when there is no active bundle or when `unchanged` is true.
+  PolicyBundle bundle = 1;
+  bool unchanged = 2;
+}
+
+message ListBundlesRequest {
+  // Newest first. Defaults to 50, at most 500.
+  int32 limit = 1;
+}
+
+message ListBundlesResponse {
+  repeated PolicyBundle bundles = 1;
+}
+
+message GetBundleRequest {
+  oneof key {
+    // QID: policy_bundle_<uuid>.
+    string id = 1;
+    int64 version = 2;
+  }
+}
+
+message GetBundleResponse {
+  PolicyBundle bundle = 1;
+}
+
+message EnforcementSetting {
+  // "install" for now. Policy sets and automated containments get their own scopes later.
+  string scope = 1;
+  awzy.authz.v1.EnforcementMode mode = 2;
+  // Empty, with no changed_at, when the scope has never been switched.
+  string changed_by = 3;
+  google.protobuf.Timestamp changed_at = 4;
+}
+
+message GetEnforcementRequest {
+  // Defaults to "install".
+  string scope = 1;
+}
+
+message GetEnforcementResponse {
+  EnforcementSetting setting = 1;
+}
+
+message SetEnforcementRequest {
+  // Defaults to "install".
+  string scope = 1;
+  awzy.authz.v1.EnforcementMode mode = 2;
+  string changed_by = 3;
+}
+
+message SetEnforcementResponse {
+  EnforcementSetting setting = 1;
+}
+
+message ListEnforcementChangesRequest {
+  // Defaults to "install".
+  string scope = 1;
+  // Defaults to 20, at most 200.
+  int32 limit = 2;
+}
+
+message ListEnforcementChangesResponse {
+  repeated EnforcementSetting changes = 1;
+}
+
+message BreakGlassRollbackRequest {
+  // The version to restore. 0: the bundle published before the active one.
+  int64 to_version = 1;
+  // Unix seconds. Requests more than 5 minutes old or ahead are refused.
+  int64 requested_at_unix = 2;
+  // Unique per request; a nonce can only be used once.
+  string nonce = 3;
+  // Why. Recorded with the event and signed, so it can't be changed in transit.
+  string reason = 4;
+  // ECDSA P-256 signature (DER) over awzy-signing's break_glass_payload.
+  bytes signature = 5;
+  // The enrolled key that signed: `sha256:<fingerprint>`.
+  string key_id = 6;
+}
+
+message BreakGlassRollbackResponse {
+  // The new active bundle: a copy of the restored version, signed as usual.
+  PolicyBundle bundle = 1;
+  int64 restored_version = 2;
+  // The version that was active before; 0 if none.
+  int64 replaced_version = 3;
+}

@@ -1,0 +1,78 @@
+{{- if .Values.networkPolicies.enabled }}
+{{- $awzy := dict "namespaceSelector" (dict "matchLabels" (dict "app.kubernetes.io/part-of" "awzy")) }}
+{{- $gateway := dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" .Values.networkPolicies.gatewayNamespace)) }}
+# Nothing reaches awzy's pods unless a policy below allows it.
+{{- range $ns := list .Values.namespaces.system .Values.namespaces.portal .Values.namespaces.data }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: {{ $ns }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+{{- end }}
+---
+# Enforcement points call the PDP from anywhere in the cluster.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awzy-pdp
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: awzy-pdp } }
+  policyTypes: [Ingress]
+  ingress:
+    - {}
+---
+# The policy service (bundles, publishing, break-glass) only from awzy's own services.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awzy-policy
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: awzy-policy } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{{ toJson $awzy }}]
+---
+# awzy-context: /v1/principals and /v1/service-accounts from awzy's services; the Gateway only
+# for SCIM. NetworkPolicy works per port, so it's the Gateway's routes that keep /v1/* private
+# (only /scim/v2 is routed there).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awzy-context
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: awzy-context } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{{ toJson $awzy }}, {{ toJson $gateway }}]
+---
+# The client portal (and the demo IdP) from the Gateway and awzy's services.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: from-gateway
+  namespace: {{ .Values.namespaces.portal }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{{ toJson $awzy }}, {{ toJson $gateway }}]
+---
+# ClickHouse from awzy's services (the portal, the migrate Job, the operator in awzy-ops).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: from-awzy
+  namespace: {{ .Values.namespaces.data }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{{ toJson $awzy }}]
+{{- end }}

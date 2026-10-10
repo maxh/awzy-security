@@ -1,0 +1,13 @@
+load("//tools:rust.bzl", "awzy_service")
+
+# A development-only OIDC provider: the local stack, tests, and the demo install (ADR 0032).
+# Never trusted by a real client install: anyone can sign in and its signing key is public.
+awzy_service(
+    name = "dev-idp",
+    crate_name = "awzy_dev_idp",
+    binary_name = "awzy-dev-idp",
+    deps = [
+        "//libs/server",
+        "//libs/telemetry",
+    ],
+)

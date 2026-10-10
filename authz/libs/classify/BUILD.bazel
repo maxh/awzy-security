@@ -1,0 +1,9 @@
+load("//tools:rust.bzl", "awzy_rust_library")
+
+# Metadata-first sensitivity classification (demo plan step 4, ADR 0047). awzy-context runs it;
+# awzy-synthetic's tests score it against the generator's ground truth.
+awzy_rust_library(
+    name = "classify",
+    crate_name = "awzy_classify",
+    visibility = ["//tools:client_side"],
+)

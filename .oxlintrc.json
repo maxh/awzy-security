@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // Type-aware rules (--type-aware) run on tsgo through oxlint-tsgolint.
+  "plugins": ["typescript", "react", "import", "unicorn", "oxc"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "rules": {
+    // The automatic JSX runtime (jsx: react-jsx) doesn't need React in scope.
+    "react/react-in-jsx-scope": "off",
+    // Side-effect imports are how stylesheets load.
+    "import/no-unassigned-import": ["warn", { "allow": ["**/*.css"] }],
+    "import/no-named-as-default-member": "off",
+    // TODO: the portals narrow Relay enums (which include "%future added value") and fetched
+    // JSON with `as`. Validate those at runtime, then turn this on.
+    "typescript/no-unsafe-type-assertion": "off"
+  },
+  "ignorePatterns": ["**/__generated__/**", "**/dist/**"]
+}

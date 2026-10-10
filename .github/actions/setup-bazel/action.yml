@@ -1,0 +1,46 @@
+name: Set up Bazel
+description: >
+  Bazel through bazelisk, with BuildBuddy's remote cache when the API key is given (fetching
+  only top-level outputs), or else a disk cache saved in GitHub's cache (forks). External
+  repositories are kept in GitHub's cache either way. Sets REMOTE_CACHE=true in the job's
+  environment when the remote cache is on. Frees runner disk first: a Rust build (and clippy's
+  outputs) doesn't fit in what a GitHub runner has free.
+inputs:
+  buildbuddy-api-key:
+    description: secrets.AWZY_CORP_BUILDBUDDY_API_KEY, or empty
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    # Preinstalled toolchains awzy never uses. Removing them takes about two minutes, so it runs
+    # in the background while the caches below restore, and the last step waits for it.
+    - name: Free disk space (background)
+      shell: bash
+      run: nohup sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL > /dev/null 2>&1 &
+    - name: Remote cache
+      shell: bash
+      env:
+        BUILDBUDDY_API_KEY: ${{ inputs.buildbuddy-api-key }}
+      run: |
+        if [ -n "$BUILDBUDDY_API_KEY" ]; then
+          printf 'build --config=remote\nbuild --remote_header=x-buildbuddy-api-key=%s\n' "$BUILDBUDDY_API_KEY" > .bazelrc.user
+          echo "REMOTE_CACHE=true" >> "$GITHUB_ENV"
+          echo "DISK_CACHE=" >> "$GITHUB_ENV"
+        else
+          echo "REMOTE_CACHE=false" >> "$GITHUB_ENV"
+          echo "DISK_CACHE=${{ github.workflow }}" >> "$GITHUB_ENV"
+        fi
+    - uses: bazel-contrib/setup-bazel@0.15.0
+      with:
+        bazelisk-cache: true
+        disk-cache: ${{ env.DISK_CACHE }}
+        repository-cache: true
+        # Fetched toolchains, crates, and npm packages, so a run doesn't extract them again.
+        # Bazel re-fetches any whose inputs changed.
+        external-cache: true
+    - name: Wait for disk space
+      shell: bash
+      run: |
+        while pgrep -f 'rm -rf /usr/share/dotnet' > /dev/null; do sleep 2; done
+        df -h /

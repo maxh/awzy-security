@@ -1,0 +1,16 @@
+load("//tools:rust.bzl", "awzy_service")
+
+awzy_service(
+    name = "gateway",
+    crate_name = "awzy_gateway",
+    binary_name = "awzy-gateway",
+    test_deps = ["//authz/services/pdp"],
+    visibility = ["//tools:client_side"],
+    deps = [
+        "//authz/libs/identity",
+        "//authz/libs/proto",
+        "//libs/model",
+        "//libs/server",
+        "//libs/telemetry",
+    ],
+)

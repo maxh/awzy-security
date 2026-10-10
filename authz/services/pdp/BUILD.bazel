@@ -1,0 +1,19 @@
+load("//tools:rust.bzl", "awzy_service")
+
+awzy_service(
+    name = "pdp",
+    crate_name = "awzy_pdp",
+    binary_name = "awzy-pdp",
+    extra_binaries = ["pdp_loadtest"],
+    deps = [
+        "//libs/server",
+        "//libs/telemetry",
+        "//libs/model",
+        "//authz/libs/proto",
+        "//authz/libs/signing",
+    ],
+    compile_data = [
+        "//policies:cedar",
+    ],
+    visibility = ["//tools:client_side"],
+)

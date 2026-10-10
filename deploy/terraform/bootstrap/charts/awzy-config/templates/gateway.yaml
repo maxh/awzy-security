@@ -1,0 +1,89 @@
+# The install's one public entry point. Envoy Gateway runs the proxy; the Service in front of it
+# gets the cloud's load balancer through install_contract.load_balancer.service_annotations.
+{{- $ops := .Release.Namespace }}
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: awzy
+  namespace: {{ $ops }}
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        annotations: {{- toYaml .Values.ingress.serviceAnnotations | nindent 10 }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: awzy
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: awzy
+    namespace: {{ $ops }}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: {{ required "ingress.acmeEmail is required" .Values.ingress.acmeEmail | quote }}
+    privateKeySecretRef:
+      name: letsencrypt-account
+    solvers:
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - { name: awzy, namespace: {{ $ops }}, sectionName: http }
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: awzy
+  namespace: {{ $ops }}
+  annotations:
+    # cert-manager issues the certificate for the https listener's hostname.
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  gatewayClassName: awzy
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same # only the redirect below and cert-manager's challenge routes
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: {{ required "ingress.hostname is required" .Values.ingress.hostname | quote }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: awzy-portal-tls
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              app.kubernetes.io/part-of: awzy
+---
+# Plain HTTP only redirects. cert-manager's ACME challenge routes match a longer path, so they
+# still win.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: https-redirect
+  namespace: {{ $ops }}
+spec:
+  parentRefs:
+    - { name: awzy, sectionName: http }
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect: { scheme: https, statusCode: 301 }

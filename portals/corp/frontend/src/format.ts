@@ -1,0 +1,40 @@
+/** Shared display helpers. */
+
+export const HEALTH = {
+  OK: { label: "ok", color: "teal" },
+  DEGRADED: { label: "degraded", color: "orange" },
+  NOT_REPORTING: { label: "not reporting", color: "red" },
+  NEVER_REPORTED: { label: "never reported", color: "gray" },
+} as const;
+
+export type HealthValue = keyof typeof HEALTH;
+
+export function healthOf(h: string): (typeof HEALTH)[HealthValue] {
+  return HEALTH[h as HealthValue] ?? { label: h.toLowerCase(), color: "gray" };
+}
+
+/** A UtcTimestamp in the viewer's locale and time zone. */
+export function formatTime(utc: string): string {
+  return new Date(utc).toLocaleString();
+}
+
+/** "12s ago", "4m ago", "3h ago", or the date for anything older than a day. */
+export function ago(utc: string | null | undefined, now = Date.now()): string {
+  if (!utc) return "never";
+  const s = Math.max(0, Math.round((now - new Date(utc).getTime()) / 1000));
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return new Date(utc).toLocaleDateString();
+}
+
+export function channelLabel(channel: string, pinned: string | null | undefined): string {
+  return channel === "PINNED" ? `pinned ${pinned ?? ""}`.trim() : channel.toLowerCase();
+}
+
+/** `sha256:3f1a…9c0b`: enough to tell digests apart. */
+export function shortDigest(d: string | null | undefined): string {
+  if (!d) return "";
+  const hex = d.replace(/^sha256:/, "");
+  return `sha256:${hex.slice(0, 4)}…${hex.slice(-4)}`;
+}

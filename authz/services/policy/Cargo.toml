@@ -1,0 +1,26 @@
+[package]
+name = "awzy-policy"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+awzy-server.workspace = true
+awzy-telemetry.workspace = true
+awzy-authz-proto.workspace = true
+awzy-model.workspace = true
+awzy-pdp.workspace = true
+awzy-signing.workspace = true
+chrono.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tonic.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+p256.workspace = true

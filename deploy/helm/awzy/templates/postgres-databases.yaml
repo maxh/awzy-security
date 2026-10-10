@@ -1,0 +1,44 @@
+# Creates databases that aren't the server's default before the services that use them start
+# (sync wave -1, after the credentials in wave -2). Safe to run on every sync.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: awzy-postgres-databases
+  namespace: {{ .Values.namespaces.system }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    # Jobs can't be changed in place; recreate it when the chart changes it.
+    argocd.argoproj.io/sync-options: Replace=true
+spec:
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70 # postgres in the alpine image
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: create
+          image: postgres:17-alpine
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              for db in $DATABASES; do
+                if psql "$URL" -tAc "SELECT 1 FROM pg_database WHERE datname = '$db'" | grep -q 1; then
+                  echo "$db exists"
+                else
+                  psql "$URL" -c "CREATE DATABASE $db" && echo "created $db"
+                fi
+              done
+          env:
+            - name: URL
+              valueFrom: { secretKeyRef: { name: awzy-postgres, key: url } }
+            - { name: DATABASES, value: {{ .Values.postgres.contextDatabase | quote }} }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }

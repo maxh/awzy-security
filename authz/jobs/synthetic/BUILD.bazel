@@ -1,0 +1,18 @@
+load("//tools:rust.bzl", "awzy_service")
+
+# The synthetic company the demo, local development, scenario tests, and scale tests run on
+# (docs/demo-plan.md, ADR 0039). Sends it to awzy-context through the same APIs an IdP and the
+# connectors use.
+awzy_service(
+    name = "synthetic",
+    crate_name = "awzy_synthetic",
+    binary_name = "awzy-synthetic",
+    visibility = ["//tools:client_side"],
+    deps = [
+        "//libs/telemetry",
+    ],
+    # The tests score awzy-classify against the generator's ground truth (ADR 0047).
+    test_deps = [
+        "//authz/libs/classify",
+    ],
+)

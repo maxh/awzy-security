@@ -1,0 +1,16 @@
+load("//tools:rust.bzl", "awzy_service")
+
+# Sends the install's heartbeat to the corp portal (ADR 0026). The only thing that leaves an
+# install for awzy, and the client can read every heartbeat in its log or turn it off.
+awzy_service(
+    name = "reporter",
+    crate_name = "awzy_reporter",
+    binary_name = "awzy-reporter",
+    visibility = ["//tools:client_side"],
+    deps = [
+        "//libs/heartbeat",
+        "//libs/model",
+        "//libs/server",
+        "//libs/telemetry",
+    ],
+)

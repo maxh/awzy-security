@@ -1,0 +1,194 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same PR cancels the run it replaces. Each commit on main gets its own
+# group, so its run is never cancelled or replaced: every commit is tested and publishes its
+# images and chart, which are tagged by commit and don't conflict. Deploys are throttled
+# separately (the deploy-corp job).
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Whether the change touches anything but docs. A pull request that only edits Markdown,
+  # docs/, or the agent skills skips the other jobs, which then count as passed. Pushes to
+  # main always run everything, so every commit on main publishes.
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ github.event_name != 'pull_request' || steps.filter.outputs.code == 'true' }}
+    steps:
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          # A file counts as code if it matches every pattern, so is none of these.
+          predicate-quantifier: every
+          filters: |
+            code:
+              - '!**/*.md'
+              - '!docs/**'
+              - '!.agents/**'
+              - '!.claude/**'
+
+  # Four jobs in parallel, so a run takes as long as the slowest. All four must pass.
+
+  # The protobuf APIs SDKs and enforcement points build on (ADR 0045): buf lint and format,
+  # and on pull requests no breaking change against main, to generated code or the wire.
+  proto:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # buf breaking compares with origin/main
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+      - run: buf lint
+      - run: buf format --diff --exit-code
+      - if: github.event_name == 'pull_request'
+        run: buf breaking --against ".git#ref=origin/main,subdir=authz/libs/proto"
+
+  # oxlint (type-aware, on tsgo) and oxfmt over the portals' TypeScript. Type checks
+  # themselves run under Bazel (the :typecheck tests).
+  lint-ts:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm format:check
+
+  # Clippy and rustfmt over every Rust target; any warning fails.
+  lint-rust:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-bazel
+        with:
+          buildbuddy-api-key: ${{ secrets.AWZY_CORP_BUILDBUDDY_API_KEY }}
+      - run: bazel build --config=ci --config=ci-check --config=lint //...
+      - name: Disk use
+        if: always()
+        run: df -h /
+
+  # Tests everything, and on main publishes from the same Bazel output instead of
+  # rebuilding on another runner.
+  bazel:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # GitHub OIDC token for AWS; only main can assume the publish role
+      contents: read
+    # Where releases go, from the repository's Actions variables (deploy/terraform/corp/build's
+    # outputs). A fork without them tests everything and skips publishing.
+    env:
+      AWS_REGION: ${{ vars.AWZY_CORP_AWS_REGION }} # the name the AWS CLI reads
+      # Two releases from each commit (ADR 0053), to the same registry for now.
+      AWZY_AUTHZ_RELEASE_COSIGN_KEY: ${{ vars.AWZY_CORP_COSIGN_KEY }}
+      AWZY_AUTHZ_RELEASE_REGISTRY: ${{ vars.AWZY_CORP_RELEASE_REGISTRY }}
+      AWZY_AUTHZ_RELEASE_TAG: ${{ github.sha }}
+      AWZY_CI_PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWZY_CORP_RELEASE_REGISTRY != '' }}
+      AWZY_CORP_PORTAL_RELEASE_COSIGN_KEY: ${{ vars.AWZY_CORP_COSIGN_KEY }}
+      AWZY_CORP_PORTAL_RELEASE_REGISTRY: ${{ vars.AWZY_CORP_RELEASE_REGISTRY }}
+      AWZY_CORP_PORTAL_RELEASE_TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      # The awzy chart and bootstrap's config chart render with example values.
+      - name: Lint charts
+        run: |
+          helm lint --strict deploy/helm/awzy -f deploy/helm/awzy/values-example.yaml
+          helm template awzy deploy/helm/awzy -f deploy/helm/awzy/values-example.yaml > /dev/null
+          helm lint --strict deploy/terraform/bootstrap/charts/awzy-config -f deploy/terraform/bootstrap/charts/awzy-config/values-example.yaml
+      - uses: ./.github/actions/setup-bazel
+        with:
+          buildbuddy-api-key: ${{ secrets.AWZY_CORP_BUILDBUDDY_API_KEY }}
+      # The same Postgres, ClickHouse, Kafka, and Valkey as local development, so the
+      # database tests run here instead of skipping.
+      - name: Start the local stack
+        run: docker compose -f deploy/local/compose.yaml up -d --wait
+      # Each Postgres database's schema.sql matches its migrations (tools/db-schema).
+      - name: Database schemas are current
+        run: tools/db-schema --check
+      - run: bazel test --config=ci --config=ci-check --config=local-stack //...
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose -f deploy/local/compose.yaml logs --tail=200
+
+      # Every push to main publishes signed images and the chart to the build account's ECR
+      # (deploy/terraform/corp/build).
+      - if: env.AWZY_CI_PUBLISH == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWZY_CORP_AWS_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ vars.AWZY_CORP_AWS_REGION }}
+      - if: env.AWZY_CI_PUBLISH == 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+      - if: env.AWZY_CI_PUBLISH == 'true'
+        uses: sigstore/cosign-installer@v3
+      - name: Publish the authz release's images
+        if: env.AWZY_CI_PUBLISH == 'true'
+        run: tools/ci/publish-images.sh authz
+      - name: Publish the authz release's chart
+        if: env.AWZY_CI_PUBLISH == 'true'
+        run: tools/ci/publish-chart.sh
+      - name: Publish the corp portal release's images
+        if: env.AWZY_CI_PUBLISH == 'true'
+        run: tools/ci/publish-images.sh corp-portal
+      # How much room the build left, to know whether freeing disk is still needed.
+      - name: Disk use
+        if: always()
+        run: df -h /
+
+  # Deploys the corp portal and the registry proxy (deploy/terraform/corp/corp-portal) once
+  # this commit's images are published. One deploy runs at a time. A deploy waiting behind
+  # another is replaced by a newer one, so a burst of merges deploys the first and the last,
+  # and deploy-corp.sh never replaces a newer commit with an older one.
+  deploy-corp:
+    needs: bazel
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWZY_CORP_AWS_DEPLOY_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-corp
+      cancel-in-progress: false
+    permissions:
+      id-token: write # GitHub OIDC token for AWS; only main can assume the deploy role
+      contents: read
+    env:
+      AWZY_CORP_PORTAL_RELEASE_REGISTRY: ${{ vars.AWZY_CORP_RELEASE_REGISTRY }}
+      AWZY_CORP_PORTAL_RELEASE_TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # deploy-corp.sh compares this commit with the deployed one
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWZY_CORP_AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWZY_CORP_AWS_REGION }}
+      - name: Deploy corp portal and registry
+        run: tools/ci/deploy-corp.sh

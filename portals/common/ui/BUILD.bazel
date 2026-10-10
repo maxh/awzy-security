@@ -1,0 +1,14 @@
+load("@aspect_rules_js//npm:defs.bzl", "npm_package")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+
+npm_link_all_packages()
+
+# Linked into the portals as @awzy/ui; Vite compiles the TypeScript sources directly.
+npm_package(
+    name = "pkg",
+    srcs = glob(["src/**/*.ts", "src/**/*.tsx"], allow_empty = True) + [
+        "package.json",
+        ":node_modules",
+    ],
+    visibility = ["//visibility:public"],
+)

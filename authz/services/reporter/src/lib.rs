@@ -1,0 +1,517 @@
+//! awzy-reporter: sends this install's heartbeat to the corp portal every minute (ADR 0026).
+//!
+//! The heartbeat is the only thing that leaves an install for awzy (ADR 0009), in the fixed
+//! schema of `awzy_heartbeat`. Every heartbeat is logged before it is sent, `--print` shows one
+//! without sending it, and AWZY_REPORTER_ENABLED=false turns reporting off.
+//!
+//! In a cluster it reads the awzy workloads from the Kubernetes API (replicas, restarts, image
+//! digests) and scrapes each PDP pod's `/metrics` for decisions per second, p99, and error rate.
+//! Locally it probes each service's `/readyz`, `/version`, and the PDP's `/metrics` by URL.
+//! ClickHouse disk use and Kafka lag come from its own read-only ClickHouse user and Kafka's
+//! offsets ([`data_metrics`], ADR 0042), when it's given them.
+
+pub mod data_metrics;
+pub mod kube;
+mod pdp_metrics;
+mod restarts;
+
+use std::{collections::HashMap, time::Duration};
+
+use anyhow::{bail, Context};
+use awzy_heartbeat::{is_version, Heartbeat, Metrics, Service, ServiceStatus, SCHEMA_VERSION};
+use awzy_model::InstallId;
+use bytes::Bytes;
+use http_body_util::{BodyExt, Full};
+use hyper_util::{
+    client::legacy::{connect::HttpConnector, Client},
+    rt::TokioExecutor,
+};
+use serde::Deserialize;
+
+const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
+const SEND_TIMEOUT: Duration = Duration::from_secs(10);
+
+pub type HttpClient = Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>;
+
+/// HTTP and HTTPS (rustls with the webpki roots).
+pub fn http_client() -> HttpClient {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let https = hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_or_http().enable_http1().build();
+    Client::builder(TokioExecutor::new()).build(https)
+}
+
+/// Where the reporter learns what's running.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Source {
+    /// Each service's base URL, probed directly. For local runs.
+    Probe(Vec<(Service, String)>),
+    /// The Kubernetes API, in these namespaces. PDP pods are scraped on `pdp_metrics_port`.
+    Kubernetes { namespaces: Vec<String>, pdp_metrics_port: u16 },
+}
+
+#[derive(Debug, Clone)]
+pub struct Config {
+    pub install_id: InstallId,
+    pub token: String,
+    /// The corp portal, e.g. https://corp.awzysecurity.com.
+    pub corp_url: String,
+    pub source: Source,
+    pub chart_version: Option<String>,
+    pub interval: Duration,
+    pub data: data_metrics::DataConfig,
+}
+
+/// `awzy-pdp=http://awzy-pdp:8080,awzy-policy=http://awzy-policy:8080`
+pub fn parse_targets(s: &str) -> anyhow::Result<Vec<(Service, String)>> {
+    s.split(',')
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(|t| {
+            let (name, url) = t.split_once('=').with_context(|| format!("{t:?}: expected <service>=<url>"))?;
+            let service = Service::parse(name)
+                .with_context(|| format!("{name:?} is not an awzy service the heartbeat can report"))?;
+            Ok((service, url.trim_end_matches('/').to_string()))
+        })
+        .collect()
+}
+
+impl Config {
+    /// AWZY_INSTALL_ID, AWZY_REPORTING_TOKEN, AWZY_REPORTER_CORP_PORTAL_URL, optionally AWZY_CHART_VERSION and
+    /// AWZY_REPORTER_INTERVAL_SECS (default 60), and the source:
+    /// - in Kubernetes: AWZY_REPORTER_NAMESPACES (comma-separated);
+    /// - otherwise: AWZY_REPORTER_TARGETS (`<service>=<url>,…`).
+    pub fn from_env() -> anyhow::Result<Self> {
+        let var = |k: &str| std::env::var(k).with_context(|| format!("{k} is not set"));
+        let interval = std::env::var("AWZY_REPORTER_INTERVAL_SECS").ok().map(|v| v.parse()).transpose()?.unwrap_or(60);
+        if interval < 10 {
+            bail!("AWZY_REPORTER_INTERVAL_SECS must be at least 10");
+        }
+        let source = if std::env::var("KUBERNETES_SERVICE_HOST").is_ok() {
+            Source::Kubernetes {
+                namespaces: var("AWZY_REPORTER_NAMESPACES")?
+                    .split(',')
+                    .map(|n| n.trim().to_string())
+                    .filter(|n| !n.is_empty())
+                    .collect(),
+                pdp_metrics_port: 8080,
+            }
+        } else {
+            Source::Probe(parse_targets(&var("AWZY_REPORTER_TARGETS")?)?)
+        };
+        Ok(Self {
+            install_id: var("AWZY_INSTALL_ID")?.parse()?,
+            token: var("AWZY_REPORTING_TOKEN")?,
+            corp_url: var("AWZY_REPORTER_CORP_PORTAL_URL")?.trim_end_matches('/').to_string(),
+            source,
+            chart_version: std::env::var("AWZY_CHART_VERSION").ok(),
+            interval: Duration::from_secs(interval),
+            data: data_metrics::DataConfig::from_env(),
+        })
+    }
+}
+
+async fn get(client: &HttpClient, url: &str) -> Option<(u16, Bytes)> {
+    let req = client.request(axum::http::Request::get(url).body(Full::new(Bytes::new())).ok()?);
+    let res = tokio::time::timeout(PROBE_TIMEOUT, req).await.ok()?.ok()?;
+    let status = res.status().as_u16();
+    let body = tokio::time::timeout(PROBE_TIMEOUT, res.into_body().collect()).await.ok()?.ok()?.to_bytes();
+    Some((status, body))
+}
+
+#[derive(Deserialize)]
+struct VersionInfo {
+    version: Option<String>,
+    image_digest: Option<String>,
+}
+
+async fn probe(client: &HttpClient, service: Service, base: &str) -> ServiceStatus {
+    let ready = matches!(get(client, &format!("{base}/readyz")).await, Some((200, _)));
+    let info = match get(client, &format!("{base}/version")).await {
+        Some((200, body)) => serde_json::from_slice::<VersionInfo>(&body).ok(),
+        _ => None,
+    };
+    let (version, image_digest) = info.map(|i| (i.version, i.image_digest)).unwrap_or_default();
+    // Probing a URL sees one replica.
+    ServiceStatus {
+        service,
+        version,
+        image_digest,
+        replicas_desired: 1,
+        replicas_ready: u32::from(ready),
+        restarts_24h: None,
+        ready,
+    }
+}
+
+/// Collects and sends heartbeats, remembering what it needs between them: the PDPs' last
+/// counters and pods' restart history.
+pub struct Reporter {
+    config: Config,
+    client: HttpClient,
+    kube: Option<kube::KubeApi>,
+    pdp: pdp_metrics::Tracker,
+    restarts: restarts::RestartTracker,
+    data: data_metrics::DataSources,
+}
+
+impl Reporter {
+    pub fn new(config: Config) -> anyhow::Result<Self> {
+        let kube = match config.source {
+            Source::Kubernetes { .. } => Some(kube::KubeApi::in_cluster()?),
+            Source::Probe(_) => None,
+        };
+        Ok(Self::with_kube(config, kube))
+    }
+
+    fn with_kube(config: Config, kube: Option<kube::KubeApi>) -> Self {
+        let data = data_metrics::DataSources::new(config.data.clone());
+        Self { config, client: http_client(), kube, pdp: Default::default(), restarts: Default::default(), data }
+    }
+
+    /// One heartbeat, from what's running now. Metrics need two collections to compare, so the
+    /// first heartbeat has none.
+    pub async fn collect(&mut self) -> Heartbeat {
+        let (services, pdp_endpoints) = match (&self.config.source, &self.kube) {
+            (Source::Kubernetes { namespaces, pdp_metrics_port }, Some(kube)) => {
+                from_kubernetes(kube, &mut self.restarts, namespaces, *pdp_metrics_port).await
+            }
+            (Source::Probe(targets), _) => (self.probe_all(targets).await, probe_pdp_endpoints(targets)),
+            (Source::Kubernetes { .. }, None) => (vec![], vec![]),
+        };
+        let mut samples = HashMap::new();
+        for (key, url) in pdp_endpoints {
+            if let Some((200, body)) = get(&self.client, &url).await {
+                samples.insert(key, pdp_metrics::parse(&String::from_utf8_lossy(&body)));
+            }
+        }
+        let rates = self.pdp.update(samples, std::time::Instant::now());
+        let data = self.data.collect().await;
+        Heartbeat {
+            schema_version: SCHEMA_VERSION,
+            install_id: self.config.install_id,
+            sent_at: chrono::Utc::now(),
+            chart_version: self.config.chart_version.clone().filter(|v| is_version(v)),
+            services,
+            metrics: Metrics {
+                decisions_per_second: rates.map(|r| r.decisions_per_second),
+                pdp_p99_ms: rates.and_then(|r| r.p99_ms),
+                error_rate: rates.and_then(|r| r.error_rate),
+                kafka_lag: data.kafka_lag,
+                clickhouse_disk_used_percent: data.clickhouse_disk_used_percent,
+            },
+        }
+    }
+
+    async fn probe_all(&self, targets: &[(Service, String)]) -> Vec<ServiceStatus> {
+        let probes: Vec<_> = targets
+            .iter()
+            .cloned()
+            .map(|(service, base)| {
+                let client = self.client.clone();
+                tokio::spawn(async move { probe(&client, service, &base).await })
+            })
+            .collect();
+        let mut services = Vec::with_capacity(probes.len());
+        for p in probes {
+            services.push(p.await.expect("probe task panicked"));
+        }
+        services
+    }
+
+    /// Sends one heartbeat. The corp portal answers 204.
+    pub async fn send(&self, hb: &Heartbeat) -> anyhow::Result<()> {
+        let body = serde_json::to_vec(hb)?;
+        let req = axum::http::Request::post(format!("{}/v1/heartbeat", self.config.corp_url))
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {}", self.config.token))
+            .body(Full::new(Bytes::from(body)))?;
+        let res = tokio::time::timeout(SEND_TIMEOUT, self.client.request(req)).await.context("timed out")??;
+        let status = res.status();
+        if !status.is_success() {
+            let body = res.into_body().collect().await.map(|b| b.to_bytes()).unwrap_or_default();
+            bail!("the corp portal answered {status}: {}", String::from_utf8_lossy(&body));
+        }
+        Ok(())
+    }
+}
+
+/// The awzy workloads in `namespaces`, and the PDP pods to scrape (pod UID, metrics URL).
+async fn from_kubernetes(
+    kube: &kube::KubeApi,
+    restart_tracker: &mut restarts::RestartTracker,
+    namespaces: &[String],
+    port: u16,
+) -> (Vec<ServiceStatus>, Vec<(String, String)>) {
+    let mut workloads = Vec::new();
+    let mut pods = Vec::new();
+    for ns in namespaces {
+        match (kube.workloads(ns).await, kube.pods(ns).await) {
+            (Ok(w), Ok(p)) => {
+                workloads.extend(w);
+                pods.extend(p);
+            }
+            (Err(e), _) | (_, Err(e)) => {
+                tracing::warn!(namespace = %ns, error = %e, "couldn't read workloads; leaving them out")
+            }
+        }
+    }
+    let now = chrono::Utc::now();
+    let samples: Vec<_> = pods.iter().map(|p| (p.uid.clone(), p.restarts, p.started_at)).collect();
+    let restarts = restart_tracker.update(now, &samples);
+
+    let mut services = Vec::new();
+    for w in &workloads {
+        // Only services the heartbeat schema knows; anything else stays in the cluster.
+        let Some(service) = Service::parse(&w.name) else { continue };
+        let its_pods: Vec<_> = pods.iter().filter(|p| p.workload == w.name).collect();
+        let version = w.version.clone().or_else(|| its_pods.iter().find_map(|p| p.image_tag.clone()));
+        services.push(ServiceStatus {
+            service,
+            version: version.filter(|v| is_version(v)),
+            image_digest: its_pods.iter().find_map(|p| p.image_digest.clone()),
+            replicas_desired: w.desired,
+            replicas_ready: w.ready,
+            restarts_24h: Some(its_pods.iter().map(|p| restarts.get(&p.uid).copied().unwrap_or(0)).sum()),
+            ready: w.ready > 0,
+        });
+    }
+    let pdp = pods
+        .iter()
+        .filter(|p| p.workload == Service::Pdp.as_str() && p.ready)
+        .filter_map(|p| p.ip.as_ref().map(|ip| (p.uid.clone(), format!("http://{}:{port}/metrics", bracket(ip)))))
+        .collect();
+    (services, pdp)
+}
+
+fn probe_pdp_endpoints(targets: &[(Service, String)]) -> Vec<(String, String)> {
+    targets
+        .iter()
+        .filter(|(s, _)| *s == Service::Pdp)
+        .map(|(_, base)| (base.clone(), format!("{base}/metrics")))
+        .collect()
+}
+
+/// An IPv6 pod IP in a URL needs brackets.
+fn bracket(ip: &str) -> String {
+    if ip.contains(':') {
+        format!("[{ip}]")
+    } else {
+        ip.to_string()
+    }
+}
+
+/// Collects, logs, and sends a heartbeat every interval, forever. A failed send is logged and
+/// retried at the next interval.
+pub async fn run(mut reporter: Reporter) {
+    let mut tick = tokio::time::interval(reporter.config.interval);
+    loop {
+        tick.tick().await;
+        let hb = reporter.collect().await;
+        // The client can read exactly what leaves their install.
+        tracing::info!(heartbeat = %serde_json::to_string(&hb).unwrap_or_default(), "sending heartbeat");
+        if let Err(e) = reporter.send(&hb).await {
+            tracing::warn!(error = %e, "heartbeat not delivered");
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use axum::{
+        extract::Query,
+        http::HeaderMap,
+        routing::{get as get_route, post},
+        Json, Router,
+    };
+    use serde_json::json;
+
+    use super::*;
+
+    async fn serve(app: Router) -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        format!("http://{addr}")
+    }
+
+    fn config(source: Source, corp_url: String) -> Config {
+        Config {
+            install_id: InstallId::new(),
+            token: "awzyrt_test".into(),
+            corp_url,
+            source,
+            chart_version: Some("0.1.0".into()),
+            interval: Duration::from_secs(60),
+            data: Default::default(),
+        }
+    }
+
+    #[test]
+    fn targets_name_only_known_services() {
+        let t = parse_targets("awzy-pdp=http://pdp:8080/, awzy-policy=http://policy:8080").unwrap();
+        assert_eq!(t, vec![(Service::Pdp, "http://pdp:8080".into()), (Service::Policy, "http://policy:8080".into())]);
+        assert!(parse_targets("acme-billing=http://x").is_err());
+        assert!(parse_targets("awzy-pdp").is_err());
+    }
+
+    /// A PDP whose /metrics counts up by `step` decisions on every scrape.
+    async fn fake_pdp(step: u64) -> String {
+        let n = Arc::new(Mutex::new(0u64));
+        let app = awzy_server::with_health(Router::new().route(
+            "/metrics",
+            get_route(move || {
+                let n = n.clone();
+                async move {
+                    let mut n = n.lock().unwrap();
+                    *n += step;
+                    format!(
+                        "awzy_pdp_decisions_total{{verdict=\"allow\"}} {n}\nawzy_pdp_check_errors_total 0\n\
+                         awzy_pdp_check_duration_seconds_bucket{{le=\"0.001\"}} {n}\nawzy_pdp_check_duration_seconds_bucket{{le=\"+Inf\"}} {n}\n"
+                    )
+                }
+            }),
+        ));
+        serve(app).await
+    }
+
+    #[tokio::test]
+    async fn probes_services_and_delivers_a_valid_heartbeat() {
+        let pdp = fake_pdp(500).await;
+        let not_ready = serve(awzy_server::with_readiness(Router::new(), Arc::new(|| false))).await;
+        let received = Arc::new(Mutex::new(Vec::<String>::new()));
+        let seen = received.clone();
+        let corp = serve(Router::new().route(
+            "/v1/heartbeat",
+            post(move |headers: HeaderMap, body: String| {
+                let seen = seen.clone();
+                async move {
+                    assert_eq!(headers["authorization"], "Bearer awzyrt_test");
+                    seen.lock().unwrap().push(body);
+                    axum::http::StatusCode::NO_CONTENT
+                }
+            }),
+        ))
+        .await;
+        let gone = "http://127.0.0.1:1".to_string();
+        let source = Source::Probe(vec![(Service::Pdp, pdp), (Service::Policy, not_ready), (Service::Gateway, gone)]);
+        let mut reporter = Reporter::with_kube(config(source, corp), None);
+
+        let first = reporter.collect().await;
+        first.validate(chrono::Utc::now()).unwrap();
+        assert_eq!(first.metrics.decisions_per_second, None, "nothing to compare the first scrape with");
+        let by = |hb: &Heartbeat, s: Service| hb.services.iter().find(|x| x.service == s).unwrap().clone();
+        assert!(
+            by(&first, Service::Pdp).ready
+                && by(&first, Service::Pdp).version.as_deref() == Some(env!("CARGO_PKG_VERSION"))
+        );
+        assert!(!by(&first, Service::Policy).ready && by(&first, Service::Policy).replicas_ready == 0);
+        assert!(
+            !by(&first, Service::Gateway).ready && by(&first, Service::Gateway).version.is_none(),
+            "unreachable counts as not ready"
+        );
+
+        let second = reporter.collect().await;
+        assert!(second.metrics.decisions_per_second.unwrap() > 0.0, "500 more decisions since the first scrape");
+        assert!(second.metrics.pdp_p99_ms.unwrap() <= 1.0);
+        assert_eq!(second.metrics.error_rate, Some(0.0));
+
+        reporter.send(&second).await.unwrap();
+        // Byte for byte what was sent. (Decoding it back needn't equal `second`: serde_json's
+        // default float parsing can be one ulp off.)
+        assert_eq!(received.lock().unwrap()[0], serde_json::to_string(&second).unwrap());
+
+        let rejecting = serve(Router::new().route(
+            "/v1/heartbeat",
+            post(|| async { (axum::http::StatusCode::UNAUTHORIZED, "unknown reporting token") }),
+        ))
+        .await;
+        let refused = Reporter::with_kube(config(Source::Probe(vec![]), rejecting), None);
+        let err = refused.send(&second).await.unwrap_err();
+        assert!(err.to_string().contains("401"), "{err}");
+    }
+
+    /// A Kubernetes API with the awzy system namespace: two PDP pods (one not ready) and
+    /// something that isn't awzy's, plus a ClickHouse StatefulSet in the data namespace.
+    async fn fake_kube(pdp_ip: &str) -> String {
+        let hex = "c".repeat(64);
+        let pdp_ip = pdp_ip.to_string();
+        let app = Router::new()
+            .route(
+                "/apis/apps/v1/namespaces/{ns}/deployments",
+                get_route(|axum::extract::Path(ns): axum::extract::Path<String>, headers: HeaderMap, Query(q): Query<HashMap<String, String>>| async move {
+                    assert_eq!(headers["authorization"], "Bearer test-token");
+                    assert_eq!(q["labelSelector"], "app.kubernetes.io/part-of=awzy");
+                    let items = if ns == "awzy-system" {
+                        json!([
+                            { "metadata": { "labels": { "app.kubernetes.io/name": "awzy-pdp", "app.kubernetes.io/version": "abc123" } },
+                              "spec": { "replicas": 2 }, "status": { "readyReplicas": 1 } },
+                            { "metadata": { "labels": { "app.kubernetes.io/name": "acme-sidecar" } }, "spec": { "replicas": 1 }, "status": { "readyReplicas": 1 } },
+                        ])
+                    } else {
+                        json!([])
+                    };
+                    Json(json!({ "items": items }))
+                }),
+            )
+            .route(
+                "/apis/apps/v1/namespaces/{ns}/statefulsets",
+                get_route(|axum::extract::Path(ns): axum::extract::Path<String>| async move {
+                    let items = if ns == "awzy-data" { json!([{ "spec": { "replicas": 1 }, "status": { "readyReplicas": 1 } }]) } else { json!([]) };
+                    Json(json!({ "items": items }))
+                }),
+            )
+            .route(
+                "/api/v1/namespaces/{ns}/pods",
+                get_route(move |axum::extract::Path(ns): axum::extract::Path<String>, Query(q): Query<HashMap<String, String>>| {
+                    let (hex, pdp_ip) = (hex.clone(), pdp_ip.clone());
+                    async move {
+                        let started = (chrono::Utc::now() - chrono::Duration::hours(1)).to_rfc3339();
+                        let ready = |r: bool| json!([{ "type": "Ready", "status": if r { "True" } else { "False" } }]);
+                        let items = match (ns.as_str(), q["labelSelector"].as_str()) {
+                            ("awzy-system", "app.kubernetes.io/part-of=awzy") => json!([
+                                { "metadata": { "uid": "p1", "labels": { "app.kubernetes.io/name": "awzy-pdp" } },
+                                  "status": { "podIP": pdp_ip, "startTime": started, "conditions": ready(true),
+                                              "containerStatuses": [{ "restartCount": 2, "image": "reg/awzy-pdp:abc123", "imageID": format!("reg/awzy-pdp@sha256:{hex}") }] } },
+                                { "metadata": { "uid": "p2", "labels": { "app.kubernetes.io/name": "awzy-pdp" } },
+                                  "status": { "podIP": "127.0.0.1", "startTime": started, "conditions": ready(false),
+                                              "containerStatuses": [{ "restartCount": 1, "image": "reg/awzy-pdp:abc123", "imageID": format!("reg/awzy-pdp@sha256:{hex}") }] } },
+                            ]),
+                            ("awzy-data", "clickhouse.altinity.com/chi") => json!([
+                                { "metadata": { "uid": "c1" }, "status": { "startTime": started, "conditions": ready(true),
+                                    "containerStatuses": [{ "restartCount": 0, "image": "clickhouse/clickhouse-server:25.8", "imageID": "" }] } },
+                            ]),
+                            _ => json!([]),
+                        };
+                        Json(json!({ "items": items }))
+                    }
+                }),
+            );
+        serve(app).await
+    }
+
+    #[tokio::test]
+    async fn reads_workloads_from_kubernetes() {
+        let pdp = fake_pdp(100).await;
+        let port: u16 = pdp.rsplit(':').next().unwrap().parse().unwrap();
+        let kube = kube::KubeApi::for_test(fake_kube("127.0.0.1").await);
+        let source =
+            Source::Kubernetes { namespaces: vec!["awzy-system".into(), "awzy-data".into()], pdp_metrics_port: port };
+        let mut reporter = Reporter::with_kube(config(source, "http://unused".into()), Some(kube));
+
+        reporter.collect().await;
+        let hb = reporter.collect().await;
+        hb.validate(chrono::Utc::now()).unwrap();
+        let names: Vec<_> = hb.services.iter().map(|s| s.service.as_str()).collect();
+        assert_eq!(names, ["awzy-pdp", "clickhouse"], "acme-sidecar isn't awzy's and isn't reported");
+        let pdp = &hb.services[0];
+        assert_eq!((pdp.replicas_desired, pdp.replicas_ready, pdp.ready), (2, 1, true));
+        assert_eq!(pdp.version.as_deref(), Some("abc123"));
+        assert_eq!(pdp.image_digest, Some(format!("sha256:{}", "c".repeat(64))));
+        assert_eq!(pdp.restarts_24h, Some(3), "pods started an hour ago: all their restarts count");
+        let ch = &hb.services[1];
+        assert_eq!((ch.version.as_deref(), ch.replicas_ready), (Some("25.8"), 1));
+        assert!(hb.metrics.decisions_per_second.unwrap() > 0.0, "the ready PDP pod was scraped");
+    }
+}

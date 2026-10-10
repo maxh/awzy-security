@@ -1,0 +1,3 @@
+#!/bin/sh
+# After a merge (including git pull): re-pin if a lockfile conflict was resolved.
+exec "$(git rev-parse --show-toplevel)/tools/git-hooks/repin-if-needed"

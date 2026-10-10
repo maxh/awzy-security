@@ -1,0 +1,23 @@
+#!/bin/sh
+# Run by the post-rewrite and post-merge hooks. If tools/git-merge-lockfile resolved a lockfile
+# conflict, re-pin crate_universe's lockfiles from every Cargo.toml and commit them, so the
+# branch builds without a hand merge. Loads BUILD files only; nothing is built.
+set -eu
+marker="$(git rev-parse --git-dir)/awzy-repin-needed"
+[ -f "$marker" ] || exit 0
+rm -f "$marker"
+cd "$(git rev-parse --show-toplevel)"
+bazel=$(command -v bazel || command -v bazelisk || true)
+if [ -z "$bazel" ]; then
+  echo "repin: a lockfile conflict was resolved, but bazel isn't on PATH to re-pin. Run:" >&2
+  echo "  CARGO_BAZEL_REPIN=1 bazel query //... && git commit -m 'Re-pin crates' Cargo.lock MODULE.bazel.lock" >&2
+  exit 0
+fi
+echo "repin: re-pinning crates after a lockfile conflict..." >&2
+CARGO_BAZEL_REPIN=1 "$bazel" query --noshow_progress --ui_event_filters=-info,-warning //... >/dev/null
+if git diff --quiet -- Cargo.lock MODULE.bazel.lock; then
+  echo "repin: the lockfiles were already current." >&2
+else
+  git commit -q -m "Re-pin crates after merging lockfiles" -- Cargo.lock MODULE.bazel.lock
+  echo "repin: committed the re-pinned lockfiles." >&2
+fi

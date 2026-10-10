@@ -1,0 +1,88 @@
+{{- if .Values.clickhouse.enabled }}
+{{- $ch := .Values.clickhouse }}
+# One ClickHouse replica (small profile) run by the Altinity operator, which bootstrap installs.
+# Losing it loses nothing: it replays from Kafka (ADR 0006). The operator exposes it as the
+# Service clickhouse-awzy.
+apiVersion: clickhouse.altinity.com/v1
+kind: ClickHouseInstallation
+metadata:
+  name: awzy
+  namespace: {{ .Values.namespaces.data }}
+spec:
+  configuration:
+    users:
+      {{ $ch.user }}/k8s_secret_password: {{ .Values.namespaces.data }}/{{ $ch.passwordSecret }}/password
+      {{ $ch.user }}/networks/ip: "::/0"
+      {{ $ch.user }}/profile: default
+      # The migrate Job creates awzy-reporter's user with SQL (ADR 0042).
+      {{ $ch.user }}/access_management: 1
+    files:
+      # Reading a system table needs a grant, so awzy-reporter's user sees only the two it's
+      # granted (ADR 0042). ClickHouse 25 defaults to this; it's set so it doesn't depend on that.
+      config.d/awzy-access.xml: |
+        <clickhouse>
+          <access_control_improvements>
+            <select_from_system_db_requires_grant>true</select_from_system_db_requires_grant>
+          </access_control_improvements>
+        </clickhouse>
+    clusters:
+      - name: awzy
+        layout: { shardsCount: 1, replicasCount: 1 }
+  defaults:
+    templates:
+      podTemplate: clickhouse
+      dataVolumeClaimTemplate: data
+  templates:
+    podTemplates:
+      - name: clickhouse
+        spec:
+          serviceAccountName: clickhouse
+          containers:
+            - name: clickhouse
+              image: clickhouse/clickhouse-server:25.8
+    volumeClaimTemplates:
+      - name: data
+        spec:
+          storageClassName: {{ $ch.storageClass }}
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests: { storage: {{ $ch.storageSize }} }
+---
+# Creates and migrates the decision log tables on every sync.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: awzy-clickhouse-migrate
+  namespace: {{ .Values.namespaces.data }}
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: migrate
+          image: {{ include "awzy.image" (dict "root" . "name" "awzy-clickhouse-migrate") }}
+          env:
+            - { name: AWZY_CLICKHOUSE_URL, value: "http://clickhouse-awzy.{{ .Values.namespaces.data }}.svc:8123" }
+            - { name: AWZY_CLICKHOUSE_USER, value: {{ $ch.user | quote }} }
+            - { name: AWZY_CLICKHOUSE_DATABASE, value: {{ $ch.database | quote }} }
+            - name: AWZY_CLICKHOUSE_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ $ch.passwordSecret }}, key: password } }
+            - { name: AWZY_CLICKHOUSE_KAFKA_BROKERS, value: {{ .Values.kafka.brokers | quote }} }
+            # Optional until bootstrap has made it; without it the reporter's user is left alone.
+            - name: AWZY_CLICKHOUSE_REPORTER_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ $ch.reporterPasswordSecret }}, key: password, optional: true } }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+{{- end }}

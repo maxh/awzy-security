@@ -1,0 +1,34 @@
+# Every awzy image must carry a cosign signature from the release key (ADR 0009). Signatures
+# are not in the public Rekor log, so only the key is checked.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: awzy-verify-images
+spec:
+  webhookConfiguration:
+    failurePolicy: Fail
+  background: false
+  rules:
+    - name: signed-by-awzy-release-key
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces:
+                {{- range $k, $ns := .Values.namespaces }}
+                - {{ $ns }}
+                {{- end }}
+      verifyImages:
+        - imageReferences: [{{ printf "%s/*" .Values.registry.prefix | quote }}]
+          imageRegistryCredentials:
+            secrets: [awzy-registry]
+          mutateDigest: true
+          verifyDigest: true
+          required: true
+          attestors:
+            - entries:
+                - keys:
+                    publicKeys: |-
+                      {{- .Values.cosignPubKey | trim | nindent 22 }}
+                    rekor: { ignoreTlog: true }
+                    ctlog: { ignoreSCT: true }

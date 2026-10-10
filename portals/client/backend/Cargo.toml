@@ -1,0 +1,38 @@
+[package]
+name = "awzy-client-portal"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+bytes.workspace = true
+http-body-util.workspace = true
+hyper-util.workspace = true
+axum.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+awzy-server.workspace = true
+awzy-telemetry.workspace = true
+async-graphql.workspace = true
+awzy-authz-proto.workspace = true
+awzy-identity.workspace = true
+async-graphql-axum.workspace = true
+thiserror.workspace = true
+awzy-model.workspace = true
+awzy-pdp.workspace = true
+awzy-portal.workspace = true
+chrono.workspace = true
+clickhouse.workspace = true
+rmcp.workspace = true
+awzy-llm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tonic.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+jsonwebtoken.workspace = true
+awzy-clickhouse.workspace = true
+tower.workspace = true

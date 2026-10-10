@@ -1,0 +1,18 @@
+# Lint and breaking-change rules for awzy's protobuf APIs (ADR 0045). CI runs
+# `buf lint` and `buf breaking` against main on every pull request.
+version: v2
+modules:
+  - path: authz/libs/proto
+lint:
+  use:
+    - STANDARD
+  ignore_only:
+    # Shipped before buf: renaming it to AuthorizerService would change the wire path
+    # (/awzy.authz.v1.Authorizer/Check) every enforcement point calls.
+    SERVICE_SUFFIX:
+      - authz/libs/proto/awzy/authz/v1/authz.proto
+breaking:
+  # FILE: no change that breaks generated code or the wire, so SDKs built on these files keep
+  # compiling and talking to newer PDPs.
+  use:
+    - FILE

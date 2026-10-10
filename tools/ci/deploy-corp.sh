@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Deploys the corp portal release (ADR 0053) to the corp portal and the registry proxy on ECS
+# (deploy/terraform/corp/corp-portal). Runs in CI after publish-images.sh, as awzy-ci-deploy.
+#
+# For each service: copy its running task definition with only the image changed, register it,
+# point the service at it, then wait for the service to settle. ECS's deployment circuit
+# breaker rolls a failing deploy back; that shows up here as the old revision still running.
+#
+# CI runs for commits on main finish in any order, so a commit older than the one deployed is
+# skipped rather than deployed over it. That needs the full history (fetch-depth: 0).
+set -euo pipefail
+: "${AWZY_CORP_PORTAL_RELEASE_REGISTRY:?}" "${AWZY_CORP_PORTAL_RELEASE_TAG:?}"
+CLUSTER=awzy-corp-portal
+
+deployed_image=$(aws ecs describe-services --cluster "$CLUSTER" --services awzy-corp-portal \
+  --query 'services[0].taskDefinition' --output text |
+  xargs -I{} aws ecs describe-task-definition --task-definition {} \
+    --query "taskDefinition.containerDefinitions[?name=='corp-portal'].image | [0]" --output text)
+deployed=${deployed_image##*:}
+if [ "$deployed" != "$AWZY_CORP_PORTAL_RELEASE_TAG" ] && git cat-file -e "$deployed^{commit}" 2>/dev/null &&
+  git merge-base --is-ancestor "$AWZY_CORP_PORTAL_RELEASE_TAG" "$deployed"; then
+  echo "::notice::Skipped: ${deployed:0:12} is deployed and newer than ${AWZY_CORP_PORTAL_RELEASE_TAG:0:12}."
+  exit 0
+fi
+
+# service:container:image repository
+SERVICES=(
+  "awzy-corp-portal:corp-portal:awzy/awzy-corp-portal"
+  "awzy-registry:registry:awzy/awzy-registry"
+)
+
+declare -A wanted
+for entry in "${SERVICES[@]}"; do
+  IFS=: read -r service container repo <<< "$entry"
+  current=$(aws ecs describe-services --cluster "$CLUSTER" --services "$service" --query 'services[0].taskDefinition' --output text)
+  aws ecs describe-task-definition --task-definition "$current" --query taskDefinition --output json > /tmp/td.json
+  python3 - "$container" "$AWZY_CORP_PORTAL_RELEASE_REGISTRY/$repo:$AWZY_CORP_PORTAL_RELEASE_TAG" <<'PY'
+import json, sys
+container, image = sys.argv[1], sys.argv[2]
+td = json.load(open("/tmp/td.json"))
+found = False
+for c in td["containerDefinitions"]:
+    if c["name"] == container:
+        c["image"] = image
+        found = True
+if not found:
+    sys.exit(f"no container {container!r} in the task definition")
+# Fields describe returns but register doesn't take.
+for k in ["taskDefinitionArn", "revision", "status", "requiresAttributes", "compatibilities",
+          "registeredAt", "registeredBy", "deregisteredAt"]:
+    td.pop(k, None)
+json.dump(td, open("/tmp/td.json", "w"))
+PY
+  new=$(aws ecs register-task-definition --cli-input-json file:///tmp/td.json --query 'taskDefinition.taskDefinitionArn' --output text)
+  aws ecs update-service --cluster "$CLUSTER" --service "$service" --task-definition "$new" --query 'service.serviceName' --output text > /dev/null
+  echo "$service: $current -> $new"
+  wanted[$service]=$new
+done
+
+echo "waiting for the services to settle"
+aws ecs wait services-stable --cluster "$CLUSTER" --services "${!wanted[@]}"
+
+failed=0
+for service in "${!wanted[@]}"; do
+  running=$(aws ecs describe-services --cluster "$CLUSTER" --services "$service" --query 'services[0].taskDefinition' --output text)
+  if [ "$running" = "${wanted[$service]}" ]; then
+    echo "$service: deployed $AWZY_CORP_PORTAL_RELEASE_TAG"
+  else
+    echo "::error::$service: rolled back to $running (the new revision didn't become healthy)"
+    failed=1
+  fi
+done
+exit $failed

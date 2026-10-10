@@ -1,0 +1,31 @@
+# awzy-context · world model
+
+Owns the entity graph: accessors, agents, teams, projects, resources, and edges between them.
+Part of [awzy-authz](../../README.md).
+
+Runs LLM preprocessing to classify resource sensitivity and derive work assignments. Publishes
+attribute changes so PDP snapshots stay current. People and groups come from the client's IdP
+over SCIM ([ADR 0031](../../../docs/adr/0031-people-and-groups-from-the-idp-over-scim.md)), and
+service accounts are registered here
+([ADR 0033](../../../docs/adr/0033-service-account-registry-in-awzy-context.md)).
+
+Resources (documents, folders, repositories, tickets) and work items (tickets, accounts, projects,
+statements of work) are written by connectors through `/v1/resources` and `/v1/work-items`, one at
+a time or in batches of up to 1,000 (demo plan step 2). `GET /v1/resources/{id}/entities` returns a
+resource and its parent folders as the Cedar entities the PDP evaluates
+([ADR 0044](../../../docs/adr/0044-pdp-loads-resources-from-awzy-context.md)); unclassified
+resources get the default tier and `unclassified: true`. The same response lists `assignees`: who is on
+open work that links the resource or a folder above it, which the PDP turns into
+`context.assigned` ([ADR 0046](../../../docs/adr/0046-work-assignment-as-context-assigned.md)). IDs containing `/` are percent-encoded
+in the path (`%2F`).
+
+Resources without a label are classified in the background by
+[awzy-classify](../../libs/classify/README.md)'s rules, using content markings, then names and
+folders. Policies see the higher of the label's tier and the classifier's
+([ADR 0047](../../../docs/adr/0047-metadata-first-classification-rules.md)).
+
+- Postgres with pgvector
+- Change feed to Kafka topic `attributes.v1`
+
+What's built so far: [platform plan](../../../docs/platform-plan.md#built-so-far). Running it locally:
+[DEVELOPMENT.md](../../../DEVELOPMENT.md#people-and-groups-from-the-idp-adr-0031).

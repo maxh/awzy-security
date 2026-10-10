@@ -1,0 +1,6 @@
+node_modules/
+portals/common/ui/node_modules/
+portals/common/relay/node_modules/
+portals/client/frontend/node_modules/
+portals/corp/frontend/node_modules/
+portals/client/e2e/node_modules/

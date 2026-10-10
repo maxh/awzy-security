@@ -1,0 +1,82 @@
+// Principals, from the world model (awzy-context, fed by connectors).
+
+// IdP groups and teams; groups can nest.
+entity Group in [Group];
+
+// A person. `active` comes from the IdP through awzy-context; absent when an enforcement point
+// built the entity from a token alone.
+entity Human in [Group] {
+  active?: Bool,
+};
+
+// Any non-human identity with its own credentials: a backend service, a scheduled job, an
+// AI agent. When it acts for a person, the request names that person (context.on_behalf_of).
+entity ServiceAccount in [Group] {
+  // Accountable for it: receives its challenges and alerts.
+  owner: Human,
+  // An AI agent rather than conventional software.
+  ai: Bool,
+};
+
+// Resources form a hierarchy (folders, projects).
+entity Resource in [Resource] {
+  // public | internal | confidential | crown_jewels
+  sensitivity: String,
+  // Set by the PDP: true when no label or classifier has set `sensitivity`, so it's the default
+  // tier, including for a resource awzy-context doesn't know yet. Policies can challenge these.
+  unclassified?: Bool,
+};
+
+// An MCP server behind awzy-gateway, and its tools (`<server>/<tool>`).
+entity McpServer;
+entity McpTool in [McpServer] {
+  // Set per tool in the gateway's config until awzy-context classifies tools.
+  sensitivity: String,
+};
+
+// An area of the client portal and its MCP server: "decisions", "policies", or "enforcement"
+// (ADR 0020).
+entity PortalArea {
+  // Set by the portal; "confidential" for every area.
+  sensitivity: String,
+};
+
+// What every check carries. Shared by all actions.
+type RequestContext = {
+  // 0-100. Set by the PDP (0 until awzy-reasoner writes risk attributes).
+  risk_score: Long,
+  // Set by the PDP from the request, never by the caller. The human a service account is
+  // acting for (OAuth token exchange, RFC 8693); absent when it acts on its own authority.
+  on_behalf_of?: Human,
+  // Set by the PDP: whether a person is there to answer a challenge right now.
+  human_present: Bool,
+  // Set by the PDP for a Resource when awzy-context is in use: whether this check's principal is
+  // assigned to open work (a ticket, account, project, or statement of work) that links the
+  // resource or a folder above it (ADR 0046). Absent when awzy doesn't know, so test it with
+  // `context has assigned`.
+  assigned?: Bool,
+  // What the enforcement point observed about the calling software, e.g. "browser",
+  // "cli", or an MCP client name. Helps spot agents using a person's own credentials.
+  client?: String,
+};
+
+action read, write appliesTo {
+  principal: [Human, ServiceAccount],
+  resource: [Resource],
+  context: RequestContext,
+};
+
+// Calling an MCP tool through awzy-gateway.
+action call appliesTo {
+  principal: [Human, ServiceAccount],
+  resource: [McpTool],
+  context: RequestContext,
+};
+
+// Using the client portal or its MCP server: reading an area, or changing what it controls
+// (publishing policy, switching enforcement).
+action view, administer appliesTo {
+  principal: [Human, ServiceAccount],
+  resource: [PortalArea],
+  context: RequestContext,
+};

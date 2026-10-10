@@ -1,0 +1,121 @@
+//! awzy-synthetic directory|world|all [--profile demo|scale] [--seed N] [--print]
+//! awzy-synthetic drive
+//! awzy-synthetic activity [--profile demo|scale] [--seed N] [--days N] [--rate N]
+//!
+//! `directory` sends the synthetic company's people, groups, and service accounts to awzy-context
+//! at AWZY_CONTEXT_URL (default http://127.0.0.1:8084) with the SCIM token in AWZY_SCIM_TOKEN.
+//! `world` sends its resources and work items, which name those people, so it runs after
+//! `directory`; `all` runs both. `--print` writes the company as JSON instead and sends nothing.
+//! `drive` serves larkspur-drive, an MCP server over the documents in awzy-context, at
+//! AWZY_LISTEN_ADDR (default 127.0.0.1:8095) `/mcp`, for awzy-gateway to front (ADR 0050).
+//! `activity` makes the company's everyday tool calls on larkspur-drive through the gateway at
+//! AWZY_GATEWAY_URL, `--rate` per second (default 5) for `--days` generated days (default 1),
+//! with tokens signed by the gateway's development secret in AWZY_GATEWAY_DEV_SECRET.
+
+use anyhow::{bail, Context};
+use awzy_synthetic::{
+    org::{generate, Profile},
+    push::ContextClient,
+};
+
+const USAGE: &str =
+    "usage: awzy-synthetic directory|world|all [--profile demo|scale] [--seed N] [--print] | awzy-synthetic drive \
+     | awzy-synthetic activity [--profile demo|scale] [--seed N] [--days N] [--rate N]";
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    awzy_telemetry::init("awzy-synthetic");
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let flag = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
+    let command = args.first().map(String::as_str).unwrap_or_default();
+    let url = std::env::var("AWZY_CONTEXT_URL").unwrap_or_else(|_| "http://127.0.0.1:8084".into());
+    if command == "drive" {
+        let addr = std::env::var("AWZY_LISTEN_ADDR").unwrap_or_else(|_| "127.0.0.1:8095".into());
+        let listener = tokio::net::TcpListener::bind(&addr).await?;
+        tracing::info!(%addr, context = %url, "larkspur-drive serving MCP at /mcp");
+        axum::serve(listener, awzy_synthetic::drive::router(ContextClient::new(&url, ""))).await?;
+        return Ok(());
+    }
+    let (directory, world) = match command {
+        "activity" => return activity(&args).await,
+        "directory" => (true, false),
+        "world" => (false, true),
+        "all" => (true, true),
+        _ => bail!(USAGE),
+    };
+    let profile_name = flag("--profile").unwrap_or_else(|| "demo".into());
+    let profile = Profile::parse(&profile_name).with_context(|| format!("unknown profile {profile_name:?}"))?;
+    let seed: u64 = flag("--seed").map(|s| s.parse()).transpose()?.unwrap_or(1);
+    let company = generate(profile, seed);
+
+    if args.iter().any(|a| a == "--print") {
+        println!("{}", serde_json::to_string_pretty(&company)?);
+        return Ok(());
+    }
+    // Only SCIM needs the token; the resource API is cluster-internal.
+    let token = match std::env::var("AWZY_SCIM_TOKEN") {
+        Ok(t) => t,
+        Err(_) if !directory => String::new(),
+        Err(_) => bail!("AWZY_SCIM_TOKEN is not set"),
+    };
+    let client = ContextClient::new(&url, &token);
+    if directory {
+        let summary = client.push(&company).await?;
+        tracing::info!(?summary, profile = profile_name, seed, "synthetic directory provisioned");
+    }
+    if world {
+        let summary = client.push_world(&company, profile).await?;
+        tracing::info!(?summary, profile = profile_name, seed, "synthetic resources and work items written");
+    }
+    Ok(())
+}
+
+/// Replays generated days of activity through the gateway at a steady rate, and reports what
+/// became of the calls. The decisions themselves are in the client portal's Decisions page.
+async fn activity(args: &[String]) -> anyhow::Result<()> {
+    use awzy_synthetic::{
+        activity,
+        driver::{Driver, Tally},
+    };
+    let flag = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
+    let profile_name = flag("--profile").unwrap_or_else(|| "demo".into());
+    let profile = Profile::parse(&profile_name).with_context(|| format!("unknown profile {profile_name:?}"))?;
+    let seed: u64 = flag("--seed").map(|s| s.parse()).transpose()?.unwrap_or(1);
+    let days: u32 = flag("--days").map(|s| s.parse()).transpose()?.unwrap_or(1);
+    let rate: f64 = flag("--rate").map(|s| s.parse()).transpose()?.unwrap_or(5.0);
+    anyhow::ensure!(rate > 0.0, "--rate is calls per second, more than 0");
+
+    let env = |k: &str, default: &str| std::env::var(k).unwrap_or_else(|_| default.to_string());
+    let gateway = std::env::var("AWZY_GATEWAY_URL").context("AWZY_GATEWAY_URL is not set")?;
+    let secret = std::env::var("AWZY_GATEWAY_DEV_SECRET").context("AWZY_GATEWAY_DEV_SECRET is not set")?;
+    let endpoint = format!("{}/mcp/{}", gateway.trim_end_matches('/'), env("AWZY_DRIVE_UPSTREAM", "larkspur-drive"));
+    let driver = Driver::new(
+        &endpoint,
+        secret.as_bytes(),
+        &env("AWZY_TOKEN_ISSUER", "https://idp.local"),
+        &env("AWZY_TOKEN_AUDIENCE", "awzy-gateway"),
+    );
+
+    let company = generate(profile, seed);
+    let mut tally = Tally::default();
+    let mut tick = tokio::time::interval(std::time::Duration::from_secs_f64(1.0 / rate));
+    let mut id = 0;
+    for d in 0..days {
+        let accesses = activity::day(&company, profile, d);
+        tracing::info!(day = d, calls = accesses.len(), %endpoint, "replaying a day of activity");
+        for a in &accesses {
+            tick.tick().await;
+            id += 1;
+            let outcome = driver.send(a, id).await;
+            if let awzy_synthetic::driver::Outcome::Failed(why) = &outcome {
+                tracing::warn!(subject = %a.subject, resource = %a.resource, %why, "call failed");
+            }
+            tally.add(&outcome);
+            if id % 500 == 0 {
+                tracing::info!(calls = id, ?tally, "activity so far");
+            }
+        }
+    }
+    tracing::info!(calls = id, ?tally, "activity done");
+    Ok(())
+}

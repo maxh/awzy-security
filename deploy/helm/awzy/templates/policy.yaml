@@ -1,0 +1,4 @@
+{{ include "awzy.service" (dict "root" . "name" "awzy-policy" "namespace" .Values.namespaces.system "values" .Values.policy
+  "env" (list
+    (dict "name" "AWZY_POSTGRES_URL" "valueFrom" (dict "secretKeyRef" (dict "name" "awzy-postgres" "key" "url")))
+  )) }}

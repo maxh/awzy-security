@@ -1,0 +1,9 @@
+load("//tools:rust.bzl", "awzy_rust_library")
+
+# Who is calling: bearer token validation shared by awzy-gateway and the client portal.
+awzy_rust_library(
+    name = "identity",
+    crate_name = "awzy_identity",
+    visibility = ["//tools:client_side"],
+    deps = ["//libs/model"],
+)

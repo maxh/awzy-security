@@ -1,0 +1,292 @@
+import {
+  Alert,
+  Badge,
+  Button,
+  Center,
+  Code,
+  Group,
+  Loader,
+  Modal,
+  Select,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import { Link } from "@tanstack/react-router";
+import { type FormEvent, Suspense, useState } from "react";
+import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
+
+import type { FleetPageQuery } from "./__generated__/FleetPageQuery.graphql";
+import type { FleetPageRegisterMutation, ReleaseChannel } from "./__generated__/FleetPageRegisterMutation.graphql";
+import { ago, channelLabel, healthOf } from "./format";
+
+/** Every registered install, with its health and what it last reported (ADR 0026). */
+export function FleetPage() {
+  const [fetchKey, setFetchKey] = useState(0);
+  const [registering, setRegistering] = useState(false);
+  return (
+    <Stack gap="md">
+      <Group justify="space-between">
+        <Title order={3}>Installs</Title>
+        <Group>
+          <Button variant="default" onClick={() => setFetchKey((k) => k + 1)}>
+            Refresh
+          </Button>
+          <Button onClick={() => setRegistering(true)}>Register install</Button>
+        </Group>
+      </Group>
+      <Suspense
+        fallback={
+          <Center p="xl">
+            <Loader />
+          </Center>
+        }
+      >
+        <Fleet fetchKey={fetchKey} />
+      </Suspense>
+      <RegisterInstall
+        opened={registering}
+        onClose={() => setRegistering(false)}
+        onRegistered={() => setFetchKey((k) => k + 1)}
+      />
+    </Stack>
+  );
+}
+
+function Fleet({ fetchKey }: { fetchKey: number }) {
+  const data = useLazyLoadQuery<FleetPageQuery>(
+    graphql`
+      query FleetPageQuery {
+        installs(first: 200) {
+          edges {
+            node {
+              id
+              client
+              environment
+              cloud
+              region
+              channel
+              pinnedVersion
+              health
+              chartVersion
+              lastSeenAt
+              services {
+                healthy
+              }
+              metrics {
+                decisionsPerSecond
+                pdpP99Ms
+              }
+            }
+          }
+        }
+      }
+    `,
+    {},
+    { fetchKey, fetchPolicy: "store-and-network" },
+  );
+  const installs = data.installs.edges.map((e) => e.node);
+  if (installs.length === 0) {
+    return (
+      <Text c="dimmed">
+        No installs yet. Register one, then put its ID and reporting token in the install's values.
+      </Text>
+    );
+  }
+  return (
+    <Table striped highlightOnHover>
+      <Table.Thead>
+        <Table.Tr>
+          <Table.Th>Install</Table.Th>
+          <Table.Th>Cloud</Table.Th>
+          <Table.Th>Channel</Table.Th>
+          <Table.Th>Version</Table.Th>
+          <Table.Th>Health</Table.Th>
+          <Table.Th>Services</Table.Th>
+          <Table.Th>PDP p99</Table.Th>
+          <Table.Th>Decisions/s</Table.Th>
+          <Table.Th>Last seen</Table.Th>
+        </Table.Tr>
+      </Table.Thead>
+      <Table.Tbody>
+        {installs.map((i) => {
+          const health = healthOf(i.health);
+          const healthy = i.services.filter((s) => s.healthy).length;
+          return (
+            <Table.Tr key={i.id}>
+              <Table.Td>
+                <Link to="/installs/$installId" params={{ installId: i.id }}>
+                  <b>{i.client}</b> / {i.environment}
+                </Link>
+              </Table.Td>
+              <Table.Td>
+                {i.cloud} {i.region}
+              </Table.Td>
+              <Table.Td>{channelLabel(i.channel, i.pinnedVersion)}</Table.Td>
+              <Table.Td>
+                {i.chartVersion ?? (
+                  <Text c="dimmed" span>
+                    —
+                  </Text>
+                )}
+              </Table.Td>
+              <Table.Td>
+                <Badge color={health.color} variant="light">
+                  {health.label}
+                </Badge>
+              </Table.Td>
+              <Table.Td>{i.services.length > 0 ? `${healthy}/${i.services.length} healthy` : "—"}</Table.Td>
+              <Table.Td>{i.metrics?.pdpP99Ms != null ? `${i.metrics.pdpP99Ms.toFixed(1)} ms` : "—"}</Table.Td>
+              <Table.Td>
+                {i.metrics?.decisionsPerSecond != null ? i.metrics.decisionsPerSecond.toLocaleString() : "—"}
+              </Table.Td>
+              <Table.Td>{ago(i.lastSeenAt)}</Table.Td>
+            </Table.Tr>
+          );
+        })}
+      </Table.Tbody>
+    </Table>
+  );
+}
+
+const CHANNELS = [
+  { value: "FAST", label: "fast" },
+  { value: "STABLE", label: "stable" },
+  { value: "PINNED", label: "pinned" },
+];
+
+function RegisterInstall({
+  opened,
+  onClose,
+  onRegistered,
+}: {
+  opened: boolean;
+  onClose: () => void;
+  onRegistered: () => void;
+}) {
+  const [client, setClient] = useState("");
+  const [environment, setEnvironment] = useState("prod");
+  const [cloud, setCloud] = useState<string | null>("aws");
+  const [region, setRegion] = useState("us-east-2");
+  const [channel, setChannel] = useState<string | null>("FAST");
+  const [pinned, setPinned] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ id: string; token: string } | null>(null);
+  const [commit, isSaving] = useMutation<FleetPageRegisterMutation>(graphql`
+    mutation FleetPageRegisterMutation($input: RegisterInstallInput!) {
+      registerInstall(input: $input) {
+        install {
+          id
+        }
+        reportingToken
+      }
+    }
+  `);
+
+  const close = () => {
+    setResult(null);
+    setError(null);
+    onClose();
+  };
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    commit({
+      variables: {
+        input: {
+          client: client.trim(),
+          environment: environment.trim(),
+          cloud: cloud ?? "aws",
+          region: region.trim(),
+          channel: (channel ?? "FAST") as ReleaseChannel,
+          pinnedVersion: channel === "PINNED" ? pinned.trim() : null,
+        },
+      },
+      onCompleted: (res) => {
+        setError(null);
+        setResult({ id: res.registerInstall.install.id, token: res.registerInstall.reportingToken });
+        onRegistered();
+      },
+      onError: (err) => setError(err.message),
+    });
+  };
+
+  return (
+    <Modal opened={opened} onClose={close} title="Register an install" size="lg">
+      {result ? (
+        <Stack>
+          <Alert color="yellow" title="Copy the reporting token now">
+            It is shown only this once. Put both values in the install's reporter settings.
+          </Alert>
+          <Text size="sm">Install ID</Text>
+          <Code block>{result.id}</Code>
+          <Text size="sm">Reporting token</Text>
+          <Code block>{result.token}</Code>
+          <Group justify="flex-end">
+            <Button onClick={close}>Done</Button>
+          </Group>
+        </Stack>
+      ) : (
+        <form onSubmit={submit}>
+          <Stack>
+            {error && <Alert color="red">{error}</Alert>}
+            <Group grow>
+              <TextInput
+                label="Client"
+                placeholder="acme"
+                value={client}
+                onChange={(e) => setClient(e.currentTarget.value)}
+                required
+              />
+              <TextInput
+                label="Environment"
+                value={environment}
+                onChange={(e) => setEnvironment(e.currentTarget.value)}
+                required
+              />
+            </Group>
+            <Group grow>
+              <Select
+                label="Cloud"
+                data={["aws", "gcp", "azure"]}
+                value={cloud}
+                onChange={setCloud}
+                allowDeselect={false}
+              />
+              <TextInput label="Region" value={region} onChange={(e) => setRegion(e.currentTarget.value)} required />
+            </Group>
+            <Group grow>
+              <Select
+                label="Release channel"
+                data={CHANNELS}
+                value={channel}
+                onChange={setChannel}
+                allowDeselect={false}
+              />
+              {channel === "PINNED" && (
+                <TextInput
+                  label="Pinned version"
+                  placeholder="0.4.2"
+                  value={pinned}
+                  onChange={(e) => setPinned(e.currentTarget.value)}
+                  required
+                />
+              )}
+            </Group>
+            <Text size="xs" c="dimmed">
+              Client, environment, and region are lowercase letters, digits, and hyphens. The client's name stays here;
+              installs report only their ID.
+            </Text>
+            <Group justify="flex-end">
+              <Button type="submit" loading={isSaving}>
+                Register
+              </Button>
+            </Group>
+          </Stack>
+        </form>
+      )}
+    </Modal>
+  );
+}

@@ -1,0 +1,15 @@
+load("//tools:rust.bzl", "awzy_service")
+
+# Pull-only proxy in front of the release registry (ADR 0028). Runs next to the corp portal.
+awzy_service(
+    name = "registry",
+    crate_name = "awzy_registry",
+    binary_name = "awzy-registry",
+    # Embedded by sqlx::migrate!.
+    compile_data = glob(["migrations/*.sql"]),
+    deps = [
+        "//libs/model",
+        "//libs/server",
+        "//libs/telemetry",
+    ],
+)

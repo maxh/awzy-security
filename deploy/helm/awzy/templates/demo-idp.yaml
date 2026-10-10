@@ -1,0 +1,31 @@
+{{- if .Values.demoIdp.enabled }}
+{{- $ns := .Values.namespaces.portal }}
+# DEMO INSTALLS ONLY (ADR 0032). The dev IdP, served at https://<hostname>/idp through the
+# install's Gateway, which terminates TLS and strips the /idp prefix.
+{{ include "awzy.service" (dict "root" . "name" "awzy-dev-idp" "namespace" $ns "values" (merge (dict "replicas" 1) .Values.demoIdp)
+  "env" (list
+    (dict "name" "AWZY_DEV_IDP_TLS" "value" "off")
+    (dict "name" "AWZY_DEV_IDP_ISSUER" "value" (include "awzy.demoIdpIssuer" .))
+  )) }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: awzy-dev-idp
+  namespace: {{ $ns }}
+spec:
+  parentRefs:
+    - name: {{ .Values.gateway.name }}
+      namespace: {{ .Values.gateway.namespace }}
+      sectionName: https
+  hostnames: [{{ .Values.clientPortal.hostname | quote }}]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: /idp }
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path: { type: ReplacePrefixMatch, replacePrefixMatch: / }
+      backendRefs:
+        - { name: awzy-dev-idp, port: 8080 }
+{{- end }}

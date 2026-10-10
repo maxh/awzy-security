@@ -1,0 +1,5 @@
+# Formatting for every Rust crate. `bazel build --config=lint //...` and the pre-commit hook
+# (tools/git-hooks/pre-commit) check against it; tools/fmt applies it.
+edition = "2021"
+max_width = 120
+use_small_heuristics = "Max"

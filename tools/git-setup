@@ -1,0 +1,9 @@
+#!/bin/sh
+# Per-clone git settings the repository can't carry itself: the hooks (pre-commit checks; re-pinning
+# after lockfile conflicts) and the lockfile merge driver. `pnpm install` runs this; it's safe to
+# run again. Applies to every worktree of the clone.
+set -eu
+git rev-parse --git-dir >/dev/null 2>&1 || exit 0
+git config core.hooksPath tools/git-hooks
+git config merge.awzy-lockfile.name "re-pin crate_universe lockfiles instead of merging them"
+git config merge.awzy-lockfile.driver "tools/git-merge-lockfile %O %A %B %P"

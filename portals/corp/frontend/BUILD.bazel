@@ -1,0 +1,75 @@
+load("@bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
+load("@bazel_lib//lib:write_source_files.bzl", "write_source_files")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//portals/corp/frontend:relay-compiler/package_json.bzl", relay_bin = "bin")
+load("@npm//portals/corp/frontend:typescript/package_json.bzl", tsc_bin = "bin")
+load("@npm//portals/corp/frontend:vite/package_json.bzl", vite_bin = "bin")
+
+npm_link_all_packages()
+
+# One copy of the sources in bazel-bin, shared by every target below. Letting each JS rule
+# copy its own would create conflicting copy actions once the Vite build runs unsandboxed.
+copy_to_bin(
+    name = "srcs",
+    srcs = glob(["src/**/*.ts", "src/**/*.tsx"], allow_empty = True) + [
+        "index.html",
+        "package.json",
+        "relay.config.json",
+        "schema.graphql",
+        "tsconfig.json",
+        "tsconfig.node.json",
+        "vite.config.ts",
+    ],
+)
+
+SRCS = [
+    ":srcs",
+    "//:tsconfig_base",
+]
+
+# schema.graphql is generated from the Rust backend. `bazel test` fails if it is stale;
+# `bazel run //portals/corp/frontend:update_schema` refreshes it.
+write_source_files(
+    name = "update_schema",
+    files = {"schema.graphql": "//portals/corp/backend:schema_sdl"},
+)
+
+# Checks that the committed __generated__ Relay artifacts match the queries and schema.
+relay_bin.relay_compiler_test(
+    name = "relay_test",
+    size = "small",
+    args = ["--validate"],
+    chdir = package_name(),
+    data = SRCS,
+)
+
+tsc_bin.tsc_test(
+    name = "typecheck",
+    size = "small",
+    args = ["-p", "tsconfig.json"],
+    chdir = package_name(),
+    data = SRCS + [":node_modules"],
+)
+
+# vite.config.ts runs in Node, so it is checked with Node's types, apart from the browser code.
+tsc_bin.tsc_test(
+    name = "typecheck_config",
+    size = "small",
+    args = ["-p", "tsconfig.node.json"],
+    chdir = package_name(),
+    data = SRCS + [":node_modules"],
+)
+
+# Vite 8 bundles with Rolldown, which resolves symlinks natively (outside rules_js's
+# Node fs patches) and so escapes the sandbox's symlinked inputs. Run it unsandboxed;
+# its inputs are still the declared srcs copied into bazel-bin.
+vite_bin.vite(
+    name = "build",
+    srcs = SRCS + [":node_modules"],
+    args = ["build"],
+    chdir = package_name(),
+    out_dirs = ["dist"],
+    tags = ["no-sandbox"],
+    # Served by the portal backend; see `frontend` in its BUILD file.
+    visibility = ["//portals/corp/backend:__pkg__"],
+)

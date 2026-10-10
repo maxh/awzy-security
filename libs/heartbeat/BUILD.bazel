@@ -1,0 +1,9 @@
+load("//tools:rust.bzl", "awzy_rust_library")
+
+# The heartbeat each install sends the corp portal (ADR 0026). Shared by the reporter in
+# client installs and the corp portal, so both sides agree on the one fixed schema.
+awzy_rust_library(
+    name = "heartbeat",
+    crate_name = "awzy_heartbeat",
+    deps = ["//libs/model"],
+)

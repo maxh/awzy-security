@@ -1,0 +1,173 @@
+# Cloud-agnostic layer of an awzy install (ADR 0015). Takes install_contract from a per-cloud
+# module (aws/install, later gcp/install, azure/install) and never branches on the cloud.
+# Installs Argo CD, Kyverno (signature checks), External Secrets, and the ClickHouse operator,
+# then hands the awzy chart to Argo CD.
+#
+# The caller configures the helm and kubernetes providers for the target cluster.
+
+terraform {
+  required_version = ">= 1.10"
+  required_providers {
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 3.0"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.38"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
+  }
+}
+
+locals {
+  c = var.install_contract
+
+  namespaces = {
+    system = "awzy-system"
+    data   = "awzy-data"
+    portal = "awzy-portal"
+    ops    = "awzy-ops"
+  }
+
+  # The registry host, e.g. registry.awzysecurity.com
+  registry_host = split("/", local.c.registry_prefix)[0]
+}
+
+resource "kubernetes_namespace_v1" "awzy" {
+  for_each = local.namespaces
+  metadata {
+    name   = each.value
+    labels = { "app.kubernetes.io/part-of" = "awzy" }
+  }
+}
+
+resource "kubernetes_storage_class_v1" "default" {
+  metadata {
+    name        = local.c.storage_class.name
+    annotations = { "storageclass.kubernetes.io/is-default-class" = "true" }
+  }
+  storage_provisioner    = local.c.storage_class.provisioner
+  parameters             = local.c.storage_class.parameters
+  volume_binding_mode    = "WaitForFirstConsumer"
+  allow_volume_expansion = true
+}
+
+# ClickHouse runs in the cluster, so its password is made here rather than in a cloud
+# secret store.
+resource "random_password" "clickhouse" {
+  length  = 32
+  special = false
+}
+
+resource "kubernetes_secret_v1" "clickhouse" {
+  for_each = toset(["data", "portal"]) # ClickHouse itself, and the portal that queries it
+  metadata {
+    name      = "awzy-clickhouse"
+    namespace = kubernetes_namespace_v1.awzy[each.key].metadata[0].name
+  }
+  data = { password = random_password.clickhouse.result }
+}
+
+# awzy-reporter's read-only ClickHouse user (ADR 0042): the migrate Job in the data namespace
+# sets it, and the reporter in the system namespace signs in with it.
+resource "random_password" "clickhouse_reporter" {
+  length  = 32
+  special = false
+}
+
+resource "kubernetes_secret_v1" "clickhouse_reporter" {
+  for_each = toset(["data", "system"])
+  metadata {
+    name      = "awzy-clickhouse-reporter"
+    namespace = kubernetes_namespace_v1.awzy[each.key].metadata[0].name
+  }
+  data = { password = random_password.clickhouse_reporter.result }
+}
+
+# The reporter sends heartbeats to the corp portal with this token (ADR 0026).
+resource "kubernetes_secret_v1" "reporting_token" {
+  count = var.reporter == null ? 0 : 1
+  metadata {
+    name      = "awzy-reporting-token"
+    namespace = kubernetes_namespace_v1.awzy["system"].metadata[0].name
+  }
+  data = { token = var.reporter.token }
+}
+
+# The bearer token the client's IdP uses for SCIM provisioning into awzy-context (ADR 0031).
+# Read it once from the `scim` output and paste it into the IdP's provisioning settings.
+resource "random_password" "scim" {
+  length  = 48
+  special = false
+}
+
+resource "kubernetes_secret_v1" "scim_token" {
+  metadata {
+    name      = "awzy-scim-token"
+    namespace = kubernetes_namespace_v1.awzy["system"].metadata[0].name
+  }
+  data = { token = random_password.scim.result }
+}
+
+output "scim" {
+  description = "SCIM endpoint and bearer token for the client's IdP (Okta, Entra)"
+  value = {
+    url   = "https://${var.ingress.hostname}/scim/v2"
+    token = random_password.scim.result
+  }
+  sensitive = true
+}
+
+# Pull credentials for registry.awzysecurity.com (ADR 0028): one static, revocable token per
+# install. The kubelet uses it in the awzy namespaces, Kyverno to read signatures, and Argo CD
+# to pull the chart. Nothing refreshes it.
+locals {
+  dockerconfig = jsonencode({
+    auths = {
+      (local.registry_host) = {
+        username = var.registry_credentials.username
+        password = var.registry_credentials.password
+        auth     = base64encode("${var.registry_credentials.username}:${var.registry_credentials.password}")
+      }
+    }
+  })
+}
+
+resource "kubernetes_secret_v1" "registry" {
+  for_each = toset(["system", "data", "portal"])
+  metadata {
+    name      = "awzy-registry"
+    namespace = kubernetes_namespace_v1.awzy[each.key].metadata[0].name
+  }
+  type = "kubernetes.io/dockerconfigjson"
+  data = { ".dockerconfigjson" = local.dockerconfig }
+}
+
+resource "kubernetes_secret_v1" "registry_kyverno" {
+  metadata {
+    name      = "awzy-registry"
+    namespace = helm_release.kyverno.namespace
+  }
+  type = "kubernetes.io/dockerconfigjson"
+  data = { ".dockerconfigjson" = local.dockerconfig }
+}
+
+resource "kubernetes_secret_v1" "chart_repo" {
+  metadata {
+    name      = "awzy-chart-repo"
+    namespace = kubernetes_namespace_v1.awzy["ops"].metadata[0].name
+    labels    = { "argocd.argoproj.io/secret-type" = "repository" }
+  }
+  data = {
+    type      = "helm"
+    name      = "awzy"
+    url       = "${local.registry_host}/awzy/charts"
+    enableOCI = "true"
+    username  = var.registry_credentials.username
+    password  = var.registry_credentials.password
+  }
+}

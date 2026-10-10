@@ -1,0 +1,597 @@
+input AskAwzyBotInput {
+	"""
+	What the person asks.
+	"""
+	message: String!
+	"""
+	The conversation so far, exactly as the last answer returned it. Omit to start over.
+	"""
+	transcript: String
+}
+
+type AskAwzyBotPayload {
+	"""
+	Awzy Bot's answer, in Markdown.
+	"""
+	reply: String!
+	"""
+	The whole conversation, for the next turn. Opaque: send it back unchanged.
+	"""
+	transcript: String!
+	"""
+	Policy drafts Awzy Bot saved this turn.
+	"""
+	drafts: [PolicyBundle!]!
+	"""
+	The tools it used this turn, in order.
+	"""
+	toolsUsed: [String!]!
+	"""
+	The model declined to answer.
+	"""
+	refused: Boolean!
+}
+
+input CreatePolicyDraftInput {
+	schema: String!
+	policies: String!
+}
+
+type CreatePolicyDraftPayload {
+	"""
+	The new draft, unless validation failed.
+	"""
+	bundle: PolicyBundle
+	"""
+	Why the bundle was rejected: Cedar parse or schema validation errors.
+	"""
+	validationError: String
+}
+
+type Decision implements Node {
+	"""
+	QID: decision_<uuid>, the ID the PDP returned to the enforcement point.
+	"""
+	id: ID!
+	at: UtcTimestamp!
+	subject: EntityRef!
+	"""
+	Set when a service account acted for a person: that person and their own check.
+	"""
+	onBehalfOf: OnBehalfOf
+	"""
+	Whether a person was there to answer a challenge.
+	"""
+	humanPresent: Boolean!
+	action: String!
+	resource: EntityRef!
+	"""
+	What policy decided. For a delegated request, the stricter of the subject's and the
+	person's checks. In MONITOR mode it was not applied: a DENY is a "would deny".
+	"""
+	verdict: Verdict!
+	mode: EnforcementMode!
+	"""
+	When the verdict is CHALLENGE: every challenge kind required.
+	"""
+	challenges: [String!]!
+	"""
+	IDs of the policies that determined the subject's own check.
+	"""
+	policies: [String!]!
+	"""
+	The policy bundle version in force; 0 means the built-in defaults.
+	"""
+	policyVersion: Int!
+	"""
+	The request context, as JSON text.
+	"""
+	context: String!
+	"""
+	Explain the subject's check: the source of each determining policy, from the bundle the
+	decision was made under.
+	"""
+	determiningPolicies: [PolicySource!]!
+}
+
+type DecisionConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [DecisionEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [Decision!]!
+}
+
+"""
+An edge in a connection.
+"""
+type DecisionEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: Decision!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
+input DecisionFilter {
+	subjectId: String
+	resourceId: String
+	verdict: Verdict
+	mode: EnforcementMode
+	"""
+	Defaults to 24 hours ago; at most 30 days ago.
+	"""
+	since: UtcTimestamp
+}
+
+type DirectoryGroup {
+	"""
+	The group's ID in policies, e.g. Group::"security".
+	"""
+	name: String!
+	people: Int!
+	"""
+	Groups nested in it.
+	"""
+	groups: Int!
+	"""
+	Groups it is nested in.
+	"""
+	parents: [String!]!
+	updatedAt: UtcTimestamp!
+}
+
+type DirectorySummary {
+	people: Int!
+	activePeople: Int!
+	groups: Int!
+	serviceAccounts: Int!
+	"""
+	When the IdP last changed a person or group.
+	"""
+	lastProvisionedAt: UtcTimestamp
+}
+
+enum EnforcementMode {
+	"""
+	Decisions are recorded but not applied: enforcement points allow.
+	"""
+	MONITOR
+	"""
+	Enforcement points apply the verdict.
+	"""
+	ENFORCE
+}
+
+type EnforcementSetting {
+	mode: EnforcementMode!
+	"""
+	Null when the install has never been switched (new installs start in MONITOR).
+	"""
+	changedBy: String
+	changedAt: UtcTimestamp
+}
+
+"""
+What enforcing would have changed, over a window of logged decisions.
+"""
+type EnforcementSummary {
+	since: UtcTimestamp!
+	total: Int!
+	"""
+	Decisions made in MONITOR mode.
+	"""
+	monitored: Int!
+	"""
+	MONITOR-mode decisions that would have been denied.
+	"""
+	wouldDeny: Int!
+	"""
+	MONITOR-mode decisions that would have been challenged.
+	"""
+	wouldChallenge: Int!
+	enforcedDeny: Int!
+	enforcedChallenge: Int!
+}
+
+type EntityRef {
+	type: String!
+	id: String!
+}
+
+type Mutation {
+	"""
+	Validates and saves a draft. Nothing is enforced until it is published.
+	"""
+	createPolicyDraft(input: CreatePolicyDraftInput!): CreatePolicyDraftPayload!
+	"""
+	Makes a draft the active bundle. PDPs pick it up within about 10 seconds.
+	"""
+	publishPolicyBundle(input: PublishPolicyBundleInput!): PublishPolicyBundlePayload!
+	"""
+	Switches the install between MONITOR and ENFORCE. PDPs pick it up within about 10 seconds.
+	TODO: require a security-key challenge for the switch to ENFORCE (awzy-challenge).
+	"""
+	setEnforcementMode(input: SetEnforcementModeInput!): SetEnforcementModePayload!
+	"""
+	Registers a service account, or changes one. Until it's registered, the PDP denies it.
+	"""
+	registerServiceAccount(input: RegisterServiceAccountInput!): RegisterServiceAccountPayload!
+	"""
+	Removes a service account. From then on the PDP denies it.
+	"""
+	removeServiceAccount(input: RemoveServiceAccountInput!): RemoveServiceAccountPayload!
+	"""
+	One turn of a conversation with Awzy Bot.
+	"""
+	askAwzyBot(input: AskAwzyBotInput!): AskAwzyBotPayload!
+}
+
+interface Node {
+	id: ID!
+}
+
+type OnBehalfOf {
+	person: EntityRef!
+	verdict: Verdict!
+	policies: [String!]!
+	determiningPolicies: [PolicySource!]!
+}
+
+"""
+Information about pagination in a connection
+"""
+type PageInfo {
+	"""
+	When paginating backwards, are there more items?
+	"""
+	hasPreviousPage: Boolean!
+	"""
+	When paginating forwards, are there more items?
+	"""
+	hasNextPage: Boolean!
+	"""
+	When paginating backwards, the cursor to continue.
+	"""
+	startCursor: String
+	"""
+	When paginating forwards, the cursor to continue.
+	"""
+	endCursor: String
+}
+
+"""
+A person, as the IdP provisioned them.
+"""
+type Person {
+	"""
+	Their ID in policies and tokens.
+	"""
+	userName: String!
+	displayName: String
+	"""
+	False once deprovisioned: denied everything.
+	"""
+	active: Boolean!
+	"""
+	Groups they're directly in.
+	"""
+	groups: [String!]!
+	updatedAt: UtcTimestamp!
+}
+
+type PolicyBundle implements Node {
+	"""
+	QID: policy_bundle_<uuid>.
+	"""
+	id: ID!
+	"""
+	Increases with every bundle; decisions record the version they were made under.
+	"""
+	version: Int!
+	status: PolicyBundleStatus!
+	"""
+	Cedar schema.
+	"""
+	schema: String!
+	"""
+	Cedar policies.
+	"""
+	policies: String!
+	createdBy: String!
+	createdAt: UtcTimestamp
+	publishedBy: String
+	publishedAt: UtcTimestamp
+}
+
+enum PolicyBundleStatus {
+	DRAFT
+	ACTIVE
+	SUPERSEDED
+}
+
+type PolicyDryRun {
+	days: Int!
+	"""
+	The active bundle's version the draft was compared with; 0 for the built-in defaults.
+	"""
+	comparedWithVersion: Int!
+	"""
+	Decisions in the window, all of them.
+	"""
+	decisions: Int!
+	"""
+	Distinct requests among them.
+	"""
+	distinctRequests: Int!
+	"""
+	Distinct requests replayed: the most frequent, up to the limit.
+	"""
+	replayedRequests: Int!
+	"""
+	Fewer were replayed than there were.
+	"""
+	truncated: Boolean!
+	"""
+	Decisions whose verdict the draft leaves as it is.
+	"""
+	unchangedDecisions: Int!
+	"""
+	Changes of verdict, most decisions first.
+	"""
+	changes: [PolicyDryRunChange!]!
+	"""
+	Requests that couldn't be replayed, and why the first one couldn't.
+	"""
+	skippedRequests: Int!
+	skippedReason: String
+}
+
+type PolicyDryRunChange {
+	"""
+	The verdict under the active bundle: allow, deny, or challenge (with its kinds).
+	"""
+	from: String!
+	"""
+	The verdict under the draft.
+	"""
+	to: String!
+	"""
+	Decisions in the window that would have come out differently.
+	"""
+	decisions: Int!
+	"""
+	Distinct requests among them.
+	"""
+	requests: Int!
+	"""
+	The most frequent ones.
+	"""
+	examples: [PolicyDryRunExample!]!
+}
+
+type PolicyDryRunExample {
+	subjectType: String!
+	subjectId: String!
+	"""
+	The person a service account acted for, if any.
+	"""
+	onBehalfOfId: String
+	action: String!
+	resourceId: String!
+	"""
+	How many times this exact request was decided in the window.
+	"""
+	decisions: Int!
+	"""
+	One of those decisions, `decision_<uuid>`.
+	"""
+	sampleDecisionId: String!
+	"""
+	The policies that decided it under the active bundle, and under the draft.
+	"""
+	policiesBefore: [String!]!
+	policiesAfter: [String!]!
+}
+
+type PolicySource {
+	"""
+	The policy's @id annotation, or Cedar's generated ID.
+	"""
+	id: String!
+	source: String!
+}
+
+enum PortalAction {
+	"""
+	Read an area.
+	"""
+	VIEW
+	"""
+	Change what an area controls: publish policy, switch enforcement.
+	"""
+	ADMINISTER
+}
+
+enum PortalArea {
+	DECISIONS
+	POLICIES
+	ENFORCEMENT
+	"""
+	People and groups from the IdP, and service accounts.
+	"""
+	DIRECTORY
+}
+
+input PublishPolicyBundleInput {
+	"""
+	A draft bundle's ID.
+	"""
+	id: ID!
+}
+
+type PublishPolicyBundlePayload {
+	bundle: PolicyBundle!
+}
+
+type Query {
+	"""
+	Version of the client portal API.
+	"""
+	apiVersion: String!
+	"""
+	Who is signed in.
+	"""
+	viewer: ViewerInfo!
+	"""
+	Whether the viewer may do `action` in `area`, so the portal can hide what they can't use.
+	"""
+	viewerCan(action: PortalAction!, area: PortalArea!): Boolean!
+	"""
+	Refetches any object by its ID.
+	"""
+	node(id: ID!): Node
+	"""
+	The bundle the PDPs enforce, if one has been published.
+	"""
+	activePolicyBundle: PolicyBundle
+	"""
+	Newest first.
+	"""
+	policyBundles(first: Int! = 50): [PolicyBundle!]!
+	"""
+	Decisions newest first. Cursors are opaque.
+	"""
+	decisions(after: String, first: Int, filter: DecisionFilter): DecisionConnection!
+	"""
+	The install's enforcement mode.
+	"""
+	enforcement: EnforcementSetting!
+	"""
+	Every switch of the install's mode, newest first.
+	"""
+	enforcementHistory(first: Int! = 20): [EnforcementSetting!]!
+	"""
+	Would-deny and would-challenge counts since `since` (default 24 hours, at most 30 days).
+	"""
+	enforcementSummary(since: UtcTimestamp): EnforcementSummary!
+	directorySummary: DirectorySummary!
+	"""
+	People by userName; `search` matches userName or display name.
+	"""
+	people(search: String, first: Int! = 200): [Person!]!
+	groups: [DirectoryGroup!]!
+	serviceAccounts: [ServiceAccount!]!
+	"""
+	What a draft bundle would change (ADR 0049): recent requests replayed under the active
+	bundle and the draft, with today's people and resources, and the verdicts compared.
+	`days` defaults to 7, at most 30.
+	"""
+	policyDryRun(draftId: ID!, days: Int): PolicyDryRun!
+	"""
+	Whether this install has Awzy Bot set up (ADR 0048).
+	"""
+	awzyBotEnabled: Boolean!
+}
+
+input RegisterServiceAccountInput {
+	"""
+	Its ID in tokens: the `sub` of its own tokens, or `act.sub` when acting for a person.
+	"""
+	id: String!
+	"""
+	The accountable person's userName; must be provisioned by the IdP.
+	"""
+	owner: String!
+	ai: Boolean!
+	groups: [String!]! = []
+	description: String! = ""
+}
+
+type RegisterServiceAccountPayload {
+	serviceAccount: ServiceAccount!
+}
+
+input RemoveServiceAccountInput {
+	id: String!
+}
+
+type RemoveServiceAccountPayload {
+	removedId: String!
+}
+
+"""
+An agent, backend service, or scheduled job, with the person accountable for it.
+"""
+type ServiceAccount {
+	"""
+	Its ID in policies and tokens.
+	"""
+	id: String!
+	"""
+	The accountable person's userName.
+	"""
+	owner: String!
+	ai: Boolean!
+	groups: [String!]!
+	description: String!
+	createdBy: String!
+	createdAt: UtcTimestamp!
+	updatedBy: String!
+	updatedAt: UtcTimestamp!
+}
+
+input SetEnforcementModeInput {
+	mode: EnforcementMode!
+}
+
+type SetEnforcementModePayload {
+	enforcement: EnforcementSetting!
+}
+
+scalar UtcTimestamp
+
+enum Verdict {
+	ALLOW
+	DENY
+	CHALLENGE
+}
+
+type ViewerInfo {
+	"""
+	The person's or service account's ID in the IdP.
+	"""
+	id: String!
+	"""
+	`Human` or `ServiceAccount`.
+	"""
+	kind: String!
+	name: String
+	"""
+	For a service account acting for someone: that person's ID.
+	"""
+	onBehalfOf: String
+}
+
+"""
+Directs the executor to include this field or fragment only when the `if` argument is true.
+"""
+directive @include(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+"""
+Directs the executor to skip this field or fragment when the `if` argument is true.
+"""
+directive @skip(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+schema {
+	query: Query
+	mutation: Mutation
+}

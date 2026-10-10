@@ -1,0 +1,30 @@
+load("//tools:rust.bzl", "awzy_service")
+
+awzy_service(
+    name = "backend",
+    crate_name = "awzy_corp_portal",
+    binary_name = "awzy-corp-portal",
+    # Embedded by sqlx::migrate!.
+    compile_data = glob(["migrations/*.sql"]),
+    deps = [
+        "//libs/heartbeat",
+        "//libs/model",
+        "//libs/server",
+        "//libs/telemetry",
+        "//libs/portal",
+    ],
+    extra_binaries = [
+        "awzy-corp-user",
+        "print_schema",
+    ],
+    frontend = "//portals/corp/frontend:build",
+)
+
+# GraphQL SDL consumed by the frontend's Relay compiler.
+genrule(
+    name = "schema_sdl",
+    outs = ["schema.graphql"],
+    cmd = "$(execpath :print_schema) > $@",
+    tools = [":print_schema"],
+    visibility = ["//visibility:public"],
+)

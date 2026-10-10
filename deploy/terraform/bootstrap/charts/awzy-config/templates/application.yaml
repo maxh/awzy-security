@@ -1,0 +1,23 @@
+# Argo CD pulls the awzy chart from the release registry and keeps the cluster on it. Its
+# repository credentials (awzy-chart-repo) are created by bootstrap.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: awzy
+  namespace: {{ .Release.Namespace }}
+spec:
+  project: default
+  source:
+    repoURL: {{ .Values.chart.repository }}
+    chart: awzy
+    targetRevision: {{ .Values.chart.version | quote }}
+    helm:
+      valuesObject: {{- toYaml .Values.awzyValues | nindent 8 }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.namespaces.system }}
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    retry:
+      limit: 10
+      backoff: { duration: 30s, factor: 2, maxDuration: 10m }

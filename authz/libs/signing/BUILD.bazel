@@ -1,0 +1,8 @@
+load("//tools:rust.bzl", "awzy_rust_library")
+
+# Signs policy bundles in awzy-policy and verifies them in awzy-pdp.
+awzy_rust_library(
+    name = "signing",
+    crate_name = "awzy_signing",
+    visibility = ["//tools:client_side"],
+)

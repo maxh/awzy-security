@@ -1,0 +1,8 @@
+apiVersion: v2
+name: awzy
+description: awzy-authz and the client portal, installed into a client cluster by Argo CD
+type: application
+# CI packages the chart with version 0.1.0-<sha> and appVersion <sha>, so the chart and the
+# images it points at always come from the same commit.
+version: 0.0.0-dev
+appVersion: dev

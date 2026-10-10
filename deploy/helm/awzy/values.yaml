@@ -1,0 +1,131 @@
+# Values come from bootstrap, which maps install_contract onto them (deploy/terraform/bootstrap).
+# Namespaces and the ClickHouse credentials Secret are created by bootstrap, not this chart.
+
+image:
+  # install_contract.registry_prefix, e.g. 123456789012.dkr.ecr.us-east-2.amazonaws.com/awzy
+  registry: ""
+  # Defaults to the chart's appVersion, the commit SHA the images were built from.
+  tag: ""
+  # dockerconfigjson Secret in each awzy namespace with the install's pull token for
+  # registry.awzysecurity.com (ADR 0028, created by bootstrap). Empty: no pull secret.
+  pullSecret: awzy-registry
+
+namespaces:
+  system: awzy-system
+  data: awzy-data
+  portal: awzy-portal
+
+postgres:
+  host: ""
+  port: 5432
+  database: awzy
+  # awzy-context's database on the same server, created by the chart's database Job.
+  contextDatabase: awzy_context
+  # Secrets Manager secret (RDS-managed master credentials); External Secrets copies it.
+  secretRef: ""
+  # ClusterSecretStore created by bootstrap.
+  secretStore: awzy
+
+kafka:
+  brokers: "" # comma-separated host:port
+
+clickhouse:
+  enabled: true
+  storageClass: gp3
+  storageSize: 20Gi
+  database: awzy
+  user: awzy
+  # Secret in the data and portal namespaces with key "password" (created by bootstrap).
+  passwordSecret: awzy-clickhouse
+  # awzy-reporter's read-only user (ADR 0042): disk sizes and Kafka consumer positions only.
+  # Secret in the data and system namespaces with key "password" (created by bootstrap).
+  reporterPasswordSecret: awzy-clickhouse-reporter
+
+pdp:
+  replicas: 2
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits: { memory: 512Mi }
+
+policy:
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { memory: 256Mi }
+
+clientPortal:
+  replicas: 1
+  # The client's IdP (required: the portal refuses to start without one).
+  auth:
+    issuer: ""
+    jwksUrl: ""
+    audience: awzy
+    clientId: awzy-client-portal
+  publicUrl: ""
+  # Public hostname; when set, the portal is served through the Gateway below.
+  hostname: ""
+  # Awzy Bot (ADR 0048): the Policies page's assistant, with Claude on the install's own
+  # Bedrock. Off until the client enables Claude in Bedrock and the portal's workload role may
+  # invoke it (deploy/terraform/aws/install). Bootstrap sets region.
+  awzyBot:
+    enabled: false
+    region: ""
+    model: "" # default anthropic.claude-opus-5-5; some accounts need us.anthropic.claude-opus-5-5
+    effort: "" # low | medium | high | xhigh | max; default: the model's own
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { memory: 256Mi }
+
+# The heartbeat to the corp portal (ADR 0026): versions, readiness, and a few aggregates of the
+# awzy services, nothing free-form. Register the install in the corp portal to get its ID and
+# reporting token. Set enabled: false to send nothing.
+reporter:
+  enabled: true
+  installId: "" # install_<uuid>, from the corp portal
+  # Secret in the system namespace with key "token" (the reporting token, created by bootstrap).
+  tokenSecret: awzy-reporting-token
+  corpUrl: https://corp.awzysecurity.com
+  intervalSeconds: 60
+  replicas: 1
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { memory: 64Mi }
+
+context:
+  replicas: 1
+  # Secret in the system namespace with key "token": the SCIM bearer token the client's IdP
+  # uses (created by bootstrap).
+  scimTokenSecret: awzy-scim-token
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { memory: 256Mi }
+
+# Pods allowed to reach the PDP. Enforcement points can run anywhere in the cluster (or call
+# through a private endpoint), so it accepts any in-cluster source.
+networkPolicies:
+  enabled: true
+  # Namespace of the Gateway's Envoy proxies (Envoy Gateway's default).
+  gatewayNamespace: envoy-gateway-system
+
+# DEMO INSTALLS ONLY (ADR 0039): provisions Larkspur Capital, the synthetic company in
+# docs/demo-plan.md, into awzy-context after each sync. Sample data only.
+demoData:
+  enabled: false
+  profile: demo # demo (~200 people) or scale (~10,000)
+  seed: 1
+
+# DEMO INSTALLS ONLY (ADR 0032): runs the dev IdP at https://<clientPortal.hostname>/idp and
+# signs the client portal in against it. Anyone who can reach it can sign in as a sample user,
+# and its signing key is public. Never on an install with real data.
+demoIdp:
+  enabled: false
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 128Mi }
+
+# The install's Gateway, created by bootstrap.
+gateway:
+  name: awzy
+  namespace: awzy-ops
+
+logFormat: json

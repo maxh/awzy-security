@@ -1,0 +1,21 @@
+load("//tools:rust.bzl", "awzy_service")
+
+# ClickHouse tables for awzy-authz and the migration runner that applies them. The image runs
+# as a release Job before the services that read or write these tables roll out.
+awzy_service(
+    name = "clickhouse",
+    crate_name = "awzy_clickhouse",
+    binary_name = "awzy-clickhouse-migrate",
+    # Embedded with include_str!.
+    compile_data = glob(["migrations/*.sql"]),
+    visibility = ["//tools:client_side"],
+    test_deps = [
+        "//authz/services/intake",
+        "//authz/services/pdp",
+        "//libs/model",
+    ],
+    deps = [
+        "//libs/server",
+        "//libs/telemetry",
+    ],
+)

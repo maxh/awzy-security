@@ -1,0 +1,305 @@
+//! Resources from awzy-context (demo plan step 3, ADR 0044).
+//!
+//! Resources can number in the millions, so unlike principals they aren't held as a snapshot.
+//! Enforcement points send a resource's ID; the PDP loads the resource and its parent folders
+//! from awzy-context on first use and keeps them in a local cache for a short time. What
+//! awzy-context says replaces anything the enforcement point sent for those entities.
+//!
+//! With the entities comes who is assigned to work on the resource (ADR 0046): everyone on an
+//! open work item that links it or a folder above it. The PDP turns that into `context.assigned`
+//! for each principal it checks.
+//!
+//! A resource awzy-context doesn't know yet keeps the enforcement point's entity if it sent one;
+//! otherwise it gets the default tier with `unclassified` set, so policies can challenge it.
+//! If awzy-context can't be reached and nothing is cached, the check fails and the enforcement
+//! point uses its fallback (ADR 0030): deciding a crown-jewel document as "internal" because
+//! awzy-context was down would be worse.
+
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, RwLock},
+    time::{Duration, Instant},
+};
+
+use awzy_model::{entity_type, EntityRef};
+use bytes::Bytes;
+use http_body_util::{BodyExt, Empty};
+use hyper_util::{
+    client::legacy::{connect::HttpConnector, Client},
+    rt::TokioExecutor,
+};
+use serde_json::{json, Value};
+
+/// The tier a resource awzy-context doesn't know gets. Matches awzy-context's default for one
+/// it knows but hasn't classified.
+pub const DEFAULT_SENSITIVITY: &str = "internal";
+
+/// How long a loaded resource is used before it's loaded again. Within the plan's 60-second
+/// target for an attribute change to reach every PDP.
+const TTL: Duration = Duration::from_secs(30);
+/// How long "awzy-context doesn't know it" is remembered: short, since a connector may be about
+/// to write it.
+const UNKNOWN_TTL: Duration = Duration::from_secs(5);
+/// Entries kept before expired ones are dropped, and then everything if none had expired.
+const CAPACITY: usize = 100_000;
+const TIMEOUT: Duration = Duration::from_secs(1);
+
+/// What awzy-context says about a resource.
+pub struct Loaded {
+    /// The resource and its ancestors, nearest first.
+    pub entities: Vec<Value>,
+    /// The `userName`s and service-account IDs assigned to open work on it.
+    pub assignees: Arc<HashSet<String>>,
+}
+
+/// The request's entities after the lookup, and, for a `Resource` checked with awzy-context,
+/// who is assigned to work on it (empty for a resource awzy-context doesn't know).
+pub struct Merged {
+    pub entities: Value,
+    pub assignees: Option<Arc<HashSet<String>>>,
+}
+
+struct Cached {
+    at: Instant,
+    /// `None` when awzy-context doesn't know the resource.
+    entities: Option<Arc<Loaded>>,
+}
+
+impl Cached {
+    fn fresh(&self, ttl: Duration, unknown_ttl: Duration) -> bool {
+        self.at.elapsed() < if self.entities.is_some() { ttl } else { unknown_ttl }
+    }
+}
+
+pub struct Resources {
+    /// awzy-context's base URL; `None` when the PDP runs without it.
+    endpoint: Option<String>,
+    client: Client<HttpConnector, Empty<Bytes>>,
+    cache: RwLock<HashMap<String, Cached>>,
+    ttl: Duration,
+    unknown_ttl: Duration,
+}
+
+impl Resources {
+    /// No awzy-context: the enforcement points' entities are used as they are.
+    pub fn none() -> Self {
+        Self::new(None, TTL, UNKNOWN_TTL)
+    }
+
+    pub fn from_context(endpoint: String) -> Self {
+        Self::new(Some(endpoint), TTL, UNKNOWN_TTL)
+    }
+
+    fn new(endpoint: Option<String>, ttl: Duration, unknown_ttl: Duration) -> Self {
+        Self {
+            endpoint: endpoint.map(|e| e.trim_end_matches('/').to_string()),
+            client: Client::builder(TokioExecutor::new()).build_http(),
+            cache: RwLock::default(),
+            ttl,
+            unknown_ttl,
+        }
+    }
+
+    /// The request's entities with the resource, and its ancestors, from awzy-context. Fails
+    /// only when awzy-context can't be reached and nothing is cached for the resource.
+    pub async fn merge(&self, request: Value, resource: &EntityRef) -> anyhow::Result<Merged> {
+        let unchanged = |entities| Ok(Merged { entities, assignees: None });
+        let Some(endpoint) = &self.endpoint else { return unchanged(request) };
+        if resource.kind != entity_type::RESOURCE {
+            return unchanged(request);
+        }
+        let Value::Array(mut entities) = request else { return unchanged(request) };
+        let assignees = match self.lookup(endpoint, &resource.id).await? {
+            Some(loaded) => {
+                entities.retain(|e| !loaded.entities.iter().any(|c| c["uid"] == e["uid"]));
+                entities.extend(loaded.entities.iter().cloned());
+                loaded.assignees.clone()
+            }
+            None => {
+                let uid = json!({ "type": entity_type::RESOURCE, "id": resource.id });
+                if !entities.iter().any(|e| e["uid"] == uid) {
+                    entities.push(json!({
+                        "uid": uid,
+                        "attrs": { "sensitivity": DEFAULT_SENSITIVITY, "unclassified": true },
+                        "parents": [],
+                    }));
+                }
+                Arc::default()
+            }
+        };
+        Ok(Merged { entities: Value::Array(entities), assignees: Some(assignees) })
+    }
+
+    async fn lookup(&self, endpoint: &str, id: &str) -> anyhow::Result<Option<Arc<Loaded>>> {
+        let stale = {
+            let cache = self.cache.read().unwrap_or_else(|e| e.into_inner());
+            match cache.get(id) {
+                Some(c) if c.fresh(self.ttl, self.unknown_ttl) => return Ok(c.entities.clone()),
+                Some(c) => Some(c.entities.clone()),
+                None => None,
+            }
+        };
+        match self.fetch(endpoint, id).await {
+            Ok(entities) => {
+                self.store(id, entities.clone());
+                Ok(entities)
+            }
+            Err(error) => match stale {
+                Some(entities) => {
+                    tracing::warn!(%error, resource = id, "awzy-context unreachable; using the cached resource");
+                    Ok(entities)
+                }
+                None => Err(error),
+            },
+        }
+    }
+
+    async fn fetch(&self, endpoint: &str, id: &str) -> anyhow::Result<Option<Arc<Loaded>>> {
+        let url = format!("{endpoint}/v1/resources/{}/entities", encode(id));
+        let res = tokio::time::timeout(TIMEOUT, self.client.get(url.parse()?)).await??;
+        match res.status().as_u16() {
+            404 => Ok(None),
+            200 => {
+                let body: Value = serde_json::from_slice(&res.into_body().collect().await?.to_bytes())?;
+                let entities = body["entities"]
+                    .as_array()
+                    .cloned()
+                    .ok_or_else(|| anyhow::anyhow!("no entities for resource {id}"))?;
+                // Absent from an awzy-context older than ADR 0046: no one is known to be assigned.
+                let assignees = body["assignees"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|a| a.as_str().map(str::to_string))
+                    .collect();
+                Ok(Some(Arc::new(Loaded { entities, assignees: Arc::new(assignees) })))
+            }
+            status => anyhow::bail!("{url} returned {status}"),
+        }
+    }
+
+    fn store(&self, id: &str, entities: Option<Arc<Loaded>>) {
+        let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
+        if cache.len() >= CAPACITY && !cache.contains_key(id) {
+            cache.retain(|_, c| c.fresh(self.ttl, self.unknown_ttl));
+            if cache.len() >= CAPACITY {
+                cache.clear();
+            }
+        }
+        cache.insert(id.to_string(), Cached { at: Instant::now(), entities });
+    }
+}
+
+/// Percent-encodes an ID as one path segment: resource IDs may contain `/`.
+fn encode(id: &str) -> String {
+    id.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => (b as char).to_string(),
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use axum::{extract::Path, routing::get, Json, Router};
+
+    use super::*;
+
+    /// A fake awzy-context that knows a document in a folder, and counts requests.
+    async fn context() -> (String, Arc<AtomicUsize>) {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = calls.clone();
+        let app = Router::new().route(
+            "/v1/resources/{id}/entities",
+            get(move |Path(id): Path<String>| {
+                counted.fetch_add(1, Ordering::SeqCst);
+                async move {
+                    if id != "drive:plans/fy27" {
+                        return Err(axum::http::StatusCode::NOT_FOUND);
+                    }
+                    Ok(Json(json!({ "assignees": ["nora.patel@larkspur.example"], "entities": [
+                        { "uid": { "type": "Resource", "id": "drive:plans/fy27" },
+                          "attrs": { "sensitivity": "crown_jewels", "unclassified": false },
+                          "parents": [{ "type": "Resource", "id": "drive:plans" }] },
+                        { "uid": { "type": "Resource", "id": "drive:plans" },
+                          "attrs": { "sensitivity": "internal", "unclassified": true }, "parents": [] },
+                    ]})))
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        (format!("http://{addr}"), calls)
+    }
+
+    fn resource(id: &str) -> EntityRef {
+        EntityRef::new("Resource", id)
+    }
+
+    fn ids(v: &Value) -> Vec<&str> {
+        v.as_array().unwrap().iter().map(|e| e["uid"]["id"].as_str().unwrap()).collect()
+    }
+
+    #[tokio::test]
+    async fn awzy_context_wins_over_what_the_enforcement_point_sent() {
+        let (url, calls) = context().await;
+        let r = Resources::from_context(url);
+        let sent = json!([
+            { "uid": { "type": "Human", "id": "bob" }, "attrs": {}, "parents": [] },
+            { "uid": { "type": "Resource", "id": "drive:plans/fy27" }, "attrs": { "sensitivity": "public" }, "parents": [] },
+        ]);
+        let merged = r.merge(sent.clone(), &resource("drive:plans/fy27")).await.unwrap();
+        assert_eq!(ids(&merged.entities), ["bob", "drive:plans/fy27", "drive:plans"], "the resource and its folder");
+        assert_eq!(merged.entities[1]["attrs"]["sensitivity"], "crown_jewels");
+        let assignees = merged.assignees.unwrap();
+        assert!(assignees.contains("nora.patel@larkspur.example") && assignees.len() == 1);
+
+        r.merge(sent, &resource("drive:plans/fy27")).await.unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "the second check is served from the cache");
+    }
+
+    #[tokio::test]
+    async fn an_unknown_resource_is_unclassified_unless_the_enforcement_point_described_it() {
+        let (url, calls) = context().await;
+        let r = Resources::from_context(url);
+        let merged = r.merge(json!([]), &resource("drive:new")).await.unwrap();
+        assert_eq!(merged.entities[0]["attrs"], json!({ "sensitivity": DEFAULT_SENSITIVITY, "unclassified": true }));
+        assert!(merged.assignees.unwrap().is_empty(), "known to have no one assigned");
+
+        let sent = json!([{ "uid": { "type": "Resource", "id": "drive:new" }, "attrs": { "sensitivity": "confidential" }, "parents": [] }]);
+        assert_eq!(r.merge(sent.clone(), &resource("drive:new")).await.unwrap().entities, sent);
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "not knowing it is cached too");
+    }
+
+    #[tokio::test]
+    async fn unreachable_fails_unless_something_is_cached() {
+        let (url, _) = context().await;
+        let r = Resources::new(Some(url), Duration::ZERO, Duration::ZERO);
+        r.merge(json!([]), &resource("drive:plans/fy27")).await.unwrap();
+
+        let down = Resources::new(Some("http://127.0.0.1:1".into()), Duration::ZERO, Duration::ZERO);
+        assert!(down.merge(json!([]), &resource("drive:plans/fy27")).await.is_err(), "fails closed");
+        down.store("drive:plans/fy27", r.cache.read().unwrap()["drive:plans/fy27"].entities.clone());
+        let merged = down.merge(json!([]), &resource("drive:plans/fy27")).await.unwrap();
+        assert_eq!(merged.entities[0]["attrs"]["sensitivity"], "crown_jewels", "an expired entry beats no answer");
+    }
+
+    #[tokio::test]
+    async fn other_resource_types_and_no_awzy_context_are_left_alone() {
+        let sent = json!([{ "uid": { "type": "McpTool", "id": "drive/search" }, "attrs": { "sensitivity": "internal" }, "parents": [] }]);
+        let unused = Resources::from_context("http://127.0.0.1:1".into());
+        let tool = unused.merge(sent.clone(), &EntityRef::new("McpTool", "drive/search")).await.unwrap();
+        assert_eq!((tool.entities, tool.assignees), (sent.clone(), None), "assignment unknown");
+        let none = Resources::none().merge(sent.clone(), &resource("drive:x")).await.unwrap();
+        assert_eq!((none.entities, none.assignees), (sent, None));
+    }
+
+    #[test]
+    fn ids_are_one_path_segment() {
+        assert_eq!(encode("synthetic:folder:sales/accounts"), "synthetic%3Afolder%3Asales%2Faccounts");
+    }
+}

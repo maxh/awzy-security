@@ -1,0 +1,276 @@
+type DeployedService {
+	"""
+	e.g. awzy-pdp.
+	"""
+	name: String!
+	version: String
+	imageDigest: String
+	replicasDesired: Int!
+	replicasReady: Int!
+	restarts24h: Int
+	"""
+	The service's own readiness check passes and every desired replica is ready.
+	"""
+	healthy: Boolean!
+}
+
+type Install implements Node {
+	id: ID!
+	client: String!
+	"""
+	e.g. prod or staging.
+	"""
+	environment: String!
+	cloud: String!
+	region: String!
+	channel: ReleaseChannel!
+	pinnedVersion: String
+	health: InstallHealth!
+	lastSeenAt: UtcTimestamp
+	"""
+	The Helm chart version the install last reported.
+	"""
+	chartVersion: String
+	"""
+	The deployed units inside the install, as last reported.
+	"""
+	services: [DeployedService!]!
+	metrics: InstallMetrics
+	"""
+	Its heartbeats over `window`, bucketed and oldest first. Buckets with no heartbeat are
+	left out, so time the install wasn't reporting shows as a gap.
+	"""
+	metricHistory(window: MetricWindow!): [MetricSample!]!
+	"""
+	Chart versions the install has run, newest first: its upgrade history.
+	"""
+	versionHistory: [VersionSeen!]!
+	createdBy: String!
+	createdAt: UtcTimestamp!
+}
+
+type InstallConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [InstallEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [Install!]!
+}
+
+"""
+An edge in a connection.
+"""
+type InstallEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: Install!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
+enum InstallHealth {
+	OK
+	"""
+	A service isn't ready, or has fewer ready replicas than desired.
+	"""
+	DEGRADED
+	"""
+	No heartbeat for 5 minutes.
+	"""
+	NOT_REPORTING
+	NEVER_REPORTED
+}
+
+type InstallMetrics {
+	decisionsPerSecond: Float
+	pdpP99Ms: Float
+	"""
+	0 to 1.
+	"""
+	errorRate: Float
+	kafkaLag: Int
+	"""
+	0 to 100.
+	"""
+	clickhouseDiskUsedPercent: Float
+}
+
+"""
+One bucket of heartbeats: the worst each figure got in it, and average throughput.
+"""
+type MetricSample {
+	"""
+	The bucket's start.
+	"""
+	at: UtcTimestamp!
+	decisionsPerSecond: Float
+	pdpP99Ms: Float
+	"""
+	0 to 1.
+	"""
+	errorRate: Float
+	kafkaLag: Int
+	"""
+	0 to 100.
+	"""
+	clickhouseDiskUsedPercent: Float
+	"""
+	Some heartbeat in the bucket had a service that wasn't fully ready.
+	"""
+	degraded: Boolean!
+}
+
+"""
+How far back the Install page's charts look.
+"""
+enum MetricWindow {
+	"""
+	5-minute buckets.
+	"""
+	DAY
+	"""
+	30-minute buckets.
+	"""
+	WEEK
+	"""
+	2-hour buckets.
+	"""
+	MONTH
+}
+
+type Mutation {
+	"""
+	Registers an install so its heartbeats are accepted.
+	"""
+	registerInstall(input: RegisterInstallInput!): RegisterInstallPayload!
+}
+
+interface Node {
+	id: ID!
+}
+
+"""
+Information about pagination in a connection
+"""
+type PageInfo {
+	"""
+	When paginating backwards, are there more items?
+	"""
+	hasPreviousPage: Boolean!
+	"""
+	When paginating forwards, are there more items?
+	"""
+	hasNextPage: Boolean!
+	"""
+	When paginating backwards, the cursor to continue.
+	"""
+	startCursor: String
+	"""
+	When paginating forwards, the cursor to continue.
+	"""
+	endCursor: String
+}
+
+type Query {
+	"""
+	Version of the corp portal API.
+	"""
+	apiVersion: String!
+	"""
+	The signed-in staff member.
+	"""
+	viewer: Staff!
+	"""
+	Refetches any object by its ID.
+	"""
+	node(id: ID!): Node
+	"""
+	Every registered install, in registration order.
+	"""
+	installs(after: String, first: Int): InstallConnection!
+	"""
+	Chart versions installs report, newest first. Installs that haven't reported a version
+	aren't counted.
+	"""
+	releases: [Release!]!
+	"""
+	The services an install can report, for filters and empty states.
+	"""
+	knownServices: [String!]!
+}
+
+input RegisterInstallInput {
+	"""
+	Lowercase slug, e.g. acme.
+	"""
+	client: String!
+	"""
+	Lowercase slug, e.g. prod.
+	"""
+	environment: String!
+	"""
+	aws, gcp, or azure.
+	"""
+	cloud: String!
+	region: String!
+	channel: ReleaseChannel!
+	"""
+	Required for PINNED, and only then.
+	"""
+	pinnedVersion: String
+}
+
+type RegisterInstallPayload {
+	install: Install!
+	"""
+	The install's reporting token. Shown once: put it in the install's values now.
+	"""
+	reportingToken: String!
+}
+
+type Release {
+	version: String!
+	installCount: Int!
+	installs: [Install!]!
+}
+
+enum ReleaseChannel {
+	STABLE
+	FAST
+	PINNED
+}
+
+type Staff {
+	username: String!
+	name: String!
+}
+
+scalar UtcTimestamp
+
+type VersionSeen {
+	chartVersion: String!
+	firstSeenAt: UtcTimestamp!
+}
+
+"""
+Directs the executor to include this field or fragment only when the `if` argument is true.
+"""
+directive @include(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+"""
+Directs the executor to skip this field or fragment when the `if` argument is true.
+"""
+directive @skip(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+schema {
+	query: Query
+	mutation: Mutation
+}

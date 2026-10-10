@@ -1,0 +1,16 @@
+/bazel-*
+.bazelrc.user
+/target/
+node_modules/
+dist/
+.DS_Store
+rust-project.json
+
+# OpenTofu / Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+/.dev-certs/
+
+# Per-deployment Terraform inputs (account IDs, buckets, emails): see deployment.env.example.
+deploy/terraform/**/deployment.env

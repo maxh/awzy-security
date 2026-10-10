@@ -1,0 +1,36 @@
+{{- $sys := .Values.namespaces.system -}}
+{{- $p := .Values.clientPortal -}}
+{{- $issuer := $p.auth.issuer -}}
+{{- $jwks := $p.auth.jwksUrl -}}
+{{- if .Values.demoIdp.enabled }}
+{{- $issuer = include "awzy.demoIdpIssuer" . -}}
+{{- $jwks = printf "http://awzy-dev-idp.%s.svc:8080/jwks" .Values.namespaces.portal -}}
+{{- end }}
+{{- $env := list
+  (dict "name" "AWZY_AUTH_ISSUER" "value" (required "clientPortal.auth.issuer is required" $issuer))
+  (dict "name" "AWZY_AUTH_JWKS_URL" "value" (required "clientPortal.auth.jwksUrl is required" $jwks))
+  (dict "name" "AWZY_AUTH_AUDIENCE" "value" $p.auth.audience)
+  (dict "name" "AWZY_AUTH_CLIENT_ID" "value" $p.auth.clientId)
+  (dict "name" "AWZY_PDP_ADDR" "value" (printf "http://awzy-pdp.%s.svc:8080" $sys))
+  (dict "name" "AWZY_POLICY_ADDR" "value" (printf "http://awzy-policy.%s.svc:8080" $sys))
+-}}
+{{- if $p.publicUrl }}
+{{- $env = append $env (dict "name" "AWZY_PORTAL_PUBLIC_URL" "value" $p.publicUrl) }}
+{{- end }}
+{{- with $p.awzyBot }}{{- if .enabled }}
+{{- $env = concat $env (list
+  (dict "name" "AWZY_BOT_ENABLED" "value" "true")
+  (dict "name" "AWS_REGION" "value" (required "clientPortal.awzyBot.region is required when Awzy Bot is on" .region))
+) }}
+{{- if .model }}{{- $env = append $env (dict "name" "AWZY_LLM_MODEL" "value" .model) }}{{- end }}
+{{- if .effort }}{{- $env = append $env (dict "name" "AWZY_LLM_EFFORT" "value" .effort) }}{{- end }}
+{{- end }}{{- end }}
+{{- if .Values.clickhouse.enabled }}
+{{- $env = concat $env (list
+  (dict "name" "AWZY_CLICKHOUSE_URL" "value" (printf "http://clickhouse-awzy.%s.svc:8123" .Values.namespaces.data))
+  (dict "name" "AWZY_CLICKHOUSE_USER" "value" .Values.clickhouse.user)
+  (dict "name" "AWZY_CLICKHOUSE_DATABASE" "value" .Values.clickhouse.database)
+  (dict "name" "AWZY_CLICKHOUSE_PASSWORD" "valueFrom" (dict "secretKeyRef" (dict "name" .Values.clickhouse.passwordSecret "key" "password")))
+) }}
+{{- end }}
+{{ include "awzy.service" (dict "root" . "name" "awzy-client-portal" "namespace" .Values.namespaces.portal "values" $p "env" $env) }}

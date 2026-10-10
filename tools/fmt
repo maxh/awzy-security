@@ -1,0 +1,13 @@
+#!/bin/sh
+# Formats every Rust and TypeScript file in the repository: rustfmt (rustfmt.toml), through
+# the Bazel toolchain, and oxfmt (.oxfmtrc.json), from the root node_modules.
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+git ls-files -z '*.rs' | xargs -0 bazel run --noshow_progress --ui_event_filters=-info \
+  @rules_rust//tools/upstream_wrapper:rustfmt -- --config-path "$PWD/rustfmt.toml"
+if [ -x node_modules/.bin/oxfmt ]; then
+  pnpm format
+else
+  echo "fmt: oxfmt isn't installed, so TypeScript wasn't formatted; run \`pnpm install\` first." >&2
+  exit 1
+fi

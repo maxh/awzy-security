@@ -1,0 +1,47 @@
+common --enable_bzlmod
+common --incompatible_disallow_empty_glob
+common --enable_platform_specific_config
+
+# hermetic_cc_toolchain keeps its Zig cache under the home directory.
+build:linux --sandbox_add_mount_pair=/home
+build:macos --sandbox_add_mount_pair=/Users
+
+build --incompatible_strict_action_env
+test --test_output=errors
+
+# The lint config's rustfmt checks read the repository's rustfmt.toml.
+build --@rules_rust//rust/settings:rustfmt.toml=//:rustfmt.toml
+
+# Clippy and rustfmt over every Rust target; any warning fails: bazel build --config=lint //...
+build:lint --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
+build:lint --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
+build:lint --output_groups=+clippy_checks,+rustfmt_checks
+build:lint --@rules_rust//rust/settings:clippy_flags=-Dwarnings
+
+# Integration tests against the local stack (deploy/local/compose.yaml):
+#   bazel test --config=local-stack //...
+test:local-stack --test_env=AWZY_TEST_POSTGRES_URL=postgres://awzy:awzy@localhost:5432/awzy_policy
+test:local-stack --test_env=AWZY_TEST_KAFKA_BROKERS=localhost:9092
+test:local-stack --test_env=AWZY_TEST_CLICKHOUSE_URL=http://localhost:8123
+# Kafka as ClickHouse (inside Docker) reaches it.
+test:local-stack --test_env=AWZY_TEST_CLICKHOUSE_KAFKA_BROKERS=kafka:29092
+
+# CI profile.
+build:ci --color=yes
+build:ci --show_progress_rate_limit=10
+# Tests and lint need no build outputs on the runner, only results. Publishing leaves this off
+# so the images it pushes are downloaded.
+build:ci-check --remote_download_minimal
+
+# Remote cache and build results on BuildBuddy: --config=remote. The API key goes in
+# .bazelrc.user (CI writes it from the AWZY_CORP_BUILDBUDDY_API_KEY secret):
+#   build --remote_header=x-buildbuddy-api-key=<key>
+build:remote --bes_results_url=https://app.buildbuddy.io/invocation/
+build:remote --bes_backend=grpcs://remote.buildbuddy.io
+build:remote --remote_cache=grpcs://remote.buildbuddy.io
+build:remote --remote_timeout=10m
+build:remote --remote_cache_compression
+# Fetch from the cache only what's needed locally: the outputs of the requested targets.
+build:remote --remote_download_toplevel
+
+try-import %workspace%/.bazelrc.user

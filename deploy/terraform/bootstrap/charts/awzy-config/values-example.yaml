@@ -1,0 +1,14 @@
+# Only for helm lint in CI; bootstrap passes the real values.
+namespaces: { system: awzy-system, data: awzy-data, portal: awzy-portal, ops: awzy-ops }
+secretStore: { aws: { service: SecretsManager, region: us-east-2 } }
+registry: { prefix: registry.awzysecurity.com/awzy }
+cosignPubKey: |
+  -----BEGIN PUBLIC KEY-----
+  MFkw
+  -----END PUBLIC KEY-----
+chart: { repository: registry.awzysecurity.com/awzy/charts, version: 0.1.0-abc }
+awzyValues: { image: { registry: x } }
+ingress:
+  hostname: demo.awzysecurity.com
+  acmeEmail: ops@example.com
+  serviceAnnotations: { service.beta.kubernetes.io/aws-load-balancer-type: nlb }

@@ -1,0 +1,5 @@
+apiVersion: v2
+name: awzy-config
+description: Cluster configuration bootstrap applies once the operators' CRDs exist
+type: application
+version: 0.1.0

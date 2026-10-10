@@ -1,0 +1,12 @@
+load("//tools:rust.bzl", "awzy_service")
+
+awzy_service(
+    name = "challenge",
+    crate_name = "awzy_challenge",
+    binary_name = "awzy-challenge",
+    deps = [
+        "//libs/server",
+        "//libs/telemetry",
+    ],
+    visibility = ["//tools:client_side"],
+)

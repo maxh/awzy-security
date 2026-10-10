@@ -1,0 +1,64 @@
+{{- /*
+awzy-reporter: the install's heartbeat to the corp portal (ADR 0026). The only thing that leaves
+the install for awzy. reporter.enabled=false turns it off; nothing is deployed and nothing is sent.
+It reads the awzy namespaces' workloads with a Role per namespace, never cluster-wide.
+*/ -}}
+{{- $r := .Values.reporter -}}
+{{- if $r.enabled }}
+{{- $sys := .Values.namespaces.system -}}
+{{- $namespaces := list .Values.namespaces.system .Values.namespaces.portal -}}
+{{- if .Values.clickhouse.enabled }}{{- $namespaces = append $namespaces .Values.namespaces.data }}{{- end }}
+{{- $env := list
+  (dict "name" "AWZY_INSTALL_ID" "value" (required "reporter.installId is required (register the install in the corp portal), or set reporter.enabled=false" $r.installId))
+  (dict "name" "AWZY_REPORTING_TOKEN" "valueFrom" (dict "secretKeyRef" (dict "name" $r.tokenSecret "key" "token")))
+  (dict "name" "AWZY_REPORTER_CORP_PORTAL_URL" "value" $r.corpUrl)
+  (dict "name" "AWZY_CHART_VERSION" "value" .Chart.Version)
+  (dict "name" "AWZY_REPORTER_NAMESPACES" "value" (join "," $namespaces))
+  (dict "name" "AWZY_REPORTER_INTERVAL_SECS" "value" (toString $r.intervalSeconds))
+-}}
+{{- if .Values.clickhouse.enabled }}
+{{- /* ClickHouse disk use and Kafka lag, with its own read-only ClickHouse user (ADR 0042). */ -}}
+{{- $env = concat $env (list
+  (dict "name" "AWZY_CLICKHOUSE_URL" "value" (printf "http://clickhouse-awzy.%s.svc:8123" .Values.namespaces.data))
+  (dict "name" "AWZY_CLICKHOUSE_PASSWORD" "valueFrom" (dict "secretKeyRef" (dict "name" .Values.clickhouse.reporterPasswordSecret "key" "password" "optional" true)))
+  (dict "name" "AWZY_KAFKA_BROKERS" "value" .Values.kafka.brokers)
+) }}
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: awzy-reporter
+  namespace: {{ $sys }}
+{{- range $ns := $namespaces }}
+---
+# Read-only: the reporter lists awzy's Deployments, ClickHouse's StatefulSets, and their Pods.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: awzy-reporter
+  namespace: {{ $ns }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["list"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: awzy-reporter
+  namespace: {{ $ns }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: awzy-reporter
+subjects:
+  - kind: ServiceAccount
+    name: awzy-reporter
+    namespace: {{ $sys }}
+{{- end }}
+---
+{{ include "awzy.service" (dict "root" . "name" "awzy-reporter" "namespace" $sys "values" $r "serviceAccount" "awzy-reporter" "env" $env) }}
+{{- end }}

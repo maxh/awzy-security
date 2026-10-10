@@ -1,0 +1,7 @@
+load("//tools:rust.bzl", "awzy_rust_library")
+
+awzy_rust_library(
+    name = "store",
+    crate_name = "awzy_store",
+    visibility = ["//tools:client_side"],
+)

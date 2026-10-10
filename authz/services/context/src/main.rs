@@ -1,0 +1,18 @@
+use anyhow::Context;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    awzy_telemetry::init("awzy-context");
+    let url = std::env::var("AWZY_POSTGRES_URL").context("AWZY_POSTGRES_URL is not set")?;
+    // The bearer token the client's IdP uses for SCIM. Generate a long random one and set it in
+    // the IdP's provisioning settings too.
+    let scim_token = std::env::var("AWZY_SCIM_TOKEN").context("AWZY_SCIM_TOKEN is not set")?;
+    anyhow::ensure!(scim_token.len() >= 32, "AWZY_SCIM_TOKEN must be at least 32 characters");
+    let pool = sqlx::postgres::PgPoolOptions::new().max_connections(5).connect(&url).await?;
+    let store = awzy_context::store::ContextStore::new(pool);
+    // TODO: run migrations from a release Job instead of at startup.
+    store.migrate().await?;
+    // Places new and changed resources in a sensitivity tier (ADR 0047).
+    tokio::spawn(awzy_context::classify::run(store.clone(), std::time::Duration::from_secs(5)));
+    awzy_server::serve("awzy-context", awzy_context::router(store, &scim_token)).await
+}

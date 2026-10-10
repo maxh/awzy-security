@@ -1,0 +1,17 @@
+{{- if .Values.clientPortal.hostname }}
+# Serves the client portal through the install's Gateway (created by bootstrap).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: awzy-client-portal
+  namespace: {{ .Values.namespaces.portal }}
+spec:
+  parentRefs:
+    - name: {{ .Values.gateway.name }}
+      namespace: {{ .Values.gateway.namespace }}
+      sectionName: https
+  hostnames: [{{ .Values.clientPortal.hostname | quote }}]
+  rules:
+    - backendRefs:
+        - { name: awzy-client-portal, port: 8080 }
+{{- end }}

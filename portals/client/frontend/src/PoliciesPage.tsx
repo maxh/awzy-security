@@ -1,0 +1,303 @@
+import {
+  Alert,
+  Badge,
+  Button,
+  Center,
+  Drawer,
+  Group,
+  Loader,
+  Modal,
+  Stack,
+  Table,
+  Text,
+  Textarea,
+  Title,
+} from "@mantine/core";
+import { Suspense, useState } from "react";
+import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
+
+import { AwzyBotPanel } from "./AwzyBotPanel";
+import { DryRunReport } from "./DryRunReport";
+import type { PoliciesPageCreateDraftMutation } from "./__generated__/PoliciesPageCreateDraftMutation.graphql";
+import type { PoliciesPagePublishMutation } from "./__generated__/PoliciesPagePublishMutation.graphql";
+import type { PoliciesPageAwzyBotQuery } from "./__generated__/PoliciesPageAwzyBotQuery.graphql";
+import type { PoliciesPageQuery } from "./__generated__/PoliciesPageQuery.graphql";
+import { formatTime } from "./format";
+
+const STATUS_COLOR = { ACTIVE: "teal", DRAFT: "blue", SUPERSEDED: "gray" } as const;
+
+export function PoliciesPage() {
+  // Bumped after a mutation to refetch the bundle list.
+  const [fetchKey, setFetchKey] = useState(0);
+  const [botOpen, setBotOpen] = useState(false);
+  const onChanged = () => setFetchKey((k) => k + 1);
+  return (
+    <Stack gap="md">
+      <Group justify="space-between">
+        <Title order={3}>Policies</Title>
+        <Suspense fallback={null}>
+          <AskAwzyBotButton onClick={() => setBotOpen(true)} />
+        </Suspense>
+      </Group>
+      {/* Kept mounted while closed, so the conversation survives closing the drawer. */}
+      <Drawer
+        opened={botOpen}
+        onClose={() => setBotOpen(false)}
+        position="right"
+        size="md"
+        title="Awzy Bot"
+        keepMounted
+      >
+        <AwzyBotPanel onDraftSaved={onChanged} />
+      </Drawer>
+      <Suspense
+        fallback={
+          <Center p="xl">
+            <Loader />
+          </Center>
+        }
+      >
+        <Policies fetchKey={fetchKey} onChanged={onChanged} />
+      </Suspense>
+    </Stack>
+  );
+}
+
+/** Shown only when the install has Awzy Bot set up (ADR 0048). */
+function AskAwzyBotButton({ onClick }: { onClick: () => void }) {
+  const { awzyBotEnabled } = useLazyLoadQuery<PoliciesPageAwzyBotQuery>(
+    graphql`
+      query PoliciesPageAwzyBotQuery {
+        awzyBotEnabled
+      }
+    `,
+    {},
+  );
+  return awzyBotEnabled ? (
+    <Button variant="light" onClick={onClick}>
+      Ask Awzy Bot
+    </Button>
+  ) : null;
+}
+
+function Policies({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => void }) {
+  const data = useLazyLoadQuery<PoliciesPageQuery>(
+    graphql`
+      query PoliciesPageQuery {
+        canPublish: viewerCan(action: ADMINISTER, area: POLICIES)
+        activePolicyBundle {
+          id
+          version
+          schema
+          policies
+          publishedAt
+          publishedBy
+        }
+        policyBundles(first: 20) {
+          id
+          version
+          status
+          createdAt
+          createdBy
+          publishedAt
+        }
+      }
+    `,
+    {},
+    { fetchKey, fetchPolicy: "store-and-network" },
+  );
+  const [commitPublish, isPublishing] = useMutation<PoliciesPagePublishMutation>(graphql`
+    mutation PoliciesPagePublishMutation($input: PublishPolicyBundleInput!) {
+      publishPolicyBundle(input: $input) {
+        bundle {
+          id
+          status
+          publishedAt
+        }
+      }
+    }
+  `);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [dryRun, setDryRun] = useState<{ id: string; version: number } | null>(null);
+  const publish = (id: string) =>
+    commitPublish({
+      variables: { input: { id } },
+      onCompleted: () => {
+        setPublishError(null);
+        onChanged();
+      },
+      onError: (e) => setPublishError(e.message),
+    });
+
+  const active = data.activePolicyBundle;
+  return (
+    <Stack gap="lg">
+      <Text>
+        {active ? (
+          <>
+            Enforcing <b>version {active.version}</b>, published{" "}
+            {active.publishedAt ? formatTime(active.publishedAt) : ""}
+            {active.publishedBy ? ` by ${active.publishedBy}` : ""}. PDPs pick up a newly published bundle within about
+            10 seconds.
+          </>
+        ) : (
+          "No bundle has been published. PDPs enforce the built-in default policies."
+        )}
+      </Text>
+
+      {data.canPublish ? (
+        <Editor
+          key={active?.id ?? "none"}
+          initialSchema={active?.schema ?? ""}
+          initialPolicies={active?.policies ?? ""}
+          onSaved={onChanged}
+        />
+      ) : (
+        <Text size="sm" c="dimmed">
+          You can read policy bundles but not change them.
+        </Text>
+      )}
+
+      <Stack gap="xs">
+        <Title order={4}>Bundles</Title>
+        {publishError && (
+          <Alert color="red" title="Publish failed">
+            {publishError}
+          </Alert>
+        )}
+        <Table>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Version</Table.Th>
+              <Table.Th>Status</Table.Th>
+              <Table.Th>Created</Table.Th>
+              <Table.Th>Published</Table.Th>
+              <Table.Th />
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {data.policyBundles.map((b) => (
+              <Table.Tr key={b.id}>
+                <Table.Td>{b.version}</Table.Td>
+                <Table.Td>
+                  <Badge color={STATUS_COLOR[b.status as keyof typeof STATUS_COLOR]} variant="light">
+                    {b.status.toLowerCase()}
+                  </Badge>
+                </Table.Td>
+                <Table.Td>
+                  {b.createdAt ? formatTime(b.createdAt) : ""} by {b.createdBy}
+                </Table.Td>
+                <Table.Td>{b.publishedAt ? formatTime(b.publishedAt) : ""}</Table.Td>
+                <Table.Td>
+                  {b.status === "DRAFT" && (
+                    <Group gap="xs" justify="flex-end" wrap="nowrap">
+                      <Button size="xs" variant="light" onClick={() => setDryRun({ id: b.id, version: b.version })}>
+                        Dry run
+                      </Button>
+                      {data.canPublish && (
+                        <Button size="xs" loading={isPublishing} onClick={() => publish(b.id)}>
+                          Publish
+                        </Button>
+                      )}
+                    </Group>
+                  )}
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </Stack>
+      <Modal
+        opened={dryRun !== null}
+        onClose={() => setDryRun(null)}
+        size="xl"
+        title={dryRun ? `What draft version ${dryRun.version} would change` : ""}
+      >
+        {dryRun && <DryRunReport draftId={dryRun.id} />}
+      </Modal>
+    </Stack>
+  );
+}
+
+/** Edits a new draft, starting from the active bundle. Saving validates it against the schema. */
+function Editor({
+  initialSchema,
+  initialPolicies,
+  onSaved,
+}: {
+  initialSchema: string;
+  initialPolicies: string;
+  onSaved: () => void;
+}) {
+  const [schema, setSchema] = useState(initialSchema);
+  const [policies, setPolicies] = useState(initialPolicies);
+  const [result, setResult] = useState<
+    { kind: "saved"; version: number } | { kind: "invalid"; message: string } | null
+  >(null);
+  const [commitDraft, isSaving] = useMutation<PoliciesPageCreateDraftMutation>(graphql`
+    mutation PoliciesPageCreateDraftMutation($input: CreatePolicyDraftInput!) {
+      createPolicyDraft(input: $input) {
+        bundle {
+          id
+          version
+        }
+        validationError
+      }
+    }
+  `);
+
+  const save = () =>
+    commitDraft({
+      variables: { input: { schema, policies } },
+      onCompleted: ({ createPolicyDraft: res }) => {
+        if (res.validationError) {
+          setResult({ kind: "invalid", message: res.validationError });
+        } else if (res.bundle) {
+          setResult({ kind: "saved", version: res.bundle.version });
+          onSaved();
+        }
+      },
+      onError: (e) => setResult({ kind: "invalid", message: e.message }),
+    });
+
+  return (
+    <Stack gap="sm">
+      <Title order={4}>New draft</Title>
+      <Textarea
+        id="policy-editor-policies"
+        label="Policies (Cedar)"
+        autosize
+        minRows={8}
+        styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
+        value={policies}
+        onChange={(e) => setPolicies(e.currentTarget.value)}
+      />
+      <Textarea
+        id="policy-editor-schema"
+        label="Schema (Cedar)"
+        autosize
+        minRows={6}
+        styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
+        value={schema}
+        onChange={(e) => setSchema(e.currentTarget.value)}
+      />
+      {result?.kind === "invalid" && (
+        <Alert color="red" title="Not saved: the bundle doesn't validate">
+          <Text size="sm" ff="monospace" style={{ whiteSpace: "pre-wrap" }}>
+            {result.message}
+          </Text>
+        </Alert>
+      )}
+      {result?.kind === "saved" && (
+        <Alert color="teal" title={`Saved draft version ${result.version}`}>
+          Publish it from the list below to start enforcing it.
+        </Alert>
+      )}
+      <Group>
+        <Button onClick={save} loading={isSaving}>
+          Save draft
+        </Button>
+      </Group>
+    </Stack>
+  );
+}

@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+// The decision API every enforcement point (gateway, SDKs, Envoy filter) calls.
+package awzy.authz.v1;
+
+import "google/protobuf/struct.proto";
+
+service Authorizer {
+  // Decides one action by one subject on one resource: allow, deny, or challenge.
+  rpc Check(CheckRequest) returns (CheckResponse);
+}
+
+// A typed reference to a world-model entity, e.g. type "Human", id "alice".
+message EntityRef {
+  string type = 1;
+  string id = 2;
+}
+
+// An entity the enforcement point already knows about, in Cedar's entity shape.
+// Sent inline until the PDP's attribute snapshot covers it.
+message Entity {
+  EntityRef uid = 1;
+  google.protobuf.Struct attrs = 2;
+  repeated EntityRef parents = 3;
+}
+
+message CheckRequest {
+  // Who is acting: a Human or a ServiceAccount.
+  EntityRef subject = 1;
+  // What they are doing, e.g. "read".
+  string action = 2;
+  // What they are doing it to.
+  EntityRef resource = 3;
+  // Request context, e.g. {"risk_score": 12}. Must match the Cedar schema for the action.
+  // The keys on_behalf_of and human_present are set by the PDP from the fields below and
+  // are rejected here.
+  google.protobuf.Struct context = 4;
+  // When a service account acts for a person (from a validated RFC 8693 token), that person.
+  // The PDP allows the request only if the person could do it too.
+  EntityRef on_behalf_of = 5;
+  repeated Entity entities = 6;
+  // Whether a person is there to answer a challenge. Unset: true for a Human subject,
+  // false for a service account.
+  optional bool human_present = 7;
+  // The enforcement point applies this verdict whatever the install's mode, and the decision
+  // is recorded as enforced. The client portal does this for its own access (ADR 0020).
+  bool always_enforced = 8;
+}
+
+enum Verdict {
+  VERDICT_UNSPECIFIED = 0;
+  VERDICT_ALLOW = 1;
+  VERDICT_DENY = 2;
+  VERDICT_CHALLENGE = 3;
+}
+
+enum ChallengeKind {
+  CHALLENGE_KIND_UNSPECIFIED = 0;
+  CHALLENGE_KIND_JUSTIFICATION = 1;
+  CHALLENGE_KIND_VERIFICATION = 2;
+  CHALLENGE_KIND_APPROVAL = 3;
+  CHALLENGE_KIND_BIOMETRIC = 4;
+}
+
+// Whether the enforcement point applies the verdict (ADR 0007).
+enum EnforcementMode {
+  ENFORCEMENT_MODE_UNSPECIFIED = 0;
+  // Record only: the enforcement point MUST allow, and must not send challenges. The verdict is
+  // what would have happened.
+  ENFORCEMENT_MODE_MONITOR = 1;
+  // Apply the verdict.
+  ENFORCEMENT_MODE_ENFORCE = 2;
+}
+
+message CheckResponse {
+  // QID: decision_<uuid>, time-ordered (UUIDv7). Used to explain the decision later.
+  string decision_id = 1;
+  Verdict verdict = 2;
+  // Set when verdict is VERDICT_CHALLENGE: every one must be passed.
+  repeated ChallengeKind challenges = 3;
+  // Policies that determined the subject's own check.
+  repeated string policies = 4;
+  // For a delegated request: the person's own check. The verdict above is the stricter of the two.
+  DelegationCheck on_behalf_of = 5;
+  // MONITOR: allow regardless of the verdict. An enforcement point that doesn't understand this
+  // field applies the verdict, which fails safe.
+  EnforcementMode mode = 6;
+}
+
+message DelegationCheck {
+  Verdict verdict = 1;
+  repeated ChallengeKind challenges = 2;
+  repeated string policies = 3;
+}

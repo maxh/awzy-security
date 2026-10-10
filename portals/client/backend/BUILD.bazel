@@ -1,0 +1,30 @@
+load("//tools:rust.bzl", "awzy_service")
+
+awzy_service(
+    name = "backend",
+    crate_name = "awzy_client_portal",
+    binary_name = "awzy-client-portal",
+    extra_binaries = ["print_schema"],
+    frontend = "//portals/client/frontend:build",
+    test_deps = ["//authz/jobs/clickhouse-migrate:clickhouse"],
+    visibility = ["//tools:client_side"],
+    deps = [
+        "//authz/libs/identity",
+        "//authz/services/pdp",
+        "//authz/libs/proto",
+        "//libs/llm",
+        "//libs/model",
+        "//libs/portal",
+        "//libs/server",
+        "//libs/telemetry",
+    ],
+)
+
+# GraphQL SDL consumed by the frontend's Relay compiler.
+genrule(
+    name = "schema_sdl",
+    outs = ["schema.graphql"],
+    cmd = "$(execpath :print_schema) > $@",
+    tools = [":print_schema"],
+    visibility = ["//visibility:public"],
+)

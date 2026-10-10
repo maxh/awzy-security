@@ -1,0 +1,28 @@
+load("@crates//:defs.bzl", "all_crate_deps")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
+load("//tools:rust.bzl", "awzy_rust_library")
+
+# The .proto sources, for other languages' code generators (e.g. SDKs) later.
+filegroup(
+    name = "protos",
+    srcs = glob(["awzy/**/*.proto"]),
+    visibility = ["//tools:client_side"],
+)
+
+# Same build.rs Cargo runs: protox + tonic-prost-build, no protoc.
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    data = [":protos"],
+    deps = all_crate_deps(build = True),
+)
+
+awzy_rust_library(
+    name = "proto",
+    crate_name = "awzy_authz_proto",
+    visibility = ["//tools:client_side"],
+    deps = [
+        ":build_script",
+        "//libs/model",
+    ],
+)

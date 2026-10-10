@@ -1,0 +1,32 @@
+{
+  "name": "awzy",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "prepare": "sh tools/git-setup || true",
+    "lint": "oxlint --type-aware --deny-warnings portals",
+    "format": "oxfmt 'portals/**/*.{ts,tsx,js,mjs}'",
+    "format:check": "oxfmt --check 'portals/**/*.{ts,tsx,js,mjs}'"
+  },
+  "devDependencies": {
+    "oxfmt": "0.72.0",
+    "oxlint": "1.87.0",
+    "oxlint-tsgolint": "7.0.2003",
+    "typescript": "^7.0.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [],
+    "packageExtensions": {
+      "babel-plugin-relay": {
+        "dependencies": {
+          "@babel/runtime": "^7.28.0"
+        }
+      },
+      "@mantine/hooks": {
+        "peerDependencies": {
+          "react-dom": "^19.2.0"
+        }
+      }
+    }
+  }
+}

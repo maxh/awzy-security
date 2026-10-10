@@ -1,0 +1,31 @@
+load("@aspect_rules_js//js:defs.bzl", "js_test")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+
+npm_link_all_packages()
+
+exports_files(["package.json"])
+
+# Signs in to the client portal in a real browser: the portal serving its built frontend,
+# the dev IdP, and a PDP with the built-in policies. Uses the machine's Chrome
+# (CHROME_PATH, or the usual install locations) and skips if there is none.
+js_test(
+    name = "signin_test",
+    size = "medium",
+    data = [
+        ":node_modules/puppeteer-core",
+        "//authz/services/pdp:awzy-pdp",
+        "//portals/client/backend:awzy-client-portal",
+        "//portals/client/frontend:build",
+        "//tools/dev-idp:awzy-dev-idp",
+    ],
+    entry_point = "signin.test.mjs",
+    env = {
+        "AWZY_E2E_DEV_IDP": "$(rootpath //tools/dev-idp:awzy-dev-idp)",
+        "AWZY_E2E_FRONTEND": "$(rootpath //portals/client/frontend:build)",
+        "AWZY_E2E_PDP": "$(rootpath //authz/services/pdp:awzy-pdp)",
+        "AWZY_E2E_PORTAL": "$(rootpath //portals/client/backend:awzy-client-portal)",
+    },
+    # Chrome needs its own sandbox and a writable profile directory, which the Bazel
+    # sandbox gets in the way of.
+    tags = ["no-sandbox"],
+)
