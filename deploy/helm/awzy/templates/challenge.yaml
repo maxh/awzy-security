@@ -4,7 +4,7 @@
 # awzy-challenge: challenges and containments (ADR 0054). In-cluster only: the PDP resolves
 # challenges and follows the containment feed; the client portal answers and manages them.
 # Who may call which methods (ADR 0055): the PDPs resolve and follow; only the portal answers for
-# a person; the portal and the backend contain and lift.
+# a person; the portal and the backend (awzy-reasoner, ADR 0066) contain, lift, and list.
 {{- $env := list
     (dict "name" "AWZY_CHALLENGE_CONTAINERS" "value" (printf "%s,%s" $backend $portal))
     (dict "name" "AWZY_CHALLENGE_GRANT_SECS" "value" (toString .Values.challenge.grantSeconds))

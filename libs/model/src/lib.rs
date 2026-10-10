@@ -192,6 +192,11 @@ pub enum EnforcementMode {
     Enforce,
 }
 
+/// The enforcement scopes awzy-policy keeps a mode for: the install's verdicts, and
+/// awzy-reasoner's automated containments (ADR 0066).
+pub const INSTALL_SCOPE: &str = "install";
+pub const AUTOMATED_CONTAINMENTS_SCOPE: &str = "automated-containments";
+
 impl EnforcementMode {
     pub fn as_str(self) -> &'static str {
         match self {

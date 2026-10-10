@@ -119,6 +119,8 @@ pub struct Containment {
     pub lifted_at: Option<DateTime<Utc>>,
     pub lifted_by: Option<String>,
     pub lift_reason: Option<String>,
+    /// Recorded but not applied (ADR 0066): never in the feed.
+    pub monitor: bool,
 }
 
 /// Every containment in force, as of a feed version.
@@ -399,13 +401,15 @@ impl ChallengeStore {
         Ok(c)
     }
 
-    /// Contains `subject`. Returns the containment and whether it is new: an accessor already
-    /// contained keeps their active containment.
+    /// Contains `subject`, or with `monitor` records that it would have (ADR 0066). Returns the
+    /// containment and whether it is new: an accessor already contained in that mode keeps their
+    /// active containment.
     pub async fn contain(
         &self,
         subject: &EntityRef,
         reason: &str,
         created_by: &str,
+        monitor: bool,
     ) -> Result<(Containment, bool), StoreError> {
         if subject.kind.is_empty() || subject.id.is_empty() {
             return Err(StoreError::Invalid("subject type and id are required".into()));
@@ -415,27 +419,34 @@ impl ChallengeStore {
         }
         let mut tx = self.pool.begin().await?;
         let inserted = sqlx::query(
-            "INSERT INTO containments (id, subject_type, subject_id, reason, created_by) VALUES ($1, $2, $3, $4, $5) \
-             ON CONFLICT (subject_type, subject_id) WHERE lifted_at IS NULL DO NOTHING RETURNING *",
+            "INSERT INTO containments (id, subject_type, subject_id, reason, created_by, monitor) \
+             VALUES ($1, $2, $3, $4, $5, $6) \
+             ON CONFLICT (subject_type, subject_id, monitor) WHERE lifted_at IS NULL DO NOTHING RETURNING *",
         )
         .bind(ContainmentId::new().uuid())
         .bind(&subject.kind)
         .bind(&subject.id)
         .bind(reason.trim())
         .bind(created_by)
+        .bind(monitor)
         .fetch_optional(&mut *tx)
         .await?;
         let result = match inserted {
             Some(row) => {
-                bump_feed(&mut tx).await?;
+                // PDPs never see a monitored containment, so the feed needn't move.
+                if !monitor {
+                    bump_feed(&mut tx).await?;
+                }
                 (containment_from_row(&row)?, true)
             }
             None => {
                 let row = sqlx::query(
-                    "SELECT * FROM containments WHERE subject_type = $1 AND subject_id = $2 AND lifted_at IS NULL",
+                    "SELECT * FROM containments \
+                     WHERE subject_type = $1 AND subject_id = $2 AND monitor = $3 AND lifted_at IS NULL",
                 )
                 .bind(&subject.kind)
                 .bind(&subject.id)
+                .bind(monitor)
                 .fetch_one(&mut *tx)
                 .await?;
                 (containment_from_row(&row)?, false)
@@ -472,22 +483,25 @@ impl ChallengeStore {
         Ok(containment_from_row(&row)?)
     }
 
-    /// Newest first.
+    /// Newest first. Monitored containments only with `include_monitor`.
     pub async fn containments(
         &self,
         active_only: bool,
         subject: Option<&EntityRef>,
         limit: i64,
+        include_monitor: bool,
     ) -> Result<Vec<Containment>, StoreError> {
         let rows = sqlx::query(
             "SELECT * FROM containments WHERE (NOT $1 OR lifted_at IS NULL) \
                 AND ($2::text IS NULL OR (subject_type = $2 AND subject_id = $3)) \
+                AND ($5 OR NOT monitor) \
              ORDER BY created_at DESC LIMIT $4",
         )
         .bind(active_only)
         .bind(subject.map(|s| s.kind.as_str()))
         .bind(subject.map(|s| s.id.as_str()))
         .bind(limit)
+        .bind(include_monitor)
         .fetch_all(&self.pool)
         .await?;
         Ok(rows.iter().map(containment_from_row).collect::<Result<_, _>>()?)
@@ -498,9 +512,10 @@ impl ChallengeStore {
         let mut tx = self.pool.begin().await?;
         sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY").execute(&mut *tx).await?;
         let version: i64 = sqlx::query("SELECT version FROM containment_feed").fetch_one(&mut *tx).await?.try_get(0)?;
-        let rows = sqlx::query("SELECT * FROM containments WHERE lifted_at IS NULL ORDER BY created_at")
-            .fetch_all(&mut *tx)
-            .await?;
+        let rows =
+            sqlx::query("SELECT * FROM containments WHERE lifted_at IS NULL AND NOT monitor ORDER BY created_at")
+                .fetch_all(&mut *tx)
+                .await?;
         tx.commit().await?;
         Ok(ActiveContainments { version, active: rows.iter().map(containment_from_row).collect::<Result<_, _>>()? })
     }
@@ -612,6 +627,7 @@ fn containment_from_row(row: &PgRow) -> Result<Containment, sqlx::Error> {
         lifted_at: row.try_get("lifted_at")?,
         lifted_by: row.try_get("lifted_by")?,
         lift_reason: row.try_get("lift_reason")?,
+        monitor: row.try_get("monitor")?,
     })
 }
 
@@ -798,9 +814,9 @@ pub(crate) mod tests {
         assert_eq!(store.active_containments().await.unwrap(), ActiveContainments::default());
 
         let agent = EntityRef::new("ServiceAccount", "sales-genie");
-        let (c, created) = store.contain(&agent, "bulk export of pipeline", "carol").await.unwrap();
+        let (c, created) = store.contain(&agent, "bulk export of pipeline", "carol", false).await.unwrap();
         assert!(created);
-        let (again, created) = store.contain(&agent, "again", "dave").await.unwrap();
+        let (again, created) = store.contain(&agent, "again", "dave", false).await.unwrap();
         assert_eq!((again.id, created), (c.id, false));
         let active = store.active_containments().await.unwrap();
         assert_eq!((active.version, active.active.len()), (1, 1));
@@ -812,9 +828,29 @@ pub(crate) mod tests {
         let active = store.active_containments().await.unwrap();
         assert_eq!((active.version, active.active.len()), (2, 0));
 
-        let (next, created) = store.contain(&agent, "again, later", "carol").await.unwrap();
+        let (next, created) = store.contain(&agent, "again, later", "carol", false).await.unwrap();
         assert!(created && next.id != c.id, "a lifted containment doesn't block a new one");
-        assert_eq!(store.containments(false, Some(&agent), 10).await.unwrap().len(), 2);
-        assert_eq!(store.containments(true, None, 10).await.unwrap().len(), 1);
+        assert_eq!(store.containments(false, Some(&agent), 10, false).await.unwrap().len(), 2);
+        assert_eq!(store.containments(true, None, 10, false).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_monitored_containment_stays_out_of_the_feed_and_beside_a_real_one() {
+        let Some(store) = test_store(Lifetimes::default()).await else { return };
+        let nora = EntityRef::new("Human", "nora");
+        let (would, created) =
+            store.contain(&nora, "rejected challenge and an export", "AwzyService::awzy-reasoner", true).await.unwrap();
+        assert!(created && would.monitor);
+        let (again, created) = store.contain(&nora, "same evidence", "AwzyService::awzy-reasoner", true).await.unwrap();
+        assert_eq!((again.id, created), (would.id, false));
+        let active = store.active_containments().await.unwrap();
+        assert_eq!((active.version, active.active.len()), (0, 0), "PDPs never hear of it");
+
+        // The security team agrees and contains her for real; the monitored record stays.
+        let (real, created) = store.contain(&nora, "confirmed on review", "Human::carol", false).await.unwrap();
+        assert!(created && !real.monitor && real.id != would.id);
+        assert_eq!(store.active_containments().await.unwrap().active, vec![real]);
+        assert_eq!(store.containments(true, Some(&nora), 10, true).await.unwrap().len(), 2);
+        assert_eq!(store.containments(true, Some(&nora), 10, false).await.unwrap().len(), 1);
     }
 }

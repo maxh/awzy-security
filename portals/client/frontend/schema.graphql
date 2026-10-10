@@ -191,6 +191,11 @@ type Containment {
 	liftedAt: UtcTimestamp
 	liftedBy: Actor
 	liftReason: String
+	"""
+	Recorded but not applied: awzy-reasoner would have contained this accessor, and automated
+	containments are in monitor (ADR 0066). Lifting it dismisses it.
+	"""
+	monitor: Boolean!
 }
 
 type ContainmentPayload {
@@ -344,10 +349,24 @@ enum EnforcementMode {
 	ENFORCE
 }
 
+"""
+What a mode applies to.
+"""
+enum EnforcementScope {
+	"""
+	The install's verdicts: whether enforcement points apply them.
+	"""
+	INSTALL
+	"""
+	awzy-reasoner's automated containments: whether they're applied or only recorded.
+	"""
+	AUTOMATED_CONTAINMENTS
+}
+
 type EnforcementSetting {
 	mode: EnforcementMode!
 	"""
-	Null when the install has never been switched (new installs start in MONITOR).
+	Null when the scope has never been switched (every scope starts in MONITOR).
 	"""
 	changedBy: Actor
 	changedAt: UtcTimestamp
@@ -431,7 +450,8 @@ type Mutation {
 	"""
 	publishPolicyBundle(input: PublishPolicyBundleInput!): PublishPolicyBundlePayload!
 	"""
-	Switches the install between MONITOR and ENFORCE. PDPs pick it up within about 10 seconds.
+	Switches a scope between MONITOR and ENFORCE. PDPs pick up the install's within about 10
+	seconds; awzy-reasoner reads automated containments' on its next run.
 	TODO: require a security-key challenge for the switch to ENFORCE (awzy-challenge).
 	"""
 	setEnforcementMode(input: SetEnforcementModeInput!): SetEnforcementModePayload!
@@ -730,13 +750,13 @@ type Query {
 	"""
 	decisions(after: String, first: Int, filter: DecisionFilter): DecisionConnection!
 	"""
-	The install's enforcement mode.
+	A scope's enforcement mode: the install's by default.
 	"""
-	enforcement: EnforcementSetting!
+	enforcement(scope: EnforcementScope! = INSTALL): EnforcementSetting!
 	"""
-	Every switch of the install's mode, newest first.
+	Every switch of a scope's mode, newest first.
 	"""
-	enforcementHistory(first: Int! = 20): [EnforcementSetting!]!
+	enforcementHistory(scope: EnforcementScope! = INSTALL, first: Int! = 20): [EnforcementSetting!]!
 	"""
 	Would-deny and would-challenge counts since `since` (default 24 hours, at most 30 days).
 	"""
@@ -866,6 +886,10 @@ type ServiceAccount {
 
 input SetEnforcementModeInput {
 	mode: EnforcementMode!
+	"""
+	The install's by default.
+	"""
+	scope: EnforcementScope! = INSTALL
 }
 
 type SetEnforcementModePayload {

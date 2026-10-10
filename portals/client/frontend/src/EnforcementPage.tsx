@@ -8,7 +8,10 @@ import type { EnforcementPageQuery } from "./__generated__/EnforcementPageQuery.
 import type { EnforcementPageSetModeMutation } from "./__generated__/EnforcementPageSetModeMutation.graphql";
 import { Entity, formatTime, Time } from "./format";
 
-/** Monitor or enforce for the whole install (ADR 0007), and what enforcing would change. */
+/**
+ * Monitor or enforce for the whole install (ADR 0007), and what enforcing would change; and the
+ * same switch for awzy-reasoner's automated containments (ADR 0066).
+ */
 export function EnforcementPage() {
   const [fetchKey, setFetchKey] = useState(0);
   return (
@@ -34,6 +37,13 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
       query EnforcementPageQuery {
         canSwitch: viewerCan(action: ADMINISTER, area: ENFORCEMENT)
         enforcement {
+          mode
+          changedBy {
+            label
+          }
+          changedAt
+        }
+        containmentEnforcement: enforcement(scope: AUTOMATED_CONTAINMENTS) {
           mode
           changedBy {
             label
@@ -93,21 +103,25 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
     }
   `);
   const [confirming, setConfirming] = useState(false);
+  const [confirmingContainments, setConfirmingContainments] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { enforcement: current, enforcementSummary: s } = data;
+  const { enforcement: current, containmentEnforcement: containments, enforcementSummary: s } = data;
   const enforcing = current.mode === "ENFORCE";
   const target = enforcing ? "MONITOR" : "ENFORCE";
-  const switchMode = () =>
+  const containing = containments.mode === "ENFORCE";
+  const switchScope = (scope: "INSTALL" | "AUTOMATED_CONTAINMENTS", mode: "MONITOR" | "ENFORCE") =>
     commit({
-      variables: { input: { mode: target } },
+      variables: { input: { mode, scope } },
       onCompleted: () => {
         setConfirming(false);
+        setConfirmingContainments(false);
         setError(null);
         onChanged();
       },
       onError: (e) => setError(e.message),
     });
+  const switchMode = () => switchScope("INSTALL", target);
 
   return (
     <Stack gap="lg">
@@ -142,6 +156,64 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
           )}
         </Stack>
       </Section>
+
+      <Section
+        title="Automated containments"
+        actions={
+          data.canSwitch ? (
+            <Button variant="light" color={containing ? "blue" : "red"} onClick={() => setConfirmingContainments(true)}>
+              {containing ? "Switch back to monitor" : "Switch to enforce"}
+            </Button>
+          ) : undefined
+        }
+      >
+        <Stack gap="xs">
+          <Group gap="sm">
+            <StatusBadge tone={containing ? "danger" : "info"}>{containing ? "Enforcing" : "Monitoring"}</StatusBadge>
+            <Text size="sm" c="dimmed">
+              {containments.changedAt
+                ? `since ${formatTime(containments.changedAt)} by ${containments.changedBy?.label ?? "unknown"}`
+                : "Starts in monitor mode, separately from the install's."}
+            </Text>
+          </Group>
+          <Text size="sm" maw={760}>
+            {containing
+              ? "awzy-reasoner contains a person when their risk is elevated, a challenge for them was rejected, and they tried to move data out, all in the same day. Every PDP applies it within seconds."
+              : "awzy-reasoner records whom it would contain (elevated risk, a rejected challenge, and an attempt to move data out, in the same day) without applying it. Review them on the Challenges page, where you can contain the person or dismiss the record."}
+          </Text>
+        </Stack>
+      </Section>
+
+      <Modal
+        opened={confirmingContainments}
+        onClose={() => setConfirmingContainments(false)}
+        title={<Text fw={600}>{containing ? "Stop automated containments?" : "Enforce automated containments?"}</Text>}
+      >
+        <Stack gap="sm">
+          <Text size="sm">
+            {containing
+              ? "awzy-reasoner will only record whom it would contain. Containments already in force stay until someone lifts them."
+              : "From its next run, awzy-reasoner's containments take effect: a contained person, and every agent acting for them, is denied until someone lifts it."}
+          </Text>
+          {error && (
+            <Alert color="red" title="Not switched">
+              {error}
+            </Alert>
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setConfirmingContainments(false)}>
+              Cancel
+            </Button>
+            <Button
+              color={containing ? "blue" : "red"}
+              loading={isSaving}
+              onClick={() => switchScope("AUTOMATED_CONTAINMENTS", containing ? "MONITOR" : "ENFORCE")}
+            >
+              {containing ? "Switch to monitor" : "Enforce"}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <div>
         <Text size="sm" c="dimmed" mb="xs">

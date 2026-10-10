@@ -99,6 +99,8 @@ impl Containments {
                     active_only: true,
                     subject: Some((*w).clone().into()),
                     limit: 1,
+                    // Recorded, not applied (ADR 0066).
+                    include_monitor: false,
                 }),
             )
             .await

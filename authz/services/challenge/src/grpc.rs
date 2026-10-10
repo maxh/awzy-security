@@ -92,7 +92,9 @@ impl Access {
         rules.extend(group(&["WatchContainments"], &either(&self.pdps, &self.gateways)));
         // Listing containments: a PDP whose feed is stale, and the portal showing them to admins.
         rules.extend(group(&["ListContainments"], &either(&self.pdps, &self.containers)));
-        rules.extend(group(&["GetChallenge", "ListChallenges", "Justify", "Decide"], &self.people));
+        rules.extend(group(&["GetChallenge", "Justify", "Decide"], &self.people));
+        // Listing challenges: the portal, and awzy-reasoner reading rejections (ADR 0066).
+        rules.extend(group(&["ListChallenges"], &either(&self.people, &self.containers)));
         // Security keys (ADR 0059): only the portal, which authenticates the person they belong to.
         rules.extend(group(
             &[
@@ -226,8 +228,10 @@ impl ChallengeService for Service {
         let req = req.into_inner();
         let subject = required_ref(req.subject, "subject")?;
         let created_by = actor(req.created_by_actor, &req.created_by, "created_by_actor")?;
-        let (c, created) = self.store.contain(&subject, &req.reason, &created_by).await.map_err(status)?;
-        if created {
+        let (c, created) = self.store.contain(&subject, &req.reason, &created_by, req.monitor).await.map_err(status)?;
+        if created && c.monitor {
+            tracing::info!(containment_id = %c.id, subject = ?c.subject, created_by = %c.created_by, reason = %c.reason, "accessor would be contained (monitor)");
+        } else if created {
             tracing::warn!(containment_id = %c.id, subject = ?c.subject, created_by = %c.created_by, reason = %c.reason, "accessor contained");
             self.refresh_feed().await;
         }
@@ -253,8 +257,11 @@ impl ChallengeService for Service {
     ) -> Result<Response<ListContainmentsResponse>, Status> {
         let req = req.into_inner();
         let subject: Option<EntityRef> = req.subject.map(Into::into);
-        let list =
-            self.store.containments(req.active_only, subject.as_ref(), limit(req.limit)).await.map_err(status)?;
+        let list = self
+            .store
+            .containments(req.active_only, subject.as_ref(), limit(req.limit), req.include_monitor)
+            .await
+            .map_err(status)?;
         Ok(Response::new(ListContainmentsResponse {
             containments: list.into_iter().map(containment_to_wire).collect(),
         }))
@@ -573,6 +580,7 @@ fn containment_to_wire(c: Containment) -> WireContainment {
         lifted_by,
         lifted_by_actor,
         lift_reason: c.lift_reason.unwrap_or_default(),
+        monitor: c.monitor,
     }
 }
 
@@ -791,5 +799,34 @@ mod tests {
             .await
             .unwrap();
         until(|| async { check(&state, "mallory", "design-doc").await.verdict == Verdict::Allow }).await;
+    }
+
+    #[tokio::test]
+    async fn a_monitored_containment_is_listed_but_never_applied() {
+        let Some(store) = test_store(Lifetimes::default()).await else { return };
+        let (endpoint, mut client) = serve(store).await;
+        let state = pdp(&endpoint).await;
+        let would = client
+            .contain(ContainRequest {
+                subject: Some(awzy_model::EntityRef::new("Human", "mallory").into()),
+                reason: "rejected challenge and an export".into(),
+                created_by_actor: Some(awzy_model::Actor::awzy("awzy-reasoner").into()),
+                monitor: true,
+                ..Default::default()
+            })
+            .await
+            .unwrap()
+            .into_inner()
+            .containment
+            .unwrap();
+        assert!(would.monitor);
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        assert_eq!(check(&state, "mallory", "design-doc").await.verdict, Verdict::Allow, "monitored: not applied");
+
+        let list =
+            |include_monitor| ListContainmentsRequest { active_only: true, include_monitor, ..Default::default() };
+        let listed = |r: tonic::Response<ListContainmentsResponse>| r.into_inner().containments.len();
+        assert_eq!(listed(client.list_containments(list(false)).await.unwrap()), 0, "left out unless asked for");
+        assert_eq!(listed(client.list_containments(list(true)).await.unwrap()), 1);
     }
 }
