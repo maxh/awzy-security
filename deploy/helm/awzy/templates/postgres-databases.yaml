@@ -39,8 +39,8 @@ spec:
               done
           env:
             - name: URL
-              valueFrom: { secretKeyRef: { name: awzy-postgres, key: url } }
-            - { name: DATABASES, value: {{ printf "%s %s" .Values.postgres.challengeDatabase .Values.postgres.contextDatabase | quote }} }
+              valueFrom: { secretKeyRef: { name: awzy-postgres, key: admin_url } }
+            - { name: DATABASES, value: {{ printf "%s %s %s" .Values.postgres.challengeDatabase .Values.postgres.contextDatabase .Values.postgres.policyDatabase | quote }} }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

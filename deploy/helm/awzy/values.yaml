@@ -18,11 +18,13 @@ namespaces:
 postgres:
   host: ""
   port: 5432
+  # The server's default database (Terraform creates it). Only the chart's database Job uses it,
+  # to create each service's own database below.
   database: awzy
-  # awzy-context's and awzy-challenge's databases on the same server, created by the chart's
-  # database Job.
+  # Each service's own database on the same server, created by the chart's database Job.
   challengeDatabase: awzy_challenge
   contextDatabase: awzy_context
+  policyDatabase: awzy_policy
   # Secrets Manager secret (RDS-managed master credentials); External Secrets copies it.
   secretRef: ""
   # ClusterSecretStore created by bootstrap.
