@@ -85,6 +85,9 @@ The rule that keeps the test honest: `aws/` and `bootstrap/` may take awzy's reg
 
 ## Steps
 
+These are the plan and its progress. The commands for an install are in
+[INSTALL.md](../INSTALL.md).
+
 ### 1. Create the two accounts
 
 *You, once per account*
