@@ -1,8 +1,8 @@
 name: docs-site
 
 # https://docs.awzysecurity.com (docs/site): builds on every pull request that touches it, and
-# deploys main to Cloudflare Pages. The Pages project and its domain are Terraform
-# (deploy/terraform/corp/corp-portal/docs-site.tf).
+# deploys main to its S3 bucket behind CloudFront (deploy/terraform/corp/corp-portal/docs-site.tf)
+# with the corp deploy role, through GitHub's OIDC token: no stored credential.
 on:
   pull_request:
     paths:
@@ -26,6 +26,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write # GitHub OIDC token for AWS; only main can assume the deploy role
+    env:
+      DEPLOY: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.AWZY_CORP_DOCS_BUCKET != '' }}
     defaults:
       run:
         working-directory: docs/site
@@ -38,10 +41,21 @@ jobs:
       # Not part of the portals' pnpm workspace: the site has its own lockfile.
       - run: pnpm install --ignore-workspace --frozen-lockfile
       - run: pnpm --ignore-workspace build
-      # Only main, and only once the account and a Pages token are configured.
-      - name: Deploy to Cloudflare Pages
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.AWZY_CORP_CLOUDFLARE_ACCOUNT_ID != ''
-        run: npx --yes wrangler@4.149.0 pages deploy dist --project-name awzy-docs --branch main
+      # Only main, and only once Terraform has made the bucket and distribution.
+      - if: env.DEPLOY == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWZY_CORP_AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWZY_CORP_AWS_REGION }}
+      # Astro names everything under _astro/ by its content hash, so those are cached for good;
+      # pages are revalidated, and CloudFront's copy is cleared on every deploy.
+      - name: Deploy
+        if: env.DEPLOY == 'true'
+        run: |
+          aws s3 sync dist/_astro "s3://$BUCKET/_astro" --cache-control "public, max-age=31536000, immutable"
+          aws s3 sync dist "s3://$BUCKET" --delete --exclude "_astro/*" --cache-control "public, max-age=0, must-revalidate"
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" --paths "/*" >/dev/null
+          echo "deployed to https://docs.awzysecurity.com"
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.AWZY_CORP_CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.AWZY_CORP_CLOUDFLARE_PAGES_TOKEN }}
+          BUCKET: ${{ vars.AWZY_CORP_DOCS_BUCKET }}
+          DISTRIBUTION: ${{ vars.AWZY_CORP_DOCS_DISTRIBUTION_ID }}
