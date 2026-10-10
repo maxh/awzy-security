@@ -34,7 +34,9 @@ CREATE TABLE public.installs (
     last_seen_at timestamp with time zone,
     alerted_health text,
     held_health text,
-    held_since timestamp with time zone
+    held_since timestamp with time zone,
+    retired_at timestamp with time zone,
+    retired_by text
 );
 
 ALTER TABLE ONLY public.heartbeat_samples
@@ -44,13 +46,12 @@ ALTER TABLE ONLY public.install_versions
     ADD CONSTRAINT install_versions_pkey PRIMARY KEY (install_id, chart_version);
 
 ALTER TABLE ONLY public.installs
-    ADD CONSTRAINT installs_client_environment_key UNIQUE (client, environment);
-
-ALTER TABLE ONLY public.installs
     ADD CONSTRAINT installs_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.installs
     ADD CONSTRAINT installs_token_sha256_key UNIQUE (token_sha256);
+
+CREATE UNIQUE INDEX installs_client_environment_active ON public.installs USING btree (client, environment) WHERE (retired_at IS NULL);
 
 ALTER TABLE ONLY public.heartbeat_samples
     ADD CONSTRAINT heartbeat_samples_install_id_fkey FOREIGN KEY (install_id) REFERENCES public.installs(id);

@@ -5,7 +5,9 @@ async fn main() -> anyhow::Result<()> {
     awzy_telemetry::init("awzy-corp-portal");
     let url = std::env::var("AWZY_POSTGRES_URL").context("AWZY_POSTGRES_URL is not set")?;
     let pool = sqlx::postgres::PgPoolOptions::new().max_connections(5).connect(&url).await?;
-    let store = awzy_corp_portal::fleet::FleetStore::new(pool);
+    // The registry proxy's pull tokens live in its own schema of this database (ADR 0028).
+    let pull_tokens = awzy_registry::tokens::TokenStore::connect(&url, "registry").await?;
+    let store = awzy_corp_portal::fleet::FleetStore::new(pool).with_pull_tokens(pull_tokens);
     // TODO: run migrations from a release Job instead of at startup.
     store.migrate().await?;
     // Fleet alerts to Slack (ADR 0043).

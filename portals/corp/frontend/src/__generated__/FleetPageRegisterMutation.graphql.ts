@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<62174363fc280da28c54aa7ef7b72ba1>>
+ * @generated SignedSource<<f9b8376844c817655b683e15f22a928a>>
  * @lightSyntaxTransform
  */
 
@@ -25,6 +25,7 @@ export type FleetPageRegisterMutation$data = {
     readonly install: {
       readonly id: string;
     };
+    readonly pullToken: string | null | undefined;
     readonly reportingToken: string;
   };
 };
@@ -80,6 +81,13 @@ v1 = [
         "kind": "ScalarField",
         "name": "reportingToken",
         "storageKey": null
+      },
+      {
+        "alias": null,
+        "args": null,
+        "kind": "ScalarField",
+        "name": "pullToken",
+        "storageKey": null
       }
     ],
     "storageKey": null
@@ -103,16 +111,16 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "a35fda92d41c77aa9a7996e5b1924ccd",
+    "cacheID": "ad86849b3c74bbaa75f41eba18428ec7",
     "id": null,
     "metadata": {},
     "name": "FleetPageRegisterMutation",
     "operationKind": "mutation",
-    "text": "mutation FleetPageRegisterMutation(\n  $input: RegisterInstallInput!\n) {\n  registerInstall(input: $input) {\n    install {\n      id\n    }\n    reportingToken\n  }\n}\n"
+    "text": "mutation FleetPageRegisterMutation(\n  $input: RegisterInstallInput!\n) {\n  registerInstall(input: $input) {\n    install {\n      id\n    }\n    reportingToken\n    pullToken\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "2e345915b49f1f21ef1142e336f13e05";
+(node as any).hash = "dd61f5909af30690aa0946e2d63ea0ea";
 
 export default node;

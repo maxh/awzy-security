@@ -219,7 +219,7 @@ function RegisterInstall({
   const [channel, setChannel] = useState<string | null>("FAST");
   const [pinned, setPinned] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ id: string; token: string } | null>(null);
+  const [result, setResult] = useState<{ id: string; token: string; pullToken: string | null } | null>(null);
   const [commit, isSaving] = useMutation<FleetPageRegisterMutation>(graphql`
     mutation FleetPageRegisterMutation($input: RegisterInstallInput!) {
       registerInstall(input: $input) {
@@ -227,6 +227,7 @@ function RegisterInstall({
           id
         }
         reportingToken
+        pullToken
       }
     }
   `);
@@ -252,7 +253,11 @@ function RegisterInstall({
       },
       onCompleted: (res) => {
         setError(null);
-        setResult({ id: res.registerInstall.install.id, token: res.registerInstall.reportingToken });
+        setResult({
+          id: res.registerInstall.install.id,
+          token: res.registerInstall.reportingToken,
+          pullToken: res.registerInstall.pullToken ?? null,
+        });
         onRegistered();
       },
       onError: (err) => setError(err.message),
@@ -263,13 +268,28 @@ function RegisterInstall({
     <Modal opened={opened} onClose={close} title={<Text fw={600}>Register an install</Text>} size="lg">
       {result ? (
         <Stack>
-          <Alert color="yellow" title="Copy the reporting token now">
-            It is shown only this once. Put both values in the install's reporter settings.
+          <Alert color="yellow" title="Copy the tokens now">
+            They're shown only this once. Store them where the install's bootstrap reads them, in the client's own
+            secret store: never in a repository or a chat.
           </Alert>
           <Text size="sm">Install ID</Text>
           <Code block>{result.id}</Code>
           <Text size="sm">Reporting token</Text>
           <Code block>{result.token}</Code>
+          {result.pullToken && (
+            <>
+              <Text size="sm">Pull token, for the release registry</Text>
+              <Code block>{result.pullToken}</Code>
+              <Text size="sm">All three as the JSON the example bootstrap reads (awzy/install-credentials)</Text>
+              <Code block>
+                {JSON.stringify(
+                  { install_id: result.id, pull_token: result.pullToken, reporting_token: result.token },
+                  null,
+                  2,
+                )}
+              </Code>
+            </>
+          )}
           <Group justify="flex-end">
             <Button onClick={close}>Done</Button>
           </Group>

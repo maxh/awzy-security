@@ -69,6 +69,14 @@ type Install implements Node {
 	"""
 	createdBy: Actor!
 	createdAt: UtcTimestamp!
+	"""
+	When it was retired; null while it's active.
+	"""
+	retiredAt: UtcTimestamp
+	"""
+	The staff member who retired it.
+	"""
+	retiredBy: Actor
 }
 
 type InstallConnection {
@@ -175,6 +183,11 @@ type Mutation {
 	Registers an install so its heartbeats are accepted.
 	"""
 	registerInstall(input: RegisterInstallInput!): RegisterInstallPayload!
+	"""
+	Retires an install: its reporting and pull tokens stop working at once, it leaves the
+	fleet views, and its client and environment can be registered again.
+	"""
+	retireInstall(input: RetireInstallInput!): RetireInstallPayload!
 }
 
 interface Node {
@@ -258,6 +271,11 @@ type RegisterInstallPayload {
 	The install's reporting token. Shown once: put it in the install's values now.
 	"""
 	reportingToken: String!
+	"""
+	Its pull token for the release registry (ADR 0028), shown once like the reporting token.
+	Null when this portal doesn't issue pull tokens.
+	"""
+	pullToken: String
 }
 
 type Release {
@@ -270,6 +288,14 @@ enum ReleaseChannel {
 	STABLE
 	FAST
 	PINNED
+}
+
+input RetireInstallInput {
+	installQid: ID!
+}
+
+type RetireInstallPayload {
+	install: Install!
 }
 
 type Staff {
