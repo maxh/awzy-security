@@ -1,0 +1,87 @@
+# Alerts for whoever runs an install (ADR 0068). They encode the platform plan's targets; the
+# local stack loads them into Prometheus, and the AWS monitoring module ships the same file.
+groups:
+  - name: awzy
+    rules:
+      - alert: AwzyServiceDown
+        expr: up{job=~"awzy-.*"} == 0
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.job }} hasn't answered a scrape for 5 minutes"
+
+      - alert: AwzyServiceNotReady
+        expr: awzy_ready == 0
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.job }} is up but not ready to take traffic"
+          description: "A PDP stays not ready until it has loaded a signed bundle and the enforcement mode."
+
+      - alert: AwzyPdpCheckLatencyHigh
+        expr: |
+          histogram_quantile(0.99, sum by (le) (rate(awzy_pdp_check_duration_seconds_bucket[5m]))) > 0.01
+        for: 10m
+        labels: { severity: page }
+        annotations:
+          summary: "PDP check p99 is {{ $value | humanizeDuration }}, over the 10 ms target"
+
+      - alert: AwzyPdpCheckErrors
+        expr: |
+          sum(rate(awzy_pdp_check_errors_total[5m]))
+            / clamp_min(sum(rate(awzy_pdp_check_errors_total[5m])) + sum(rate(awzy_pdp_decisions_total[5m])), 1e-9)
+            > 0.01
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of PDP checks are failing"
+
+      - alert: AwzyServerErrors
+        expr: |
+          sum by (job) (rate(awzy_http_request_duration_seconds_count{status="5xx"}[5m]))
+            / clamp_min(sum by (job) (rate(awzy_http_request_duration_seconds_count[5m])), 1e-9)
+            > 0.05
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: "{{ $labels.job }} answers {{ $value | humanizePercentage }} of requests with a 5xx"
+
+  # The platform plan's freshness targets, as the PDP sees them.
+  - name: awzy-freshness
+    rules:
+      - alert: AwzyPdpContainmentFeedStale
+        expr: awzy_pdp_containment_feed_age_seconds > 2
+        for: 1m
+        labels: { severity: page }
+        annotations:
+          summary: "A PDP hasn't heard the containment feed for {{ $value | humanizeDuration }} (target: 2 s)"
+          description: "Until it recovers, the PDP asks awzy-challenge on every check, which counts against the 10 ms budget."
+
+      - alert: AwzyPdpPolicySyncStale
+        expr: awzy_pdp_policy_sync_age_seconds > 60
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "A PDP last synced policy {{ $value | humanizeDuration }} ago (target: a published bundle live within 60 s)"
+
+      - alert: AwzyPdpPrincipalsSyncStale
+        expr: awzy_pdp_principals_sync_age_seconds > 60
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "A PDP last synced principals {{ $value | humanizeDuration }} ago (target: attribute changes within 60 s)"
+
+      - alert: AwzyPdpServingStaleResources
+        expr: sum(rate(awzy_pdp_resource_lookups_total{served="stale"}[5m])) > 0
+        for: 5m
+        labels: { severity: ticket }
+        annotations:
+          summary: "PDPs are deciding on cached resources because awzy-context can't be reached"
+
+      - alert: AwzyGatewayCantReachPdp
+        expr: sum(rate(awzy_gateway_pdp_unreachable_total[5m])) > 0
+        for: 1m
+        labels: { severity: page }
+        annotations:
+          summary: "awzy-gateway can't reach awzy-pdp; tool calls are replayed or denied (ADR 0030)"
+

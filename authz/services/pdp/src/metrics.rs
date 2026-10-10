@@ -1,4 +1,5 @@
-//! Prometheus metrics at `/metrics`: decisions by verdict, failed checks, and check latency.
+//! The PDP's own metrics at `/metrics`, next to every service's baseline (ADR 0068): decisions by
+//! verdict, failed checks, and check latency.
 //!
 //! awzy-reporter scrapes them for the install's heartbeat (decisions per second, p99, error rate;
 //! ADR 0026), and a client's own monitoring can scrape them too. Counters are lock-free atomics
@@ -9,7 +10,10 @@ use std::{
     time::Duration,
 };
 
+use std::{fmt::Write, sync::LazyLock};
+
 use awzy_model::Verdict;
+use awzy_server::metrics::{Counter, Histogram, LastSuccess};
 
 /// Upper bounds of the latency buckets, in seconds. The PDP's target is p99 under 10 ms.
 pub const BUCKETS: [f64; 12] = [0.0001, 0.00025, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 1.0];
@@ -65,6 +69,43 @@ impl Metrics {
         out.push_str(&format!("awzy_pdp_check_duration_seconds_count {cumulative}\n"));
         out
     }
+}
+
+impl awzy_server::metrics::Source for Metrics {
+    fn render(&self, out: &mut String) {
+        out.push_str(&Metrics::render(self));
+        render_freshness(out);
+    }
+}
+
+/// Time inside Cedar for one evaluation. A delegated check makes two, and a passed challenge one
+/// more.
+pub static CEDAR_EVALUATION: LazyLock<Histogram> = LazyLock::new(|| Histogram::new(&BUCKETS));
+
+/// Resource lookups (ADR 0044): served fresh from the cache, fetched from awzy-context, or served
+/// stale from the cache because awzy-context couldn't be reached.
+pub static RESOURCE_CACHE_HITS: Counter = Counter::new();
+pub static RESOURCE_FETCHES: Counter = Counter::new();
+pub static RESOURCE_STALE_SERVED: Counter = Counter::new();
+
+/// The freshness targets (platform plan): when the bundle and mode, and the principals snapshot,
+/// were last synced. A sync that finds nothing new still counts: the PDP is as fresh as it can be.
+pub static POLICY_SYNC: LazyLock<LastSuccess> = LazyLock::new(LastSuccess::default);
+pub static PRINCIPALS_SYNC: LazyLock<LastSuccess> = LazyLock::new(LastSuccess::default);
+
+fn render_freshness(out: &mut String) {
+    out.push_str("# HELP awzy_pdp_cedar_evaluation_seconds Time inside Cedar for one evaluation.\n");
+    out.push_str("# TYPE awzy_pdp_cedar_evaluation_seconds histogram\n");
+    CEDAR_EVALUATION.render(out, "awzy_pdp_cedar_evaluation_seconds", "");
+    out.push_str("# HELP awzy_pdp_resource_lookups_total Resource lookups, by how they were served.\n");
+    out.push_str("# TYPE awzy_pdp_resource_lookups_total counter\n");
+    for (served, n) in
+        [("cache", &RESOURCE_CACHE_HITS), ("fetched", &RESOURCE_FETCHES), ("stale", &RESOURCE_STALE_SERVED)]
+    {
+        let _ = writeln!(out, "awzy_pdp_resource_lookups_total{{served=\"{served}\"}} {}", n.get());
+    }
+    POLICY_SYNC.render(out, "awzy_pdp_policy_sync", "syncing the bundle and enforcement mode from awzy-policy");
+    PRINCIPALS_SYNC.render(out, "awzy_pdp_principals_sync", "syncing principals from awzy-context");
 }
 
 #[cfg(test)]

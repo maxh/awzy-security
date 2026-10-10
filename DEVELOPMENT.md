@@ -555,6 +555,21 @@ In a cluster the Helm chart runs the reporter (`reporter.installId`, and the rep
 namespace and scrapes the PDPs' `/metrics`. Its ClickHouse password is the
 `awzy-clickhouse-reporter` Secret that bootstrap makes. `reporter.enabled=false` deploys nothing.
 
+### Metrics and dashboards (ADR 0068)
+
+Every service serves Prometheus metrics at `/metrics` on its own port: requests by route with
+latency, readiness, its release, and its own numbers (the PDP's checks by verdict and latency).
+To watch them in Grafana, start the services on the ports above, then:
+
+```sh
+docker compose -f deploy/local/compose.yaml --profile observability up -d
+open http://localhost:3000   # Grafana, dashboard "awzy: operator"; Prometheus is on :9091
+```
+
+The dashboards and alert rules are in `deploy/observability/`. A new metric goes in the service
+as an `awzy_server::metrics::Source`, named `awzy_<service>_<what>_<unit>`, and never with an
+accessor's, resource's, or policy's ID as a label.
+
 ### Corp portal (demos and testing only)
 
 The corp portal signs staff in with usernames and passwords

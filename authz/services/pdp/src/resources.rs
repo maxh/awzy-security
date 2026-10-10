@@ -137,18 +137,23 @@ impl Resources {
         let stale = {
             let cache = self.cache.read().unwrap_or_else(|e| e.into_inner());
             match cache.get(id) {
-                Some(c) if c.fresh(self.ttl, self.unknown_ttl) => return Ok(c.entities.clone()),
+                Some(c) if c.fresh(self.ttl, self.unknown_ttl) => {
+                    crate::metrics::RESOURCE_CACHE_HITS.inc();
+                    return Ok(c.entities.clone());
+                }
                 Some(c) => Some(c.entities.clone()),
                 None => None,
             }
         };
         match self.fetch(endpoint, id).await {
             Ok(entities) => {
+                crate::metrics::RESOURCE_FETCHES.inc();
                 self.store(id, entities.clone());
                 Ok(entities)
             }
             Err(error) => match stale {
                 Some(entities) => {
+                    crate::metrics::RESOURCE_STALE_SERVED.inc();
                     tracing::warn!(%error, resource = id, "awzy-context unreachable; using the cached resource");
                     Ok(entities)
                 }

@@ -45,6 +45,7 @@ async fn main() -> anyhow::Result<()> {
     if let Ok(endpoint) = std::env::var("AWZY_CHALLENGE_ADDR") {
         let containments = Arc::new(awzy_pdp::containments::Containments::from_challenge(&endpoint)?);
         let resolver = Arc::new(awzy_pdp::challenges::ChallengeResolver::from_challenge(&endpoint)?);
+        awzy_server::metrics::register(containments.clone());
         state = state.with_challenges(containments.clone(), resolver);
         tokio::spawn(containments.follow());
     }
@@ -57,6 +58,8 @@ async fn main() -> anyhow::Result<()> {
         }
         Err(_) => tracing::warn!("AWZY_KAFKA_BROKERS is not set; decisions are not logged"),
     }
+
+    awzy_server::metrics::register(state.metrics.clone());
 
     // Not ready until the first sync loads the bundle and mode; checks are refused until then too.
     let ready = state.clone();

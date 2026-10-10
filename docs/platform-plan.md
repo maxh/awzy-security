@@ -495,7 +495,7 @@ Only portable Kubernetes features are used, so one Helm chart installs on EKS, G
 | Scaling | HPA on CPU and request rate for pdp and gateway, KEDA on Kafka lag for intake and reasoner |
 | Backups | Managed services use the cloud's own backups, set by Terraform. `clickhouse-backup` to object storage, with a restore drill in CI. Velero for cluster resources |
 | Packaging | One Helm umbrella chart with a subchart per service; values profiles `small`, `standard`, `large` and an overlay per cloud |
-| Observability | OpenTelemetry SDK in every service, collector to the client's chosen backend |
+| Observability | Prometheus metrics at `/metrics` on every service, scraped by the client's chosen backend; dashboards and alert rules in `deploy/observability/` ([ADR 0068](adr/0068-operator-metrics-are-prometheus-on-every-port.md)). Traces over OpenTelemetry (OTLP), not built yet |
 
 ## Bazel monorepo
 

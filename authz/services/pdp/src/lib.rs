@@ -275,7 +275,9 @@ impl Pdp {
         }
         let context = Context::from_json_value(serde_json::Value::Object(context), Some((&self.schema, &action)))?;
         let request = Request::new(uid(principal)?, action, uid(&req.resource)?, context, Some(&self.schema))?;
+        let evaluating = std::time::Instant::now();
         let response = self.authorizer.is_authorized(&request, policy_set, entities);
+        metrics::CEDAR_EVALUATION.observe(evaluating.elapsed());
 
         let determining: Vec<_> = response.diagnostics().reason().filter_map(|id| policy_set.policy(id)).collect();
         // Cedar reports them in no particular order; sort so explanations are stable.
@@ -316,7 +318,11 @@ impl Pdp {
     ) -> anyhow::Result<bool> {
         let rest =
             PolicySet::from_policies(policy_set.policies().filter(|p| p.annotation("challenge").is_none()).cloned())?;
-        Ok(self.authorizer.is_authorized(request, &rest, entities).decision() == cedar_policy::Decision::Allow)
+        let evaluating = std::time::Instant::now();
+        let allowed =
+            self.authorizer.is_authorized(request, &rest, entities).decision() == cedar_policy::Decision::Allow;
+        metrics::CEDAR_EVALUATION.observe(evaluating.elapsed());
+        Ok(allowed)
     }
 }
 
@@ -522,25 +528,16 @@ pub struct EvaluationRequest {
 /// so gRPC clients connect to the same address.
 ///
 /// Deciding needs a service token from any workload in the cluster (ADR 0055): enforcement points
-/// run anywhere, and the policies decide what they may do. `/metrics` stays open for the reporter.
+/// run anywhere, and the policies decide what they may do. `/metrics` comes from awzy-server, open
+/// for the reporter (ADR 0068).
 pub fn router(state: AppState) -> Router {
-    let metrics = state.metrics.clone();
     let guard =
         awzy_service_auth::Guard::new(state.service_auth.clone(), awzy_service_auth::Allowed::AnyServiceAccount);
-    let decide = Router::new()
+    Router::new()
         .route("/v1/access/evaluation", post(evaluate))
         .with_state(state.clone())
         .merge(grpc::router(state.clone()))
-        .route_layer(axum::middleware::from_fn_with_state(guard, awzy_service_auth::require));
-    Router::new()
-        .route(
-            "/metrics",
-            axum::routing::get(move || {
-                let metrics = metrics.clone();
-                async move { ([(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4")], metrics.render()) }
-            }),
-        )
-        .merge(decide)
+        .route_layer(axum::middleware::from_fn_with_state(guard, awzy_service_auth::require))
 }
 
 async fn evaluate(

@@ -154,8 +154,12 @@ pub async fn sync_principals(principals: Arc<Principals>, endpoint: String, ever
     let client: Client<HttpConnector, Empty<Bytes>> = Client::builder(TokioExecutor::new()).build_http();
     let tokens = TokenSource::from_env();
     loop {
-        if let Err(error) = sync_once(&principals, &endpoint, &client, &tokens).await {
-            tracing::warn!(%error, %endpoint, "principals sync failed; keeping the current snapshot");
+        match sync_once(&principals, &endpoint, &client, &tokens).await {
+            Ok(_) => crate::metrics::PRINCIPALS_SYNC.succeeded(),
+            Err(error) => {
+                crate::metrics::PRINCIPALS_SYNC.failed();
+                tracing::warn!(%error, %endpoint, "principals sync failed; keeping the current snapshot");
+            }
         }
         tokio::time::sleep(every).await;
     }

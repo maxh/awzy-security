@@ -39,5 +39,6 @@ async fn main() -> anyhow::Result<()> {
             awzy_gateway::GatewayState::new(config, pdp)?
         }
     };
+    awzy_server::metrics::register(std::sync::Arc::new(awzy_gateway::metrics::GatewayMetrics));
     awzy_server::serve("awzy-gateway", awzy_gateway::router(state)).await
 }

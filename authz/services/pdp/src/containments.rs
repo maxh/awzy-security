@@ -134,6 +134,26 @@ impl Containments {
     }
 }
 
+/// The containment feed's freshness (target: applied within 2 s), and how many accessors are
+/// contained. Without awzy-challenge there's no feed to report.
+impl awzy_server::metrics::Source for Containments {
+    fn render(&self, out: &mut String) {
+        if self.client.is_none() {
+            return;
+        }
+        let heard = Duration::from_millis(self.heard_at_ms.load(Ordering::Acquire));
+        let age = self.started.elapsed().saturating_sub(heard);
+        out.push_str(
+            "# HELP awzy_pdp_containment_feed_age_seconds Seconds since the containment feed was last heard from.\n",
+        );
+        out.push_str("# TYPE awzy_pdp_containment_feed_age_seconds gauge\n");
+        out.push_str(&format!("awzy_pdp_containment_feed_age_seconds {:.3}\n", age.as_secs_f64()));
+        out.push_str("# HELP awzy_pdp_containments_active Accessors contained right now.\n");
+        out.push_str("# TYPE awzy_pdp_containments_active gauge\n");
+        out.push_str(&format!("awzy_pdp_containments_active {}\n", self.active.load().len()));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
