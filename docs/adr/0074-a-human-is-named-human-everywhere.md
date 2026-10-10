@@ -1,4 +1,4 @@
-# 0073. A human is `human` in every name, and several are `humans`
+# 0074. A human is `human` in every name, and several are `humans`
 
 - Status: Accepted
 - Date: 2026-10-10

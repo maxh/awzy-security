@@ -122,7 +122,7 @@ struct HumansParams {
 async fn directory_humans(State(store): State<ContextStore>, Query(p): Query<HumansParams>) -> Response {
     let search = p.search.as_deref().map(str::trim).filter(|s| !s.is_empty());
     match store.directory_humans(search, p.limit.unwrap_or(200).clamp(1, 1000)).await {
-        // `people` is the name before ADR 0073, for a client portal that predates it.
+        // `people` is the name before ADR 0074, for a client portal that predates it.
         Ok(humans) => Json(json!({ "humans": humans, "people": humans })).into_response(),
         Err(e) => internal(e),
     }
@@ -208,7 +208,7 @@ pub fn router(store: ContextStore, scim_token: &str, access: &Access) -> Router 
     let directory = Router::new()
         .route("/v1/directory/summary", get(directory_summary))
         .route("/v1/directory/humans", get(directory_humans))
-        // The route before ADR 0073, for a client portal that predates it. Removed in a later release.
+        // The route before ADR 0074, for a client portal that predates it. Removed in a later release.
         .route("/v1/directory/people", get(directory_humans))
         .route("/v1/directory/groups", get(directory_groups))
         .route("/v1/service-accounts", get(list_service_accounts))

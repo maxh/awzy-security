@@ -100,7 +100,7 @@ struct WireGroup {
 
 #[derive(Deserialize)]
 struct WireSummary {
-    // awzy-context before ADR 0073 says `people` and `active_people`.
+    // awzy-context before ADR 0074 says `people` and `active_people`.
     #[serde(alias = "people")]
     humans: i64,
     #[serde(alias = "active_people")]
@@ -218,7 +218,7 @@ impl DirectoryQuery {
         #[graphql(default = 200)] first: i32,
     ) -> Result<Vec<Human>> {
         require(ctx, PortalAction::View, PortalArea::Directory).await?;
-        // The route every awzy-context serves during the rename (ADR 0073); `/v1/directory/humans`
+        // The route every awzy-context serves during the rename (ADR 0074); `/v1/directory/humans`
         // once no older one runs.
         let mut path = format!("/v1/directory/people?limit={}", first.clamp(1, 1000));
         if let Some(s) = search.filter(|s| !s.trim().is_empty()) {
@@ -420,7 +420,7 @@ mod tests {
         let bob = testing::person("bob", "engineering");
 
         let d = testing::run(&schema, &alice, "{ directorySummary { humans activeHumans lastProvisionedAt } humans(search: \"ali\") { userName groups active } }").await;
-        // The fake answers with the names before ADR 0073, as an older awzy-context does.
+        // The fake answers with the names before ADR 0074, as an older awzy-context does.
         assert_eq!(d["directorySummary"]["activeHumans"], 1);
         assert_eq!(d["humans"][0], json!({ "userName": "alice", "groups": ["security"], "active": true }));
 

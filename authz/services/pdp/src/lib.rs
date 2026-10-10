@@ -64,7 +64,7 @@ static OPTIONAL_RESOURCE_ATTRS: std::sync::LazyLock<Vec<(&'static str, serde_jso
             ("shared_groups", serde_json::json!([group.clone()])),
             ("writer_humans", serde_json::json!([human.clone()])),
             ("writer_groups", serde_json::json!([group])),
-            // The names before ADR 0073. awzy-context sends both for a release, and a bundle's
+            // The names before ADR 0074. awzy-context sends both for a release, and a bundle's
             // schema declares one pair, so the other is dropped here.
             ("shared_people", serde_json::json!([human.clone()])),
             ("writer_people", serde_json::json!([human])),
@@ -626,7 +626,7 @@ mod tests {
             when { resource has shared_people && resource.shared_people.contains(principal) };
         "#;
         let human = |id: &str| json!({ "__entity": { "type": "Human", "id": id } });
-        // What awzy-context sends while both names are in use (ADR 0073).
+        // What awzy-context sends while both names are in use (ADR 0074).
         let shared = |pdp: &Pdp| {
             pdp.entities(json!([
                 { "uid": { "type": "Human", "id": "sam" }, "attrs": {}, "parents": [] },

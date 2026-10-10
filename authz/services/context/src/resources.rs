@@ -40,7 +40,7 @@ const MAX_TEXT: usize = 20_000;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Share {
-    /// human | group | domain | anyone. `person`, the name before ADR 0073, still reads as `human`.
+    /// human | group | domain | anyone. `person`, the name before ADR 0074, still reads as `human`.
     pub kind: String,
     /// A userName, a group name, or a domain; empty for `anyone`.
     #[serde(default)]
@@ -593,7 +593,7 @@ fn entity_sharing<'a>(r: &Resource, sharing: impl Iterator<Item = &'a Share>) ->
         "writer_humans": refs(entity_type::HUMAN, writer_humans.clone()),
         "writer_groups": refs(entity_type::GROUP, writer_groups),
         "shared_with_everyone": everyone,
-        // The names before ADR 0073, for bundles published under them. The PDP drops whichever
+        // The names before ADR 0074, for bundles published under them. The PDP drops whichever
         // pair its schema doesn't declare. Removed in a later release.
         "shared_people": refs(entity_type::HUMAN, humans),
         "writer_people": refs(entity_type::HUMAN, writer_humans),
@@ -896,7 +896,7 @@ mod tests {
         };
         let a = &chain[0]["attrs"];
         assert_eq!(names(&a["shared_humans"]), ["sam"]);
-        assert_eq!(names(&a["shared_people"]), ["sam"], "also under the name before ADR 0073, for a release");
+        assert_eq!(names(&a["shared_people"]), ["sam"], "also under the name before ADR 0074, for a release");
         assert_eq!(names(&a["shared_groups"]), ["engineering"], "inherited from its folder");
         assert_eq!(names(&a["writer_groups"]), ["engineering"], "a writer on the folder writes the document");
         assert_eq!(

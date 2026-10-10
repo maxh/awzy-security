@@ -71,7 +71,7 @@ bazel build --config=lint //...                    # clippy
   GraphQL objects keep `id`, which Relay requires (ADR 0058).
 - **Humans** are `human` in every name, and several are `humans`: code, wire fields, schema
   attributes, policy IDs, routes, GraphQL (`shared_humans`, `human_id`, `answering_human`). Never
-  `person` or `people` in a name; prose can say "the person" (ADR 0073).
+  `person` or `people` in a name; prose can say "the person" (ADR 0074).
 - **Who did something** is an `Actor` (an entity and the person it acted for), never a string:
   `awzy_model::Actor`, `awzy.authz.v1.Actor` in protobuf, the `Actor` type in GraphQL (ADR 0060).
 - **Names** are specific and easy to grep (`ClientPortalSchema`, `CorpPortalQuery`, not `Query`).
