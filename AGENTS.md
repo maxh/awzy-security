@@ -11,9 +11,10 @@ Skills for common tasks (linting, the local stack, a new service, an ADR) are in
 awzy implements Google's "Beyond Zero" authorization: per-action, per-resource decisions for
 humans and AI agents, installed single-tenant in each client's cloud. The plans are
 [docs/platform-plan.md](docs/platform-plan.md) and [docs/deployment-plan.md](docs/deployment-plan.md).
-Decisions are recorded in [docs/adr/](docs/adr/README.md). Read the relevant ADR before
-changing something it covers, and don't re-propose a decision an ADR settled (for example,
-keeping Kafka) without new information.
+The vocabulary (entities, QIDs, actors, timestamps) is on the docs site's
+[domain model](docs/site/src/content/docs/reference/domain-model.md) page. Decisions are recorded in
+[docs/adr/](docs/adr/README.md). Read the relevant ADR before changing something it covers, and
+don't re-propose a decision an ADR settled (for example, keeping Kafka) without new information.
 
 ## Layout and boundaries
 
