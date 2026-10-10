@@ -493,6 +493,21 @@ bazel run //authz/demo/synthetic:awzy-synthetic -- directory --print   # just pr
 tests. Demo installs
 run it as a Job after each sync (`demoData.enabled` in the chart, `demo_data` in bootstrap).
 
+### Google Drive (ADR 0069)
+
+awzy-connectors syncs a real Workspace's shared drives into awzy-context. It needs a Google
+service account key with domain-wide delegation (see
+[the connector's README](authz/services/connectors/README.md)), and awzy-context running:
+
+```sh
+AWZY_LISTEN_ADDR=127.0.0.1:8088 AWZY_CONTEXT_URL=http://127.0.0.1:8084 \
+  AWZY_CONNECTORS_DRIVE_KEY_FILE=$PWD/drive-key.json AWZY_CONNECTORS_DRIVE_SUBJECT=awzy-reader@example.com \
+  bazel run //authz/services/connectors:awzy-connectors
+curl -s 'http://127.0.0.1:8084/v1/resources?source=google_drive&limit=5'
+```
+
+Keep the key file out of the repository.
+
 ### Events (awzy-intake)
 
 `awzy-intake` takes app and audit-log events, normalizes them, and puts them on Kafka, from

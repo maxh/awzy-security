@@ -8,7 +8,17 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 axum.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+http-body-util.workspace = true
+hyper-rustls.workspace = true
+hyper-util.workspace = true
+jsonwebtoken.workspace = true
+rustls.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 awzy-server.workspace = true
+awzy-service-auth.workspace = true
 awzy-telemetry.workspace = true

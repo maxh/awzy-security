@@ -1,6 +1,12 @@
 //! awzy-connectors: syncs systems of record (IdP, HR, work tracking, data catalogs) into awzy-context.
 //!
-//! Each source implements [`Connector`]. Runs as Kubernetes CronJobs plus webhook receivers.
+//! Each source implements [`Connector`]. Google Drive is the first (ADR 0069): shared drives'
+//! files, folders, and sharing, read-only.
+
+pub mod context;
+pub mod drive;
+pub mod google;
+pub mod http;
 
 use axum::Router;
 

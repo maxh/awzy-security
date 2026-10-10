@@ -99,6 +99,10 @@ impl Counter {
         self.0.fetch_add(1, Relaxed);
     }
 
+    pub fn inc_by(&self, n: u64) {
+        self.0.fetch_add(n, Relaxed);
+    }
+
     pub fn get(&self) -> u64 {
         self.0.load(Relaxed)
     }

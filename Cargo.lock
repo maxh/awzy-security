@@ -766,8 +766,18 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "awzy-server",
+ "awzy-service-auth",
  "awzy-telemetry",
  "axum",
+ "bytes",
+ "chrono",
+ "http-body-util",
+ "hyper-rustls",
+ "hyper-util",
+ "jsonwebtoken",
+ "rustls",
+ "serde",
+ "serde_json",
  "tokio",
  "tracing",
 ]
