@@ -7,7 +7,7 @@ use awzy_authz_proto::{
     policy::v1::{EnforcementSetting, GetEnforcementRequest, ListEnforcementChangesRequest, SetEnforcementRequest},
 };
 use awzy_model::EnforcementMode;
-use awzy_portal::UtcTimestamp;
+use awzy_portal::{Actor, UtcTimestamp};
 use chrono::DateTime;
 
 use crate::{
@@ -65,9 +65,17 @@ pub async fn history(mut policy: PolicyClient, limit: i32) -> anyhow::Result<Vec
     Ok(policy.list_enforcement_changes(req).await?.into_inner().changes)
 }
 
-pub async fn set(mut policy: PolicyClient, mode: EnforcementMode, actor: &str) -> anyhow::Result<EnforcementSetting> {
-    let req =
-        SetEnforcementRequest { scope: String::new(), mode: WireMode::from(mode).into(), changed_by: actor.into() };
+pub async fn set(
+    mut policy: PolicyClient,
+    mode: EnforcementMode,
+    actor: &awzy_model::Actor,
+) -> anyhow::Result<EnforcementSetting> {
+    let req = SetEnforcementRequest {
+        scope: String::new(),
+        mode: WireMode::from(mode).into(),
+        changed_by_actor: Some(actor.clone().into()),
+        ..Default::default()
+    };
     policy
         .set_enforcement(req)
         .await?
@@ -88,8 +96,8 @@ impl Setting {
     }
 
     /// Null when the install has never been switched (new installs start in MONITOR).
-    async fn changed_by(&self) -> Option<&str> {
-        Some(self.0.changed_by.as_str()).filter(|s| !s.is_empty())
+    async fn changed_by(&self) -> Option<Actor> {
+        Actor::from_text(&self.0.changed_by)
     }
 
     async fn changed_at(&self) -> Option<UtcTimestamp> {

@@ -9,7 +9,7 @@ use awzy_authz_proto::{
     prost_types::Timestamp,
 };
 use awzy_model::PolicyBundleId;
-use awzy_portal::UtcTimestamp;
+use awzy_portal::{Actor, UtcTimestamp};
 use chrono::DateTime;
 use tonic::Code;
 
@@ -61,16 +61,16 @@ impl PolicyBundle {
         &self.0.policies
     }
 
-    async fn created_by(&self) -> &str {
-        &self.0.created_by
+    async fn created_by(&self) -> Option<Actor> {
+        Actor::from_text(&self.0.created_by)
     }
 
     async fn created_at(&self) -> Option<UtcTimestamp> {
         self.0.created_at.as_ref().and_then(to_datetime)
     }
 
-    async fn published_by(&self) -> Option<&str> {
-        Some(self.0.published_by.as_str()).filter(|s| !s.is_empty())
+    async fn published_by(&self) -> Option<Actor> {
+        Actor::from_text(&self.0.published_by)
     }
 
     async fn published_at(&self) -> Option<UtcTimestamp> {
@@ -118,9 +118,10 @@ pub async fn create_draft(
     mut policy: PolicyClient,
     schema: String,
     policies: String,
-    actor: &str,
+    actor: &awzy_model::Actor,
 ) -> anyhow::Result<DraftOutcome> {
-    let req = CreateDraftRequest { schema, policies, created_by: actor.into() };
+    let req =
+        CreateDraftRequest { schema, policies, created_by_actor: Some(actor.clone().into()), ..Default::default() };
     match policy.create_draft(req).await {
         Ok(res) => {
             let bundle = res.into_inner().bundle.ok_or_else(|| anyhow::anyhow!("awzy-policy returned no bundle"))?;
@@ -131,8 +132,16 @@ pub async fn create_draft(
     }
 }
 
-pub async fn publish(mut policy: PolicyClient, id: PolicyBundleId, actor: &str) -> anyhow::Result<WireBundle> {
-    let req = PublishRequest { policy_bundle_qid: id.to_string(), published_by: actor.into() };
+pub async fn publish(
+    mut policy: PolicyClient,
+    id: PolicyBundleId,
+    actor: &awzy_model::Actor,
+) -> anyhow::Result<WireBundle> {
+    let req = PublishRequest {
+        policy_bundle_qid: id.to_string(),
+        published_by_actor: Some(actor.clone().into()),
+        ..Default::default()
+    };
     policy.publish(req).await?.into_inner().bundle.ok_or_else(|| anyhow::anyhow!("awzy-policy returned no bundle"))
 }
 
@@ -254,7 +263,9 @@ pub(crate) mod tests {
                 schema: req.schema,
                 policies: req.policies,
                 status: BundleStatus::Draft.into(),
-                created_by: req.created_by,
+                created_by: awzy_authz_proto::actor_from_wire(req.created_by_actor.clone(), &req.created_by)
+                    .map(|a| a.to_string())
+                    .unwrap_or_default(),
                 ..Default::default()
             };
             all.push(bundle.clone());
@@ -271,7 +282,9 @@ pub(crate) mod tests {
                 .find(|b| b.qid == req.policy_bundle_qid)
                 .ok_or_else(|| Status::not_found("no such bundle"))?;
             b.status = BundleStatus::Active.into();
-            b.published_by = req.published_by;
+            b.published_by = awzy_authz_proto::actor_from_wire(req.published_by_actor.clone(), &req.published_by)
+                .map(|a| a.to_string())
+                .unwrap_or_default();
             Ok(Response::new(PublishResponse { bundle: Some(b.clone()) }))
         }
         async fn get_active(&self, _: Request<GetActiveRequest>) -> Result<Response<GetActiveResponse>, Status> {
@@ -312,8 +325,11 @@ pub(crate) mod tests {
             let setting = EnforcementSetting {
                 scope: "install".into(),
                 mode: req.mode,
-                changed_by: req.changed_by,
+                changed_by: awzy_authz_proto::actor_from_wire(req.changed_by_actor.clone(), &req.changed_by)
+                    .map(|a| a.to_string())
+                    .unwrap_or_default(),
                 changed_at: None,
+                ..Default::default()
             };
             self.1.lock().unwrap().insert(0, setting.clone());
             Ok(Response::new(SetEnforcementResponse { setting: Some(setting) }))
@@ -379,7 +395,7 @@ pub(crate) mod tests {
         assert_eq!(draft["createPolicyDraft"]["bundle"]["status"], "DRAFT");
 
         let published = run(format!(
-            "mutation {{ publishPolicyBundle(input: {{ policyBundleQid: \"{id}\" }}) {{ bundle {{ status publishedBy }} }} }}"
+            "mutation {{ publishPolicyBundle(input: {{ policyBundleQid: \"{id}\" }}) {{ bundle {{ status publishedBy {{ id }} }} }} }}"
         ))
         .await;
         assert_eq!(published["publishPolicyBundle"]["bundle"]["status"], "ACTIVE");
@@ -391,17 +407,21 @@ pub(crate) mod tests {
         let refetched = run(format!("{{ node(id: \"{id}\") {{ ... on PolicyBundle {{ version }} }} }}")).await;
         assert_eq!(refetched["node"]["version"], 1, "the rejected draft was never stored");
 
-        let mode = run("{ enforcement { mode changedBy } }".into()).await;
+        let mode = run("{ enforcement { mode changedBy { id } } }".into()).await;
         assert_eq!(mode["enforcement"]["mode"], "MONITOR", "a new install starts in monitor");
         assert!(mode["enforcement"]["changedBy"].is_null());
         let switched =
-            run("mutation { setEnforcementMode(input: { mode: ENFORCE }) { enforcement { mode changedBy } } }".into())
-                .await;
+            run("mutation { setEnforcementMode(input: { mode: ENFORCE }) { enforcement { mode changedBy { id } } } }"
+                .into())
+            .await;
         assert_eq!(switched["setEnforcementMode"]["enforcement"]["mode"], "ENFORCE");
-        let history = run("{ enforcement { mode } enforcementHistory { mode changedBy } }".into()).await;
+        let history = run("{ enforcement { mode } enforcementHistory { mode changedBy { type id } } }".into()).await;
         assert_eq!(history["enforcement"]["mode"], "ENFORCE");
-        assert_eq!(history["enforcementHistory"][0]["changedBy"], "alice");
-        assert_eq!(published["publishPolicyBundle"]["bundle"]["publishedBy"], "alice");
+        assert_eq!(
+            history["enforcementHistory"][0]["changedBy"],
+            serde_json::json!({ "type": "Human", "id": "alice" })
+        );
+        assert_eq!(published["publishPolicyBundle"]["bundle"]["publishedBy"]["id"], "alice");
     }
 
     /// Only the security group runs the portal (base.cedar), even in monitor mode.

@@ -229,7 +229,11 @@ impl SecurityKeyMutation {
     /// administer challenges.
     async fn reset_security_key(&self, ctx: &Context<'_>, input: ResetSecurityKeyInput) -> Result<SecurityKeyPayload> {
         let viewer = require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
-        let req = ResetSecurityKeyRequest { security_key_qid: input.security_key_qid.0, removed_by: viewer.actor() };
+        let req = ResetSecurityKeyRequest {
+            security_key_qid: input.security_key_qid.0,
+            removed_by_actor: Some(viewer.actor().into()),
+            ..Default::default()
+        };
         key(client(ctx)?.reset_security_key(req).await.map_err(grpc)?.into_inner().key)
     }
 

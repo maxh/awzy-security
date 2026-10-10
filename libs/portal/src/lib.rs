@@ -3,8 +3,10 @@
 
 use std::path::{Path, PathBuf};
 
+mod actor;
 mod scalars;
 
+pub use actor::Actor;
 pub use scalars::UtcTimestamp;
 
 use async_graphql::{http::GraphiQLSource, ObjectType, Schema, SubscriptionType};

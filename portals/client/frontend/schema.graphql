@@ -1,3 +1,22 @@
+type Actor {
+	"""
+	`Human`, `ServiceAccount`, `AwzyService`, `BreakGlassKey`, or `AwzyStaff`.
+	"""
+	type: String!
+	"""
+	A person's IdP ID, a service account ID, an awzy service name, a key fingerprint, or a staff user name.
+	"""
+	id: String!
+	"""
+	The person it acted for, when it acted for one.
+	"""
+	onBehalfOf: Actor
+	"""
+	For people to read: `alice`, or `sales-genie for alice`.
+	"""
+	label: String!
+}
+
 input AskAwzyBotInput {
 	"""
 	What the person asks.
@@ -96,7 +115,7 @@ type Challenge implements Node {
 	"""
 	Who approved or rejected it.
 	"""
-	decidedBy: String
+	decidedBy: Actor
 	decisionNote: String
 	createdAt: UtcTimestamp
 	"""
@@ -164,13 +183,13 @@ type Containment {
 	id: ID!
 	subject: EntityRef
 	reason: String!
-	createdBy: String!
+	createdBy: Actor
 	createdAt: UtcTimestamp
 	"""
 	Null while it's in force.
 	"""
 	liftedAt: UtcTimestamp
-	liftedBy: String
+	liftedBy: Actor
 	liftReason: String
 }
 
@@ -330,7 +349,7 @@ type EnforcementSetting {
 	"""
 	Null when the install has never been switched (new installs start in MONITOR).
 	"""
-	changedBy: String
+	changedBy: Actor
 	changedAt: UtcTimestamp
 }
 
@@ -540,9 +559,9 @@ type PolicyBundle implements Node {
 	Cedar policies.
 	"""
 	policies: String!
-	createdBy: String!
+	createdBy: Actor
 	createdAt: UtcTimestamp
-	publishedBy: String
+	publishedBy: Actor
 	publishedAt: UtcTimestamp
 }
 
@@ -835,9 +854,9 @@ type ServiceAccount {
 	ai: Boolean!
 	groups: [String!]!
 	description: String!
-	createdBy: String!
+	createdBy: Actor
 	createdAt: UtcTimestamp!
-	updatedBy: String!
+	updatedBy: Actor
 	updatedAt: UtcTimestamp!
 }
 

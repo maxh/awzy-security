@@ -18,7 +18,7 @@ use awzy_authz_proto::{
     prost_types::Timestamp,
 };
 use awzy_model::{entity_type, ChallengeId};
-use awzy_portal::UtcTimestamp;
+use awzy_portal::{Actor, UtcTimestamp};
 use chrono::DateTime;
 
 use crate::{
@@ -44,7 +44,9 @@ pub(crate) fn grpc(s: tonic::Status) -> async_graphql::Error {
 /// The signed-in person, or an error for a service account.
 pub(crate) fn answering_person(viewer: &Viewer) -> Result<String> {
     if viewer.subject.kind != entity_type::HUMAN || viewer.on_behalf_of.is_some() {
-        return Err(format!("{} can't answer challenges; only the person can, in the portal", viewer.actor()).into());
+        return Err(
+            format!("{} can't answer challenges; only the person can, in the portal", viewer.actor().label()).into()
+        );
     }
     Ok(viewer.subject.id.clone())
 }
@@ -168,8 +170,8 @@ impl Challenge {
     }
 
     /// Who approved or rejected it.
-    async fn decided_by(&self) -> Option<&str> {
-        Some(self.0.decided_by.as_str()).filter(|s| !s.is_empty())
+    async fn decided_by(&self) -> Option<Actor> {
+        Actor::from_text(&self.0.decided_by)
     }
 
     async fn decision_note(&self) -> Option<&str> {
@@ -213,8 +215,8 @@ impl Containment {
         &self.0.reason
     }
 
-    async fn created_by(&self) -> &str {
-        &self.0.created_by
+    async fn created_by(&self) -> Option<Actor> {
+        Actor::from_text(&self.0.created_by)
     }
 
     async fn created_at(&self) -> Option<UtcTimestamp> {
@@ -226,8 +228,8 @@ impl Containment {
         time(&self.0.lifted_at)
     }
 
-    async fn lifted_by(&self) -> Option<&str> {
-        Some(self.0.lifted_by.as_str()).filter(|s| !s.is_empty())
+    async fn lifted_by(&self) -> Option<Actor> {
+        Actor::from_text(&self.0.lifted_by)
     }
 
     async fn lift_reason(&self) -> Option<&str> {
@@ -363,8 +365,9 @@ impl ChallengeMutation {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req = JustifyRequest {
             challenge_qid: input.challenge_qid.0,
-            answered_by: answering_person(&viewer)?,
+            answered_by_actor: Some(awzy_model::Actor::human(answering_person(&viewer)?).into()),
             justification: input.justification,
+            ..Default::default()
         };
         let c = client(ctx)?.justify(req).await.map_err(grpc)?.into_inner().challenge;
         Ok(ChallengePayload { challenge: Challenge(c.ok_or("awzy-challenge returned no challenge")?) })
@@ -376,10 +379,11 @@ impl ChallengeMutation {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req = DecideRequest {
             challenge_qid: input.challenge_qid.0,
-            decided_by: answering_person(&viewer)?,
+            decided_by_actor: Some(awzy_model::Actor::human(answering_person(&viewer)?).into()),
             approve: input.approve,
             note: input.note.unwrap_or_default(),
             approver_entities: viewer.entities.iter().map(awzy_authz_proto::entity_from_json).collect(),
+            ..Default::default()
         };
         let c = client(ctx)?.decide(req).await.map_err(grpc)?.into_inner().challenge;
         Ok(ChallengePayload { challenge: Challenge(c.ok_or("awzy-challenge returned no challenge")?) })
@@ -391,7 +395,8 @@ impl ChallengeMutation {
         let req = ContainRequest {
             subject: Some(awzy_authz_proto::authz::v1::EntityRef { r#type: input.subject.kind, id: input.subject.id }),
             reason: input.reason,
-            created_by: viewer.actor(),
+            created_by_actor: Some(viewer.actor().into()),
+            ..Default::default()
         };
         let c = client(ctx)?.contain(req).await.map_err(grpc)?.into_inner().containment;
         Ok(ContainmentPayload { containment: Containment(c.ok_or("awzy-challenge returned no containment")?) })
@@ -399,8 +404,12 @@ impl ChallengeMutation {
 
     async fn lift_containment(&self, ctx: &Context<'_>, input: LiftContainmentInput) -> Result<ContainmentPayload> {
         let viewer = require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
-        let req =
-            LiftRequest { containment_qid: input.containment_qid.0, lifted_by: viewer.actor(), reason: input.reason };
+        let req = LiftRequest {
+            containment_qid: input.containment_qid.0,
+            lifted_by_actor: Some(viewer.actor().into()),
+            reason: input.reason,
+            ..Default::default()
+        };
         let c = client(ctx)?.lift(req).await.map_err(grpc)?.into_inner().containment;
         Ok(ContainmentPayload { containment: Containment(c.ok_or("awzy-challenge returned no containment")?) })
     }
@@ -512,18 +521,21 @@ mod tests {
         assert_eq!(pending["challenges"], json!([{ "id": id, "subject": { "id": "bob" } }]));
 
         let decide = format!(
-            r#"mutation {{ decideChallenge(input: {{ challengeQid: "{id}", approve: true, note: "ok" }}) {{ challenge {{ status decidedBy }} }} }}"#
+            r#"mutation {{ decideChallenge(input: {{ challengeQid: "{id}", approve: true, note: "ok" }}) {{ challenge {{ status decidedBy {{ id }} }} }} }}"#
         );
         assert!(run_err(&schema, &bob, decide.as_str()).await.contains("doesn't let bob approve"));
         assert!(run_err(&schema, &carol, decide.as_str()).await.contains("doesn't let carol approve"));
         let approved = run(&schema, &alice, decide.as_str()).await;
-        assert_eq!(approved["decideChallenge"]["challenge"], json!({ "status": "PASSED", "decidedBy": "alice" }));
+        assert_eq!(
+            approved["decideChallenge"]["challenge"],
+            json!({ "status": "PASSED", "decidedBy": { "id": "alice" } })
+        );
 
         let contain = r#"mutation { containAccessor(input: { subject: { type: "ServiceAccount", id: "sales-genie" },
-            reason: "bulk export of the pipeline" }) { containment { id createdBy liftedAt } } }"#;
+            reason: "bulk export of the pipeline" }) { containment { id createdBy { type id } liftedAt } } }"#;
         assert!(run_err(&schema, &bob, contain).await.contains("may not administer challenges"));
         let c = run(&schema, &alice, contain).await["containAccessor"]["containment"].clone();
-        assert_eq!((&c["createdBy"], &c["liftedAt"]), (&json!("alice"), &json!(null)));
+        assert_eq!((&c["createdBy"], &c["liftedAt"]), (&json!({ "type": "Human", "id": "alice" }), &json!(null)));
         let active = run(&schema, &alice, "{ containments { id subject { type id } } }").await;
         assert_eq!(
             active["containments"],
@@ -531,10 +543,13 @@ mod tests {
         );
 
         let lift = format!(
-            r#"mutation {{ liftContainment(input: {{ containmentQid: {}, reason: "reviewed" }}) {{ containment {{ liftedBy }} }} }}"#,
+            r#"mutation {{ liftContainment(input: {{ containmentQid: {}, reason: "reviewed" }}) {{ containment {{ liftedBy {{ id }} }} }} }}"#,
             c["id"]
         );
-        assert_eq!(run(&schema, &alice, lift).await["liftContainment"]["containment"]["liftedBy"], json!("alice"));
+        assert_eq!(
+            run(&schema, &alice, lift).await["liftContainment"]["containment"]["liftedBy"]["id"],
+            json!("alice")
+        );
         assert_eq!(run(&schema, &alice, "{ containments { id } }").await["containments"], json!([]));
     }
 

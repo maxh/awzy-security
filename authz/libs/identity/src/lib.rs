@@ -152,12 +152,10 @@ impl Accessor {
         }
     }
 
-    /// Who to attribute an action to: `alice`, or `sales-genie for alice`.
-    pub fn actor(&self) -> String {
-        match &self.on_behalf_of {
-            Some(person) => format!("{} for {}", self.subject.id, person.id),
-            None => self.subject.id.clone(),
-        }
+    /// Who to attribute an action to (ADR 0060): `Human::alice`, or
+    /// `ServiceAccount::sales-genie for Human::alice`.
+    pub fn actor(&self) -> awzy_model::Actor {
+        awzy_model::Actor::new(self.subject.clone(), self.on_behalf_of.clone())
     }
 }
 
@@ -350,7 +348,7 @@ mod tests {
         let a = verifier.accessor(Some(&bearer(alice)), &registry).await.unwrap();
         assert_eq!(
             (a.subject.kind.as_str(), a.subject.id.as_str(), a.actor()),
-            ("Human", "alice", "alice".to_string())
+            ("Human", "alice", awzy_model::Actor::human("alice"))
         );
         assert_eq!(a.name.as_deref(), Some("Alice"));
         assert_eq!(a.entities[0]["parents"][0]["id"], "security");
@@ -358,7 +356,7 @@ mod tests {
         let delegated = token(&key, "k1", claims("alice", json!({ "act": { "sub": "sales-genie" } })));
         let d = verifier.accessor(Some(&bearer(delegated)), &registry).await.unwrap();
         assert_eq!(d.subject, EntityRef::new("ServiceAccount", "sales-genie"));
-        assert_eq!(d.actor(), "sales-genie for alice");
+        assert_eq!(d.actor().to_string(), "ServiceAccount::sales-genie for Human::alice");
 
         let wrong_kid = token(&key, "k2", claims("alice", json!({})));
         assert!(matches!(verifier.accessor(Some(&bearer(wrong_kid)), &registry).await, Err(IdentityError::Invalid(_))));

@@ -46,8 +46,10 @@ message PolicyBundle {
   // Cedar policies.
   string policies = 4;
   BundleStatus status = 5;
+  // Deprecated: use `created_by_actor`, which this repeats as text (`Human::alice`).
   string created_by = 6;
   google.protobuf.Timestamp created_at = 7;
+  // Deprecated: use `published_by_actor`, which this repeats as text (`Human::alice`).
   string published_by = 8;
   google.protobuf.Timestamp published_at = 9;
   // ECDSA P-256 signature (DER) over the payload defined in awzy-signing, set when published.
@@ -55,12 +57,19 @@ message PolicyBundle {
   bytes signature = 10;
   // Which key signed it: `sha256:<fingerprint>` of the public key.
   string signing_key_id = 11;
+  // Who created it (ADR 0060).
+  awzy.authz.v1.Actor created_by_actor = 12;
+  // Who published it (ADR 0060).
+  awzy.authz.v1.Actor published_by_actor = 13;
 }
 
 message CreateDraftRequest {
   string schema = 1;
   string policies = 2;
+  // Deprecated: use `created_by_actor`, which this repeats as text (`Human::alice`).
   string created_by = 3;
+  // Who created it (ADR 0060).
+  awzy.authz.v1.Actor created_by_actor = 4;
 }
 
 message CreateDraftResponse {
@@ -70,7 +79,10 @@ message CreateDraftResponse {
 message PublishRequest {
   // QID: policy_bundle_<uuid>.
   string policy_bundle_qid = 1;
+  // Deprecated: use `published_by_actor`, which this repeats as text (`Human::alice`).
   string published_by = 2;
+  // Who published it (ADR 0060).
+  awzy.authz.v1.Actor published_by_actor = 3;
 }
 
 message PublishResponse {
@@ -114,8 +126,11 @@ message EnforcementSetting {
   string scope = 1;
   awzy.authz.v1.EnforcementMode mode = 2;
   // Empty, with no changed_at, when the scope has never been switched.
+  // Deprecated: use `changed_by_actor`, which this repeats as text (`Human::alice`).
   string changed_by = 3;
   google.protobuf.Timestamp changed_at = 4;
+  // Who changed it (ADR 0060).
+  awzy.authz.v1.Actor changed_by_actor = 5;
 }
 
 message GetEnforcementRequest {
@@ -131,7 +146,10 @@ message SetEnforcementRequest {
   // Defaults to "install".
   string scope = 1;
   awzy.authz.v1.EnforcementMode mode = 2;
+  // Deprecated: use `changed_by_actor`, which this repeats as text (`Human::alice`).
   string changed_by = 3;
+  // Who changed it (ADR 0060).
+  awzy.authz.v1.Actor changed_by_actor = 4;
 }
 
 message SetEnforcementResponse {

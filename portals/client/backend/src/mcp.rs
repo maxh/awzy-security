@@ -540,7 +540,7 @@ mod tests {
             .0;
         let draft = good.draft.unwrap();
         assert_eq!(draft.status, "draft");
-        assert_eq!(draft.created_by, "alice");
+        assert_eq!(draft.created_by, "Human::alice");
         assert!(draft.id.starts_with("policy_bundle_"));
         assert!(mcp.get_active_policy_bundle(alice()).await.unwrap().0.bundle.is_none(), "proposing never publishes");
 
@@ -710,6 +710,9 @@ mod tests {
         )
         .await;
         assert_eq!(call["result"]["structuredContent"]["draft"]["status"], "draft", "{call}");
-        assert_eq!(call["result"]["structuredContent"]["draft"]["created_by"], "sec-agent for alice", "{call}");
+        assert_eq!(
+            call["result"]["structuredContent"]["draft"]["created_by"], "ServiceAccount::sec-agent for Human::alice",
+            "{call}"
+        );
     }
 }

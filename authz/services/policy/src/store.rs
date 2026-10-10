@@ -228,7 +228,11 @@ impl PolicyStore {
         };
         let target = bundle_from_row(&target)?;
 
-        let actor = format!("break-glass:{}", req.key_id);
+        let actor = awzy_model::Actor::new(
+            awzy_model::EntityRef::new(awzy_model::actor_type::BREAK_GLASS_KEY, req.key_id.clone()),
+            None,
+        )
+        .to_string();
         let copy: Uuid = sqlx::query_scalar(
             "INSERT INTO policy_bundles (id, schema_src, policies_src, status, created_by)
              VALUES ($1, $2, $3, 'draft', $4) RETURNING id",
@@ -463,7 +467,7 @@ pub(crate) mod tests {
         let active = store.active().await.unwrap().unwrap();
         assert_eq!(active.id, out.bundle.id);
         assert_eq!(active.policies, POLICIES);
-        assert_eq!(active.published_by.as_deref(), Some("break-glass:sha256:admin"));
+        assert_eq!(active.published_by.as_deref(), Some("BreakGlassKey::sha256:admin"));
 
         assert!(matches!(store.break_glass_rollback(&req).await.unwrap_err(), StoreError::NonceReused));
         let missing = BreakGlassRequest { nonce: "n-2".into(), to_version: Some(999), ..req };

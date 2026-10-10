@@ -1028,6 +1028,7 @@ version = "0.1.0"
 dependencies = [
  "async-graphql",
  "async-graphql-axum",
+ "awzy-model",
  "axum",
  "chrono",
  "tokio",

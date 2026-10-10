@@ -40,7 +40,9 @@ function Install({ id }: { id: string }) {
             health
             chartVersion
             lastSeenAt
-            createdBy
+            createdBy {
+              label
+            }
             createdAt
             services {
               name
@@ -99,7 +101,7 @@ function Install({ id }: { id: string }) {
         description={
           <>
             {i.cloud?.toUpperCase()} {i.region} · {channelLabel(i.channel ?? "", i.pinnedVersion)} channel · last
-            heartbeat {ago(i.lastSeenAt)} · registered by {i.createdBy}
+            heartbeat {ago(i.lastSeenAt)} · registered by {i.createdBy?.label}
             {i.createdAt ? ` on ${formatTime(i.createdAt)}` : ""}
           </>
         }

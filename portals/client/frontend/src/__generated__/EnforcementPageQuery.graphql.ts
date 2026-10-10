@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<1a00e0ae4d4318bfdc2ab5f83577162d>>
+ * @generated SignedSource<<0c14f5baca890e408811475b1cef4ebd>>
  * @lightSyntaxTransform
  */
 
@@ -14,12 +14,16 @@ export type EnforcementPageQuery$data = {
   readonly canSwitch: boolean;
   readonly enforcement: {
     readonly changedAt: string | null | undefined;
-    readonly changedBy: string | null | undefined;
+    readonly changedBy: {
+      readonly label: string;
+    } | null | undefined;
     readonly mode: EnforcementMode;
   };
   readonly enforcementHistory: ReadonlyArray<{
     readonly changedAt: string | null | undefined;
-    readonly changedBy: string | null | undefined;
+    readonly changedBy: {
+      readonly label: string;
+    } | null | undefined;
     readonly mode: EnforcementMode;
   }>;
   readonly enforcementSummary: {
@@ -67,8 +71,19 @@ var v0 = [
   {
     "alias": null,
     "args": null,
-    "kind": "ScalarField",
+    "concreteType": "Actor",
+    "kind": "LinkedField",
     "name": "changedBy",
+    "plural": false,
+    "selections": [
+      {
+        "alias": null,
+        "args": null,
+        "kind": "ScalarField",
+        "name": "label",
+        "storageKey": null
+      }
+    ],
     "storageKey": null
   },
   {
@@ -309,16 +324,16 @@ return {
     "selections": (v3/*:: as any*/)
   },
   "params": {
-    "cacheID": "61d0c65b7a1d5b3b5a9f6bcbe6464b64",
+    "cacheID": "d597bb596a3f93c39ed04cdf9f6b29e5",
     "id": null,
     "metadata": {},
     "name": "EnforcementPageQuery",
     "operationKind": "query",
-    "text": "query EnforcementPageQuery {\n  canSwitch: viewerCan(action: ADMINISTER, area: ENFORCEMENT)\n  enforcement {\n    mode\n    changedBy\n    changedAt\n  }\n  enforcementSummary {\n    since\n    total\n    monitored\n    wouldDeny\n    wouldChallenge\n    enforcedDeny\n    enforcedChallenge\n  }\n  wouldDeny: decisions(first: 5, filter: {mode: MONITOR, verdict: DENY}) {\n    edges {\n      node {\n        id\n        at\n        subject {\n          type\n          id\n        }\n        action\n        resource {\n          type\n          id\n        }\n        policies\n      }\n    }\n  }\n  enforcementHistory(first: 10) {\n    mode\n    changedBy\n    changedAt\n  }\n}\n"
+    "text": "query EnforcementPageQuery {\n  canSwitch: viewerCan(action: ADMINISTER, area: ENFORCEMENT)\n  enforcement {\n    mode\n    changedBy {\n      label\n    }\n    changedAt\n  }\n  enforcementSummary {\n    since\n    total\n    monitored\n    wouldDeny\n    wouldChallenge\n    enforcedDeny\n    enforcedChallenge\n  }\n  wouldDeny: decisions(first: 5, filter: {mode: MONITOR, verdict: DENY}) {\n    edges {\n      node {\n        id\n        at\n        subject {\n          type\n          id\n        }\n        action\n        resource {\n          type\n          id\n        }\n        policies\n      }\n    }\n  }\n  enforcementHistory(first: 10) {\n    mode\n    changedBy {\n      label\n    }\n    changedAt\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "aae7b1529492db3bf41a7df97ec81c77";
+(node as any).hash = "ab7eb1cb47bb2ae067e74bb228d7eae2";
 
 export default node;

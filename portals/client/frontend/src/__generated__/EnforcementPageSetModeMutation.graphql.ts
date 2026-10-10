@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<099e4f669291ff38f174fcd1987b8112>>
+ * @generated SignedSource<<4ee590bfd7d93f9303986ec81a2e1c50>>
  * @lightSyntaxTransform
  */
 
@@ -19,7 +19,9 @@ export type EnforcementPageSetModeMutation$data = {
   readonly setEnforcementMode: {
     readonly enforcement: {
       readonly changedAt: string | null | undefined;
-      readonly changedBy: string | null | undefined;
+      readonly changedBy: {
+        readonly label: string;
+      } | null | undefined;
       readonly mode: EnforcementMode;
     };
   };
@@ -70,8 +72,19 @@ v1 = [
           {
             "alias": null,
             "args": null,
-            "kind": "ScalarField",
+            "concreteType": "Actor",
+            "kind": "LinkedField",
             "name": "changedBy",
+            "plural": false,
+            "selections": [
+              {
+                "alias": null,
+                "args": null,
+                "kind": "ScalarField",
+                "name": "label",
+                "storageKey": null
+              }
+            ],
             "storageKey": null
           },
           {
@@ -106,16 +119,16 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "7d5e866464a92e78972dca05c5443140",
+    "cacheID": "22f375ef409f1b5cb3dc03070c108045",
     "id": null,
     "metadata": {},
     "name": "EnforcementPageSetModeMutation",
     "operationKind": "mutation",
-    "text": "mutation EnforcementPageSetModeMutation(\n  $input: SetEnforcementModeInput!\n) {\n  setEnforcementMode(input: $input) {\n    enforcement {\n      mode\n      changedBy\n      changedAt\n    }\n  }\n}\n"
+    "text": "mutation EnforcementPageSetModeMutation(\n  $input: SetEnforcementModeInput!\n) {\n  setEnforcementMode(input: $input) {\n    enforcement {\n      mode\n      changedBy {\n        label\n      }\n      changedAt\n    }\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "d86e1b7932c01bc0315a4f153ec01619";
+(node as any).hash = "32a41175a2fa34eeba4e14c164a3007f";
 
 export default node;

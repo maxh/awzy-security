@@ -238,7 +238,11 @@ impl BotTool {
                         .map(|b| b.schema)
                         .unwrap_or_else(|| awzy_pdp::DEFAULT_SCHEMA.to_string()),
                 };
-                let actor = format!("Awzy Bot for {}", self.turn.viewer.actor());
+                // Awzy Bot, acting for the person it's talking to (ADR 0060).
+                let actor = awzy_model::Actor::new(
+                    awzy_model::EntityRef::new(awzy_model::actor_type::AWZY_SERVICE, "awzy-bot"),
+                    Some(self.turn.viewer.subject.clone()),
+                );
                 match policies::create_draft(policy, schema, p.policies, &actor).await.map_err(failed)? {
                     DraftOutcome::Created(b) => {
                         let version = b.version;
@@ -375,7 +379,7 @@ mod tests {
         let transcript =
             transcript.map(|t| format!(", transcript: {}", serde_json::to_string(t).unwrap())).unwrap_or_default();
         format!(
-            "mutation {{ askAwzyBot(input: {{ message: {}{transcript} }}) {{ reply transcript toolsUsed refused drafts {{ status createdBy version }} }} }}",
+            "mutation {{ askAwzyBot(input: {{ message: {}{transcript} }}) {{ reply transcript toolsUsed refused drafts {{ status createdBy {{ type id onBehalfOf {{ id }} }} version }} }} }}",
             serde_json::to_string(message).unwrap()
         )
     }
@@ -392,7 +396,14 @@ mod tests {
         let out = testing::run(&schema, &alice, ask("Draft our base policies", None)).await;
         let bot = &out["askAwzyBot"];
         assert_eq!(bot["toolsUsed"], json!(["get_active_policies", "draft_policy"]));
-        assert_eq!(bot["drafts"], json!([{ "status": "DRAFT", "createdBy": "Awzy Bot for alice", "version": 1 }]));
+        assert_eq!(
+            bot["drafts"],
+            json!([{
+                "status": "DRAFT",
+                "createdBy": { "type": "AwzyService", "id": "awzy-bot", "onBehalfOf": { "id": "alice" } },
+                "version": 1
+            }])
+        );
         assert!(bot["reply"].as_str().unwrap().starts_with("I saved a draft"));
         assert_eq!(bot["refused"], false);
         // The model saw the tools and Awzy Bot's instructions.

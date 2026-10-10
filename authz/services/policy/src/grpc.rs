@@ -90,7 +90,8 @@ struct Service(Arc<PolicyStore>, Option<Arc<BundleVerifier>>);
 impl PolicyService for Service {
     async fn create_draft(&self, req: Request<CreateDraftRequest>) -> Result<Response<CreateDraftResponse>, Status> {
         let req = req.into_inner();
-        let bundle = self.0.create_draft(&req.schema, &req.policies, &req.created_by).await.map_err(status)?;
+        let by = actor(req.created_by_actor, &req.created_by, "created_by_actor")?;
+        let bundle = self.0.create_draft(&req.schema, &req.policies, &by).await.map_err(status)?;
         Ok(Response::new(CreateDraftResponse { bundle: Some(to_wire(bundle)) }))
     }
 
@@ -98,7 +99,8 @@ impl PolicyService for Service {
         let req = req.into_inner();
         let id: PolicyBundleId =
             req.policy_bundle_qid.parse().map_err(|e: awzy_model::QidError| Status::invalid_argument(e.to_string()))?;
-        let bundle = self.0.publish(id, &req.published_by).await.map_err(status)?;
+        let by = actor(req.published_by_actor, &req.published_by, "published_by_actor")?;
+        let bundle = self.0.publish(id, &by).await.map_err(status)?;
         Ok(Response::new(PublishResponse { bundle: Some(to_wire(bundle)) }))
     }
 
@@ -158,11 +160,8 @@ impl PolicyService for Service {
             }
             m => m.into(),
         };
-        if req.changed_by.is_empty() {
-            return Err(Status::invalid_argument("changed_by is required"));
-        }
-        let setting =
-            self.0.set_enforcement(&scope_or_install(req.scope), mode, &req.changed_by).await.map_err(status)?;
+        let by = actor(req.changed_by_actor.clone(), &req.changed_by, "changed_by_actor")?;
+        let setting = self.0.set_enforcement(&scope_or_install(req.scope), mode, &by).await.map_err(status)?;
         tracing::info!(scope = %setting.scope, mode = setting.mode.as_str(), changed_by = ?setting.changed_by, "enforcement mode changed");
         Ok(Response::new(SetEnforcementResponse { setting: Some(setting_to_wire(setting)) }))
     }
@@ -247,11 +246,20 @@ fn scope_or_install(scope: String) -> String {
     }
 }
 
+/// Who acted, stored as text in its typed form (ADR 0060). Every change names someone.
+fn actor(actor: Option<awzy_authz_proto::authz::v1::Actor>, text: &str, field: &str) -> Result<String, Status> {
+    awzy_authz_proto::actor_from_wire(actor, text)
+        .map(|a| a.to_string())
+        .ok_or_else(|| Status::invalid_argument(format!("{field} is required")))
+}
+
 fn setting_to_wire(s: EnforcementSetting) -> WireSetting {
+    let (changed_by_actor, changed_by) = awzy_authz_proto::actor_to_wire(s.changed_by.as_deref().unwrap_or(""));
     WireSetting {
         scope: s.scope,
         mode: awzy_authz_proto::authz::v1::EnforcementMode::from(s.mode).into(),
-        changed_by: s.changed_by.unwrap_or_default(),
+        changed_by,
+        changed_by_actor,
         changed_at: s
             .changed_at
             .map(|t| Timestamp { seconds: t.timestamp(), nanos: t.timestamp_subsec_nanos() as i32 }),
@@ -260,6 +268,8 @@ fn setting_to_wire(s: EnforcementSetting) -> WireSetting {
 
 fn to_wire(b: PolicyBundle) -> WireBundle {
     let ts = |t: DateTime<Utc>| Timestamp { seconds: t.timestamp(), nanos: t.timestamp_subsec_nanos() as i32 };
+    let (created_by_actor, created_by) = awzy_authz_proto::actor_to_wire(&b.created_by);
+    let (published_by_actor, published_by) = awzy_authz_proto::actor_to_wire(b.published_by.as_deref().unwrap_or(""));
     WireBundle {
         qid: b.id.to_string(),
         version: b.version,
@@ -271,9 +281,11 @@ fn to_wire(b: PolicyBundle) -> WireBundle {
             BundleStatus::Superseded => WireStatus::Superseded,
         }
         .into(),
-        created_by: b.created_by,
+        created_by,
+        created_by_actor,
         created_at: Some(ts(b.created_at)),
-        published_by: b.published_by.unwrap_or_default(),
+        published_by,
+        published_by_actor,
         published_at: b.published_at.map(ts),
         signature: b.signature.unwrap_or_default(),
         signing_key_id: b.signing_key_id.unwrap_or_default(),
@@ -295,6 +307,7 @@ mod tests {
             schema: awzy_pdp::DEFAULT_SCHEMA.into(),
             policies: policies.into(),
             created_by: "bob".into(),
+            ..Default::default()
         })
         .await
         .unwrap()
@@ -327,6 +340,7 @@ mod tests {
                 schema: "nonsense".into(),
                 policies: String::new(),
                 created_by: "alice".into(),
+                ..Default::default()
             })
             .await
             .unwrap_err();
@@ -336,7 +350,8 @@ mod tests {
             .create_draft(CreateDraftRequest {
                 schema: awzy_pdp::DEFAULT_SCHEMA.into(),
                 policies: awzy_pdp::DEFAULT_POLICIES.into(),
-                created_by: "alice".into(),
+                created_by_actor: Some(awzy_model::Actor::awzy("awzy-bot").for_person("alice").into()),
+                ..Default::default()
             })
             .await
             .unwrap()
@@ -344,14 +359,26 @@ mod tests {
             .bundle
             .unwrap();
         assert_eq!(draft.status(), WireStatus::Draft);
+        // The typed actor comes back as sent, and as its text form for callers that predate it.
+        assert_eq!(
+            awzy_authz_proto::actor_from_wire(draft.created_by_actor.clone(), ""),
+            Some(awzy_model::Actor::awzy("awzy-bot").for_person("alice"))
+        );
+        assert_eq!(draft.created_by, "AwzyService::awzy-bot for Human::alice");
         let active = client
-            .publish(PublishRequest { policy_bundle_qid: draft.qid.clone(), published_by: "alice".into() })
+            .publish(PublishRequest {
+                policy_bundle_qid: draft.qid.clone(),
+                published_by: "alice".into(),
+                ..Default::default()
+            })
             .await
             .unwrap()
             .into_inner()
             .bundle
             .unwrap();
         assert_eq!(active.status(), WireStatus::Active);
+        // A caller still sending text is read as before: a bare ID is a person.
+        assert_eq!(active.published_by, "Human::alice");
 
         let pdp = awzy_pdp::shared(awzy_pdp::Pdp::with_defaults().unwrap());
         let enforcement = awzy_pdp::Enforcement::awaiting_sync();
@@ -366,6 +393,7 @@ mod tests {
                 scope: String::new(),
                 mode: awzy_authz_proto::authz::v1::EnforcementMode::Enforce.into(),
                 changed_by: "alice".into(),
+                ..Default::default()
             })
             .await
             .unwrap();
@@ -376,7 +404,7 @@ mod tests {
         let bad = admin_draft(&mut admin_client(&endpoint).await, "forbid (principal, action, resource);").await;
         admin_client(&endpoint)
             .await
-            .publish(PublishRequest { policy_bundle_qid: bad, published_by: "bob".into() })
+            .publish(PublishRequest { policy_bundle_qid: bad, published_by: "bob".into(), ..Default::default() })
             .await
             .unwrap();
         let signed = |to_version: i64, nonce: &str, at: i64, signer: &awzy_signing::BundleSigner| {
@@ -398,7 +426,7 @@ mod tests {
             .unwrap()
             .into_inner();
         assert_eq!(restored.restored_version, active.version);
-        assert_eq!(restored.bundle.unwrap().published_by, format!("break-glass:{}", glass_key.key_id()));
+        assert_eq!(restored.bundle.unwrap().published_by, format!("BreakGlassKey::{}", glass_key.key_id()));
 
         let mut c = admin_client(&endpoint).await;
         let replay = c.break_glass_rollback(signed(0, "n-1", now, &glass_key)).await.unwrap_err();

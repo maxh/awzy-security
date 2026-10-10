@@ -1,3 +1,22 @@
+type Actor {
+	"""
+	`Human`, `ServiceAccount`, `AwzyService`, `BreakGlassKey`, or `AwzyStaff`.
+	"""
+	type: String!
+	"""
+	A person's IdP ID, a service account ID, an awzy service name, a key fingerprint, or a staff user name.
+	"""
+	id: String!
+	"""
+	The person it acted for, when it acted for one.
+	"""
+	onBehalfOf: Actor
+	"""
+	For people to read: `alice`, or `sales-genie for alice`.
+	"""
+	label: String!
+}
+
 type DeployedService {
 	"""
 	e.g. awzy-pdp.
@@ -45,7 +64,10 @@ type Install implements Node {
 	Chart versions the install has run, newest first: its upgrade history.
 	"""
 	versionHistory: [VersionSeen!]!
-	createdBy: String!
+	"""
+	The staff member who registered it.
+	"""
+	createdBy: Actor!
 	createdAt: UtcTimestamp!
 }
 

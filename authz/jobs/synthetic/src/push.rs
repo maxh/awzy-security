@@ -75,7 +75,9 @@ impl ContextClient {
             req = req.header(header::AUTHORIZATION, format!("Bearer {}", self.scim_token));
             req = req.header(header::CONTENT_TYPE, "application/scim+json");
         } else {
-            req = req.header(header::CONTENT_TYPE, "application/json").header("x-awzy-actor", "awzy-synthetic");
+            req = req
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-awzy-actor", "AwzyService::awzy-synthetic");
             // This Job's service token for awzy-context (ADR 0055); SCIM uses the IdP's token.
             if let Some(authorization) = self.tokens.authorization("awzy-context")? {
                 req = req.header(header::AUTHORIZATION, authorization);

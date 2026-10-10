@@ -148,6 +148,7 @@ mod tests {
                     mode,
                     changed_by: "alice".into(),
                     changed_at: None,
+                    ..Default::default()
                 }),
             }))
         }

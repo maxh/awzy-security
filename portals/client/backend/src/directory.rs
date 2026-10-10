@@ -3,7 +3,7 @@
 //! read-only here because the IdP owns them.
 
 use async_graphql::{Context, InputObject, Object, Result, SimpleObject};
-use awzy_portal::UtcTimestamp;
+use awzy_portal::{Actor, UtcTimestamp};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use http_body_util::{BodyExt, Full};
@@ -166,9 +166,9 @@ pub struct ServiceAccount {
     pub ai: bool,
     pub groups: Vec<String>,
     pub description: String,
-    pub created_by: String,
+    pub created_by: Option<Actor>,
     pub created_at: UtcTimestamp,
-    pub updated_by: String,
+    pub updated_by: Option<Actor>,
     pub updated_at: UtcTimestamp,
 }
 
@@ -180,9 +180,9 @@ impl From<WireServiceAccount> for ServiceAccount {
             ai: w.ai,
             groups: w.groups,
             description: w.description,
-            created_by: w.created_by,
+            created_by: Actor::from_text(&w.created_by),
             created_at: UtcTimestamp(w.created_at),
-            updated_by: w.updated_by,
+            updated_by: Actor::from_text(&w.updated_by),
             updated_at: UtcTimestamp(w.updated_at),
         }
     }
@@ -315,7 +315,12 @@ impl DirectoryMutation {
         let viewer = require(ctx, PortalAction::Administer, PortalArea::Directory).await?;
         let body = serde_json::to_value(&input)?;
         let (status, res) = context(ctx)?
-            .call("PUT", &format!("/v1/service-accounts/{}", urlencode(&input.id)), Some(&viewer.actor()), Some(body))
+            .call(
+                "PUT",
+                &format!("/v1/service-accounts/{}", urlencode(&input.id)),
+                Some(&viewer.actor().to_string()),
+                Some(body),
+            )
             .await?;
         if status != 200 {
             return Err(String::from_utf8_lossy(&res).into_owned().into());
@@ -336,7 +341,12 @@ impl DirectoryMutation {
     ) -> Result<RemoveServiceAccountPayload> {
         let viewer = require(ctx, PortalAction::Administer, PortalArea::Directory).await?;
         let (status, res) = context(ctx)?
-            .call("DELETE", &format!("/v1/service-accounts/{}", urlencode(&input.id)), Some(&viewer.actor()), None)
+            .call(
+                "DELETE",
+                &format!("/v1/service-accounts/{}", urlencode(&input.id)),
+                Some(&viewer.actor().to_string()),
+                None,
+            )
             .await?;
         match status {
             204 => Ok(RemoveServiceAccountPayload { removed_id: input.id }),
@@ -405,13 +415,13 @@ mod tests {
         assert_eq!(d["directorySummary"]["activePeople"], 1);
         assert_eq!(d["people"][0], json!({ "userName": "alice", "groups": ["security"], "active": true }));
 
-        let register = r#"mutation { registerServiceAccount(input: { id: "sales-genie", owner: "bob", ai: true, groups: ["engineering"], description: "Drafts emails" }) { serviceAccount { id owner ai createdBy } } }"#;
+        let register = r#"mutation { registerServiceAccount(input: { id: "sales-genie", owner: "bob", ai: true, groups: ["engineering"], description: "Drafts emails" }) { serviceAccount { id owner ai createdBy { type id } } } }"#;
         let r = testing::run(&schema, &alice, register).await;
         assert_eq!(
             r["registerServiceAccount"]["serviceAccount"],
-            json!({ "id": "sales-genie", "owner": "bob", "ai": true, "createdBy": "alice" })
+            json!({ "id": "sales-genie", "owner": "bob", "ai": true, "createdBy": { "type": "Human", "id": "alice" } })
         );
-        assert_eq!(seen.lock().unwrap()[0].1, "alice", "awzy-context records who registered it");
+        assert_eq!(seen.lock().unwrap()[0].1, "Human::alice", "awzy-context records who registered it");
 
         let err = testing::run_err(&schema, &bob, register).await;
         assert!(err.starts_with("bob may not administer directory"), "{err}");

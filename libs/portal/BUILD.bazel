@@ -3,4 +3,5 @@ load("//tools:rust.bzl", "awzy_rust_library")
 awzy_rust_library(
     name = "portal",
     crate_name = "awzy_portal",
+    deps = ["//libs/model"],
 )

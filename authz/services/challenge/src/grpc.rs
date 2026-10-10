@@ -188,39 +188,35 @@ impl ChallengeService for Service {
 
     async fn justify(&self, req: Request<JustifyRequest>) -> Result<Response<JustifyResponse>, Status> {
         let req = req.into_inner();
-        if req.answered_by.is_empty() {
-            return Err(Status::invalid_argument("answered_by is required"));
-        }
-        let c =
-            self.store.justify(qid(&req.challenge_qid)?, &req.answered_by, &req.justification).await.map_err(status)?;
-        tracing::info!(challenge_id = %c.id, answered_by = %req.answered_by, status = c.status.as_str(), "challenge justified");
+        let answered_by = person(req.answered_by_actor, &req.answered_by, "answered_by_actor")?;
+        let c = self.store.justify(qid(&req.challenge_qid)?, &answered_by, &req.justification).await.map_err(status)?;
+        tracing::info!(challenge_id = %c.id, answered_by = %answered_by, status = c.status.as_str(), "challenge justified");
         Ok(Response::new(JustifyResponse { challenge: Some(challenge_to_wire(c)) }))
     }
 
     async fn decide(&self, req: Request<DecideRequest>) -> Result<Response<DecideResponse>, Status> {
         let req = req.into_inner();
-        if req.decided_by.is_empty() {
-            return Err(Status::invalid_argument("decided_by is required"));
-        }
+        let decided_by = person(req.decided_by_actor.clone(), &req.decided_by, "decided_by_actor")?;
         let id = qid(&req.challenge_qid)?;
         // Checked before the store's own checks so a refusal names the policy decision; the store
         // then re-checks the challenge is still pending as it records the answer.
         let c = self.store.get(id).await.map_err(status)?;
-        self.approvals.check(&req.decided_by, &c.request.resource, req.approver_entities.clone()).await.map_err(
+        self.approvals.check(&decided_by, &c.request.resource, req.approver_entities.clone()).await.map_err(
             |e| match e {
                 ApprovalError::Refused(_) => Status::permission_denied(e.to_string()),
                 ApprovalError::Unavailable(_) => Status::unavailable(e.to_string()),
             },
         )?;
-        let c = self.store.decide(id, &req.decided_by, req.approve, &req.note).await.map_err(status)?;
-        tracing::info!(challenge_id = %c.id, decided_by = %req.decided_by, approve = req.approve, "challenge decided");
+        let c = self.store.decide(id, &decided_by, req.approve, &req.note).await.map_err(status)?;
+        tracing::info!(challenge_id = %c.id, decided_by = %decided_by, approve = req.approve, "challenge decided");
         Ok(Response::new(DecideResponse { challenge: Some(challenge_to_wire(c)) }))
     }
 
     async fn contain(&self, req: Request<ContainRequest>) -> Result<Response<ContainResponse>, Status> {
         let req = req.into_inner();
         let subject = required_ref(req.subject, "subject")?;
-        let (c, created) = self.store.contain(&subject, &req.reason, &req.created_by).await.map_err(status)?;
+        let created_by = actor(req.created_by_actor, &req.created_by, "created_by_actor")?;
+        let (c, created) = self.store.contain(&subject, &req.reason, &created_by).await.map_err(status)?;
         if created {
             tracing::warn!(containment_id = %c.id, subject = ?c.subject, created_by = %c.created_by, reason = %c.reason, "accessor contained");
             self.refresh_feed().await;
@@ -230,12 +226,13 @@ impl ChallengeService for Service {
 
     async fn lift(&self, req: Request<LiftRequest>) -> Result<Response<LiftResponse>, Status> {
         let req = req.into_inner();
+        let lifted_by = actor(req.lifted_by_actor, &req.lifted_by, "lifted_by_actor")?;
         let c = self
             .store
-            .lift(qid::<ContainmentId>(&req.containment_qid)?, &req.lifted_by, &req.reason)
+            .lift(qid::<ContainmentId>(&req.containment_qid)?, &lifted_by, &req.reason)
             .await
             .map_err(status)?;
-        tracing::warn!(containment_id = %c.id, subject = ?c.subject, lifted_by = %req.lifted_by, "containment lifted");
+        tracing::warn!(containment_id = %c.id, subject = ?c.subject, lifted_by = %lifted_by, "containment lifted");
         self.refresh_feed().await;
         Ok(Response::new(LiftResponse { containment: Some(containment_to_wire(c)) }))
     }
@@ -322,8 +319,9 @@ impl ChallengeService for Service {
         req: Request<ResetSecurityKeyRequest>,
     ) -> Result<Response<ResetSecurityKeyResponse>, Status> {
         let req = req.into_inner();
-        let key = self.keys()?.reset(qid(&req.security_key_qid)?, &req.removed_by).await.map_err(key_status)?;
-        tracing::warn!(key_id = %key.id, person = %key.person_id, removed_by = %req.removed_by, "security key reset by an admin");
+        let removed_by = actor(req.removed_by_actor, &req.removed_by, "removed_by_actor")?;
+        let key = self.keys()?.reset(qid(&req.security_key_qid)?, &removed_by).await.map_err(key_status)?;
+        tracing::warn!(key_id = %key.id, person = %key.person_id, removed_by = %removed_by, "security key reset by an admin");
         Ok(Response::new(ResetSecurityKeyResponse { key: Some(key_to_wire(key)) }))
     }
 
@@ -442,6 +440,7 @@ fn key_status(e: KeyError) -> Status {
 }
 
 fn key_to_wire(k: SecurityKey) -> WireKey {
+    let (removed_by_actor, removed_by) = awzy_authz_proto::actor_to_wire(k.removed_by.as_deref().unwrap_or(""));
     WireKey {
         qid: k.id.to_string(),
         person_id: k.person_id,
@@ -450,7 +449,8 @@ fn key_to_wire(k: SecurityKey) -> WireKey {
         created_at: Some(ts(k.created_at)),
         last_used_at: k.last_used_at.map(ts),
         removed_at: k.removed_at.map(ts),
-        removed_by: k.removed_by.unwrap_or_default(),
+        removed_by,
+        removed_by_actor,
     }
 }
 
@@ -485,11 +485,29 @@ fn status(e: StoreError) -> Status {
     }
 }
 
+/// Who acted, stored as text in its typed form (ADR 0060).
+fn actor(actor: Option<awzy_authz_proto::authz::v1::Actor>, text: &str, field: &str) -> Result<String, Status> {
+    awzy_authz_proto::actor_from_wire(actor, text)
+        .map(|a| a.to_string())
+        .ok_or_else(|| Status::invalid_argument(format!("{field} is required")))
+}
+
+/// The person who answered or decided, by their IdP ID: only a person, acting for themselves,
+/// answers for a challenge, and approvals are checked against them as a Cedar principal.
+fn person(actor: Option<awzy_authz_proto::authz::v1::Actor>, text: &str, field: &str) -> Result<String, Status> {
+    match awzy_authz_proto::actor_from_wire(actor, text) {
+        Some(a) if a.subject.kind == awzy_model::entity_type::HUMAN && a.on_behalf_of.is_none() => Ok(a.subject.id),
+        Some(a) => Err(Status::invalid_argument(format!("{field} must be a person acting for themselves, not {a}"))),
+        None => Err(Status::invalid_argument(format!("{field} is required"))),
+    }
+}
+
 fn ts(t: DateTime<Utc>) -> Timestamp {
     Timestamp { seconds: t.timestamp(), nanos: t.timestamp_subsec_nanos() as i32 }
 }
 
 fn challenge_to_wire(c: Challenge) -> WireChallenge {
+    let (decided_by_actor, decided_by) = awzy_authz_proto::actor_to_wire(c.decided_by.as_deref().unwrap_or(""));
     WireChallenge {
         qid: c.id.to_string(),
         decision_qid: c.decision_id.to_string(),
@@ -508,7 +526,8 @@ fn challenge_to_wire(c: Challenge) -> WireChallenge {
         .into(),
         answerer_id: c.answerer_id.unwrap_or_default(),
         justification: c.justification.unwrap_or_default(),
-        decided_by: c.decided_by.unwrap_or_default(),
+        decided_by,
+        decided_by_actor,
         decision_note: c.decision_note.unwrap_or_default(),
         created_at: Some(ts(c.created_at)),
         expires_at: Some(ts(c.expires_at)),
@@ -518,14 +537,18 @@ fn challenge_to_wire(c: Challenge) -> WireChallenge {
 }
 
 fn containment_to_wire(c: Containment) -> WireContainment {
+    let (created_by_actor, created_by) = awzy_authz_proto::actor_to_wire(&c.created_by);
+    let (lifted_by_actor, lifted_by) = awzy_authz_proto::actor_to_wire(c.lifted_by.as_deref().unwrap_or(""));
     WireContainment {
         qid: c.id.to_string(),
         subject: Some(c.subject.into()),
         reason: c.reason,
-        created_by: c.created_by,
+        created_by,
+        created_by_actor,
         created_at: Some(ts(c.created_at)),
         lifted_at: c.lifted_at.map(ts),
-        lifted_by: c.lifted_by.unwrap_or_default(),
+        lifted_by,
+        lifted_by_actor,
         lift_reason: c.lift_reason.unwrap_or_default(),
     }
 }
@@ -631,8 +654,9 @@ mod tests {
         let challenge = client
             .justify(JustifyRequest {
                 challenge_qid: challenge_id.to_string(),
-                answered_by: "alice".into(),
+                answered_by_actor: Some(awzy_model::Actor::human("alice").into()),
                 justification: "Preparing the audit committee's review of Q3".into(),
+                ..Default::default()
             })
             .await
             .unwrap()
@@ -660,6 +684,7 @@ mod tests {
             approve,
             note: String::new(),
             approver_entities: vec![],
+            ..Default::default()
         };
         let refused = client.decide(decide("dave", true)).await.unwrap_err();
         assert_eq!(refused.code(), Code::PermissionDenied);
@@ -674,6 +699,7 @@ mod tests {
                 approve: false,
                 note: "no".into(),
                 approver_entities: vec![],
+                ..Default::default()
             })
             .await
             .unwrap();
@@ -694,13 +720,15 @@ mod tests {
             .contain(ContainRequest {
                 subject: Some(awzy_model::EntityRef::new("Human", "mallory").into()),
                 reason: "bulk download of design docs".into(),
-                created_by: "carol".into(),
+                created_by_actor: Some(awzy_model::Actor::awzy("awzy-reasoner").into()),
+                ..Default::default()
             })
             .await
             .unwrap()
             .into_inner()
             .containment
             .unwrap();
+        assert_eq!(containment.created_by, "AwzyService::awzy-reasoner", "the typed actor, as text for older callers");
         until(|| async { check(&state, "mallory", "design-doc").await.verdict == Verdict::Deny }).await;
         assert!(started.elapsed() < Duration::from_secs(2), "took {:?}", started.elapsed());
         assert_eq!(check(&state, "mallory", "design-doc").await.policies, std::slice::from_ref(&containment.qid));
@@ -711,6 +739,7 @@ mod tests {
                 containment_qid: containment.qid,
                 lifted_by: "carol".into(),
                 reason: "reviewed".into(),
+                ..Default::default()
             })
             .await
             .unwrap();

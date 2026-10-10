@@ -160,6 +160,7 @@ mod tests {
                 subject: Some(agent.clone().into()),
                 reason: "bulk export".into(),
                 created_by: "alice".into(),
+                ..Default::default()
             })
             .await
             .unwrap();
