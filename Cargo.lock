@@ -1095,6 +1095,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "awzy-service-auth"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "awzy-identity",
+ "axum",
+ "base64 0.22.1",
+ "jsonwebtoken",
+ "p256",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tower",
+ "tracing",
+]
+
+[[package]]
 name = "awzy-signing"
 version = "0.1.0"
 dependencies = [
