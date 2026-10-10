@@ -254,7 +254,7 @@ impl ChallengeService for Service {
         &self,
         req: Request<ListSecurityKeysRequest>,
     ) -> Result<Response<ListSecurityKeysResponse>, Status> {
-        let person = required(req.into_inner().person_id, "person_id")?;
+        let person = required(req.into_inner().human_id, "human_id")?;
         let keys = self.keys()?.list(&person).await.map_err(key_status)?;
         Ok(Response::new(ListSecurityKeysResponse { keys: keys.into_iter().map(key_to_wire).collect() }))
     }
@@ -263,7 +263,7 @@ impl ChallengeService for Service {
         &self,
         req: Request<BeginKeyChangeRequest>,
     ) -> Result<Response<BeginKeyChangeResponse>, Status> {
-        let person = required(req.into_inner().person_id, "person_id")?;
+        let person = required(req.into_inner().human_id, "human_id")?;
         let c = self.keys()?.begin_key_change(&person).await.map_err(key_status)?;
         Ok(Response::new(BeginKeyChangeResponse {
             ceremony_qid: c.id.to_string(),
@@ -276,7 +276,7 @@ impl ChallengeService for Service {
         req: Request<BeginKeyRegistrationRequest>,
     ) -> Result<Response<BeginKeyRegistrationResponse>, Status> {
         let req = req.into_inner();
-        let person = required(req.person_id, "person_id")?;
+        let person = required(req.human_id, "human_id")?;
         let authorization = req.authorization.map(assertion);
         let c = self.keys()?.begin_registration(&person, authorization.as_ref()).await.map_err(key_status)?;
         Ok(Response::new(BeginKeyRegistrationResponse {
@@ -290,7 +290,7 @@ impl ChallengeService for Service {
         req: Request<FinishKeyRegistrationRequest>,
     ) -> Result<Response<FinishKeyRegistrationResponse>, Status> {
         let req = req.into_inner();
-        let person = required(req.person_id, "person_id")?;
+        let person = required(req.human_id, "human_id")?;
         let key = self
             .keys()?
             .finish_registration(&person, &req.ceremony_qid, &req.name, &req.client_data_json, &req.attestation_object)
@@ -305,7 +305,7 @@ impl ChallengeService for Service {
         req: Request<RemoveSecurityKeyRequest>,
     ) -> Result<Response<RemoveSecurityKeyResponse>, Status> {
         let req = req.into_inner();
-        let person = required(req.person_id, "person_id")?;
+        let person = required(req.human_id, "human_id")?;
         let authorization =
             req.authorization.map(assertion).ok_or_else(|| Status::invalid_argument("authorization is required"))?;
         let key =
@@ -321,7 +321,7 @@ impl ChallengeService for Service {
         let req = req.into_inner();
         let removed_by = actor(req.removed_by_actor, &req.removed_by, "removed_by_actor")?;
         let key = self.keys()?.reset(qid(&req.security_key_qid)?, &removed_by).await.map_err(key_status)?;
-        tracing::warn!(key_id = %key.id, person = %key.person_id, removed_by = %removed_by, "security key reset by an admin");
+        tracing::warn!(key_id = %key.id, person = %key.human_id, removed_by = %removed_by, "security key reset by an admin");
         Ok(Response::new(ResetSecurityKeyResponse { key: Some(key_to_wire(key)) }))
     }
 
@@ -330,7 +330,7 @@ impl ChallengeService for Service {
         req: Request<BeginVerificationRequest>,
     ) -> Result<Response<BeginVerificationResponse>, Status> {
         let req = req.into_inner();
-        let person = required(req.person_id, "person_id")?;
+        let person = required(req.human_id, "human_id")?;
         let c = self.keys()?.begin_verification(&person, qid(&req.challenge_qid)?).await.map_err(key_status)?;
         Ok(Response::new(BeginVerificationResponse {
             ceremony_qid: c.id.to_string(),
@@ -343,7 +343,7 @@ impl ChallengeService for Service {
         req: Request<FinishVerificationRequest>,
     ) -> Result<Response<FinishVerificationResponse>, Status> {
         let req = req.into_inner();
-        let person = required(req.person_id, "person_id")?;
+        let person = required(req.human_id, "human_id")?;
         let a = req.assertion.map(assertion).ok_or_else(|| Status::invalid_argument("assertion is required"))?;
         let c = self.keys()?.finish_verification(&person, &a).await.map_err(key_status)?;
         tracing::info!(challenge_id = %c.id, person = %person, status = c.status.as_str(), "challenge verified with a security key");
@@ -443,7 +443,7 @@ fn key_to_wire(k: SecurityKey) -> WireKey {
     let (removed_by_actor, removed_by) = awzy_authz_proto::actor_to_wire(k.removed_by.as_deref().unwrap_or(""));
     WireKey {
         qid: k.id.to_string(),
-        person_id: k.person_id,
+        human_id: k.human_id,
         name: k.name,
         added_with_qid: k.added_with.map(|id| id.to_string()).unwrap_or_default(),
         created_at: Some(ts(k.created_at)),
