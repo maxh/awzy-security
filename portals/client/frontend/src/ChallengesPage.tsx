@@ -52,21 +52,61 @@ function Loading() {
   );
 }
 
+/** What happened to the justification just submitted: the request it was for, and whether that
+ * passed the challenge or something else is still needed. */
+type Justified = { request: string; grantExpiresAt: string | null; stillNeeded: ReadonlyArray<string> };
+
 /** Challenges (ADR 0054): answer your own; admins approve requests and manage containments. */
 export function ChallengesPage() {
   const [fetchKey, setFetchKey] = useState(0);
+  // Kept outside Suspense so the refetch after submitting doesn't clear it.
+  const [justified, setJustified] = useState<Justified | null>(null);
   const refresh = () => setFetchKey((k) => k + 1);
   return (
     <Stack gap="md">
       <Title order={3}>Challenges</Title>
+      {justified && <JustifiedNotice justified={justified} onClose={() => setJustified(null)} />}
       <Suspense fallback={<Loading />}>
-        <Challenges fetchKey={fetchKey} onChanged={refresh} />
+        <Challenges
+          fetchKey={fetchKey}
+          onChanged={refresh}
+          onJustified={(j) => {
+            setJustified(j);
+            refresh();
+          }}
+        />
       </Suspense>
     </Stack>
   );
 }
 
-function Challenges({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => void }) {
+/** The next step after a justification: retry the request, or wait for what's left. */
+function JustifiedNotice({ justified: j, onClose }: { justified: Justified; onClose: () => void }) {
+  if (j.stillNeeded.length > 0) {
+    return (
+      <Alert color="blue" title="Justification recorded" withCloseButton onClose={onClose}>
+        {j.request} still needs {j.stillNeeded.join(" and ")}. Retry it once that's done.
+      </Alert>
+    );
+  }
+  return (
+    <Alert color="teal" title="Challenge passed: retry the request" withCloseButton onClose={onClose}>
+      Run {j.request} again
+      {j.grantExpiresAt ? ` before ${formatTime(j.grantExpiresAt)}` : ""}. awzy allows that exact request until then;
+      anything else is checked as usual.
+    </Alert>
+  );
+}
+
+function Challenges({
+  fetchKey,
+  onChanged,
+  onJustified,
+}: {
+  fetchKey: number;
+  onChanged: () => void;
+  onJustified: (j: Justified) => void;
+}) {
   const data = useLazyLoadQuery<ChallengesPageQuery>(
     graphql`
       query ChallengesPageQuery {
@@ -116,6 +156,8 @@ function Challenges({ fetchKey, onChanged }: { fetchKey: number; onChanged: () =
     { fetchKey, fetchPolicy: "store-and-network" },
   );
   const recent = data.recent.filter((c) => c.status !== "PENDING");
+  // When the page loaded: a pass that has since run out no longer invites a retry.
+  const [loadedAt] = useState(() => Date.now());
 
   return (
     <Stack gap="lg">
@@ -127,7 +169,7 @@ function Challenges({ fetchKey, onChanged }: { fetchKey: number; onChanged: () =
             answer it, then retry the request.
           </Text>
         ) : (
-          data.pending.map((c) => <PendingChallenge key={c.id} challenge={c} onChanged={onChanged} />)
+          data.pending.map((c) => <PendingChallenge key={c.id} challenge={c} onJustified={onJustified} />)
         )}
       </Stack>
 
@@ -146,7 +188,11 @@ function Challenges({ fetchKey, onChanged }: { fetchKey: number; onChanged: () =
                     </Badge>
                   </Table.Td>
                   <Table.Td c="dimmed">
-                    {c.status === "PASSED" && c.grantExpiresAt ? `allowed until ${formatTime(c.grantExpiresAt)}` : ""}
+                    {c.status === "PASSED" && c.grantExpiresAt
+                      ? Date.parse(c.grantExpiresAt) > loadedAt
+                        ? `retry the request before ${formatTime(c.grantExpiresAt)}`
+                        : `was allowed until ${formatTime(c.grantExpiresAt)}`
+                      : ""}
                     {c.status === "REJECTED" && c.decidedBy ? `rejected by ${c.decidedBy}` : ""}
                   </Table.Td>
                 </Table.Tr>
@@ -167,14 +213,16 @@ function Challenges({ fetchKey, onChanged }: { fetchKey: number; onChanged: () =
 
 type Pending = ChallengesPageQuery["response"]["pending"][number];
 
-function PendingChallenge({ challenge: c, onChanged }: { challenge: Pending; onChanged: () => void }) {
+function PendingChallenge({ challenge: c, onJustified }: { challenge: Pending; onJustified: (j: Justified) => void }) {
   const [commit, isSaving] = useMutation<ChallengesPageJustifyMutation>(graphql`
     mutation ChallengesPageJustifyMutation($input: JustifyChallengeInput!) {
       justifyChallenge(input: $input) {
         challenge {
           id
           status
+          kinds
           passed
+          grantExpiresAt
         }
       }
     }
@@ -186,9 +234,13 @@ function PendingChallenge({ challenge: c, onChanged }: { challenge: Pending; onC
   const justify = () =>
     commit({
       variables: { input: { id: c.id, justification: text } },
-      onCompleted: () => {
+      onCompleted: ({ justifyChallenge: { challenge: done } }) => {
         setError(null);
-        onChanged();
+        onJustified({
+          request: requestLabel(c),
+          grantExpiresAt: done.status === "PASSED" ? (done.grantExpiresAt ?? null) : null,
+          stillNeeded: done.kinds.filter((k) => !done.passed.includes(k)).map(kindLabel),
+        });
       },
       onError: (e) => setError(e.message),
     });
