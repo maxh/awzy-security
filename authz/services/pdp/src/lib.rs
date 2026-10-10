@@ -100,10 +100,24 @@ pub fn policy_sources(policies: &str, ids: &[String]) -> anyhow::Result<Vec<(Str
     Ok(set
         .policies()
         .filter_map(|p| {
-            let id = p.annotation("id").map(str::to_string).unwrap_or_else(|| p.id().to_string());
+            // A bundle published before a rename still names the policy the old way (ADR 0075).
+            let id = current_policy_id(&p.annotation("id").map(str::to_string).unwrap_or_else(|| p.id().to_string()));
             ids.contains(&id).then(|| (id, p.to_string()))
         })
         .collect())
+}
+
+/// Base policies renamed since they were first published, old ID to new (ADR 0074).
+const RENAMED_POLICIES: [(&str, &str); 3] = [
+    ("people-answer-their-challenges", "humans-answer-their-challenges"),
+    ("deactivated-people", "deactivated-humans"),
+    ("crown-jewels-need-a-person-to-approve", "crown-jewels-need-a-human-to-approve"),
+];
+
+/// A policy's ID as decisions report it: the current name of a renamed base policy, so the log
+/// says the same whichever bundle decided (ADR 0075).
+pub fn current_policy_id(id: &str) -> String {
+    RENAMED_POLICIES.iter().find(|(old, _)| *old == id).map_or(id, |(_, new)| new).to_string()
 }
 
 /// Parses `policies` and validates them strictly against `schema`. awzy-policy calls this
@@ -287,7 +301,7 @@ impl Pdp {
         // Cedar reports them in no particular order; sort so explanations are stable.
         let mut policies: Vec<String> = determining
             .iter()
-            .map(|p| p.annotation("id").map(str::to_string).unwrap_or_else(|| p.id().to_string()))
+            .map(|p| current_policy_id(&p.annotation("id").map(str::to_string).unwrap_or_else(|| p.id().to_string())))
             .collect();
         policies.sort();
         let verdict = match response.decision() {
@@ -684,6 +698,21 @@ mod tests {
         let old = Pdp::new(&DEFAULT_SCHEMA.replace("assigned?: Bool,", ""), DEFAULT_POLICIES).unwrap();
         let entities = old.entities(json!([{ "uid": { "type": "Resource", "id": "plan" }, "attrs": { "sensitivity": "internal" }, "parents": [] }])).unwrap();
         assert!(old.decide_assigned(&read("bob", "plan", 1), &entities, Some(&both)).is_ok());
+    }
+
+    #[test]
+    fn a_bundle_from_before_a_rename_is_logged_and_explained_under_the_new_id() {
+        let old = DEFAULT_POLICIES.replace("deactivated-humans", "deactivated-people");
+        let pdp = Pdp::new(DEFAULT_SCHEMA, &old).unwrap();
+        let entities = pdp
+            .entities(json!([{ "uid": { "type": "Human", "id": "gone" }, "attrs": { "active": false }, "parents": [] },
+                              { "uid": { "type": "Resource", "id": "doc" }, "attrs": { "sensitivity": "internal" }, "parents": [] }]))
+            .unwrap();
+        let d = pdp.decide(&read("gone", "doc", 0), &entities).unwrap();
+        assert_eq!(d.policies, ["deactivated-humans"]);
+        let found = policy_sources(&old, &d.policies).unwrap();
+        assert_eq!(found[0].0, "deactivated-humans");
+        assert!(found[0].1.contains("deactivated-people"), "the source as the bundle has it");
     }
 
     #[test]

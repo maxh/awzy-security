@@ -14,6 +14,7 @@ const MIGRATIONS: &[(u32, &str, &str)] = &[
     (3, "delegation", include_str!("../migrations/0003_delegation.sql")),
     (4, "enforcement_mode", include_str!("../migrations/0004_enforcement_mode.sql")),
     (5, "events", include_str!("../migrations/0005_events.sql")),
+    (6, "human_policy_ids", include_str!("../migrations/0006_human_policy_ids.sql")),
 ];
 
 /// Values substituted into migrations.
@@ -250,7 +251,8 @@ mod tests {
             events_topic,
             consumer_group: database.clone(),
         };
-        assert_eq!(migrate(&client, &settings).await.unwrap(), vec![1, 2, 3, 4, 5]);
+        let every: Vec<u32> = MIGRATIONS.iter().map(|(v, ..)| *v).collect();
+        assert_eq!(migrate(&client, &settings).await.unwrap(), every);
         assert!(migrate(&client, &settings).await.unwrap().is_empty(), "migrations apply once");
 
         let pdp = awzy_pdp::Pdp::with_defaults().unwrap();
