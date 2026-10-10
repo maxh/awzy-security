@@ -111,6 +111,11 @@ qid!(
     CeremonyId,
     "ceremony"
 );
+qid!(
+    /// One investigation awzy-reasoner ran: a model's checked finding about one principal.
+    InvestigationId,
+    "investigation"
+);
 
 #[cfg(test)]
 mod tests {

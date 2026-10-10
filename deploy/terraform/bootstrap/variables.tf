@@ -52,6 +52,12 @@ variable "awzy_bot" {
   default     = false
 }
 
+variable "investigations" {
+  description = "awzy-reasoner's investigations of the people it flags (ADR 0070). AWS only: Claude must be enabled in the install account's Bedrock"
+  type        = bool
+  default     = false
+}
+
 variable "demo_idp" {
   description = "DEMO INSTALLS ONLY (ADR 0032): sign the client portal in against the dev IdP at https://<hostname>/idp"
   type        = bool

@@ -25,6 +25,34 @@ CREATE TABLE public.humans (
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE public.investigations (
+    id uuid NOT NULL,
+    subject_type text NOT NULL,
+    subject_id text NOT NULL,
+    trigger text NOT NULL,
+    floor integer NOT NULL,
+    status text NOT NULL,
+    verdict text NOT NULL,
+    risk integer NOT NULL,
+    summary text NOT NULL,
+    evidence jsonb DEFAULT '[]'::jsonb NOT NULL,
+    containment text NOT NULL,
+    notes jsonb DEFAULT '[]'::jsonb NOT NULL,
+    finding jsonb,
+    model text NOT NULL,
+    input_tokens bigint DEFAULT 0 NOT NULL,
+    output_tokens bigint DEFAULT 0 NOT NULL,
+    started_at timestamp with time zone NOT NULL,
+    finished_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT investigations_containment_check CHECK ((containment = ANY (ARRAY['none'::text, 'propose'::text, 'recommend'::text]))),
+    CONSTRAINT investigations_floor_check CHECK (((floor >= 0) AND (floor <= 100))),
+    CONSTRAINT investigations_input_tokens_check CHECK ((input_tokens >= 0)),
+    CONSTRAINT investigations_output_tokens_check CHECK ((output_tokens >= 0)),
+    CONSTRAINT investigations_risk_check CHECK (((risk >= 0) AND (risk <= 100))),
+    CONSTRAINT investigations_status_check CHECK ((status = ANY (ARRAY['needs_review'::text, 'done'::text]))),
+    CONSTRAINT investigations_verdict_check CHECK ((verdict = ANY (ARRAY['malicious'::text, 'suspicious'::text, 'benign'::text, 'inconclusive'::text])))
+);
+
 CREATE TABLE public.resources (
     id text NOT NULL,
     source text NOT NULL,
@@ -95,6 +123,9 @@ ALTER TABLE ONLY public.groups
 ALTER TABLE ONLY public.humans
     ADD CONSTRAINT humans_pkey PRIMARY KEY (scim_id);
 
+ALTER TABLE ONLY public.investigations
+    ADD CONSTRAINT investigations_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY public.resources
     ADD CONSTRAINT resources_pkey PRIMARY KEY (id);
 
@@ -115,6 +146,10 @@ CREATE INDEX group_members_member ON public.group_members USING btree (member_id
 CREATE UNIQUE INDEX groups_display_name ON public.groups USING btree (lower(display_name));
 
 CREATE UNIQUE INDEX humans_user_name ON public.humans USING btree (lower(user_name));
+
+CREATE INDEX investigations_by_finished ON public.investigations USING btree (finished_at DESC);
+
+CREATE INDEX investigations_by_subject ON public.investigations USING btree (subject_type, subject_id, finished_at DESC);
 
 CREATE INDEX resources_owner ON public.resources USING btree (owner);
 

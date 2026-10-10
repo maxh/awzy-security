@@ -1,13 +1,14 @@
 //! awzy-reasoner: the slow path. Scores each person's and service account's risk from their
 //! activity in ClickHouse and writes the scores to awzy-context, where the PDPs pick them up
 //! (ADR 0056). Contains people when the day's evidence adds up, in awzy-challenge (ADR 0066).
-//! Investigations, a model's findings checked in code, are in [`investigate`] (ADR 0067); they
-//! don't run on the reasoner's flags yet.
+//! Investigates the principals it flags, within a monthly token budget, with a model whose
+//! findings are checked in code ([`investigate`], ADR 0067; [`runs`], ADR 0070).
 
 pub mod activity;
 pub mod contain;
 pub mod context;
 pub mod investigate;
+pub mod runs;
 pub mod score;
 
 use std::{collections::HashMap, time::Duration};
@@ -96,6 +97,8 @@ pub struct Reasoner {
     pub context: ContextClient,
     /// None when awzy-challenge or awzy-policy isn't configured: nobody is contained.
     pub containments: Option<contain::Containments>,
+    /// None until the client turns investigations on (ADR 0070).
+    pub investigations: Option<runs::Investigations<awzy_llm::bedrock::Bedrock>>,
 }
 
 impl Reasoner {
@@ -107,11 +110,20 @@ impl Reasoner {
         let teams = self.context.teams().await?;
         let scores = score_all(&history, &opened, &teams);
         self.context.put(&scores).await?;
+        // Scores are written whatever happens below; a failed step waits for the next run.
+        let mut rejected = std::collections::BTreeMap::new();
         if let Some(c) = &self.containments {
-            // Scores are written whatever happens here; a failed containment step waits for the
-            // next run.
-            if let Err(e) = self.contain(c, &scores, as_of).await {
-                tracing::warn!(error = %e, "automated containments skipped this run");
+            match self.contain(c, &scores, as_of).await {
+                Ok(evidence) => rejected = evidence.rejected,
+                Err(e) => tracing::warn!(error = %e, "automated containments skipped this run"),
+            }
+        }
+        if let Some(inv) = &self.investigations {
+            let containments = self.containments.as_ref();
+            match inv.run(&self.clickhouse, &self.context, containments, &scores, &rejected, as_of).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!(investigations = n, "investigations ran"),
+                Err(e) => tracing::warn!(error = %e, "investigations stopped this run"),
             }
         }
         Ok(scores.len())
@@ -119,7 +131,13 @@ impl Reasoner {
 
     /// Contains whoever this run's scores and the day's evidence call for (ADR 0066), or records
     /// that it would have, by the `automated-containments` scope's mode.
-    async fn contain(&self, c: &contain::Containments, scores: &[Scored], as_of: DateTime<Utc>) -> anyhow::Result<()> {
+    /// Returns the day's evidence, for the investigations that follow.
+    async fn contain(
+        &self,
+        c: &contain::Containments,
+        scores: &[Scored],
+        as_of: DateTime<Utc>,
+    ) -> anyhow::Result<contain::Evidence> {
         // Read first: if the mode can't be read, nobody is contained.
         let mode = c.mode().await?;
         let mut evidence = c.evidence(as_of).await?;
@@ -128,7 +146,7 @@ impl Reasoner {
             c.contain(&p, mode).await?;
             tracing::warn!(person = %p.person, mode = mode.as_str(), reason = %p.reason, "automated containment");
         }
-        Ok(())
+        Ok(evidence)
     }
 
     /// Scores everyone every `interval`, for as long as the service runs. A failed run is

@@ -127,7 +127,8 @@ resource "helm_release" "config" {
         hostname  = var.ingress.hostname
         awzyBot   = { enabled = var.awzy_bot && local.c.cloud == "aws", region = local.c.region }
       }
-      gateway = { name = "awzy", namespace = local.namespaces.ops }
+      reasoner = { investigations = { enabled = var.investigations && local.c.cloud == "aws", region = local.c.region } }
+      gateway  = { name = "awzy", namespace = local.namespaces.ops }
     }
   })]
 

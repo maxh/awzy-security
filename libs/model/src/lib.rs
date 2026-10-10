@@ -7,7 +7,8 @@ mod qid;
 
 pub use actor::{actor_type, Actor};
 pub use qid::{
-    CeremonyId, ChallengeId, ContainmentId, DecisionId, EventId, InstallId, PolicyBundleId, QidError, SecurityKeyId,
+    CeremonyId, ChallengeId, ContainmentId, DecisionId, EventId, InstallId, InvestigationId, PolicyBundleId, QidError,
+    SecurityKeyId,
 };
 
 use chrono::{DateTime, Utc};

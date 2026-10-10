@@ -2,10 +2,9 @@
 {{- $sys := .Values.namespaces.system -}}
 # awzy-reasoner: scores each principal's risk from ClickHouse with its own read-only user and
 # writes the scores to awzy-context with a service token (ADR 0056, ADR 0055). Contains people
-# in awzy-challenge under the automated-containments mode it reads from awzy-policy (ADR 0066).
-{{ include "awzy.service" (dict "root" . "name" "awzy-reasoner" "namespace" $sys "values" .Values.reasoner
-  "tokens" (list "awzy-challenge" "awzy-context" "awzy-policy")
-  "env" (list
+# in awzy-challenge under the automated-containments mode it reads from awzy-policy (ADR 0066),
+# and, when turned on, investigates the people it flags with Claude on Bedrock (ADR 0070).
+{{- $env := list
     (dict "name" "AWZY_CHALLENGE_ADDR" "value" (printf "http://awzy-challenge.%s.svc:8080" $sys))
     (dict "name" "AWZY_CLICKHOUSE_DATABASE" "value" .Values.clickhouse.database)
     (dict "name" "AWZY_CLICKHOUSE_PASSWORD" "valueFrom" (dict "secretKeyRef" (dict "name" .Values.clickhouse.reasonerPasswordSecret "key" "password")))
@@ -13,5 +12,18 @@
     (dict "name" "AWZY_CONTEXT_URL" "value" (printf "http://awzy-context.%s.svc:8080" $sys))
     (dict "name" "AWZY_POLICY_ADDR" "value" (printf "http://awzy-policy.%s.svc:8080" $sys))
     (dict "name" "AWZY_REASONER_INTERVAL_SECS" "value" (toString .Values.reasoner.intervalSeconds))
-  )) }}
+-}}
+{{- with .Values.reasoner.investigations }}{{- if .enabled }}
+{{- $env = concat $env (list
+  (dict "name" "AWS_REGION" "value" (required "reasoner.investigations.region is required when investigations are on" .region))
+  (dict "name" "AWZY_REASONER_INVESTIGATIONS" "value" "true")
+  (dict "name" "AWZY_REASONER_INVESTIGATION_TOKENS" "value" (toString (int64 .monthlyTokens)))
+  (dict "name" "AWZY_REASONER_PRIVILEGED_GROUPS" "value" (join "," .privilegedGroups))
+) }}
+{{- if .model }}{{- $env = append $env (dict "name" "AWZY_LLM_MODEL" "value" .model) }}{{- end }}
+{{- if .effort }}{{- $env = append $env (dict "name" "AWZY_LLM_EFFORT" "value" .effort) }}{{- end }}
+{{- end }}{{- end }}
+{{ include "awzy.service" (dict "root" . "name" "awzy-reasoner" "namespace" $sys "values" .Values.reasoner
+  "tokens" (list "awzy-challenge" "awzy-context" "awzy-policy")
+  "env" $env) }}
 {{- end }}

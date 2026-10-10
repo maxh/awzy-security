@@ -2,7 +2,10 @@
 //! `awzy_reasoner`, read-only) with AWZY_CLICKHOUSE_PASSWORD, database AWZY_CLICKHOUSE_DATABASE
 //! (default `awzy`); awzy-context at AWZY_CONTEXT_URL; scores every AWZY_REASONER_INTERVAL_SECS
 //! (default 900). With AWZY_CHALLENGE_ADDR and AWZY_POLICY_ADDR, it also contains people when the
-//! day's evidence adds up (ADR 0066).
+//! day's evidence adds up (ADR 0066). AWZY_REASONER_INVESTIGATIONS=true investigates the people it
+//! flags with Claude on Bedrock (AWZY_LLM_MODEL, AWZY_LLM_EFFORT, AWS_REGION), at most
+//! AWZY_REASONER_INVESTIGATION_TOKENS a month (default 2,000,000), proposing rather than applying
+//! containments for members of AWZY_REASONER_PRIVILEGED_GROUPS (default `it,security`; ADR 0070).
 
 use std::time::Duration;
 
@@ -30,6 +33,23 @@ async fn main() -> anyhow::Result<()> {
             None
         }
     };
-    tokio::spawn(awzy_reasoner::Reasoner { clickhouse, context, containments }.run(interval));
+    let investigations = if or("AWZY_REASONER_INVESTIGATIONS", "false") == "true" {
+        let config = awzy_llm::bedrock::BedrockConfig::from_env();
+        let model_name = config.model.clone();
+        Some(awzy_reasoner::runs::Investigations {
+            model: awzy_llm::bedrock::Bedrock::from_env(config).await,
+            model_name,
+            monthly_tokens: or("AWZY_REASONER_INVESTIGATION_TOKENS", "2000000").parse()?,
+            privileged_groups: or("AWZY_REASONER_PRIVILEGED_GROUPS", "it,security")
+                .split(',')
+                .map(str::trim)
+                .filter(|g| !g.is_empty())
+                .map(str::to_string)
+                .collect(),
+        })
+    } else {
+        None
+    };
+    tokio::spawn(awzy_reasoner::Reasoner { clickhouse, context, containments, investigations }.run(interval));
     awzy_server::serve("awzy-reasoner", awzy_reasoner::router()).await
 }
