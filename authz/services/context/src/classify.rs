@@ -108,7 +108,11 @@ mod tests {
 
         let misc = get("synthetic:doc:misc").await;
         assert_eq!(misc.classification.as_ref().unwrap().sensitivity, None, "nothing decides it");
-        assert_eq!(entity(&misc)["attrs"], serde_json::json!({ "sensitivity": "internal", "unclassified": true }));
+        let attrs = &entity(&misc)["attrs"];
+        assert_eq!(
+            (&attrs["sensitivity"], &attrs["unclassified"]),
+            (&serde_json::json!("internal"), &serde_json::json!(true))
+        );
         let folder = get("synthetic:folder:payroll").await;
         assert_eq!(folder.classification.unwrap().sensitivity, None, "folders only by label");
 

@@ -8,7 +8,7 @@
 //!
 //! Each access carries why the generator chose it ([`Why`]), the ground truth that detection is
 //! later scored against: `Noise` is ordinary but out of pattern, and nothing here is an attack.
-//! The scenarios add those.
+//! The scenarios add those ([`crate::scenarios`]).
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -30,6 +30,8 @@ pub enum Why {
     Team,
     /// Ordinary but out of pattern: another team's document.
     Noise,
+    /// Part of a demo plan scenario, named ([`crate::scenarios`]).
+    Scenario(&'static str),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -100,7 +102,7 @@ pub fn day(company: &Company, profile: Profile, day: u32) -> Vec<Access> {
         let Some(&owner) = index_of.get(sa.owner.as_str()) else { continue };
         let person = &company.people[owner];
         // Scheduled agents work alone; the others act for their owner, who is there.
-        let unattended = sa.id == "finance-summarizer";
+        let unattended = !sa.acts_for_owner();
         let mine = assigned.get(person.user_name.as_str()).map(Vec::as_slice).unwrap_or_default();
         for _ in 0..CALLS_PER_AGENT {
             let (resource, why) = pick(&mut rng, &mut docs, mine, &by_team[person.team], owner, &by_team);

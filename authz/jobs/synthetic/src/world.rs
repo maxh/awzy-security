@@ -434,6 +434,9 @@ pub fn scenario_resources(company: &Company) -> Vec<Resource> {
     );
     plan.sharing.push(group("finance", "reader"));
     plan.sharing.push(group("executive", "reader"));
+    // Overshared to all of sales for the investor update: the static check lets SalesGenie and
+    // its person through, as in the paper, and Beyond Zero is what catches it.
+    plan.sharing.push(group("sales", "reader"));
     plan.scenario = Some("rogue-agent");
 
     let mut report = doc(
@@ -459,6 +462,9 @@ pub fn scenario_resources(company: &Company) -> Vec<Resource> {
         "How client money moves through the payments service and ledger: settlement windows, \
          reconciliation, and the keys that sign transfers.",
     );
+    // Shared with all of engineering, Quarry Labs' contractors included, though their statement of
+    // work doesn't cover it: what the curious contractor finds open.
+    payments.sharing.push(group("engineering", "reader"));
     payments.scenario = Some("curious-contractor");
 
     let mut export = doc(
@@ -565,17 +571,31 @@ fn document(p: &Person, index: usize, k: usize, t: &Topic, truth: Tier, name: St
 /// Who works on what: each sales rep's accounts (with SalesGenie on Nora's), engineering tickets,
 /// Quarry Labs' statement of work, and the FY27 strategic plan.
 pub fn work_items(company: &Company, profile: Profile, seed: u64) -> Vec<WorkItem> {
-    let nora = cast("sales-northeast-finserv").expect("cast");
+    let mut items = people_work(company, profile, seed);
+    // An agent working for its owner is on its owner's work too (SalesGenie on Nora's accounts),
+    // so its own assignment check passes where hers does (ADR 0046).
+    for item in &mut items {
+        let agents: Vec<String> = company
+            .service_accounts
+            .iter()
+            .filter(|sa| sa.acts_for_owner() && item.assignees.contains(&sa.owner))
+            .map(|sa| sa.id.clone())
+            .collect();
+        item.assignees.extend(agents);
+    }
+    items
+}
+
+/// People's work items: sales accounts, engineering tickets, the contractor's statement of work,
+/// and the strategy team's plan.
+fn people_work(company: &Company, profile: Profile, seed: u64) -> Vec<WorkItem> {
     let mut items = Vec::new();
     for (index, p) in company.people.iter().enumerate() {
         let team_accounts = accounts(p.team);
         if !team_accounts.is_empty() {
             let docs = person_documents(company, profile, seed, index);
             for account in rep_accounts(index, team_accounts) {
-                let mut assignees = vec![p.user_name.clone()];
-                if p.user_name == nora {
-                    assignees.push("sales-genie".into());
-                }
+                let assignees = vec![p.user_name.clone()];
                 items.push(WorkItem {
                     id: format!("synthetic:account:{}-{index:05}", slug(account)),
                     kind: "account",
@@ -769,7 +789,10 @@ mod tests {
         let find = |id: &str| all.iter().find(|r| r.id == id).unwrap();
         let plan = find("synthetic:doc:strategic-plan-fy27");
         assert_eq!((plan.truth, plan.labeled), (Tier::CrownJewels, Some(Tier::CrownJewels)));
-        assert!(plan.sharing.iter().all(|s| s.id != "sales"), "sales can't read the strategic plan");
+        assert!(
+            plan.sharing.iter().any(|s| s.id == "sales"),
+            "overshared to sales, as the paper's static check allows"
+        );
         assert_eq!(plan.to_input()["sensitivity"], "crown_jewels");
 
         let nora = cast("sales-northeast-finserv").unwrap();

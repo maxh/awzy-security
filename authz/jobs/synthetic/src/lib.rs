@@ -15,5 +15,6 @@ mod names;
 pub mod org;
 pub mod push;
 mod rng;
+pub mod scenarios;
 pub mod scim;
 pub mod world;

@@ -539,19 +539,62 @@ impl ContextStore {
     }
 }
 
-/// A resource as the Cedar entity the PDP evaluates: its sensitivity (the default tier until it
-/// is classified) and its parent folder. Owner, sharing, and work assignments join the schema in
-/// later steps of the demo plan.
+/// A resource as the Cedar entity the PDP evaluates, with only its own sharing.
 pub fn entity(r: &Resource) -> Value {
+    entity_sharing(r, r.sharing.iter())
+}
+
+/// A resource and its ancestors (nearest first) as Cedar entities. Each one's sharing includes
+/// its folders', as in Drive: a document in a folder shared with a group is shared with it too.
+pub fn chain_entities(chain: &[Resource]) -> Vec<Value> {
+    (0..chain.len()).map(|i| entity_sharing(&chain[i], chain[i..].iter().flat_map(|r| r.sharing.iter()))).collect()
+}
+
+/// The entity: its sensitivity (the default tier until it is classified), its owner, who it's
+/// shared with (ADR 0061), and its parent folder.
+fn entity_sharing<'a>(r: &Resource, sharing: impl Iterator<Item = &'a Share>) -> Value {
+    use std::collections::BTreeSet;
     let parents: Vec<Value> = r.parent.iter().map(|p| json!({ "type": entity_type::RESOURCE, "id": p })).collect();
-    json!({
-        "uid": { "type": entity_type::RESOURCE, "id": r.id },
-        "attrs": {
-            "sensitivity": r.effective_sensitivity().unwrap_or(DEFAULT_SENSITIVITY),
-            "unclassified": r.effective_sensitivity().is_none(),
-        },
-        "parents": parents,
-    })
+    // Sorted and deduplicated, so an entity is the same however its shares were written.
+    let (mut people, mut groups, mut writer_people, mut writer_groups) =
+        (BTreeSet::new(), BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
+    let mut everyone = false;
+    for share in sharing {
+        let writes = matches!(share.role.as_str(), "writer" | "owner");
+        match share.kind.as_str() {
+            "person" => {
+                people.insert(share.id.as_str());
+                if writes {
+                    writer_people.insert(share.id.as_str());
+                }
+            }
+            "group" => {
+                groups.insert(share.id.as_str());
+                if writes {
+                    writer_groups.insert(share.id.as_str());
+                }
+            }
+            // A single-tenant install's domain is the client's own: everyone there.
+            "anyone" | "domain" => everyone = true,
+            _ => {}
+        }
+    }
+    let refs = |kind: &str, ids: BTreeSet<&str>| -> Vec<Value> {
+        ids.into_iter().map(|id| json!({ "__entity": { "type": kind, "id": id } })).collect()
+    };
+    let mut attrs = json!({
+        "sensitivity": r.effective_sensitivity().unwrap_or(DEFAULT_SENSITIVITY),
+        "unclassified": r.effective_sensitivity().is_none(),
+        "shared_people": refs(entity_type::HUMAN, people),
+        "shared_groups": refs(entity_type::GROUP, groups),
+        "writer_people": refs(entity_type::HUMAN, writer_people),
+        "writer_groups": refs(entity_type::GROUP, writer_groups),
+        "shared_with_everyone": everyone,
+    });
+    if let Some(owner) = &r.owner {
+        attrs["owner"] = json!({ "__entity": { "type": entity_type::HUMAN, "id": owner } });
+    }
+    json!({ "uid": { "type": entity_type::RESOURCE, "id": r.id }, "attrs": attrs, "parents": parents })
 }
 
 // ---- HTTP
@@ -622,10 +665,7 @@ async fn get_resource_entities(State(store): State<ContextStore>, Path(id): Path
     };
     let ids: Vec<String> = chain.iter().map(|r| r.id.clone()).collect();
     match store.assignees_of(&ids).await {
-        Ok(assignees) => {
-            Json(json!({ "entities": chain.iter().map(entity).collect::<Vec<_>>(), "assignees": assignees }))
-                .into_response()
-        }
+        Ok(assignees) => Json(json!({ "entities": chain_entities(&chain), "assignees": assignees })).into_response(),
         Err(e) => internal(e),
     }
 }
@@ -812,9 +852,55 @@ mod tests {
             at: now,
         };
         let r = Resource { classification: Some(classified("crown_jewels")), ..r };
-        assert_eq!(entity(&r)["attrs"], json!({ "sensitivity": "crown_jewels", "unclassified": false }));
+        assert_eq!(
+            (&entity(&r)["attrs"]["sensitivity"], &entity(&r)["attrs"]["unclassified"]),
+            (&json!("crown_jewels"), &json!(false))
+        );
         let r = Resource { sensitivity: Some("confidential".into()), classification: Some(classified("public")), ..r };
         assert_eq!(entity(&r)["attrs"]["sensitivity"], "confidential", "a classifier never lowers a label");
+    }
+
+    #[test]
+    fn sharing_comes_from_the_resource_and_its_folders() {
+        let now = Utc::now();
+        let share = |kind: &str, id: &str, role: &str| Share { kind: kind.into(), id: id.into(), role: role.into() };
+        let resource = |id: &str, parent: Option<&str>, sharing: Vec<Share>| Resource {
+            id: id.into(),
+            source: "synthetic".into(),
+            kind: "document".into(),
+            name: id.into(),
+            parent: parent.map(str::to_string),
+            owner: None,
+            sensitivity: None,
+            labels: vec![],
+            sharing,
+            text: None,
+            url: None,
+            attributes: json!({}),
+            created_at: now,
+            updated_at: now,
+            classification: None,
+        };
+        let doc = resource("doc", Some("folder"), vec![share("person", "sam", "reader")]);
+        let folder = resource("folder", None, vec![share("group", "engineering", "writer")]);
+        let chain = chain_entities(&[doc, folder]);
+        let names = |v: &Value| -> Vec<String> {
+            v.as_array().unwrap().iter().map(|e| e["__entity"]["id"].as_str().unwrap().to_string()).collect()
+        };
+        let a = &chain[0]["attrs"];
+        assert_eq!(names(&a["shared_people"]), ["sam"]);
+        assert_eq!(names(&a["shared_groups"]), ["engineering"], "inherited from its folder");
+        assert_eq!(names(&a["writer_groups"]), ["engineering"], "a writer on the folder writes the document");
+        assert_eq!(
+            (names(&a["writer_people"]).len(), &a["shared_with_everyone"]),
+            (0, &json!(false)),
+            "sam only reads"
+        );
+        assert_eq!(names(&chain[1]["attrs"]["shared_people"]).len(), 0, "a folder doesn't inherit from its document");
+
+        let public = resource("public", None, vec![share("anyone", "", "reader"), share("group", "x", "reader")]);
+        assert_eq!(entity(&public)["attrs"]["shared_with_everyone"], true);
+        assert!(entity(&public)["attrs"].get("owner").is_none(), "no owner, no attribute");
     }
 
     #[tokio::test]
@@ -831,7 +917,10 @@ mod tests {
         assert_eq!(
             entity(&r),
             json!({ "uid": { "type": "Resource", "id": "synthetic:doc:1" },
-                     "attrs": { "sensitivity": "confidential", "unclassified": false },
+                     "attrs": { "sensitivity": "confidential", "unclassified": false,
+                                "owner": { "__entity": { "type": "Human", "id": "nora.patel@larkspur.example" } },
+                                "shared_people": [], "shared_groups": [{ "__entity": { "type": "Group", "id": "sales" } }],
+                                "writer_people": [], "writer_groups": [], "shared_with_everyone": false },
                      "parents": [{ "type": "Resource", "id": "synthetic:folder:sales" }] })
         );
 
@@ -930,7 +1019,8 @@ mod tests {
             ["synthetic:folder:a/b/c", "synthetic:folder:a/b", "synthetic:folder:a"],
             "nearest first, once each"
         );
-        assert_eq!(body["entities"][0]["attrs"], json!({ "sensitivity": "confidential", "unclassified": false }));
+        let attrs = &body["entities"][0]["attrs"];
+        assert_eq!((&attrs["sensitivity"], &attrs["unclassified"]), (&json!("confidential"), &json!(false)));
         assert_eq!(body["entities"][0]["parents"], json!([{ "type": "Resource", "id": "synthetic:folder:a/b" }]));
         assert_eq!(body["assignees"], json!([]), "no work items yet");
 

@@ -51,15 +51,33 @@ pub struct Facts<'a> {
     pub risk: Option<&'a std::collections::HashMap<String, i64>>,
 }
 
+/// `Resource` attributes added after the first schema, each with a value of its type: a bundle's
+/// schema is probed for each, and the ones it doesn't declare are dropped from resource entities.
+static OPTIONAL_RESOURCE_ATTRS: std::sync::LazyLock<Vec<(&'static str, serde_json::Value)>> =
+    std::sync::LazyLock::new(|| {
+        let human = serde_json::json!({ "__entity": { "type": "Human", "id": "probe" } });
+        let group = serde_json::json!({ "__entity": { "type": "Group", "id": "probe" } });
+        vec![
+            ("unclassified", serde_json::json!(true)),
+            ("owner", human.clone()),
+            ("shared_people", serde_json::json!([human.clone()])),
+            ("shared_groups", serde_json::json!([group.clone()])),
+            ("writer_people", serde_json::json!([human])),
+            ("writer_groups", serde_json::json!([group])),
+            ("shared_with_everyone", serde_json::json!(true)),
+        ]
+    });
+
 pub struct Pdp {
     schema: Schema,
     policies: PolicySet,
     authorizer: Authorizer,
     /// Version of the policy bundle in force; 0 for the built-in defaults.
     version: i64,
-    /// Whether the bundle's schema declares `Resource.unclassified`. A bundle published before
-    /// it existed doesn't, and Cedar rejects attributes a schema doesn't declare.
-    knows_unclassified: bool,
+    /// The optional `Resource` attributes the bundle's schema doesn't declare. A bundle published
+    /// before one existed doesn't, and Cedar rejects attributes a schema doesn't declare, so they
+    /// are dropped before evaluation.
+    unknown_resource_attrs: Vec<&'static str>,
     /// Whether the schema declares `context.assigned` for `read` (ADR 0046). Same reason.
     knows_assigned: bool,
 }
@@ -100,13 +118,20 @@ impl Pdp {
             let errors: Vec<String> = result.validation_errors().map(|e| e.to_string()).collect();
             anyhow::bail!("policy validation failed: {}", errors.join("; "));
         }
-        let probe = serde_json::json!([{ "uid": { "type": "Resource", "id": "probe" },
-            "attrs": { "sensitivity": "internal", "unclassified": true }, "parents": [] }]);
-        let knows_unclassified = Entities::from_json_value(probe, Some(&schema)).is_ok();
+        let unknown_resource_attrs = OPTIONAL_RESOURCE_ATTRS
+            .iter()
+            .filter(|(attr, example)| {
+                let mut attrs = serde_json::json!({ "sensitivity": "internal" });
+                attrs[*attr] = example.clone();
+                let probe = serde_json::json!([{ "uid": { "type": "Resource", "id": "probe" }, "attrs": attrs, "parents": [] }]);
+                Entities::from_json_value(probe, Some(&schema)).is_err()
+            })
+            .map(|(attr, _)| *attr)
+            .collect();
         let read = EntityUid::from_type_name_and_id(EntityTypeName::from_str("Action")?, EntityId::new("read"));
         let probe = serde_json::json!({ "risk_score": 0, "human_present": true, "assigned": true });
         let knows_assigned = Context::from_json_value(probe, Some((&schema, &read))).is_ok();
-        Ok(Self { schema, policies, authorizer: Authorizer::new(), version: 0, knows_unclassified, knows_assigned })
+        Ok(Self { schema, policies, authorizer: Authorizer::new(), version: 0, unknown_resource_attrs, knows_assigned })
     }
 
     pub fn with_version(mut self, version: i64) -> Self {
@@ -124,11 +149,13 @@ impl Pdp {
 
     /// Parses Cedar entity JSON (accessors, teams, resources) against the schema.
     pub fn entities(&self, mut json: serde_json::Value) -> anyhow::Result<Entities> {
-        if !self.knows_unclassified {
+        if !self.unknown_resource_attrs.is_empty() {
             for e in json.as_array_mut().into_iter().flatten() {
                 if e["uid"]["type"] == awzy_model::entity_type::RESOURCE {
                     if let Some(attrs) = e["attrs"].as_object_mut() {
-                        attrs.remove("unclassified");
+                        for attr in &self.unknown_resource_attrs {
+                            attrs.remove(*attr);
+                        }
                     }
                 }
             }
@@ -264,12 +291,32 @@ impl Pdp {
                 let kinds: Option<Vec<ChallengeKind>> =
                     determining.iter().map(|p| p.annotation("challenge").and_then(ChallengeKind::parse)).collect();
                 match kinds {
-                    Some(kinds) if !kinds.is_empty() => Verdict::Challenge { challenges: kinds.into_iter().collect() },
+                    // And only in front of something policy would otherwise allow: passing a
+                    // challenge on a request nothing permits would still end in a deny.
+                    Some(kinds)
+                        if !kinds.is_empty() && self.allowed_without_challenges(policy_set, &request, entities)? =>
+                    {
+                        Verdict::Challenge { challenges: kinds.into_iter().collect() }
+                    }
                     _ => Verdict::Deny,
                 }
             }
         };
         Ok((verdict, policies))
+    }
+}
+
+impl Pdp {
+    /// Whether `request` is allowed once every `@challenge` policy is set aside.
+    fn allowed_without_challenges(
+        &self,
+        policy_set: &PolicySet,
+        request: &Request,
+        entities: &Entities,
+    ) -> anyhow::Result<bool> {
+        let rest =
+            PolicySet::from_policies(policy_set.policies().filter(|p| p.annotation("challenge").is_none()).cloned())?;
+        Ok(self.authorizer.is_authorized(request, &rest, entities).decision() == cedar_policy::Decision::Allow)
     }
 }
 
@@ -664,6 +711,118 @@ mod tests {
         let d = decide(&read("bob", "design-doc", 90));
         assert_eq!(d.verdict, Verdict::Challenge { challenges: Challenges::of(ChallengeKind::Verification) });
         assert_eq!(d.policies, vec!["high-risk-verify"]);
+    }
+
+    /// Larkspur's shapes (ADR 0061): Sam, a Quarry Labs contractor in engineering; Nora in sales;
+    /// SalesGenie in Nora's team; Priya owns the payments design and the strategic plan.
+    fn larkspur(pdp: &Pdp) -> Entities {
+        let group = |id: &str| json!({ "__entity": { "type": "Group", "id": id } });
+        let human = |id: &str| json!({ "__entity": { "type": "Human", "id": id } });
+        let doc = |id: &str, tier: &str, owner: &str, groups: &[&str], writers: &[&str]| {
+            json!({ "uid": { "type": "Resource", "id": id }, "parents": [], "attrs": {
+                "sensitivity": tier, "owner": human(owner),
+                "shared_people": [], "shared_groups": groups.iter().map(|g| group(g)).collect::<Vec<_>>(),
+                "writer_people": [], "writer_groups": writers.iter().map(|g| group(g)).collect::<Vec<_>>(),
+                "shared_with_everyone": false } })
+        };
+        pdp.entities(json!([
+            { "uid": { "type": "Human", "id": "sam" }, "attrs": {}, "parents": [{ "type": "Group", "id": "contractors-quarry-labs" }] },
+            { "uid": { "type": "Group", "id": "contractors-quarry-labs" }, "attrs": {},
+              "parents": [{ "type": "Group", "id": "engineering" }, { "type": "Group", "id": "contractors" }] },
+            { "uid": { "type": "Group", "id": "engineering" }, "attrs": {}, "parents": [] },
+            { "uid": { "type": "Group", "id": "contractors" }, "attrs": {}, "parents": [] },
+            { "uid": { "type": "Human", "id": "nora" }, "attrs": {}, "parents": [{ "type": "Group", "id": "sales-ne" }] },
+            { "uid": { "type": "Group", "id": "sales-ne" }, "attrs": {}, "parents": [{ "type": "Group", "id": "sales" }] },
+            { "uid": { "type": "Group", "id": "sales" }, "attrs": {}, "parents": [] },
+            { "uid": { "type": "ServiceAccount", "id": "sales-genie" },
+              "attrs": { "owner": human("nora"), "ai": true }, "parents": [{ "type": "Group", "id": "sales-ne" }] },
+            { "uid": { "type": "Human", "id": "priya" }, "attrs": {}, "parents": [] },
+            doc("payments", "confidential", "priya", &["engineering"], &[]),
+            doc("plan", "crown_jewels", "priya", &["sales"], &[]),
+            doc("export", "confidential", "priya", &["finance"], &[]),
+            doc("accounts", "internal", "nora", &["sales-ne"], &["sales-ne"]),
+        ]))
+        .unwrap()
+    }
+
+    fn as_(who: &str, kind: &str, action: &str, what: &str) -> AccessRequest {
+        AccessRequest { subject: EntityRef::new(kind, who), action: action.into(), ..read(who, what, 0) }
+    }
+
+    #[test]
+    fn owners_and_shares_grant_reads_and_writers_grant_writes() {
+        let pdp = Pdp::with_defaults().unwrap();
+        let e = larkspur(&pdp);
+        let nobody_assigned = HashSet::new();
+        let decide = |r: AccessRequest| pdp.decide_assigned(&r, &e, Some(&nobody_assigned)).unwrap();
+        assert_eq!(decide(as_("nora", "Human", "read", "accounts")).verdict, Verdict::Allow, "shared with her team");
+        assert_eq!(decide(as_("nora", "Human", "write", "accounts")).verdict, Verdict::Allow, "her team writes");
+        assert_eq!(decide(as_("nora", "Human", "read", "export")).verdict, Verdict::Deny, "not shared with her");
+        assert_eq!(decide(as_("sam", "Human", "write", "payments")).verdict, Verdict::Deny, "engineering only reads");
+        assert_eq!(decide(as_("priya", "Human", "write", "export")).verdict, Verdict::Allow, "the owner writes");
+        assert_eq!(decide(as_("priya", "Human", "approve", "payments")).verdict, Verdict::Allow, "owners approve");
+        assert_eq!(decide(as_("nora", "Human", "approve", "payments")).verdict, Verdict::Deny);
+    }
+
+    #[test]
+    fn the_curious_contractor_needs_the_owners_approval() {
+        let pdp = Pdp::with_defaults().unwrap();
+        let e = larkspur(&pdp);
+        let d = pdp.decide_assigned(&as_("sam", "Human", "read", "payments"), &e, Some(&HashSet::new())).unwrap();
+        assert_eq!(d.verdict, Verdict::Challenge { challenges: Challenges::of(ChallengeKind::Approval) });
+        assert_eq!(d.policies, vec!["contractors-outside-their-work"]);
+        let mine = HashSet::from(["sam".to_string()]);
+        let d = pdp.decide_assigned(&as_("sam", "Human", "read", "payments"), &e, Some(&mine)).unwrap();
+        assert_eq!(d.verdict, Verdict::Allow, "within his statement of work");
+        let d = pdp.decide_assigned(&as_("sam", "Human", "read", "export"), &e, Some(&HashSet::new())).unwrap();
+        assert_eq!(d.verdict, Verdict::Deny, "not shared with him at all: no challenge to pass");
+    }
+
+    #[test]
+    fn the_rogue_agent_needs_its_person_and_the_owner() {
+        let pdp = Pdp::with_defaults().unwrap();
+        let e = larkspur(&pdp);
+        let genie = AccessRequest {
+            on_behalf_of: Some(EntityRef::new("Human", "nora")),
+            human_present: Some(true),
+            ..as_("sales-genie", "ServiceAccount", "read", "plan")
+        };
+        let d = pdp.decide_assigned(&genie, &e, Some(&HashSet::new())).unwrap();
+        let both = [ChallengeKind::Justification, ChallengeKind::Approval].into_iter().collect();
+        assert_eq!(d.verdict, Verdict::Challenge { challenges: both });
+        assert_eq!(d.on_behalf_of.unwrap().verdict, Verdict::Allow, "Nora herself may read the overshared plan");
+        let nora = AccessRequest { on_behalf_of: None, ..as_("nora", "Human", "read", "plan") };
+        assert_eq!(pdp.decide_assigned(&nora, &e, Some(&HashSet::new())).unwrap().verdict, Verdict::Allow);
+        let accounts = AccessRequest { resource: EntityRef::new("Resource", "accounts"), ..genie };
+        assert_eq!(
+            pdp.decide_assigned(&accounts, &e, Some(&HashSet::new())).unwrap().verdict,
+            Verdict::Allow,
+            "internal"
+        );
+    }
+
+    #[test]
+    fn a_challenge_only_stands_in_front_of_something_policy_allows() {
+        // Risk over 80 asks for a security key, but nothing permits bob to read the board deck:
+        // passing the challenge would still end in a deny, so it's a deny now.
+        let d = decide(&read("bob", "board-deck", 90));
+        assert_eq!(d.verdict, Verdict::Deny);
+        assert_eq!(decide(&read("bob", "design-doc", 90)).verdict.as_str(), "challenge", "permitted, then challenged");
+    }
+
+    #[test]
+    fn a_bundle_from_before_sharing_still_loads_its_resources() {
+        let mut old_schema = DEFAULT_SCHEMA.to_string();
+        let start = old_schema.find("  // Who owns it in its source system").unwrap();
+        let end = old_schema[start..].find("};").unwrap() + start;
+        old_schema.replace_range(start..end, "");
+        let policies = "permit (principal, action == Action::\"read\", resource);";
+        let pdp = Pdp::new(&old_schema, policies).unwrap();
+        assert!(pdp
+            .entities(json!([{ "uid": { "type": "Resource", "id": "doc" }, "parents": [], "attrs": {
+            "sensitivity": "internal", "owner": { "__entity": { "type": "Human", "id": "p" } },
+            "shared_groups": [], "shared_with_everyone": true } }]))
+            .is_ok());
     }
 
     #[test]

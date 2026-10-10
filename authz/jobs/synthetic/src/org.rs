@@ -91,6 +91,14 @@ pub struct ServiceAccount {
     pub description: String,
 }
 
+impl ServiceAccount {
+    /// Whether it works for its owner, who is there to answer for it. A scheduled agent works
+    /// alone, on its own authority.
+    pub fn acts_for_owner(&self) -> bool {
+        self.id != "finance-summarizer"
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Company {
     pub seed: u64,
