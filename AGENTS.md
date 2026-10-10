@@ -82,5 +82,10 @@ bazel build --config=lint //...                    # clippy
 - **Configuration names** start with `AWZY_` (`AWZY_<COMPONENT>_<SETTING>`); the vendor side's,
   including CI variables, with `AWZY_CORP_`; test-only inputs with `AWZY_TEST_`. Lists of keys
   are sorted alphabetically (ADR 0053).
+- **Nothing deployment-specific** goes in this public repository, or in commit messages or PR
+  and issue text: no account IDs, resource IDs, support case numbers, sign-in portal URLs, real
+  install QIDs, people's emails, or customer names. Use placeholders and configuration, and keep
+  the real values in `deployment.env`, CI variables, or Secrets Manager. See the
+  `keep-deployments-out` skill.
 - **Commits:** `<area>: <what changed>` as the subject, then a body of short bullets on what and
   why. Reference ADRs by number.
