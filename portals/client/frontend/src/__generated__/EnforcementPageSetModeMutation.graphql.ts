@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<4ee590bfd7d93f9303986ec81a2e1c50>>
+ * @generated SignedSource<<453a85cd80bac798146e0b3f9253d03e>>
  * @lightSyntaxTransform
  */
 
@@ -9,8 +9,10 @@
 
 import { ConcreteRequest } from 'relay-runtime';
 export type EnforcementMode = "ENFORCE" | "MONITOR" | "%future added value";
+export type EnforcementScope = "AUTOMATED_CONTAINMENTS" | "INSTALL" | "%future added value";
 export type SetEnforcementModeInput = {
   mode: EnforcementMode;
+  scope?: EnforcementScope;
 };
 export type EnforcementPageSetModeMutation$variables = {
   input: SetEnforcementModeInput;

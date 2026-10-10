@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<f3698faaadabbb7fc93fc3c38ba17189>>
+ * @generated SignedSource<<618ff60c232a77b72a70634fcd7c89ae>>
  * @lightSyntaxTransform
  */
 
@@ -17,6 +17,7 @@ export type ChallengesPageAdminQuery$data = {
       readonly label: string;
     } | null | undefined;
     readonly id: string;
+    readonly monitor: boolean;
     readonly reason: string;
     readonly subject: {
       readonly id: string;
@@ -196,7 +197,14 @@ v4 = [
         ],
         "storageKey": null
       },
-      (v3/*:: as any*/)
+      (v3/*:: as any*/),
+      {
+        "alias": null,
+        "args": null,
+        "kind": "ScalarField",
+        "name": "monitor",
+        "storageKey": null
+      }
     ],
     "storageKey": null
   }
@@ -219,16 +227,16 @@ return {
     "selections": (v4/*:: as any*/)
   },
   "params": {
-    "cacheID": "40093ca372bb486b5c045c8cc3a67498",
+    "cacheID": "0b43f589af1569ee2d4343da902d4f29",
     "id": null,
     "metadata": {},
     "name": "ChallengesPageAdminQuery",
     "operationKind": "query",
-    "text": "query ChallengesPageAdminQuery {\n  pending: challenges(status: PENDING) {\n    id\n    subject {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    kinds\n    passed\n    answererId\n    justification\n    createdAt\n  }\n  containments {\n    id\n    subject {\n      type\n      id\n    }\n    reason\n    createdBy {\n      label\n    }\n    createdAt\n  }\n}\n"
+    "text": "query ChallengesPageAdminQuery {\n  pending: challenges(status: PENDING) {\n    id\n    subject {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    kinds\n    passed\n    answererId\n    justification\n    createdAt\n  }\n  containments {\n    id\n    subject {\n      type\n      id\n    }\n    reason\n    createdBy {\n      label\n    }\n    createdAt\n    monitor\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "028305e6bc27739e0d9998112aa9c3ca";
+(node as any).hash = "235f976cfe53e67d365bae01cd20a841";
 
 export default node;
