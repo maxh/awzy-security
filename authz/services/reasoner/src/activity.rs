@@ -1,7 +1,7 @@
 //! Each principal's activity per day, from ClickHouse: the decisions the PDPs made and the
 //! events awzy-intake received, together. A "day" is 24 hours counted back from the run, so
 //! day 0 is always the last full 24 hours whatever time the reasoner runs. And, for each resource
-//! opened in the last day, who had opened it (ADR 0062).
+//! opened in the last day, who had opened it (ADR 0064).
 
 use std::collections::{BTreeMap, BTreeSet};
 

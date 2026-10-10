@@ -9,7 +9,7 @@
 0040 put the demo's synthetic company (0039) in `authz/jobs/synthetic`, since it was then a job:
 it provisioned Larkspur Capital and exited. Since then it has also become an activity driver, a
 history sender, and two long-running MCP servers that awzy-gateway fronts (larkspur-drive, 0050;
-larkspur-admin, 0062). Neither `jobs/` nor `services/` describes that.
+larkspur-admin, 0064). Neither `jobs/` nor `services/` describes that.
 
 More important, nothing kept real code from depending on it. Its visibility was
 `//tools:client_side`, so awzy-pdp or awzy-gateway could have imported it and Bazel would have

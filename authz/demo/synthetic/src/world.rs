@@ -493,7 +493,7 @@ pub fn scenario_resources(company: &Company) -> Vec<Resource> {
 
     let mut out = vec![plan, report, payments, export, runbook];
     // Engineering's introductions for new starters, open to everyone, and nothing IT has needed
-    // in the last month: what the suddenly foolish administrator asks (ADR 0062).
+    // in the last month: what the suddenly foolish administrator asks (ADR 0064).
     for &(id, name, text) in BASIC_QUESTIONS {
         let mut d = doc(
             id,

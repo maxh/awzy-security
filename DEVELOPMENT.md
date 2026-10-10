@@ -361,7 +361,7 @@ AWZY_CONTEXT_URL=http://127.0.0.1:8084 bazel run //authz/demo/synthetic:awzy-syn
 ```
 
 The same process serves larkspur-admin at `/admin/mcp`: IT's high-risk operations, which change
-nothing ([ADR 0062](docs/adr/0062-unfamiliar-territory-raises-risk-and-high-risk-operations-need-a-key.md)).
+nothing ([ADR 0064](docs/adr/0064-unfamiliar-territory-raises-risk-and-high-risk-operations-need-a-key.md)).
 
 Then make Larkspur's everyday activity flow through it (demo plan step 5b): people opening their
 work's and their team's documents, SalesGenie acting for Nora, FinanceSummarizer alone at 6am,

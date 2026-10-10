@@ -83,7 +83,7 @@ when { principal has active && !principal.active };
 forbid (principal, action, resource)
 when { context.risk_score > 80 };
 
-// The suddenly foolish administrator (ADR 0062): someone whose risk is elevated runs a high-risk
+// The suddenly foolish administrator (ADR 0064): someone whose risk is elevated runs a high-risk
 // operation only after touching their security key, which an agent working with their credentials
 // can't do for them. Checked for a person, so an agent acting for one is stopped too.
 @id("elevated-risk-high-risk-operations-verify")

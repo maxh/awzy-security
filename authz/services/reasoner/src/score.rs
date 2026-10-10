@@ -1,5 +1,5 @@
 //! Deterministic risk scores (ADR 0056): a principal's last day against its own recent days and
-//! against its team's last day, and what it opened that neither it nor its team had (ADR 0062).
+//! against its team's last day, and what it opened that neither it nor its team had (ADR 0064).
 //! No LLM, so the same activity always scores the same, and a
 //! later LLM investigation can raise a score but has this one as its floor.
 
@@ -11,7 +11,7 @@ pub struct Day {
     pub accesses: u64,
     pub resources: u64,
     pub denied: u64,
-    /// Resources opened that neither the principal nor its team had opened before (ADR 0062).
+    /// Resources opened that neither the principal nor its team had opened before (ADR 0064).
     /// Only counted for the last day.
     pub unfamiliar: u64,
 }
