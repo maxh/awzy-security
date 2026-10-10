@@ -223,7 +223,7 @@ curl -s localhost:8080/v1/access/evaluation -H 'content-type: application/json' 
      "attrs": {"owner": {"__entity": {"type": "Human", "id": "bob"}}, "ai": true}},
     {"uid": {"type": "Resource", "id": "design-doc"}, "attrs": {"sensitivity": "internal"}, "parents": []}
   ]}'
-# {"id":"decision_0199…","verdict":"challenge","challenges":["verification","approval"],
+# {"qid":"decision_0199…","verdict":"challenge","challenges":["verification","approval"],
 #  "policies":["absent-human-approval","high-risk-verify"],
 #  "on_behalf_of":{"verdict":"challenge","challenges":["verification"],"policies":["high-risk-verify"]},
 #  "mode":"monitor"}
@@ -281,7 +281,7 @@ AWZY_LISTEN_ADDR=127.0.0.1:8083 AWZY_POSTGRES_URL=postgres://awzy:awzy@localhost
 
 A PDP with `AWZY_CHALLENGE_ADDR` isn't ready until it has the containment list. Challenges are only
 opened in enforce mode: switch the install on the portal's Enforcement page, then a challenged
-request comes back with a `challenge_id`. The person answers it on the Challenges page and retries.
+request comes back with a `challenge_qid`. The person answers it on the Challenges page and retries.
 Locally, `AWZY_CHALLENGE_GRANT_SECS` and `AWZY_CHALLENGE_PENDING_SECS` shorten how long a pass
 lasts and how long a challenge waits.
 
@@ -446,7 +446,7 @@ AWZY_LISTEN_ADDR=127.0.0.1:8086 AWZY_KAFKA_BROKERS=localhost:9092 bazel run //au
 curl -X POST http://127.0.0.1:8086/v1/events -H "authorization: Bearer $AWZY_INTAKE_TOKEN" \
   -H 'content-type: application/json' -d '{"events": [{"at": "'"$(date -u +%FT%TZ)"'", "system": "jira",
   "subject": {"type": "Human", "id": "bob"}, "action": "read", "resource": {"type": "Ticket", "id": "ENG-1"}}]}'
-# {"accepted":1,"ids":["event_0199…"]}
+# {"accepted":1,"qids":["event_0199…"]}
 ```
 
 A CloudTrail log file goes to `/v1/events/aws-cloudtrail` as is (`{"Records": [...]}`, after

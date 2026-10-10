@@ -74,7 +74,7 @@ enum EnforcementMode {
 
 message CheckResponse {
   // QID: decision_<uuid>, time-ordered (UUIDv7). Used to explain the decision later.
-  string decision_id = 1;
+  string decision_qid = 1;
   Verdict verdict = 2;
   // Set when verdict is VERDICT_CHALLENGE: every one must be passed.
   repeated ChallengeKind challenges = 3;
@@ -87,7 +87,7 @@ message CheckResponse {
   EnforcementMode mode = 6;
   // For an enforced challenge: the challenge opened in awzy-challenge (QID: challenge_<uuid>). The
   // person answers it, then the caller retries the same request. Empty when none could be opened.
-  string challenge_id = 7;
+  string challenge_qid = 7;
 }
 
 message DelegationCheck {

@@ -39,11 +39,11 @@ async fn main() -> anyhow::Result<()> {
         .bundle
         .context("awzy-policy returned no draft")?;
     let bundle = client
-        .publish(PublishRequest { id: draft.id, published_by: by })
+        .publish(PublishRequest { policy_bundle_qid: draft.qid, published_by: by })
         .await?
         .into_inner()
         .bundle
         .context("awzy-policy returned no bundle")?;
-    println!("Published version {} ({}). PDPs pick it up within about 10 seconds.", bundle.version, bundle.id);
+    println!("Published version {} ({}). PDPs pick it up within about 10 seconds.", bundle.version, bundle.qid);
     Ok(())
 }

@@ -96,7 +96,7 @@ impl From<ModeParam> for awzy_model::EnforcementMode {
 #[schemars(crate = "rmcp::schemars")]
 pub struct ExplainDecisionParams {
     /// The decision's ID, `decision_<uuid>`, as the PDP returned it.
-    pub decision_id: String,
+    pub decision_qid: String,
 }
 
 #[derive(Deserialize, JsonSchema, Default)]
@@ -270,7 +270,7 @@ impl ClientPortalMcp {
     ) -> Result<Json<Explanation>, ErrorData> {
         self.allow(&parts, PortalAction::View, PortalArea::Decisions).await?;
         let id: DecisionId =
-            p.decision_id.parse().map_err(|e: awzy_model::QidError| ErrorData::invalid_params(e.to_string(), None))?;
+            p.decision_qid.parse().map_err(|e: awzy_model::QidError| ErrorData::invalid_params(e.to_string(), None))?;
         let row = decisions::find(self.clickhouse()?, id)
             .await
             .map_err(internal)?
@@ -470,7 +470,7 @@ pub(crate) fn bundle_out(b: WireBundle, with_sources: bool) -> PolicyBundleOut {
     };
     PolicyBundleOut {
         status: b.status().as_str_name().trim_start_matches("BUNDLE_STATUS_").to_lowercase(),
-        id: b.id,
+        id: b.qid,
         version: b.version,
         created_by: b.created_by,
         created_at: ts(b.created_at),
@@ -588,7 +588,7 @@ mod tests {
     async fn explain_rejects_ids_that_are_not_decisions() {
         let mcp = server().await;
         let Err(err) = mcp
-            .explain_decision(alice(), Parameters(ExplainDecisionParams { decision_id: "policy_bundle_0199".into() }))
+            .explain_decision(alice(), Parameters(ExplainDecisionParams { decision_qid: "policy_bundle_0199".into() }))
             .await
         else {
             panic!("a policy bundle ID must not be accepted as a decision ID");

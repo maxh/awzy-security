@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<8feba62de5f77b30cbe866a836cd25b1>>
+ * @generated SignedSource<<083016076afa5e837a58acd8f8c8c7bf>>
  * @lightSyntaxTransform
  */
 
@@ -10,7 +10,7 @@
 import { ConcreteRequest } from 'relay-runtime';
 export type PolicyBundleStatus = "ACTIVE" | "DRAFT" | "SUPERSEDED" | "%future added value";
 export type PublishPolicyBundleInput = {
-  id: string;
+  policyBundleQid: string;
 };
 export type PoliciesPagePublishMutation$variables = {
   input: PublishPolicyBundleInput;

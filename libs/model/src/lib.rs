@@ -209,6 +209,8 @@ impl EnforcementMode {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Decision {
     /// Time-ordered, so the decision log sorts by it. Used to explain the decision later.
+    /// On the wire: `qid` (ADR 0058).
+    #[serde(rename = "qid")]
     pub id: DecisionId,
     /// For a delegated request, the stricter of the subject's and the person's checks.
     #[serde(flatten)]
@@ -223,7 +225,7 @@ pub struct Decision {
     pub mode: EnforcementMode,
     /// For an enforced challenge: the challenge awzy-challenge opened, which the person answers
     /// before the request is retried.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, rename = "challenge_qid", skip_serializing_if = "Option::is_none")]
     pub challenge_id: Option<ChallengeId>,
 }
 
@@ -377,7 +379,7 @@ mod tests {
         assert_eq!(
             v,
             serde_json::json!({
-                "id": id.to_string(),
+                "qid": id.to_string(),
                 "verdict": "challenge",
                 "challenges": ["verification"],
                 "policies": ["high-risk-verify"],

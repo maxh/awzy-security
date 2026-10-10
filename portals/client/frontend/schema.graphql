@@ -40,7 +40,7 @@ type Challenge implements Node {
 	"""
 	The decision that opened it.
 	"""
-	decisionId: String!
+	decisionQid: String!
 	subject: EntityRef
 	"""
 	Set when a service account acted for a person.
@@ -161,7 +161,7 @@ type CreatePolicyDraftPayload {
 }
 
 input DecideChallengeInput {
-	id: ID!
+	challengeQid: ID!
 	approve: Boolean!
 	note: String
 }
@@ -336,7 +336,7 @@ input EntityRefInput {
 }
 
 input JustifyChallengeInput {
-	id: ID!
+	challengeQid: ID!
 	"""
 	Why the access is needed: at least 20 characters.
 	"""
@@ -344,7 +344,7 @@ input JustifyChallengeInput {
 }
 
 input LiftContainmentInput {
-	id: ID!
+	containmentQid: ID!
 	reason: String!
 }
 
@@ -549,7 +549,7 @@ type PolicyDryRunExample {
 	"""
 	One of those decisions, `decision_<uuid>`.
 	"""
-	sampleDecisionId: String!
+	sampleDecisionQid: String!
 	"""
 	The policies that decided it under the active bundle, and under the draft.
 	"""
@@ -592,9 +592,9 @@ enum PortalArea {
 
 input PublishPolicyBundleInput {
 	"""
-	A draft bundle's ID.
+	A draft bundle's QID.
 	"""
-	id: ID!
+	policyBundleQid: ID!
 }
 
 type PublishPolicyBundlePayload {
@@ -654,7 +654,7 @@ type Query {
 	bundle and the draft, with today's people and resources, and the verdicts compared.
 	`days` defaults to 7, at most 30.
 	"""
-	policyDryRun(draftId: ID!, days: Int): PolicyDryRun!
+	policyDryRun(draftQid: ID!, days: Int): PolicyDryRun!
 	"""
 	Whether this install has Awzy Bot set up (ADR 0048).
 	"""

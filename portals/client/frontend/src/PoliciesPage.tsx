@@ -121,7 +121,7 @@ function Policies({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => 
   const [dryRun, setDryRun] = useState<{ id: string; version: number } | null>(null);
   const publish = (id: string) =>
     commitPublish({
-      variables: { input: { id } },
+      variables: { input: { policyBundleQid: id } },
       onCompleted: () => {
         setPublishError(null);
         onChanged();
@@ -213,7 +213,7 @@ function Policies({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => 
         size="xl"
         title={dryRun ? `What draft version ${dryRun.version} would change` : ""}
       >
-        {dryRun && <DryRunReport draftId={dryRun.id} />}
+        {dryRun && <DryRunReport draftQid={dryRun.id} />}
       </Modal>
     </Stack>
   );

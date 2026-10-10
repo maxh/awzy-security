@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<6b028902e94eb1d13fc81c24636aa0ad>>
+ * @generated SignedSource<<31dc8666f9dd52558ddb01bdb3d875de>>
  * @lightSyntaxTransform
  */
 
@@ -11,7 +11,7 @@ import { ConcreteRequest } from 'relay-runtime';
 export type ChallengeKind = "APPROVAL" | "BIOMETRIC" | "JUSTIFICATION" | "VERIFICATION" | "%future added value";
 export type ChallengeStatus = "EXPIRED" | "PASSED" | "PENDING" | "REJECTED" | "%future added value";
 export type JustifyChallengeInput = {
-  id: string;
+  challengeQid: string;
   justification: string;
 };
 export type ChallengesPageJustifyMutation$variables = {

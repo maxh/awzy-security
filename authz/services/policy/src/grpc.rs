@@ -97,7 +97,7 @@ impl PolicyService for Service {
     async fn publish(&self, req: Request<PublishRequest>) -> Result<Response<PublishResponse>, Status> {
         let req = req.into_inner();
         let id: PolicyBundleId =
-            req.id.parse().map_err(|e: awzy_model::QidError| Status::invalid_argument(e.to_string()))?;
+            req.policy_bundle_qid.parse().map_err(|e: awzy_model::QidError| Status::invalid_argument(e.to_string()))?;
         let bundle = self.0.publish(id, &req.published_by).await.map_err(status)?;
         Ok(Response::new(PublishResponse { bundle: Some(to_wire(bundle)) }))
     }
@@ -122,7 +122,7 @@ impl PolicyService for Service {
 
     async fn get_bundle(&self, req: Request<GetBundleRequest>) -> Result<Response<GetBundleResponse>, Status> {
         let bundle = match req.into_inner().key {
-            Some(Key::Id(id)) => {
+            Some(Key::PolicyBundleQid(id)) => {
                 let id: PolicyBundleId =
                     id.parse().map_err(|e: awzy_model::QidError| Status::invalid_argument(e.to_string()))?;
                 self.0.get(id).await.map_err(status)?
@@ -261,7 +261,7 @@ fn setting_to_wire(s: EnforcementSetting) -> WireSetting {
 fn to_wire(b: PolicyBundle) -> WireBundle {
     let ts = |t: DateTime<Utc>| Timestamp { seconds: t.timestamp(), nanos: t.timestamp_subsec_nanos() as i32 };
     WireBundle {
-        id: b.id.to_string(),
+        qid: b.id.to_string(),
         version: b.version,
         schema: b.schema,
         policies: b.policies,
@@ -301,7 +301,7 @@ mod tests {
         .into_inner()
         .bundle
         .unwrap()
-        .id
+        .qid
     }
 
     /// Draft, publish, and fetch over gRPC; then an awzy-pdp picks the bundle up.
@@ -345,7 +345,7 @@ mod tests {
             .unwrap();
         assert_eq!(draft.status(), WireStatus::Draft);
         let active = client
-            .publish(PublishRequest { id: draft.id.clone(), published_by: "alice".into() })
+            .publish(PublishRequest { policy_bundle_qid: draft.qid.clone(), published_by: "alice".into() })
             .await
             .unwrap()
             .into_inner()
@@ -374,7 +374,11 @@ mod tests {
 
         // Break-glass: a bad bundle goes out, an enrolled admin rolls it back.
         let bad = admin_draft(&mut admin_client(&endpoint).await, "forbid (principal, action, resource);").await;
-        admin_client(&endpoint).await.publish(PublishRequest { id: bad, published_by: "bob".into() }).await.unwrap();
+        admin_client(&endpoint)
+            .await
+            .publish(PublishRequest { policy_bundle_qid: bad, published_by: "bob".into() })
+            .await
+            .unwrap();
         let signed = |to_version: i64, nonce: &str, at: i64, signer: &awzy_signing::BundleSigner| {
             let reason = "forbid-all locked everyone out".to_string();
             BreakGlassRollbackRequest {

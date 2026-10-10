@@ -115,12 +115,12 @@ pub struct Challenge(pub WireChallenge);
 impl Challenge {
     /// QID: challenge_<uuid>.
     pub async fn id(&self) -> ID {
-        ID(self.0.id.clone())
+        ID(self.0.qid.clone())
     }
 
     /// The decision that opened it.
-    async fn decision_id(&self) -> &str {
-        &self.0.decision_id
+    async fn decision_qid(&self) -> &str {
+        &self.0.decision_qid
     }
 
     async fn subject(&self) -> Option<EntityRef> {
@@ -202,7 +202,7 @@ pub struct Containment(pub WireContainment);
 impl Containment {
     /// QID: containment_<uuid>.
     async fn id(&self) -> ID {
-        ID(self.0.id.clone())
+        ID(self.0.qid.clone())
     }
 
     async fn subject(&self) -> Option<EntityRef> {
@@ -239,7 +239,7 @@ impl Containment {
 /// challenges.
 pub(crate) async fn get_by_id(ctx: &Context<'_>, id: ChallengeId) -> Result<Option<Challenge>> {
     let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
-    let res = client(ctx)?.get_challenge(GetChallengeRequest { id: id.to_string() }).await;
+    let res = client(ctx)?.get_challenge(GetChallengeRequest { challenge_qid: id.to_string() }).await;
     let c = match res {
         Ok(r) => r.into_inner().challenge,
         Err(s) if s.code() == tonic::Code::NotFound => None,
@@ -311,14 +311,14 @@ async fn list(
 
 #[derive(InputObject)]
 pub struct JustifyChallengeInput {
-    pub id: ID,
+    pub challenge_qid: ID,
     /// Why the access is needed: at least 20 characters.
     pub justification: String,
 }
 
 #[derive(InputObject)]
 pub struct DecideChallengeInput {
-    pub id: ID,
+    pub challenge_qid: ID,
     pub approve: bool,
     pub note: Option<String>,
 }
@@ -344,7 +344,7 @@ pub struct ContainAccessorInput {
 
 #[derive(InputObject)]
 pub struct LiftContainmentInput {
-    pub id: ID,
+    pub containment_qid: ID,
     pub reason: String,
 }
 
@@ -362,7 +362,7 @@ impl ChallengeMutation {
     async fn justify_challenge(&self, ctx: &Context<'_>, input: JustifyChallengeInput) -> Result<ChallengePayload> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req = JustifyRequest {
-            id: input.id.0,
+            challenge_qid: input.challenge_qid.0,
             answered_by: answering_person(&viewer)?,
             justification: input.justification,
         };
@@ -375,7 +375,7 @@ impl ChallengeMutation {
     async fn decide_challenge(&self, ctx: &Context<'_>, input: DecideChallengeInput) -> Result<ChallengePayload> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req = DecideRequest {
-            id: input.id.0,
+            challenge_qid: input.challenge_qid.0,
             decided_by: answering_person(&viewer)?,
             approve: input.approve,
             note: input.note.unwrap_or_default(),
@@ -399,7 +399,8 @@ impl ChallengeMutation {
 
     async fn lift_containment(&self, ctx: &Context<'_>, input: LiftContainmentInput) -> Result<ContainmentPayload> {
         let viewer = require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
-        let req = LiftRequest { id: input.id.0, lifted_by: viewer.actor(), reason: input.reason };
+        let req =
+            LiftRequest { containment_qid: input.containment_qid.0, lifted_by: viewer.actor(), reason: input.reason };
         let c = client(ctx)?.lift(req).await.map_err(grpc)?.into_inner().containment;
         Ok(ContainmentPayload { containment: Containment(c.ok_or("awzy-challenge returned no containment")?) })
     }
@@ -451,7 +452,7 @@ mod tests {
     /// Opens a challenge for `who` reading the board deck, as a PDP would.
     async fn open(client: &mut ChallengeClient, who: &str, kind: WireKind) -> String {
         let req = ResolveRequest {
-            decision_id: awzy_model::DecisionId::new().to_string(),
+            decision_qid: awzy_model::DecisionId::new().to_string(),
             subject: Some(awzy_authz_proto::authz::v1::EntityRef { r#type: "Human".into(), id: who.into() }),
             on_behalf_of: None,
             action: "read".into(),
@@ -463,7 +464,7 @@ mod tests {
             answerer_id: who.into(),
             open: true,
         };
-        client.resolve(req).await.unwrap().into_inner().challenge_id
+        client.resolve(req).await.unwrap().into_inner().challenge_qid
     }
 
     #[tokio::test]
@@ -483,7 +484,7 @@ mod tests {
 
         let justify = |text: &str| {
             format!(
-                r#"mutation {{ justifyChallenge(input: {{ id: "{id}", justification: "{text}" }}) {{ challenge {{ status justification }} }} }}"#
+                r#"mutation {{ justifyChallenge(input: {{ challengeQid: "{id}", justification: "{text}" }}) {{ challenge {{ status justification }} }} }}"#
             )
         };
         let why = "Preparing the audit committee's Q3 review";
@@ -505,7 +506,7 @@ mod tests {
         assert_eq!(pending["challenges"], json!([{ "id": id, "subject": { "id": "bob" } }]));
 
         let decide = format!(
-            r#"mutation {{ decideChallenge(input: {{ id: "{id}", approve: true, note: "ok" }}) {{ challenge {{ status decidedBy }} }} }}"#
+            r#"mutation {{ decideChallenge(input: {{ challengeQid: "{id}", approve: true, note: "ok" }}) {{ challenge {{ status decidedBy }} }} }}"#
         );
         assert!(run_err(&schema, &bob, decide.as_str()).await.contains("doesn't let bob approve"));
         assert!(run_err(&schema, &carol, decide.as_str()).await.contains("doesn't let carol approve"));
@@ -524,7 +525,7 @@ mod tests {
         );
 
         let lift = format!(
-            r#"mutation {{ liftContainment(input: {{ id: {}, reason: "reviewed" }}) {{ containment {{ liftedBy }} }} }}"#,
+            r#"mutation {{ liftContainment(input: {{ containmentQid: {}, reason: "reviewed" }}) {{ containment {{ liftedBy }} }} }}"#,
             c["id"]
         );
         assert_eq!(run(&schema, &alice, lift).await["liftContainment"]["containment"]["liftedBy"], json!("alice"));

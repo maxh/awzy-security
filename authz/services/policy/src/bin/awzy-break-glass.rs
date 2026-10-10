@@ -43,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
     let bundle = res.bundle.context("awzy-policy returned no bundle")?;
     println!(
         "Restored version {} as version {} ({}). Replaced version {}. PDPs pick it up within about 10 seconds.",
-        res.restored_version, bundle.version, bundle.id, res.replaced_version
+        res.restored_version, bundle.version, bundle.qid, res.replaced_version
     );
     Ok(())
 }

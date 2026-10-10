@@ -103,7 +103,7 @@ impl Containments {
             )
             .await
             .map_err(|_| anyhow::anyhow!("the containment feed is stale and awzy-challenge didn't answer in time"))??;
-            found.extend(res.into_inner().containments.into_iter().map(|c| c.id));
+            found.extend(res.into_inner().containments.into_iter().map(|c| c.qid));
         }
         Ok(found)
     }
@@ -124,7 +124,7 @@ impl Containments {
         while let Some(msg) = stream.message().await? {
             if msg.changed {
                 let count = msg.active.len();
-                self.load(msg.active.into_iter().filter_map(|c| Some((c.subject?.into(), c.id))));
+                self.load(msg.active.into_iter().filter_map(|c| Some((c.subject?.into(), c.qid))));
                 tracing::info!(version = msg.version, active = count, "loaded containments");
             } else {
                 self.heard();

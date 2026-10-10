@@ -61,7 +61,7 @@ impl ChallengeResolver {
         let res = tokio::time::timeout(
             RESOLVE_TIMEOUT,
             client.clone().resolve(ResolveRequest {
-                decision_id: decision_id.to_string(),
+                decision_qid: decision_id.to_string(),
                 subject: Some(req.subject.clone().into()),
                 on_behalf_of: req.on_behalf_of.clone().map(Into::into),
                 action: req.action.clone(),
@@ -74,7 +74,7 @@ impl ChallengeResolver {
         .await
         .map_err(|_| anyhow::anyhow!("awzy-challenge didn't answer in time"))??
         .into_inner();
-        let challenge_id = match res.challenge_id.as_str() {
+        let challenge_id = match res.challenge_qid.as_str() {
             "" => None,
             id => Some(id.parse()?),
         };

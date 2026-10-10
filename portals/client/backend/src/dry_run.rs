@@ -106,7 +106,7 @@ pub struct PolicyDryRunExample {
     /// How many times this exact request was decided in the window.
     pub decisions: u64,
     /// One of those decisions, `decision_<uuid>`.
-    pub sample_decision_id: String,
+    pub sample_decision_qid: String,
     /// The policies that decided it under the active bundle, and under the draft.
     pub policies_before: Vec<String>,
     pub policies_after: Vec<String>,
@@ -195,7 +195,7 @@ pub async fn compare(
                 action: g.action.clone(),
                 resource_id: g.resource_id.clone(),
                 decisions: g.decisions,
-                sample_decision_id: format!("decision_{}", g.sample_id),
+                sample_decision_qid: format!("decision_{}", g.sample_id),
                 policies_before: before.policies,
                 policies_after: after.policies,
             });
@@ -214,7 +214,7 @@ impl DryRunQuery {
     /// What a draft bundle would change (ADR 0049): recent requests replayed under the active
     /// bundle and the draft, with today's people and resources, and the verdicts compared.
     /// `days` defaults to 7, at most 30.
-    async fn policy_dry_run(&self, ctx: &Context<'_>, draft_id: ID, days: Option<u32>) -> Result<PolicyDryRun> {
+    async fn policy_dry_run(&self, ctx: &Context<'_>, draft_qid: ID, days: Option<u32>) -> Result<PolicyDryRun> {
         require(ctx, PortalAction::View, PortalArea::Policies).await?;
         require(ctx, PortalAction::View, PortalArea::Decisions).await?;
         let services = ctx.data::<Services>()?;
@@ -222,7 +222,7 @@ impl DryRunQuery {
         let policy = crate::policy_client(ctx)?;
         let ch = services.clickhouse.as_ref().ok_or("the decision log isn't configured (AWZY_CLICKHOUSE_URL)")?;
 
-        let id: PolicyBundleId = draft_id.parse()?;
+        let id: PolicyBundleId = draft_qid.parse()?;
         let draft = policies::get(policy.clone(), id).await?.ok_or("no such policy bundle")?;
         let draft = Pdp::new(&draft.schema, &draft.policies)?;
         let (active, compared_with_version) = match policies::active(policy).await? {
@@ -314,7 +314,7 @@ mod tests {
         assert_eq!(c.examples[0].subject_id, "alice", "most frequent first");
         assert_eq!(c.examples[0].policies_before, ["security-team-read"]);
         assert_eq!(c.examples[0].policies_after, ["no-security-reads"]);
-        assert!(c.examples[0].sample_decision_id.starts_with("decision_"));
+        assert!(c.examples[0].sample_decision_qid.starts_with("decision_"));
         assert_eq!(unchanged, 7, "bob isn't in security");
         assert_eq!(skipped, 1);
         assert!(reason.unwrap().contains("broken"));
@@ -391,7 +391,7 @@ mod tests {
         let out = crate::testing::run(
             &schema,
             &alice,
-            format!(r#"{{ policyDryRun(draftId: "{id}") {{ days comparedWithVersion decisions distinctRequests replayedRequests truncated unchangedDecisions skippedRequests changes {{ from to }} }} }}"#),
+            format!(r#"{{ policyDryRun(draftQid: "{id}") {{ days comparedWithVersion decisions distinctRequests replayedRequests truncated unchangedDecisions skippedRequests changes {{ from to }} }} }}"#),
         )
         .await;
         admin.query(&format!("DROP DATABASE {database}")).execute().await.unwrap();

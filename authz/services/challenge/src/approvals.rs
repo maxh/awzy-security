@@ -72,7 +72,7 @@ impl Approvals {
             Verdict::Allow => Ok(()),
             _ => Err(ApprovalError::Refused(format!(
                 "policy doesn't let {approver} approve access to {}::{:?} (decision {})",
-                resource.kind, resource.id, res.decision_id
+                resource.kind, resource.id, res.decision_qid
             ))),
         }
     }

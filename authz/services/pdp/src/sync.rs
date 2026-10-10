@@ -58,7 +58,7 @@ pub async fn sync_once(
             if let Some(verifier) = verifier {
                 verifier
                     .verify(
-                        &bundle.id,
+                        &bundle.qid,
                         bundle.version,
                         &bundle.schema,
                         &bundle.policies,
@@ -66,12 +66,12 @@ pub async fn sync_once(
                         &bundle.signing_key_id,
                     )
                     .map_err(|e| {
-                        anyhow::anyhow!("refusing policy bundle {} (version {}): {e}", bundle.id, bundle.version)
+                        anyhow::anyhow!("refusing policy bundle {} (version {}): {e}", bundle.qid, bundle.version)
                     })?;
             }
             let next = Pdp::new(&bundle.schema, &bundle.policies)?.with_version(bundle.version);
             pdp.store(Arc::new(next));
-            tracing::info!(version = bundle.version, id = %bundle.id, "loaded policy bundle");
+            tracing::info!(version = bundle.version, id = %bundle.qid, "loaded policy bundle");
             true
         }
         None => false,
@@ -116,7 +116,7 @@ mod tests {
             }
             Ok(Response::new(GetActiveResponse {
                 bundle: Some(PolicyBundle {
-                    id: awzy_model::PolicyBundleId::new().to_string(),
+                    qid: awzy_model::PolicyBundleId::new().to_string(),
                     version: 7,
                     schema: crate::DEFAULT_SCHEMA.into(),
                     policies: r#"@id("everyone-reads") permit (principal, action == Action::"read", resource);"#.into(),
