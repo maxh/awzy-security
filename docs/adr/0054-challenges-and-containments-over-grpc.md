@@ -31,7 +31,7 @@ for resources too), and a first slice doesn't need a second store to meet those 
   or a challenge of another kind, and never grants what no policy permits. The response carries
   `challenge_id`, so every PEP gets challenges without new code. Only challenge verdicts make
   the call, and in monitor mode nothing is opened ([0007](0007-monitor-before-enforce.md)). If
-  awzy-challenge doesn't answer within 250 ms, the verdict stays a challenge with no ID.
+  awzy-challenge doesn't answer within a second, the verdict stays a challenge with no ID.
 - **Who answers.** The challenge goes to the human subject, the person a service account acts
   for, or the service account's `owner`. A justification must come from that person and be at
   least 20 characters. An approval must come from someone else: never the person asking, the
