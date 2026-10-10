@@ -29,8 +29,8 @@ backend block can't read variables. It's the only record of which accounts this 
 so a copy lives in Secrets Manager in the management account (`awzy/deployment-env/corp`):
 
 ```sh
-tools/deployment-env pull deploy/terraform/corp --profile <management profile> --region <region>   # on a new machine
-tools/deployment-env push deploy/terraform/corp --profile <management profile> --region <region>   # after editing it
+tools/deployment-env push corp                                          # after editing it
+tools/deployment-env pull corp --profile awzy-corp --region us-east-2   # on a new machine
 ```
 
 CI publishes with the repository's Actions variables, set from `build/`'s outputs:

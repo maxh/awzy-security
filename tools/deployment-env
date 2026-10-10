@@ -1,63 +1,114 @@
 #!/usr/bin/env bash
-# Keeps a deployment's gitignored deployment.env (the account IDs, buckets, and names its
-# Terraform targets; ADR 0053) in AWS Secrets Manager in that deployment's management account, so
-# it survives a lost laptop and can be restored on another machine.
+# Backs up a deployment's deployment.env to AWS Secrets Manager, and restores it.
 #
-#   tools/deployment-env push deploy/terraform/corp --profile awzy-corp --region us-east-2
-#   tools/deployment-env pull deploy/terraform/corp --profile awzy-corp --region us-east-2
+# deployment.env is gitignored (ADR 0053) and is the only record of which accounts, buckets,
+# and names a deployment's Terraform targets. The backup lives in that deployment's own
+# management account, as the secret awzy/deployment-env/<deployment>.
 #
-# The secret is named awzy/deployment-env/<deployment folder name>. `pull` refuses to replace a
-# local file that differs unless given --force, and shows what would change.
+#   tools/deployment-env push corp
+#   tools/deployment-env pull corp --profile awzy-corp --region us-east-2
+#
+# A deployment is a folder with a deployment.env: deploy/terraform/<name> or
+# deploy/terraform/examples/<name>. `push` reads the profile and region from the file; `pull`
+# needs them given, since the file doesn't exist yet. `pull` won't replace a local file that
+# differs unless given --force.
 set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
 
-usage() { echo "usage: $0 push|pull <deployment dir> --profile <aws profile> --region <region> [--force]" >&2; exit 2; }
-[ $# -ge 2 ] || usage
-action=$1 dir=${2%/}; shift 2
-profile="" region="" force=false
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --profile) profile=$2; shift 2 ;;
-    --region) region=$2; shift 2 ;;
-    --force) force=true; shift ;;
+main() {
+  local action=${1:-} deployment=${2:-}
+  [ -n "$action" ] && [ -n "$deployment" ] || usage
+  shift 2
+  local dir file
+  dir=$(find_deployment "$deployment")
+  file="$dir/deployment.env"
+  case "$action" in
+    push) push "$deployment" "$file" ;;
+    pull) pull "$deployment" "$file" "$@" ;;
     *) usage ;;
   esac
-done
-[ -n "$profile" ] && [ -n "$region" ] || usage
-[ -d "$dir" ] || { echo "no such directory: $dir" >&2; exit 2; }
+}
 
-file="$dir/deployment.env"
-name="awzy/deployment-env/$(basename "$dir")"
-aws=(aws --profile "$profile" --region "$region")
-account=$("${aws[@]}" sts get-caller-identity --query Account --output text)
+usage() {
+  echo "usage: tools/deployment-env push <deployment>" >&2
+  echo "       tools/deployment-env pull <deployment> --profile <aws profile> --region <region> [--force]" >&2
+  exit 2
+}
 
-case "$action" in
-  push)
-    [ -f "$file" ] || { echo "no $file to push" >&2; exit 1; }
-    # The file says which management account it belongs in; refuse to store it anywhere else.
-    expected=$(sed -n 's/^export TF_VAR_management_account_id=//p' "$file" | tr -d "'\"")
-    [ "$expected" = "$account" ] || { echo "$file is for account $expected, but --profile $profile is $account" >&2; exit 1; }
-    if "${aws[@]}" secretsmanager describe-secret --secret-id "$name" >/dev/null 2>&1; then
-      "${aws[@]}" secretsmanager put-secret-value --secret-id "$name" --secret-string "file://$file" >/dev/null
-    else
-      "${aws[@]}" secretsmanager create-secret --name "$name" \
-        --description "deployment.env for $dir (tools/deployment-env)" --secret-string "file://$file" >/dev/null
+find_deployment() {
+  for dir in "deploy/terraform/$1" "deploy/terraform/examples/$1"; do
+    if [ -f "$dir/deployment.env.example" ]; then
+      echo "$dir"
+      return
     fi
-    echo "stored $file as $name in account $account"
-    ;;
-  pull)
-    tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT
-    # JSON, not text: --output text adds a newline the file doesn't have.
-    "${aws[@]}" secretsmanager get-secret-value --secret-id "$name" --query SecretString --output json |
-      python3 -c 'import json, sys; sys.stdout.write(json.load(sys.stdin))' > "$tmp"
-    if [ -f "$file" ] && ! cmp -s "$tmp" "$file"; then
-      if ! $force; then
-        diff -u "$file" "$tmp" >&2 || true
-        echo "$file differs from $name (above); rerun with --force to replace it" >&2
-        exit 1
-      fi
-    fi
-    (umask 077 && cp "$tmp" "$file")
-    echo "restored $file from $name in account $account"
-    ;;
-  *) usage ;;
-esac
+  done
+  echo "no deployment named $1 (looked for deploy/terraform/$1 and deploy/terraform/examples/$1)" >&2
+  exit 2
+}
+
+secret_name() {
+  echo "awzy/deployment-env/$1"
+}
+
+# The value of TF_VAR_<name> in a deployment.env, without quotes.
+setting() {
+  sed -n "s/^export TF_VAR_$2=//p" "$1" | tr -d "'\""
+}
+
+push() {
+  local deployment=$1 file=$2
+  [ -f "$file" ] || { echo "no $file to back up" >&2; exit 1; }
+  local profile region account
+  profile=$(setting "$file" management_profile)
+  region=$(setting "$file" region)
+  account=$(aws sts get-caller-identity --profile "$profile" --region "$region" --query Account --output text)
+
+  # Only ever store it in the management account the file itself names.
+  if [ "$account" != "$(setting "$file" management_account_id)" ]; then
+    echo "profile $profile is account $account, not this deployment's management account" >&2
+    exit 1
+  fi
+
+  local name aws=(aws --profile "$profile" --region "$region" secretsmanager)
+  name=$(secret_name "$deployment")
+  if "${aws[@]}" describe-secret --secret-id "$name" >/dev/null 2>&1; then
+    "${aws[@]}" put-secret-value --secret-id "$name" --secret-string "file://$file" >/dev/null
+  else
+    "${aws[@]}" create-secret --name "$name" --secret-string "file://$file" \
+      --description "deployment.env for the $deployment deployment (tools/deployment-env)" >/dev/null
+  fi
+  echo "backed up $file to $name in account $account"
+}
+
+pull() {
+  local deployment=$1 file=$2
+  shift 2
+  local profile="" region="" force=false
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --profile) profile=$2; shift 2 ;;
+      --region) region=$2; shift 2 ;;
+      --force) force=true; shift ;;
+      *) usage ;;
+    esac
+  done
+  [ -n "$profile" ] && [ -n "$region" ] || usage
+
+  local name
+  name=$(secret_name "$deployment")
+  backup=$(mktemp)
+  trap 'rm -f "$backup"' EXIT
+  # JSON rather than text: --output text adds a newline the file doesn't have.
+  aws --profile "$profile" --region "$region" secretsmanager get-secret-value --secret-id "$name" \
+    --query SecretString --output json | python3 -c 'import json, sys; sys.stdout.write(json.load(sys.stdin))' > "$backup"
+
+  if [ -f "$file" ] && ! cmp -s "$backup" "$file" && ! $force; then
+    diff -u "$file" "$backup" >&2 || true
+    echo "$file differs from the backup (above); rerun with --force to replace it" >&2
+    exit 1
+  fi
+  (umask 077 && cp "$backup" "$file")
+  echo "restored $file from $name"
+}
+
+main "$@"
