@@ -37,10 +37,20 @@ locals {
     # Only for the demo install (ADR 0032, 0039).
     "awzy-dev-idp", "awzy-synthetic",
   ]
+
+  # Third-party images mirrored and signed for installs (ADR 0057), by name.
+  third_party = [
+    for l in split("\n", file("${path.module}/../../../release/third-party-images.txt")) : split(":", trimspace(l))[0]
+    if trimspace(l) != "" && !startswith(trimspace(l), "#")
+  ]
 }
 
 resource "aws_ecr_repository" "image" {
-  for_each = toset(concat([for i in local.images : "awzy/${i}"], ["awzy/charts/awzy"]))
+  for_each = toset(concat(
+    [for i in local.images : "awzy/${i}"],
+    [for i in local.third_party : "awzy/third-party/${i}"],
+    ["awzy/charts/awzy"],
+  ))
 
   name                 = each.key
   image_tag_mutability = "IMMUTABLE" # tags are commit SHAs; a tag never moves

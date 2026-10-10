@@ -8,7 +8,14 @@ resource "helm_release" "argo_cd" {
     # Pull only: no UI or API exposed outside the cluster, no Dex.
     dex     = { enabled = false }
     configs = { params = { "server.insecure" = true } }
+    # Mirrored images only in awzy's namespaces (ADR 0057).
+    global = {
+      image            = local.mirrored["argocd"]
+      imagePullSecrets = [{ name = "awzy-registry" }]
+    }
+    redis = { image = local.mirrored["redis"] }
   })]
+  depends_on = [kubernetes_secret_v1.registry]
 }
 
 resource "helm_release" "kyverno" {
@@ -37,6 +44,18 @@ resource "helm_release" "clickhouse_operator" {
   repository = "https://docs.altinity.com/clickhouse-operator/"
   chart      = "altinity-clickhouse-operator"
   version    = var.versions.clickhouse_operator
+  values = [yamlencode({
+    imagePullSecrets = [{ name = "awzy-registry" }]
+    operator         = { image = local.mirrored["clickhouse-operator"] }
+    metrics          = { image = local.mirrored["metrics-exporter"] }
+    # The CRD hook needs a shell and kubectl; alpine/k8s has both (the chart's default,
+    # bitnami/kubectl:latest, is unpinned and no longer maintained).
+    crdHook = {
+      image            = local.mirrored["k8s"]
+      imagePullSecrets = [{ name = "awzy-registry" }]
+    }
+  })]
+  depends_on = [kubernetes_secret_v1.registry]
 }
 
 # Ingress: Gateway API with Envoy Gateway (same on every cloud; the chart also installs the
@@ -63,6 +82,8 @@ resource "helm_release" "cert_manager" {
       kind             = "ControllerConfiguration"
       enableGatewayAPI = true
     }
+    # HTTP-01 solver pods run next to the Gateway, in awzy-ops, so they use the mirror too.
+    acmesolver = { image = local.mirrored["cert-manager-acmesolver"] }
   })]
 
   # cert-manager looks for the Gateway API CRDs when it starts.

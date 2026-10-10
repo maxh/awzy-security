@@ -135,9 +135,10 @@ the cluster on it.
 
 - **Argo CD:** `kubectl -n awzy-ops get application awzy` is `Synced` and `Healthy`.
 - **Pods:** `kubectl get pods -n awzy-system -n awzy-portal -n awzy-data` are all ready.
-- **Signatures:** `kubectl get clusterpolicy awzy-verify-images` is ready. It refuses any pod in
-  the awzy namespaces whose image is under `registry_prefix` without the release key's signature.
-  Images from other registries aren't checked by it.
+- **Images:** `kubectl get clusterpolicy awzy-verify-images` is ready. In the awzy namespaces
+  it refuses any image that isn't from `registry_prefix` with the release key's signature,
+  including third-party ones, which awzy mirrors and signs (ADR 0057):
+  `kubectl -n awzy-system run unsigned --image=busybox` is refused.
 - **A decision:** port-forward the PDP and ask it something (the request shape is in
   [DEVELOPMENT.md](DEVELOPMENT.md#pdp)):
   ```sh
