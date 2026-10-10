@@ -40,6 +40,10 @@ spec:
           gatewayHTTPRoute:
             parentRefs:
               - { name: awzy, namespace: {{ $ops }}, sectionName: http }
+            # The solver pod runs in awzy-ops from the mirrored image (ADR 0057).
+            podTemplate:
+              spec:
+                imagePullSecrets: [{ name: awzy-registry }]
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway

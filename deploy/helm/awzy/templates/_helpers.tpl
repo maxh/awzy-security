@@ -3,6 +3,12 @@
 {{- required "image.registry is required" .root.Values.image.registry -}}/{{ .name }}:{{ $tag }}
 {{- end -}}
 
+{{- /* A third-party image mirrored into the release registry and signed (ADR 0057); `ref` is a
+<name>:<tag> from deploy/release/third-party-images.txt. */ -}}
+{{- define "awzy.thirdPartyImage" -}}
+{{- required "image.registry is required" .root.Values.image.registry -}}/third-party/{{ .ref }}
+{{- end -}}
+
 {{- define "awzy.labels" -}}
 app.kubernetes.io/name: {{ .name }}
 app.kubernetes.io/part-of: awzy

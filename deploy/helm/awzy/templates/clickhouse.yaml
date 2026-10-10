@@ -37,9 +37,12 @@ spec:
       - name: clickhouse
         spec:
           serviceAccountName: clickhouse
+          {{- with $.Values.image.pullSecret }}
+          imagePullSecrets: [{ name: {{ . }} }]
+          {{- end }}
           containers:
             - name: clickhouse
-              image: clickhouse/clickhouse-server:25.8
+              image: {{ include "awzy.thirdPartyImage" (dict "root" $ "ref" "clickhouse-server:25.8-0152dd511bef") }}
     volumeClaimTemplates:
       - name: data
         spec:

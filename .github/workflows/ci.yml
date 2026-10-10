@@ -128,6 +128,9 @@ jobs:
           helm lint --strict deploy/helm/awzy -f deploy/helm/awzy/values-example.yaml
           helm template awzy deploy/helm/awzy -f deploy/helm/awzy/values-example.yaml > /dev/null
           helm lint --strict deploy/terraform/bootstrap/charts/awzy-config -f deploy/terraform/bootstrap/charts/awzy-config/values-example.yaml
+      # Every image the chart runs is awzy's or a listed, mirrored one (ADR 0057).
+      - name: Chart images are mirrored
+        run: tools/ci/mirror-images.sh --check
       - uses: ./.github/actions/setup-bazel
         with:
           buildbuddy-api-key: ${{ secrets.AWZY_CORP_BUILDBUDDY_API_KEY }}
@@ -157,6 +160,12 @@ jobs:
       - name: Publish the authz release's images
         if: env.AWZY_CI_PUBLISH == 'true'
         run: tools/ci/publish-images.sh authz
+      - if: env.AWZY_CI_PUBLISH == 'true'
+        uses: imjasonh/setup-crane@v0.4
+      # Third-party images installs run, copied from upstream and signed (ADR 0057).
+      - name: Mirror third-party images
+        if: env.AWZY_CI_PUBLISH == 'true'
+        run: tools/ci/mirror-images.sh
       - name: Publish the authz release's chart
         if: env.AWZY_CI_PUBLISH == 'true'
         run: tools/ci/publish-chart.sh

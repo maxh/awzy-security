@@ -15,13 +15,16 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      {{- with .Values.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 70 # postgres in the alpine image
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: create
-          image: postgres:17-alpine
+          image: {{ include "awzy.thirdPartyImage" (dict "root" . "ref" "postgres:17-alpine-b0f9560a2de0") }}
           command:
             - sh
             - -c

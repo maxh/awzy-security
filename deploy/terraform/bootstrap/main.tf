@@ -35,6 +35,15 @@ locals {
 
   # The registry host, e.g. registry.awzysecurity.com
   registry_host = split("/", local.c.registry_prefix)[0]
+
+  # Third-party images, mirrored into the release registry and signed (ADR 0057): name =>
+  # { repository, tag }, from the list CI mirrors. Changing a component's version in
+  # var.versions means mirroring its new images first.
+  mirror_lines = [
+    for l in split("\n", file("${path.module}/../../release/third-party-images.txt")) : split(":", split(" ", trimspace(l))[0])
+    if trimspace(l) != "" && !startswith(trimspace(l), "#")
+  ]
+  mirrored = { for m in local.mirror_lines : m[0] => { repository = "${local.c.registry_prefix}/third-party/${m[0]}", tag = m[1] } }
 }
 
 resource "kubernetes_namespace_v1" "awzy" {
@@ -139,8 +148,9 @@ output "scim" {
 }
 
 # Pull credentials for registry.awzysecurity.com (ADR 0028): one static, revocable token per
-# install. The kubelet uses it in the awzy namespaces, Kyverno to read signatures, and Argo CD
-# to pull the chart. Nothing refreshes it.
+# install. The kubelet uses it in the awzy namespaces (ops too, for the mirrored images of Argo
+# CD, the ClickHouse operator, and cert-manager's solver), Kyverno to read signatures, and Argo
+# CD to pull the chart. Nothing refreshes it.
 locals {
   dockerconfig = jsonencode({
     auths = {
@@ -154,7 +164,7 @@ locals {
 }
 
 resource "kubernetes_secret_v1" "registry" {
-  for_each = toset(["system", "data", "portal"])
+  for_each = toset(["system", "data", "portal", "ops"])
   metadata {
     name      = "awzy-registry"
     namespace = kubernetes_namespace_v1.awzy[each.key].metadata[0].name

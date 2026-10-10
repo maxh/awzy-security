@@ -1,5 +1,7 @@
-# Every awzy image must carry a cosign signature from the release key (ADR 0009). Signatures
-# are not in the public Rekor log, so only the key is checked.
+# awzy's namespaces run only awzy's images: each must come from the release registry (ADR 0057)
+# and carry a cosign signature from the release key (ADR 0009). Third-party images there are
+# mirrored into the registry and signed like awzy's own. Signatures are not in the public Rekor
+# log, so only the key is checked.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -32,3 +34,23 @@ spec:
                       {{- .Values.cosignPubKey | trim | nindent 22 }}
                     rekor: { ignoreTlog: true }
                     ctlog: { ignoreSCT: true }
+    - name: only-the-release-registry
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces:
+                {{- range $k, $ns := .Values.namespaces }}
+                - {{ $ns }}
+                {{- end }}
+      validate:
+        failureAction: Enforce
+        message: "awzy's namespaces run only images from {{ .Values.registry.prefix }} (ADR 0057)"
+        pattern:
+          spec:
+            =(ephemeralContainers):
+              - image: {{ printf "%s/*" .Values.registry.prefix | quote }}
+            =(initContainers):
+              - image: {{ printf "%s/*" .Values.registry.prefix | quote }}
+            containers:
+              - image: {{ printf "%s/*" .Values.registry.prefix | quote }}
