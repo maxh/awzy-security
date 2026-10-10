@@ -14,5 +14,7 @@ async fn main() -> anyhow::Result<()> {
     store.migrate().await?;
     // Places new and changed resources in a sensitivity tier (ADR 0047).
     tokio::spawn(awzy_context::classify::run(store.clone(), std::time::Duration::from_secs(5)));
-    awzy_server::serve("awzy-context", awzy_context::router(store, &scim_token)).await
+    // Who may call what (ADR 0054); SCIM keeps the IdP's token.
+    let access = awzy_context::Access::from_env()?;
+    awzy_server::serve("awzy-context", awzy_context::router(store, &scim_token, &access)).await
 }

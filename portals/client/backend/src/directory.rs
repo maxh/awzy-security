@@ -21,6 +21,8 @@ use crate::access::{require, PortalAction, PortalArea};
 pub struct ContextClient {
     base: String,
     client: Client<HttpConnector, Full<Bytes>>,
+    /// This portal's service token for awzy-context (ADR 0054).
+    tokens: awzy_service_auth::TokenSource,
 }
 
 impl ContextClient {
@@ -33,6 +35,7 @@ impl ContextClient {
         Self {
             base: base.trim_end_matches('/').to_string(),
             client: Client::builder(TokioExecutor::new()).build_http(),
+            tokens: awzy_service_auth::TokenSource::from_env(),
         }
     }
 
@@ -49,6 +52,10 @@ impl ContextClient {
             .header("content-type", "application/json");
         if let Some(a) = actor {
             req = req.header("x-awzy-actor", a);
+        }
+        // This portal's service token for awzy-context (ADR 0054).
+        if let Some(authorization) = self.tokens.authorization("awzy-context")? {
+            req = req.header("authorization", authorization);
         }
         let req = req.body(Full::new(body.map(|b| Bytes::from(b.to_string())).unwrap_or_default()))?;
         let res = tokio::time::timeout(std::time::Duration::from_secs(10), self.client.request(req)).await??;

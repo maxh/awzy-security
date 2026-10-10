@@ -32,6 +32,8 @@ serde_json.workspace = true
 tonic.workspace = true
 uuid.workspace = true
 
+awzy-service-auth.workspace = true
+
 [dev-dependencies]
 jsonwebtoken.workspace = true
 awzy-clickhouse.workspace = true

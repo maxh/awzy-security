@@ -24,6 +24,12 @@ Resources without a label are classified in the background by
 folders. Policies see the higher of the label's tier and the classifier's
 ([ADR 0047](../../../docs/adr/0047-metadata-first-classification-rules.md)).
 
+Every route except SCIM needs a service token (ADR 0054) from a caller the route's group
+allows: *readers* (principals, resources, work items), *writers* (resource and work-item
+writes), and *directory* (the directory and service accounts), each set by the chart
+(`AWZY_CONTEXT_READERS`, `AWZY_CONTEXT_WRITERS`, `AWZY_CONTEXT_DIRECTORY`). SCIM keeps the IdP's
+bearer token.
+
 - Postgres with pgvector
 - Change feed to Kafka topic `attributes.v1`
 

@@ -9,6 +9,7 @@ awzy_service(
     binary_name = "awzy-synthetic",
     visibility = ["//tools:client_side"],
     deps = [
+        "//authz/libs/service-auth",
         "//libs/telemetry",
     ],
     # The tests score awzy-classify against the generator's ground truth (ADR 0047).

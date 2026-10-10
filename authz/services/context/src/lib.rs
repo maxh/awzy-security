@@ -12,9 +12,13 @@ pub mod resources;
 pub mod scim;
 pub mod store;
 
+use std::sync::Arc;
+
+use awzy_service_auth::{require, Allowed};
 use axum::{
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
+    middleware::from_fn_with_state,
     response::{IntoResponse, Response},
     routing::get,
     Json, Router,
@@ -31,7 +35,7 @@ struct SnapshotParams {
 }
 
 /// People and groups as Cedar entities, unless the caller already has this version.
-/// TODO: authenticate PDPs (service-to-service authentication is undecided; see the ADR index).
+/// Callers authenticate with service tokens (ADR 0054; see `Access`).
 async fn principals(
     State(store): State<ContextStore>,
     Query(p): Query<SnapshotParams>,
@@ -124,21 +128,72 @@ async fn directory_summary(State(store): State<ContextStore>) -> Response {
     }
 }
 
+/// Who may call which routes (ADR 0054). Each group's callers come from the chart, as
+/// `namespace/service-account`; a group it leaves empty is closed.
+pub struct Access {
+    verifier: Arc<awzy_service_auth::Verifier>,
+    /// Principals, resources, and work items: the PDP, connectors, the synthetic Job.
+    readers: Allowed,
+    /// Writes to resources and work items: connectors, the synthetic Job.
+    writers: Allowed,
+    /// The directory and the service account registry: the client portal, the synthetic Job.
+    directory: Allowed,
+}
+
+impl Access {
+    /// From `AWZY_CONTEXT_READERS`, `AWZY_CONTEXT_WRITERS`, and `AWZY_CONTEXT_DIRECTORY`.
+    pub fn from_env() -> anyhow::Result<Self> {
+        Ok(Self {
+            verifier: Arc::new(awzy_service_auth::Verifier::from_env("awzy-context")?),
+            readers: Allowed::from_env("AWZY_CONTEXT_READERS"),
+            writers: Allowed::from_env("AWZY_CONTEXT_WRITERS"),
+            directory: Allowed::from_env("AWZY_CONTEXT_DIRECTORY"),
+        })
+    }
+
+    /// Everyone may call everything: for tests and local runs.
+    pub fn off() -> Self {
+        Self::with_verifier(awzy_service_auth::Verifier::off(), &[], &[], &[])
+    }
+
+    pub fn with_verifier(
+        verifier: awzy_service_auth::Verifier,
+        readers: &[&str],
+        writers: &[&str],
+        directory: &[&str],
+    ) -> Self {
+        Self {
+            verifier: Arc::new(verifier),
+            readers: Allowed::only(readers),
+            writers: Allowed::only(writers),
+            directory: Allowed::only(directory),
+        }
+    }
+
+    fn guard(&self, allowed: &Allowed) -> awzy_service_auth::Guard {
+        awzy_service_auth::Guard::new(self.verifier.clone(), allowed.clone())
+    }
+}
+
 /// The PDPs' snapshot at `/v1/principals`, the directory for the client portal at
 /// `/v1/directory/*`, the service account registry at `/v1/service-accounts` (for the client
 /// portal, which authorizes changes), resources and work items at `/v1/resources` and
-/// `/v1/work-items` (for connectors), and SCIM at `/scim/v2` behind `scim_token`.
-/// TODO: authenticate the PDPs and the client portal (service-to-service auth is undecided).
-pub fn router(store: ContextStore, scim_token: &str) -> Router {
-    Router::new()
-        .route("/v1/principals", get(principals))
+/// `/v1/work-items` (for connectors), and SCIM at `/scim/v2` behind `scim_token`. Every route but
+/// SCIM's needs a service token its group allows (`access`).
+pub fn router(store: ContextStore, scim_token: &str, access: &Access) -> Router {
+    let guarded = |r: Router, allowed: &Allowed| r.route_layer(from_fn_with_state(access.guard(allowed), require));
+    let readers = Router::new().route("/v1/principals", get(principals)).with_state(store.clone());
+    let directory = Router::new()
         .route("/v1/directory/summary", get(directory_summary))
         .route("/v1/directory/people", get(directory_people))
         .route("/v1/directory/groups", get(directory_groups))
         .route("/v1/service-accounts", get(list_service_accounts))
         .route("/v1/service-accounts/{id}", axum::routing::put(put_service_account).delete(delete_service_account))
-        .with_state(store.clone())
-        .merge(resources::router(store.clone()))
+        .with_state(store.clone());
+    guarded(readers, &access.readers)
+        .merge(guarded(resources::read_router(store.clone()), &access.readers))
+        .merge(guarded(resources::write_router(store.clone()), &access.writers))
+        .merge(guarded(directory, &access.directory))
         .merge(scim::router(store, scim_token))
 }
 
@@ -170,7 +225,7 @@ mod tests {
     #[tokio::test]
     async fn idp_provisioning_reaches_the_snapshot() {
         let Some(store) = store::tests::test_store().await else { return };
-        let app = router(store, TOKEN);
+        let app = router(store, TOKEN, &Access::off());
 
         let unauthenticated =
             app.clone().oneshot(Request::get("/scim/v2/Users").body(Body::empty()).unwrap()).await.unwrap();
@@ -291,5 +346,43 @@ mod tests {
             1,
             "only the nested security group is left"
         );
+    }
+
+    #[tokio::test]
+    async fn every_route_but_scim_needs_a_service_token() {
+        use axum::{body::Body, http::Request as HttpRequest};
+        use tower::ServiceExt;
+
+        // A store that never connects: a guarded route must refuse before touching it.
+        let pool = sqlx::postgres::PgPoolOptions::new().connect_lazy("postgres://awzy@127.0.0.1:1/none").unwrap();
+        // A verifier with no keys refuses every token.
+        let verifier =
+            awzy_service_auth::Verifier::with_fixed_keys("awzy-context", "https://issuer.test", Default::default());
+        let access =
+            Access::with_verifier(verifier, &["awzy-system/awzy"], &["awzy-system/awzy"], &["awzy-portal/awzy"]);
+        let app = router(ContextStore::new(pool), TOKEN, &access);
+        let call = |method: &str, path: &str, auth: Option<String>| {
+            let mut req = HttpRequest::builder().method(method).uri(path);
+            if let Some(a) = auth {
+                req = req.header("authorization", a);
+            }
+            app.clone().oneshot(req.body(Body::empty()).unwrap())
+        };
+        for (method, path) in [
+            ("GET", "/v1/principals"),
+            ("GET", "/v1/resources/synthetic:doc:1/entities"),
+            ("POST", "/v1/resources/batch"),
+            ("DELETE", "/v1/work-items/synthetic:ticket:1"),
+            ("GET", "/v1/directory/summary"),
+            ("PUT", "/v1/service-accounts/sales-genie"),
+        ] {
+            let status = call(method, path, None).await.unwrap().status();
+            assert_eq!(status, StatusCode::UNAUTHORIZED, "{method} {path}");
+            let forged = call(method, path, Some("Bearer not.a.token".into())).await.unwrap().status();
+            assert_eq!(forged, StatusCode::UNAUTHORIZED, "{method} {path} with a bad token");
+        }
+        // SCIM answers to the IdP's token, not a service token: past auth, it reaches the store.
+        let scim = call("GET", "/scim/v2/Users", Some(format!("Bearer {TOKEN}"))).await.unwrap().status();
+        assert_ne!(scim, StatusCode::UNAUTHORIZED);
     }
 }

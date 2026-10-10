@@ -20,5 +20,7 @@ tokio.workspace = true
 tracing.workspace = true
 awzy-telemetry.workspace = true
 
+awzy-service-auth.workspace = true
+
 [dev-dependencies]
 awzy-classify.workspace = true

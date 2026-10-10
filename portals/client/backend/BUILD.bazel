@@ -12,6 +12,7 @@ awzy_service(
         "//authz/libs/identity",
         "//authz/services/pdp",
         "//authz/libs/proto",
+        "//authz/libs/service-auth",
         "//libs/llm",
         "//libs/model",
         "//libs/portal",

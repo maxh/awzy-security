@@ -75,6 +75,8 @@ pub struct Resources {
     /// awzy-context's base URL; `None` when the PDP runs without it.
     endpoint: Option<String>,
     client: Client<HttpConnector, Empty<Bytes>>,
+    /// This process's service token for awzy-context (ADR 0054).
+    tokens: awzy_service_auth::TokenSource,
     cache: RwLock<HashMap<String, Cached>>,
     ttl: Duration,
     unknown_ttl: Duration,
@@ -94,6 +96,7 @@ impl Resources {
         Self {
             endpoint: endpoint.map(|e| e.trim_end_matches('/').to_string()),
             client: Client::builder(TokioExecutor::new()).build_http(),
+            tokens: awzy_service_auth::TokenSource::from_env(),
             cache: RwLock::default(),
             ttl,
             unknown_ttl,
@@ -156,7 +159,8 @@ impl Resources {
 
     async fn fetch(&self, endpoint: &str, id: &str) -> anyhow::Result<Option<Arc<Loaded>>> {
         let url = format!("{endpoint}/v1/resources/{}/entities", encode(id));
-        let res = tokio::time::timeout(TIMEOUT, self.client.get(url.parse()?)).await??;
+        let req = crate::principals::context_get(&url, &self.tokens)?;
+        let res = tokio::time::timeout(TIMEOUT, self.client.request(req)).await??;
         match res.status().as_u16() {
             404 => Ok(None),
             200 => {

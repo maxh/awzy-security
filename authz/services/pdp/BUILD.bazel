@@ -10,6 +10,7 @@ awzy_service(
         "//libs/telemetry",
         "//libs/model",
         "//authz/libs/proto",
+        "//authz/libs/service-auth",
         "//authz/libs/signing",
     ],
     compile_data = [
