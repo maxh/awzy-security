@@ -48,10 +48,10 @@ bazel build --config=lint //...                    # clippy
 - First-party Rust deps go in the `deps` of the package's `BUILD.bazel` (`awzy_service` /
   `awzy_rust_library` in `tools/rust.bzl`) as well as its `Cargo.toml`.
 - pnpm runs with `hoist=false`: every TypeScript package declares every dependency it imports.
-- GraphQL schemas are generated from the Rust backends. After changing a resolver, run
-  `bazel run //portals/<client|corp>/frontend:update_schema`, then `pnpm relay` in that frontend
-  (after `pnpm install`), or `bazel test` fails on the stale `schema.graphql` and `__generated__`
-  files.
+- GraphQL schemas are generated from the Rust backends. On a pull request, the `schema-prs`
+  workflow regenerates `schema.graphql` and the Relay `__generated__` files and pushes them to the
+  branch, so don't hand-edit them. Locally it's `bazel run
+  //portals/<client|corp>/frontend:update_schema`, then `pnpm relay` in that frontend.
 
 ## Conventions
 

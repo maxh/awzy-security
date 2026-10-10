@@ -1,0 +1,41 @@
+name: schema-prs
+
+# Keeps each pull request's generated GraphQL schemas and Relay artifacts in step with its
+# resolvers and queries (tools/ci/regen-schemas.sh), so a resolver change needs no local Bazel.
+# Pull requests from forks are skipped: the workflow token can't push to them.
+on:
+  pull_request:
+    paths:
+      - "libs/model/**"
+      - "libs/portal/**"
+      - "portals/*/backend/**"
+      - "portals/*/frontend/schema.graphql"
+      - "portals/*/frontend/src/**"
+
+# One run per branch; a newer push replaces a run still waiting.
+concurrency:
+  group: schema-prs-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  regen:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the regenerated files to the PR's branch
+      actions: write # start the PR's CI, which the workflow token's push doesn't
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: ./.github/actions/setup-bazel
+        with:
+          buildbuddy-api-key: ${{ secrets.AWZY_CORP_BUILDBUDDY_API_KEY }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: tools/ci/regen-schemas.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.head_ref }}
