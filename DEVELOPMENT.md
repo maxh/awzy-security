@@ -535,7 +535,9 @@ bazel run //portals/client/frontend:update_schema   # regenerate schema.graphql 
 cd portals/client/frontend && pnpm relay && pnpm dev # https://localhost:5173 (with .dev-certs/), proxies /graphql and /auth/config to :8080
 ```
 
-`bazel test` fails if `schema.graphql` or the committed Relay artifacts are stale.
+`bazel test` fails if `schema.graphql` or the committed Relay artifacts are stale. On a pull
+request you needn't regenerate them: the `schema-prs` workflow (`tools/ci/regen-schemas.sh`) does,
+pushes them to the branch, and starts CI again.
 
 `//portals/client/e2e:signin_test` signs in to the client portal in headless Chrome through the dev
 IdP (code + PKCE), switches users, and checks what the backend sees. It uses the machine's Chrome
