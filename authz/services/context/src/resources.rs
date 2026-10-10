@@ -12,7 +12,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, post, put},
     Json, Router,
 };
 use chrono::{DateTime, Utc};
@@ -698,18 +698,33 @@ async fn delete_work_item(State(store): State<ContextStore>, Path(id): Path<Stri
 
 /// `/v1/resources` and `/v1/work-items` for connectors (writes, in batches of up to
 /// [`MAX_BATCH`]) and for enforcement points and the PDP (reads).
-/// TODO: authenticate connectors and PDPs (service-to-service auth is undecided).
-pub fn router(store: ContextStore) -> Router {
+/// Callers authenticate with service tokens (ADR 0055; see `Access`).
+/// Reading resources and work items: what the PDP and connectors need (ADR 0055 groups them).
+pub fn read_router(store: ContextStore) -> Router {
     Router::new()
         .route("/v1/resources", get(list_resources))
-        .route("/v1/resources/batch", post(put_resource_batch))
-        .route("/v1/resources/{id}", get(get_resource).put(put_resource).delete(delete_resource))
+        .route("/v1/resources/{id}", get(get_resource))
         .route("/v1/resources/{id}/entity", get(get_resource_entity))
         .route("/v1/resources/{id}/entities", get(get_resource_entities))
         .route("/v1/work-items", get(list_work_items))
-        .route("/v1/work-items/batch", post(put_work_item_batch))
-        .route("/v1/work-items/{id}", get(get_work_item).put(put_work_item).delete(delete_work_item))
+        .route("/v1/work-items/{id}", get(get_work_item))
         .with_state(store)
+}
+
+/// Writing resources and work items: what connectors do.
+pub fn write_router(store: ContextStore) -> Router {
+    Router::new()
+        .route("/v1/resources/batch", post(put_resource_batch))
+        .route("/v1/resources/{id}", put(put_resource).delete(delete_resource))
+        .route("/v1/work-items/batch", post(put_work_item_batch))
+        .route("/v1/work-items/{id}", put(put_work_item).delete(delete_work_item))
+        .with_state(store)
+}
+
+/// Both, unguarded: for tests.
+#[cfg(test)]
+pub fn router(store: ContextStore) -> Router {
+    read_router(store.clone()).merge(write_router(store))
 }
 
 #[cfg(test)]

@@ -17,6 +17,13 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      # The backend's account: awzy-context allows it to write (ADR 0055).
+      serviceAccountName: awzy
+      volumes:
+        - name: awzy-service-tokens
+          projected:
+            sources:
+              - serviceAccountToken: { audience: awzy-context, expirationSeconds: 600, path: awzy-context }
       {{- with .Values.image.pullSecret }}
       imagePullSecrets: [{ name: {{ . }} }]
       {{- end }}
@@ -32,6 +39,8 @@ spec:
             - { name: AWZY_LOG_FORMAT, value: {{ .Values.logFormat | quote }} }
             - name: AWZY_SCIM_TOKEN
               valueFrom: { secretKeyRef: { name: {{ .Values.context.scimTokenSecret }}, key: token } }
+          volumeMounts:
+            - { name: awzy-service-tokens, mountPath: /var/run/secrets/awzy/tokens, readOnly: true }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

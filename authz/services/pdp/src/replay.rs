@@ -85,7 +85,7 @@ impl Replayer {
         let endpoint = endpoint.trim_end_matches('/');
         let principals = Arc::new(Principals::awaiting_sync());
         let client: Client<HttpConnector, Empty<Bytes>> = Client::builder(TokioExecutor::new()).build_http();
-        principals::sync_once(&principals, endpoint, &client).await?;
+        principals::sync_once(&principals, endpoint, &client, &awzy_service_auth::TokenSource::from_env()).await?;
         Ok(Self::new(principals, Arc::new(Resources::from_context(endpoint.to_string()))))
     }
 

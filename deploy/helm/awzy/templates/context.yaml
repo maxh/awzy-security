@@ -1,8 +1,15 @@
 {{- $sys := .Values.namespaces.system -}}
+{{- $backend := printf "%s/awzy" $sys -}}
+{{- $portal := printf "%s/awzy" .Values.namespaces.portal -}}
 # awzy-context: people and groups from the client's IdP over SCIM (ADR 0031), served to the PDP
-# at /v1/principals. Only /scim/v2 is public, through the Gateway; the rest is in-cluster.
+# at /v1/principals. Only /scim/v2 is public, through the Gateway; the rest is in-cluster, and
+# needs a service token from a caller its group allows (ADR 0055): the install's backend
+# (`awzy` in the system namespace) and, for reading and the directory, the client portal.
 {{ include "awzy.service" (dict "root" . "name" "awzy-context" "namespace" $sys "values" .Values.context
   "env" (list
+    (dict "name" "AWZY_CONTEXT_DIRECTORY" "value" (printf "%s,%s" $backend $portal))
+    (dict "name" "AWZY_CONTEXT_READERS" "value" (printf "%s,%s" $backend $portal))
+    (dict "name" "AWZY_CONTEXT_WRITERS" "value" $backend)
     (dict "name" "AWZY_POSTGRES_URL" "valueFrom" (dict "secretKeyRef" (dict "name" "awzy-postgres" "key" "context_url")))
     (dict "name" "AWZY_SCIM_TOKEN" "valueFrom" (dict "secretKeyRef" (dict "name" .Values.context.scimTokenSecret "key" "token")))
   )) }}

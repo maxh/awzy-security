@@ -33,4 +33,5 @@
   (dict "name" "AWZY_CLICKHOUSE_PASSWORD" "valueFrom" (dict "secretKeyRef" (dict "name" .Values.clickhouse.passwordSecret "key" "password")))
 ) }}
 {{- end }}
-{{ include "awzy.service" (dict "root" . "name" "awzy-client-portal" "namespace" .Values.namespaces.portal "values" $p "env" $env) }}
+{{ include "awzy.service" (dict "root" . "name" "awzy-client-portal" "namespace" .Values.namespaces.portal "values" $p "env" $env
+  "tokens" (list "awzy-context")) }}

@@ -34,6 +34,7 @@ pub struct ContextClient {
     base_url: String,
     scim_token: String,
     http: HttpClient,
+    tokens: awzy_service_auth::TokenSource,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -58,6 +59,7 @@ impl ContextClient {
             base_url: base_url.trim_end_matches('/').to_string(),
             scim_token: scim_token.to_string(),
             http: Client::builder(TokioExecutor::new()).build(https),
+            tokens: awzy_service_auth::TokenSource::from_env(),
         }
     }
 
@@ -74,6 +76,10 @@ impl ContextClient {
             req = req.header(header::CONTENT_TYPE, "application/scim+json");
         } else {
             req = req.header(header::CONTENT_TYPE, "application/json").header("x-awzy-actor", "awzy-synthetic");
+            // This Job's service token for awzy-context (ADR 0055); SCIM uses the IdP's token.
+            if let Some(authorization) = self.tokens.authorization("awzy-context")? {
+                req = req.header(header::AUTHORIZATION, authorization);
+            }
         }
         let body = body.map(|b| Bytes::from(b.to_string())).unwrap_or_default();
         let res = tokio::time::timeout(TIMEOUT, self.http.request(req.body(Full::new(body))?))

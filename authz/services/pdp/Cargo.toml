@@ -22,6 +22,7 @@ cedar-policy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 awzy-model.workspace = true
+awzy-service-auth.workspace = true
 awzy-signing.workspace = true
 thiserror.workspace = true
 awzy-authz-proto.workspace = true

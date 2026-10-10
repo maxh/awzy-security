@@ -1,5 +1,6 @@
 {{- $sys := .Values.namespaces.system -}}
 {{ include "awzy.service" (dict "root" . "name" "awzy-pdp" "namespace" $sys "values" .Values.pdp
+  "tokens" (list "awzy-context")
   "env" (list
     (dict "name" "AWZY_CHALLENGE_ADDR" "value" (printf "http://awzy-challenge.%s.svc:8080" $sys))
     (dict "name" "AWZY_KAFKA_BROKERS" "value" (required "kafka.brokers is required" .Values.kafka.brokers))

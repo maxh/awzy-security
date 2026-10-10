@@ -6,6 +6,7 @@
 //! minted before a change, and a deactivated person carries no groups. Principals the snapshot
 //! doesn't know (service accounts, people not provisioned) keep what the enforcement point sent.
 
+use awzy_service_auth::TokenSource;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     sync::{
@@ -119,12 +120,22 @@ impl Principals {
     }
 }
 
+/// A GET to awzy-context, with this process's service token for it (ADR 0055).
+pub(crate) fn context_get(url: &str, tokens: &TokenSource) -> anyhow::Result<axum::http::Request<Empty<Bytes>>> {
+    let mut req = axum::http::Request::get(url);
+    if let Some(authorization) = tokens.authorization("awzy-context")? {
+        req = req.header(axum::http::header::AUTHORIZATION, authorization);
+    }
+    Ok(req.body(Empty::new())?)
+}
+
 /// Polls awzy-context's `/v1/principals` every `every`, forever. Failures keep the snapshot in
 /// hand and are retried.
 pub async fn sync_principals(principals: Arc<Principals>, endpoint: String, every: Duration) {
     let client: Client<HttpConnector, Empty<Bytes>> = Client::builder(TokioExecutor::new()).build_http();
+    let tokens = TokenSource::from_env();
     loop {
-        if let Err(error) = sync_once(&principals, &endpoint, &client).await {
+        if let Err(error) = sync_once(&principals, &endpoint, &client, &tokens).await {
             tracing::warn!(%error, %endpoint, "principals sync failed; keeping the current snapshot");
         }
         tokio::time::sleep(every).await;
@@ -136,13 +147,14 @@ pub async fn sync_once(
     principals: &Principals,
     endpoint: &str,
     client: &Client<HttpConnector, Empty<Bytes>>,
+    tokens: &TokenSource,
 ) -> anyhow::Result<bool> {
     let known = principals.is_ready().then(|| principals.version());
     let url = match known {
         Some(v) => format!("{endpoint}/v1/principals?known={v}"),
         None => format!("{endpoint}/v1/principals"),
     };
-    let res = tokio::time::timeout(Duration::from_secs(10), client.get(url.parse()?)).await??;
+    let res = tokio::time::timeout(Duration::from_secs(10), client.request(context_get(&url, tokens)?)).await??;
     anyhow::ensure!(res.status().is_success(), "{url} returned {}", res.status());
     let body: Value = serde_json::from_slice(&res.into_body().collect().await?.to_bytes())?;
     let version = body["version"].as_i64().ok_or_else(|| anyhow::anyhow!("no version in the principals snapshot"))?;
