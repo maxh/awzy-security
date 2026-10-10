@@ -5,8 +5,10 @@ awzy_service(
     crate_name = "awzy_reasoner",
     binary_name = "awzy-reasoner",
     deps = [
+        "//authz/libs/proto",
         "//authz/libs/service-auth",
         "//libs/llm",
+        "//libs/model",
         "//libs/server",
         "//libs/telemetry",
     ],

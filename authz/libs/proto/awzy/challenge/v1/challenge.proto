@@ -20,8 +20,9 @@ service ChallengeService {
   // allows to `approve` the resource.
   rpc Decide(DecideRequest) returns (DecideResponse);
 
-  // Revokes an accessor's access until the containment is lifted. Idempotent: containing an
-  // accessor who is already contained returns the active containment.
+  // Revokes an accessor's access until the containment is lifted, or with `monitor` records that
+  // it would have (ADR 0066). Idempotent: containing an accessor who is already contained in
+  // that mode returns the active containment.
   rpc Contain(ContainRequest) returns (ContainResponse);
   rpc Lift(LiftRequest) returns (LiftResponse);
   // Newest first.
@@ -185,6 +186,9 @@ message Containment {
   awzy.authz.v1.Actor created_by_actor = 9;
   // Who lifted it (ADR 0060).
   awzy.authz.v1.Actor lifted_by_actor = 10;
+  // Recorded but not applied: an automated containment while that scope is in monitor
+  // (ADR 0066). Never sent to PDPs; lifting it dismisses it.
+  bool monitor = 11;
 }
 
 message ContainRequest {
@@ -194,6 +198,9 @@ message ContainRequest {
   string created_by = 3;
   // Who created it (ADR 0060).
   awzy.authz.v1.Actor created_by_actor = 4;
+  // Record it without applying it (ADR 0066). An accessor may have one monitored and one
+  // enforced containment active at once.
+  bool monitor = 5;
 }
 
 message ContainResponse {
@@ -220,6 +227,8 @@ message ListContainmentsRequest {
   awzy.authz.v1.EntityRef subject = 2;
   // Default 50, at most 500.
   int32 limit = 3;
+  // Monitored containments too, which are otherwise left out (ADR 0066).
+  bool include_monitor = 4;
 }
 
 message ListContainmentsResponse {

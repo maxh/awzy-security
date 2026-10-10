@@ -52,8 +52,7 @@ pub struct PolicyBundle {
     pub signing_key_id: Option<String>,
 }
 
-/// The only enforcement scope so far. Policy sets and automated containments come later.
-pub const INSTALL_SCOPE: &str = "install";
+pub use awzy_model::{AUTOMATED_CONTAINMENTS_SCOPE, INSTALL_SCOPE};
 
 /// A scope's enforcement mode and the change that set it.
 #[derive(Debug, Clone, PartialEq)]
@@ -95,7 +94,7 @@ pub enum StoreError {
     NonceReused,
     #[error("nothing to roll back to{}", .0.map(|v| format!(": version {v} was never published")).unwrap_or_else(|| ": no earlier published bundle".into()))]
     NoRollbackTarget(Option<i64>),
-    #[error("unknown enforcement scope {0:?}; only \"install\" exists so far")]
+    #[error("unknown enforcement scope {0:?}; the scopes are \"install\" and \"automated-containments\"")]
     UnknownScope(String),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
@@ -342,7 +341,8 @@ impl PolicyStore {
 }
 
 fn check_scope(scope: &str) -> Result<(), StoreError> {
-    if scope == INSTALL_SCOPE {
+    // Policy sets come later.
+    if scope == INSTALL_SCOPE || scope == AUTOMATED_CONTAINMENTS_SCOPE {
         Ok(())
     } else {
         Err(StoreError::UnknownScope(scope.to_string()))
@@ -421,6 +421,17 @@ pub(crate) mod tests {
             store.enforcement_changes(INSTALL_SCOPE, 10).await.unwrap().into_iter().map(|c| c.mode).collect();
         assert_eq!(history, vec![EnforcementMode::Monitor, EnforcementMode::Enforce]);
         assert!(matches!(store.enforcement("policy_set:x").await.unwrap_err(), StoreError::UnknownScope(_)));
+    }
+
+    #[tokio::test]
+    async fn automated_containments_have_their_own_mode() {
+        let Some(store) = test_store().await else { return };
+        let scope = AUTOMATED_CONTAINMENTS_SCOPE;
+        assert_eq!(store.enforcement(scope).await.unwrap().mode, EnforcementMode::Monitor, "starts in monitor");
+        store.set_enforcement(INSTALL_SCOPE, EnforcementMode::Enforce, "alice").await.unwrap();
+        assert_eq!(store.enforcement(scope).await.unwrap().mode, EnforcementMode::Monitor, "apart from the install's");
+        store.set_enforcement(scope, EnforcementMode::Enforce, "alice").await.unwrap();
+        assert_eq!(store.enforcement(scope).await.unwrap().mode, EnforcementMode::Enforce);
     }
 
     #[tokio::test]

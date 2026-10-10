@@ -718,6 +718,7 @@ function Admin({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => voi
             label
           }
           createdAt
+          monitor
         }
       }
     `,
@@ -859,6 +860,17 @@ function Containments({
       },
       onError: (e) => setError(e.message),
     });
+  // A monitored containment (ADR 0066) that the security team agrees with: contain for real.
+  const confirm = (c: ContainmentRow) =>
+    c.subject &&
+    contain({
+      variables: { input: { subject: c.subject, reason: `Confirmed on review: ${c.reason}` } },
+      onCompleted: () => {
+        setError(null);
+        onChanged();
+      },
+      onError: (e) => setError(e.message),
+    });
   const submitLift = () =>
     lifting &&
     lift({
@@ -877,7 +889,8 @@ function Containments({
       <Title order={4}>Containments</Title>
       <Text size="sm" c="dimmed">
         A contained accessor is denied everything until a person lifts it. Every PDP applies a change within seconds. In
-        monitor mode it's recorded as a would-deny.
+        monitor mode it's recorded as a would-deny. While automated containments are in monitor, the ones awzy-reasoner
+        would have made are listed as "Would contain": contain the person, or dismiss the record.
       </Text>
       {containments.length === 0 ? (
         <Text c="dimmed">No one is contained.</Text>
@@ -886,16 +899,30 @@ function Containments({
           <Table.Tbody>
             {containments.map((c) => (
               <Table.Tr key={c.id}>
-                <Table.Td>{c.subject ? entityLabel(c.subject) : ""}</Table.Td>
+                <Table.Td>
+                  {c.subject ? entityLabel(c.subject) : ""}
+                  {c.monitor && (
+                    <Badge ml="xs" variant="light" color="gray">
+                      Would contain
+                    </Badge>
+                  )}
+                </Table.Td>
                 <Table.Td>{c.reason}</Table.Td>
                 <Table.Td c="dimmed" style={{ whiteSpace: "nowrap" }}>
                   {c.createdBy?.label}
                   {c.createdAt ? `, ${formatTime(c.createdAt)}` : ""}
                 </Table.Td>
                 <Table.Td>
-                  <Button size="xs" variant="light" onClick={() => setLifting(c)}>
-                    Lift
-                  </Button>
+                  <Group gap="xs" wrap="nowrap">
+                    {c.monitor && (
+                      <Button size="xs" color="red" variant="light" loading={isContaining} onClick={() => confirm(c)}>
+                        Contain
+                      </Button>
+                    )}
+                    <Button size="xs" variant="light" onClick={() => setLifting(c)}>
+                      {c.monitor ? "Dismiss" : "Lift"}
+                    </Button>
+                  </Group>
                 </Table.Td>
               </Table.Tr>
             ))}

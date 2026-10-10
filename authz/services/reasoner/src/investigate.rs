@@ -11,8 +11,7 @@ use serde_json::{json, Value};
 
 use crate::activity::Principal;
 
-/// Scores above this are elevated: the line the base policies draw for high-risk operations.
-pub const ELEVATED: i32 = 40;
+pub use crate::contain::ELEVATED;
 
 /// Where a piece of evidence came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

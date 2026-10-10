@@ -235,6 +235,11 @@ impl Containment {
     async fn lift_reason(&self) -> Option<&str> {
         Some(self.0.lift_reason.as_str()).filter(|s| !s.is_empty())
     }
+    /// Recorded but not applied: awzy-reasoner would have contained this accessor, and automated
+    /// containments are in monitor (ADR 0066). Lifting it dismisses it.
+    async fn monitor(&self) -> bool {
+        self.0.monitor
+    }
 }
 
 /// For `node(id)`: the challenge, if the viewer is the person it was sent to or administers
@@ -290,7 +295,8 @@ impl ChallengeQuery {
         first: Option<i32>,
     ) -> Result<Vec<Containment>> {
         require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
-        let req = ListContainmentsRequest { active_only, subject: None, limit: self::first(first) };
+        let req =
+            ListContainmentsRequest { active_only, subject: None, limit: self::first(first), include_monitor: true };
         let list = client(ctx)?.list_containments(req).await.map_err(grpc)?.into_inner().containments;
         Ok(list.into_iter().map(Containment).collect())
     }

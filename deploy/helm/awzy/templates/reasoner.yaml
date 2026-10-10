@@ -1,14 +1,17 @@
 {{- if and .Values.reasoner.enabled .Values.clickhouse.enabled }}
 {{- $sys := .Values.namespaces.system -}}
 # awzy-reasoner: scores each principal's risk from ClickHouse with its own read-only user and
-# writes the scores to awzy-context with a service token (ADR 0056, ADR 0055).
+# writes the scores to awzy-context with a service token (ADR 0056, ADR 0055). Contains people
+# in awzy-challenge under the automated-containments mode it reads from awzy-policy (ADR 0066).
 {{ include "awzy.service" (dict "root" . "name" "awzy-reasoner" "namespace" $sys "values" .Values.reasoner
-  "tokens" (list "awzy-context")
+  "tokens" (list "awzy-challenge" "awzy-context" "awzy-policy")
   "env" (list
+    (dict "name" "AWZY_CHALLENGE_ADDR" "value" (printf "http://awzy-challenge.%s.svc:8080" $sys))
     (dict "name" "AWZY_CLICKHOUSE_DATABASE" "value" .Values.clickhouse.database)
     (dict "name" "AWZY_CLICKHOUSE_PASSWORD" "valueFrom" (dict "secretKeyRef" (dict "name" .Values.clickhouse.reasonerPasswordSecret "key" "password")))
     (dict "name" "AWZY_CLICKHOUSE_URL" "value" (printf "http://clickhouse-awzy.%s.svc:8123" .Values.namespaces.data))
     (dict "name" "AWZY_CONTEXT_URL" "value" (printf "http://awzy-context.%s.svc:8080" $sys))
+    (dict "name" "AWZY_POLICY_ADDR" "value" (printf "http://awzy-policy.%s.svc:8080" $sys))
     (dict "name" "AWZY_REASONER_INTERVAL_SECS" "value" (toString .Values.reasoner.intervalSeconds))
   )) }}
 {{- end }}

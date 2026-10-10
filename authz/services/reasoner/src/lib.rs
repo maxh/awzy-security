@@ -1,9 +1,11 @@
 //! awzy-reasoner: the slow path. Scores each person's and service account's risk from their
 //! activity in ClickHouse and writes the scores to awzy-context, where the PDPs pick them up
-//! (ADR 0056). Investigations, a model's findings checked in code, are in [`investigate`]
-//! (ADR 0067); they don't run on the reasoner's flags yet.
+//! (ADR 0056). Contains people when the day's evidence adds up, in awzy-challenge (ADR 0066).
+//! Investigations, a model's findings checked in code, are in [`investigate`] (ADR 0067); they
+//! don't run on the reasoner's flags yet.
 
 pub mod activity;
+pub mod contain;
 pub mod context;
 pub mod investigate;
 pub mod score;
@@ -92,6 +94,8 @@ pub fn score_all(history: &History, opened: &Opened, teams: &HashMap<Principal, 
 pub struct Reasoner {
     pub clickhouse: clickhouse::Client,
     pub context: ContextClient,
+    /// None when awzy-challenge or awzy-policy isn't configured: nobody is contained.
+    pub containments: Option<contain::Containments>,
 }
 
 impl Reasoner {
@@ -103,7 +107,28 @@ impl Reasoner {
         let teams = self.context.teams().await?;
         let scores = score_all(&history, &opened, &teams);
         self.context.put(&scores).await?;
+        if let Some(c) = &self.containments {
+            // Scores are written whatever happens here; a failed containment step waits for the
+            // next run.
+            if let Err(e) = self.contain(c, &scores, as_of).await {
+                tracing::warn!(error = %e, "automated containments skipped this run");
+            }
+        }
         Ok(scores.len())
+    }
+
+    /// Contains whoever this run's scores and the day's evidence call for (ADR 0066), or records
+    /// that it would have, by the `automated-containments` scope's mode.
+    async fn contain(&self, c: &contain::Containments, scores: &[Scored], as_of: DateTime<Utc>) -> anyhow::Result<()> {
+        // Read first: if the mode can't be read, nobody is contained.
+        let mode = c.mode().await?;
+        let mut evidence = c.evidence(as_of).await?;
+        evidence.exfiltration = contain::load_exfiltration(&self.clickhouse, as_of).await?;
+        for p in contain::proposals(scores, &evidence) {
+            c.contain(&p, mode).await?;
+            tracing::warn!(person = %p.person, mode = mode.as_str(), reason = %p.reason, "automated containment");
+        }
+        Ok(())
     }
 
     /// Scores everyone every `interval`, for as long as the service runs. A failed run is

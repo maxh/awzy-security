@@ -307,7 +307,9 @@ impl ClientPortalMcp {
     )]
     async fn get_enforcement(&self, Extension(parts): Extension<Parts>) -> Result<Json<EnforcementOut>, ErrorData> {
         self.allow(&parts, PortalAction::View, PortalArea::Enforcement).await?;
-        let setting = crate::enforcement::current(self.policy()?).await.map_err(internal)?;
+        let setting = crate::enforcement::current(self.policy()?, crate::enforcement::EnforcementScope::Install)
+            .await
+            .map_err(internal)?;
         let (_, counts) = decisions::mode_counts(self.clickhouse()?, None).await.map_err(internal)?;
         Ok(Json(EnforcementOut {
             mode: awzy_model::EnforcementMode::from(setting.mode()).as_str().to_string(),
