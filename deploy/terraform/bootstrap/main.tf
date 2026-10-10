@@ -88,6 +88,22 @@ resource "kubernetes_secret_v1" "clickhouse_reporter" {
   data = { password = random_password.clickhouse_reporter.result }
 }
 
+# awzy-reasoner's read-only ClickHouse user (ADR 0056), set by the migrate Job like the
+# reporter's.
+resource "random_password" "clickhouse_reasoner" {
+  length  = 32
+  special = false
+}
+
+resource "kubernetes_secret_v1" "clickhouse_reasoner" {
+  for_each = toset(["data", "system"])
+  metadata {
+    name      = "awzy-clickhouse-reasoner"
+    namespace = kubernetes_namespace_v1.awzy[each.key].metadata[0].name
+  }
+  data = { password = random_password.clickhouse_reasoner.result }
+}
+
 # The reporter sends heartbeats to the corp portal with this token (ADR 0026).
 resource "kubernetes_secret_v1" "reporting_token" {
   count = var.reporter == null ? 0 : 1

@@ -92,6 +92,30 @@ pub async fn ensure_reporter_user(client: &Client, user: &str, password: &str) -
     Ok(())
 }
 
+pub const REASONER_USER: &str = "awzy_reasoner";
+
+/// Creates `user` if needed and sets its password and grants: awzy-reasoner reads `decisions`
+/// and `events` in `database` to score risk (ADR 0056), and nothing else.
+pub async fn ensure_reasoner_user(client: &Client, database: &str, user: &str, password: &str) -> anyhow::Result<()> {
+    for name in [database, user] {
+        anyhow::ensure!(name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_'), "invalid name {name:?}");
+    }
+    anyhow::ensure!(password.len() >= 16, "the reasoner's ClickHouse password must be at least 16 characters");
+    for statement in [
+        format!("CREATE USER IF NOT EXISTS {user} IDENTIFIED WITH sha256_password BY ? SETTINGS readonly = 1"),
+        format!("ALTER USER {user} IDENTIFIED WITH sha256_password BY ? SETTINGS readonly = 1"),
+        format!("REVOKE ALL ON *.* FROM {user}"),
+        format!("GRANT SELECT ON {database}.decisions TO {user}"),
+        format!("GRANT SELECT ON {database}.events TO {user}"),
+    ] {
+        let query = client.query(&statement);
+        let query = if statement.contains('?') { query.bind(password) } else { query };
+        query.execute().await?;
+    }
+    tracing::info!(user, "ClickHouse reasoner user is current");
+    Ok(())
+}
+
 /// ClickHouse runs one statement per request. Statements end with `;` at the end of a line.
 fn statements(sql: &str) -> Vec<String> {
     sql.split(";\n")
@@ -157,6 +181,43 @@ mod tests {
             assert!(reporter.query(denied).fetch_one::<u64>().await.is_err(), "{denied}");
         }
         admin.query(&format!("DROP USER {user}")).execute().await.unwrap();
+    }
+
+    /// With --config=local-stack: the reasoner's user reads decisions and events, and nothing
+    /// else, and can't write.
+    #[tokio::test]
+    async fn the_reasoner_user_reads_only_activity() {
+        let Ok(url) = std::env::var("AWZY_TEST_CLICKHOUSE_URL") else {
+            eprintln!("skipping: AWZY_TEST_CLICKHOUSE_URL is not set");
+            return;
+        };
+        let suffix = uuid::Uuid::now_v7().simple().to_string();
+        let database = format!("test_{suffix}");
+        let admin = Client::default().with_url(&url).with_user("awzy").with_password("awzy");
+        admin.query(&format!("CREATE DATABASE {database}")).execute().await.unwrap();
+        let settings = Settings {
+            kafka_brokers: "localhost:1".into(),
+            decisions_topic: format!("unused.{database}"),
+            events_topic: format!("unused-events.{database}"),
+            consumer_group: database.clone(),
+        };
+        migrate(&admin.clone().with_database(&database), &settings).await.unwrap();
+        let user = format!("test_reasoner_{suffix}");
+        let password = "test-reasoner-password-0123";
+        ensure_reasoner_user(&admin, &database, &user, password).await.unwrap();
+        ensure_reasoner_user(&admin, &database, &user, password).await.unwrap(); // every sync
+        let reasoner =
+            Client::default().with_url(&url).with_user(&user).with_password(password).with_database(&database);
+
+        for allowed in ["SELECT count() FROM decisions", "SELECT count() FROM events"] {
+            reasoner.query(allowed).fetch_one::<u64>().await.unwrap();
+        }
+        for denied in ["SELECT count() FROM decisions_queue", "SELECT count() FROM system.query_log"] {
+            assert!(reasoner.query(denied).fetch_one::<u64>().await.is_err(), "{denied}");
+        }
+        assert!(reasoner.query("TRUNCATE TABLE events").execute().await.is_err());
+        admin.query(&format!("DROP USER {user}")).execute().await.unwrap();
+        admin.query(&format!("DROP DATABASE {database}")).execute().await.unwrap();
     }
 
     /// End to end with --config=local-stack: the PDP's decision log and awzy-intake's events ->
