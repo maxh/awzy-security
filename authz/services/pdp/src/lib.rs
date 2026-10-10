@@ -622,7 +622,7 @@ mod tests {
         let old_schema =
             DEFAULT_SCHEMA.replace("shared_humans", "shared_people").replace("writer_humans", "writer_people");
         let policies = r#"
-            permit (principal, action == Action::"read", resource)
+            permit (principal is Human, action == Action::"read", resource)
             when { resource has shared_people && resource.shared_people.contains(principal) };
         "#;
         let human = |id: &str| json!({ "__entity": { "type": "Human", "id": id } });
