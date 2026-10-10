@@ -12,6 +12,7 @@ members = [
     "tools/dev-idp",
     "authz/libs/proto",
     "authz/services/challenge",
+    "authz/demo/evals",
     "authz/demo/synthetic",
     "authz/jobs/clickhouse-migrate",
     "authz/services/connectors",
@@ -105,6 +106,7 @@ awzy-intake = { path = "authz/services/intake" }
 awzy-model = { path = "libs/model" }
 awzy-pdp = { path = "authz/services/pdp" }
 awzy-reasoner = { path = "authz/services/reasoner" }
+awzy-synthetic = { path = "authz/demo/synthetic" }
 awzy-server = { path = "libs/server" }
 awzy-signing = { path = "authz/libs/signing" }
 awzy-classify = { path = "authz/libs/classify" }

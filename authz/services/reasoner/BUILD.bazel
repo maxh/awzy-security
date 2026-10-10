@@ -6,6 +6,7 @@ awzy_service(
     binary_name = "awzy-reasoner",
     deps = [
         "//authz/libs/service-auth",
+        "//libs/llm",
         "//libs/server",
         "//libs/telemetry",
     ],
