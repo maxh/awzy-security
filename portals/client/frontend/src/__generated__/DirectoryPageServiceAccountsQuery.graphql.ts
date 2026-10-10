@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<afbfea7b559ff21b85e6cbf06cf706f7>>
+ * @generated SignedSource<<7cbe83d9bb886af6f4f9b4ce344438fc>>
  * @lightSyntaxTransform
  */
 
@@ -18,7 +18,9 @@ export type DirectoryPageServiceAccountsQuery$data = {
     readonly id: string;
     readonly owner: string;
     readonly updatedAt: string;
-    readonly updatedBy: string;
+    readonly updatedBy: {
+      readonly label: string;
+    } | null | undefined;
   }>;
 };
 export type DirectoryPageServiceAccountsQuery = {
@@ -92,8 +94,19 @@ var v0 = [
       {
         "alias": null,
         "args": null,
-        "kind": "ScalarField",
+        "concreteType": "Actor",
+        "kind": "LinkedField",
         "name": "updatedBy",
+        "plural": false,
+        "selections": [
+          {
+            "alias": null,
+            "args": null,
+            "kind": "ScalarField",
+            "name": "label",
+            "storageKey": null
+          }
+        ],
         "storageKey": null
       },
       {
@@ -125,16 +138,16 @@ return {
     "selections": (v0/*:: as any*/)
   },
   "params": {
-    "cacheID": "f882fcc1663adc3b0b853803685f75d9",
+    "cacheID": "05fac166ef452c6b91c734e6665a80a8",
     "id": null,
     "metadata": {},
     "name": "DirectoryPageServiceAccountsQuery",
     "operationKind": "query",
-    "text": "query DirectoryPageServiceAccountsQuery {\n  canAdminister: viewerCan(action: ADMINISTER, area: DIRECTORY)\n  serviceAccounts {\n    id\n    owner\n    ai\n    groups\n    description\n    updatedBy\n    updatedAt\n  }\n}\n"
+    "text": "query DirectoryPageServiceAccountsQuery {\n  canAdminister: viewerCan(action: ADMINISTER, area: DIRECTORY)\n  serviceAccounts {\n    id\n    owner\n    ai\n    groups\n    description\n    updatedBy {\n      label\n    }\n    updatedAt\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "fffb4ec31f83f61575d2c6f279d439e6";
+(node as any).hash = "6a4dc4237ea29ea91f67ea877356c801";
 
 export default node;

@@ -16,6 +16,14 @@ message EntityRef {
   string id = 2;
 }
 
+// Who did something (ADR 0060): a person (type "Human", the IdP's ID), a service account or one of
+// awzy's services ("AwzyService", e.g. "awzy-reasoner"), a break-glass key ("BreakGlassKey", its
+// fingerprint), or corp portal staff ("Staff"); and the person it acted for, when it acted for one.
+message Actor {
+  EntityRef subject = 1;
+  EntityRef on_behalf_of = 2;
+}
+
 // An entity the enforcement point already knows about, in Cedar's entity shape.
 // Sent inline until the PDP's attribute snapshot covers it.
 message Entity {

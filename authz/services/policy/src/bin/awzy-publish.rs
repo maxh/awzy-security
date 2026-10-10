@@ -1,6 +1,6 @@
 //! Publishes a policy bundle straight to awzy-policy, without the portal.
 //!
-//!   awzy-publish --endpoint http://awzy-policy:8080 --by "install" \
+//!   awzy-publish --endpoint http://awzy-policy:8080 --by "$USER" \
 //!     [--schema awzy.cedarschema] [--policies policies.cedar]
 //!
 //! For the install's first bundle, and for upgrades that change the portal's own rules
@@ -25,21 +25,25 @@ fn read_or(path: Option<String>, default: &str) -> anyhow::Result<String> {
 async fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let (Some(endpoint), Some(by)) = (arg(&args, "--endpoint"), arg(&args, "--by")) else {
-        bail!("usage: awzy-publish --endpoint <awzy-policy URL> --by <who> [--schema <file>] [--policies <file>]");
+        bail!("usage: awzy-publish --endpoint <awzy-policy URL> --by <person running it> [--schema <file>] [--policies <file>]");
     };
     let schema = read_or(arg(&args, "--schema"), awzy_pdp::DEFAULT_SCHEMA)?;
     let policies = read_or(arg(&args, "--policies"), awzy_pdp::DEFAULT_POLICIES)?;
 
+    // awzy-publish acting for whoever ran it (ADR 0060).
+    let actor = || -> Option<awzy_authz_proto::authz::v1::Actor> {
+        Some(awzy_model::Actor::awzy("awzy-publish").for_person(by.clone()).into())
+    };
     let mut client = PolicyServiceClient::connect(endpoint).await?;
     let draft = client
-        .create_draft(CreateDraftRequest { schema, policies, created_by: by.clone() })
+        .create_draft(CreateDraftRequest { schema, policies, created_by_actor: actor(), ..Default::default() })
         .await
         .map_err(|s| anyhow::anyhow!("{}", s.message()))?
         .into_inner()
         .bundle
         .context("awzy-policy returned no draft")?;
     let bundle = client
-        .publish(PublishRequest { policy_bundle_qid: draft.qid, published_by: by })
+        .publish(PublishRequest { policy_bundle_qid: draft.qid, published_by_actor: actor(), ..Default::default() })
         .await?
         .into_inner()
         .bundle

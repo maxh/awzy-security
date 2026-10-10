@@ -8,7 +8,7 @@ use async_graphql::{
 };
 use awzy_heartbeat::{Service as WireService, ServiceStatus};
 use awzy_model::InstallId;
-use awzy_portal::UtcTimestamp;
+use awzy_portal::{Actor, UtcTimestamp};
 use chrono::Utc;
 
 use crate::{
@@ -201,8 +201,9 @@ impl Install {
             .collect())
     }
 
-    async fn created_by(&self) -> &str {
-        &self.0.created_by
+    /// The staff member who registered it.
+    async fn created_by(&self) -> Actor {
+        Actor(awzy_model::Actor::staff(&self.0.created_by))
     }
 
     async fn created_at(&self) -> UtcTimestamp {

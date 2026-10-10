@@ -277,7 +277,9 @@ function Challenges({
           }
           status
           createdAt
-          decidedBy
+          decidedBy {
+            label
+          }
           grantExpiresAt
         }
         mySecurityKeys {
@@ -332,7 +334,7 @@ function Challenges({
                         ? `retry the request before ${formatTime(c.grantExpiresAt)}`
                         : `was allowed until ${formatTime(c.grantExpiresAt)}`
                       : ""}
-                    {c.status === "REJECTED" && c.decidedBy ? `rejected by ${c.decidedBy}` : ""}
+                    {c.status === "REJECTED" && c.decidedBy ? `rejected by ${c.decidedBy.label}` : ""}
                   </Table.Td>
                 </Table.Tr>
               ))}
@@ -712,7 +714,9 @@ function Admin({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => voi
             id
           }
           reason
-          createdBy
+          createdBy {
+            label
+          }
           createdAt
         }
       }
@@ -885,7 +889,7 @@ function Containments({
                 <Table.Td>{c.subject ? entityLabel(c.subject) : ""}</Table.Td>
                 <Table.Td>{c.reason}</Table.Td>
                 <Table.Td c="dimmed" style={{ whiteSpace: "nowrap" }}>
-                  {c.createdBy}
+                  {c.createdBy?.label}
                   {c.createdAt ? `, ${formatTime(c.createdAt)}` : ""}
                 </Table.Td>
                 <Table.Td>

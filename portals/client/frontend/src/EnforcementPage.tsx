@@ -35,7 +35,9 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
         canSwitch: viewerCan(action: ADMINISTER, area: ENFORCEMENT)
         enforcement {
           mode
-          changedBy
+          changedBy {
+            label
+          }
           changedAt
         }
         enforcementSummary {
@@ -67,7 +69,9 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
         }
         enforcementHistory(first: 10) {
           mode
-          changedBy
+          changedBy {
+            label
+          }
           changedAt
         }
       }
@@ -80,7 +84,9 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
       setEnforcementMode(input: $input) {
         enforcement {
           mode
-          changedBy
+          changedBy {
+            label
+          }
           changedAt
         }
       }
@@ -120,7 +126,7 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
             <StatusBadge tone={enforcing ? "danger" : "info"}>{enforcing ? "Enforcing" : "Monitoring"}</StatusBadge>
             <Text size="sm" c="dimmed">
               {current.changedAt
-                ? `since ${formatTime(current.changedAt)} by ${current.changedBy}`
+                ? `since ${formatTime(current.changedAt)} by ${current.changedBy?.label ?? "unknown"}`
                 : "New installs start in monitor mode and stay there until an admin switches them."}
             </Text>
           </Group>
@@ -254,7 +260,7 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
                       {c.mode === "ENFORCE" ? "Enforce" : "Monitor"}
                     </StatusBadge>
                   </Table.Td>
-                  <Table.Td>{c.changedBy}</Table.Td>
+                  <Table.Td>{c.changedBy?.label}</Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>

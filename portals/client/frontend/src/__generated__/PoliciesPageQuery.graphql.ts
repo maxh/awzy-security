@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<d91c34d64f58a5785ee944e460ef5894>>
+ * @generated SignedSource<<a65e790b08e093cf59375cda87633662>>
  * @lightSyntaxTransform
  */
 
@@ -15,14 +15,18 @@ export type PoliciesPageQuery$data = {
     readonly id: string;
     readonly policies: string;
     readonly publishedAt: string | null | undefined;
-    readonly publishedBy: string | null | undefined;
+    readonly publishedBy: {
+      readonly label: string;
+    } | null | undefined;
     readonly schema: string;
     readonly version: number;
   } | null | undefined;
   readonly canPublish: boolean;
   readonly policyBundles: ReadonlyArray<{
     readonly createdAt: string | null | undefined;
-    readonly createdBy: string;
+    readonly createdBy: {
+      readonly label: string;
+    } | null | undefined;
     readonly id: string;
     readonly publishedAt: string | null | undefined;
     readonly status: PolicyBundleStatus;
@@ -57,6 +61,15 @@ v2 = {
   "storageKey": null
 },
 v3 = [
+  {
+    "alias": null,
+    "args": null,
+    "kind": "ScalarField",
+    "name": "label",
+    "storageKey": null
+  }
+],
+v4 = [
   {
     "alias": "canPublish",
     "args": [
@@ -103,8 +116,11 @@ v3 = [
       {
         "alias": null,
         "args": null,
-        "kind": "ScalarField",
+        "concreteType": "Actor",
+        "kind": "LinkedField",
         "name": "publishedBy",
+        "plural": false,
+        "selections": (v3/*:: as any*/),
         "storageKey": null
       }
     ],
@@ -143,8 +159,11 @@ v3 = [
       {
         "alias": null,
         "args": null,
-        "kind": "ScalarField",
+        "concreteType": "Actor",
+        "kind": "LinkedField",
         "name": "createdBy",
+        "plural": false,
+        "selections": (v3/*:: as any*/),
         "storageKey": null
       },
       (v2/*:: as any*/)
@@ -158,7 +177,7 @@ return {
     "kind": "Fragment",
     "metadata": null,
     "name": "PoliciesPageQuery",
-    "selections": (v3/*:: as any*/),
+    "selections": (v4/*:: as any*/),
     "type": "Query",
     "abstractKey": null
   },
@@ -167,19 +186,19 @@ return {
     "argumentDefinitions": [],
     "kind": "Operation",
     "name": "PoliciesPageQuery",
-    "selections": (v3/*:: as any*/)
+    "selections": (v4/*:: as any*/)
   },
   "params": {
-    "cacheID": "c7d61245d95e12d6676ddbab5e6fa12e",
+    "cacheID": "447cccd313f55c6abdce6448366fb0f9",
     "id": null,
     "metadata": {},
     "name": "PoliciesPageQuery",
     "operationKind": "query",
-    "text": "query PoliciesPageQuery {\n  canPublish: viewerCan(action: ADMINISTER, area: POLICIES)\n  activePolicyBundle {\n    id\n    version\n    schema\n    policies\n    publishedAt\n    publishedBy\n  }\n  policyBundles(first: 20) {\n    id\n    version\n    status\n    createdAt\n    createdBy\n    publishedAt\n  }\n}\n"
+    "text": "query PoliciesPageQuery {\n  canPublish: viewerCan(action: ADMINISTER, area: POLICIES)\n  activePolicyBundle {\n    id\n    version\n    schema\n    policies\n    publishedAt\n    publishedBy {\n      label\n    }\n  }\n  policyBundles(first: 20) {\n    id\n    version\n    status\n    createdAt\n    createdBy {\n      label\n    }\n    publishedAt\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "c4211f1de8aeee23ea0fb5321dc29231";
+(node as any).hash = "3b082a9bc4bc808ff7dcb96e73d54f63";
 
 export default node;

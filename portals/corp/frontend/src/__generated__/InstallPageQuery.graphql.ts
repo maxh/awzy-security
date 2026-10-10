@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<8be705a379bfa7294f8b46bb2f937cd0>>
+ * @generated SignedSource<<736b7cb5e2f1e4b246a273722f307801>>
  * @lightSyntaxTransform
  */
 
@@ -20,7 +20,9 @@ export type InstallPageQuery$data = {
     readonly client?: string;
     readonly cloud?: string;
     readonly createdAt?: string;
-    readonly createdBy?: string;
+    readonly createdBy?: {
+      readonly label: string;
+    };
     readonly environment?: string;
     readonly health?: InstallHealth;
     readonly lastSeenAt?: string | null | undefined;
@@ -138,8 +140,19 @@ v3 = {
     {
       "alias": null,
       "args": null,
-      "kind": "ScalarField",
+      "concreteType": "Actor",
+      "kind": "LinkedField",
       "name": "createdBy",
+      "plural": false,
+      "selections": [
+        {
+          "alias": null,
+          "args": null,
+          "kind": "ScalarField",
+          "name": "label",
+          "storageKey": null
+        }
+      ],
       "storageKey": null
     },
     {
@@ -336,16 +349,16 @@ return {
     ]
   },
   "params": {
-    "cacheID": "3ded34caa3724aec7bee06545580f05e",
+    "cacheID": "6d56f4b436cdb3de1493813e0d697580",
     "id": null,
     "metadata": {},
     "name": "InstallPageQuery",
     "operationKind": "query",
-    "text": "query InstallPageQuery(\n  $id: ID!\n) {\n  node(id: $id) {\n    __typename\n    ... on Install {\n      client\n      environment\n      cloud\n      region\n      channel\n      pinnedVersion\n      health\n      chartVersion\n      lastSeenAt\n      createdBy\n      createdAt\n      services {\n        name\n        version\n        imageDigest\n        replicasReady\n        replicasDesired\n        restarts24h\n        healthy\n      }\n      metrics {\n        decisionsPerSecond\n        pdpP99Ms\n        errorRate\n        kafkaLag\n        clickhouseDiskUsedPercent\n      }\n      versionHistory {\n        chartVersion\n        firstSeenAt\n      }\n    }\n    id\n  }\n}\n"
+    "text": "query InstallPageQuery(\n  $id: ID!\n) {\n  node(id: $id) {\n    __typename\n    ... on Install {\n      client\n      environment\n      cloud\n      region\n      channel\n      pinnedVersion\n      health\n      chartVersion\n      lastSeenAt\n      createdBy {\n        label\n      }\n      createdAt\n      services {\n        name\n        version\n        imageDigest\n        replicasReady\n        replicasDesired\n        restarts24h\n        healthy\n      }\n      metrics {\n        decisionsPerSecond\n        pdpP99Ms\n        errorRate\n        kafkaLag\n        clickhouseDiskUsedPercent\n      }\n      versionHistory {\n        chartVersion\n        firstSeenAt\n      }\n    }\n    id\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "cdf30566c9926168a1269daa5c0684ff";
+(node as any).hash = "d28d390cad2c3cc0fab6c48da80a9a5b";
 
 export default node;

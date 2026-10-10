@@ -80,14 +80,18 @@ function Policies({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => 
           schema
           policies
           publishedAt
-          publishedBy
+          publishedBy {
+            label
+          }
         }
         policyBundles(first: 20) {
           id
           version
           status
           createdAt
-          createdBy
+          createdBy {
+            label
+          }
           publishedAt
         }
       }
@@ -130,8 +134,8 @@ function Policies({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => 
             {active ? (
               <>
                 Published {active.publishedAt ? formatTime(active.publishedAt) : ""}
-                {active.publishedBy ? ` by ${active.publishedBy}` : ""}. PDPs pick up a newly published bundle within
-                about 10 seconds.
+                {active.publishedBy ? ` by ${active.publishedBy.label}` : ""}. PDPs pick up a newly published bundle
+                within about 10 seconds.
               </>
             ) : (
               "No bundle has been published. PDPs enforce the built-in default policies."
@@ -170,7 +174,7 @@ function Policies({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => 
                       {b.createdAt ? formatTime(b.createdAt) : ""}
                       <Text span size="xs" c="dimmed">
                         {" "}
-                        by {b.createdBy}
+                        by {b.createdBy?.label ?? "unknown"}
                       </Text>
                     </Table.Td>
                     <Table.Td>{b.publishedAt ? formatTime(b.publishedAt) : "—"}</Table.Td>

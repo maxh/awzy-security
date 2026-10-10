@@ -26,6 +26,6 @@ mod convert;
 pub use prost_types;
 
 pub use convert::{
-    challenges_from_wire, challenges_to_wire, entities_to_json, entity_from_json, json_to_struct, struct_to_json,
-    ConvertError,
+    actor_from_wire, actor_to_wire, challenges_from_wire, challenges_to_wire, entities_to_json, entity_from_json,
+    json_to_struct, struct_to_json, ConvertError,
 };

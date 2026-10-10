@@ -68,6 +68,13 @@ async fn list_service_accounts(State(store): State<ContextStore>) -> Response {
     }
 }
 
+/// Who did it, from `x-awzy-actor` (an actor's typed text, ADR 0060), as the caller authorized
+/// them. Stored in the typed form whatever the caller sent.
+fn actor(headers: &HeaderMap) -> String {
+    let text = headers.get("x-awzy-actor").and_then(|v| v.to_str().ok()).unwrap_or("unknown");
+    awzy_model::Actor::parse(text).to_string()
+}
+
 /// Registers or changes a service account. `x-awzy-actor` names who did it, as the client
 /// portal authorized them.
 async fn put_service_account(
@@ -77,10 +84,10 @@ async fn put_service_account(
     Json(mut input): Json<ServiceAccountInput>,
 ) -> Response {
     input.id = id;
-    let by = headers.get("x-awzy-actor").and_then(|v| v.to_str().ok()).unwrap_or("unknown");
-    match store.put_service_account(&input, by).await {
+    let by = actor(&headers);
+    match store.put_service_account(&input, &by).await {
         Ok(sa) => {
-            tracing::info!(service_account = %sa.id, owner = %sa.owner, ai = sa.ai, by, "service account registered");
+            tracing::info!(service_account = %sa.id, owner = %sa.owner, ai = sa.ai, %by, "service account registered");
             Json(json!({ "service_account": sa })).into_response()
         }
         Err(StoreError::Invalid(m) | StoreError::Conflict(m)) => (StatusCode::BAD_REQUEST, m).into_response(),
@@ -93,10 +100,10 @@ async fn delete_service_account(
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> Response {
-    let by = headers.get("x-awzy-actor").and_then(|v| v.to_str().ok()).unwrap_or("unknown");
+    let by = actor(&headers);
     match store.delete_service_account(&id).await {
         Ok(true) => {
-            tracing::info!(service_account = %id, by, "service account removed");
+            tracing::info!(service_account = %id, %by, "service account removed");
             StatusCode::NO_CONTENT.into_response()
         }
         Ok(false) => (StatusCode::NOT_FOUND, "no such service account").into_response(),

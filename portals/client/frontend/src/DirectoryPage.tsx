@@ -246,7 +246,9 @@ function ServiceAccountsTable({ fetchKey, onChanged }: { fetchKey: number; onCha
           ai
           groups
           description
-          updatedBy
+          updatedBy {
+            label
+          }
           updatedAt
         }
       }
@@ -305,7 +307,7 @@ function ServiceAccountsTable({ fetchKey, onChanged }: { fetchKey: number; onCha
                 <Table.Td>{sa.groups.join(", ")}</Table.Td>
                 <Table.Td>{sa.description}</Table.Td>
                 <Table.Td>
-                  {formatTime(sa.updatedAt)} by {sa.updatedBy}
+                  {formatTime(sa.updatedAt)} by {sa.updatedBy?.label ?? "unknown"}
                 </Table.Td>
                 <Table.Td>
                   {data.canAdminister && (

@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<689c17094a78b1a89ca32b091f15827c>>
+ * @generated SignedSource<<f3698faaadabbb7fc93fc3c38ba17189>>
  * @lightSyntaxTransform
  */
 
@@ -13,7 +13,9 @@ export type ChallengesPageAdminQuery$variables = Record<PropertyKey, never>;
 export type ChallengesPageAdminQuery$data = {
   readonly containments: ReadonlyArray<{
     readonly createdAt: string | null | undefined;
-    readonly createdBy: string;
+    readonly createdBy: {
+      readonly label: string;
+    } | null | undefined;
     readonly id: string;
     readonly reason: string;
     readonly subject: {
@@ -179,8 +181,19 @@ v4 = [
       {
         "alias": null,
         "args": null,
-        "kind": "ScalarField",
+        "concreteType": "Actor",
+        "kind": "LinkedField",
         "name": "createdBy",
+        "plural": false,
+        "selections": [
+          {
+            "alias": null,
+            "args": null,
+            "kind": "ScalarField",
+            "name": "label",
+            "storageKey": null
+          }
+        ],
         "storageKey": null
       },
       (v3/*:: as any*/)
@@ -206,16 +219,16 @@ return {
     "selections": (v4/*:: as any*/)
   },
   "params": {
-    "cacheID": "ae82a8ed030b8bee535f5af755413334",
+    "cacheID": "40093ca372bb486b5c045c8cc3a67498",
     "id": null,
     "metadata": {},
     "name": "ChallengesPageAdminQuery",
     "operationKind": "query",
-    "text": "query ChallengesPageAdminQuery {\n  pending: challenges(status: PENDING) {\n    id\n    subject {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    kinds\n    passed\n    answererId\n    justification\n    createdAt\n  }\n  containments {\n    id\n    subject {\n      type\n      id\n    }\n    reason\n    createdBy\n    createdAt\n  }\n}\n"
+    "text": "query ChallengesPageAdminQuery {\n  pending: challenges(status: PENDING) {\n    id\n    subject {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    kinds\n    passed\n    answererId\n    justification\n    createdAt\n  }\n  containments {\n    id\n    subject {\n      type\n      id\n    }\n    reason\n    createdBy {\n      label\n    }\n    createdAt\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "5c17fc46d92a38f7944aa935c5bb2321";
+(node as any).hash = "028305e6bc27739e0d9998112aa9c3ca";
 
 export default node;

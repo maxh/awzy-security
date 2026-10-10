@@ -50,6 +50,32 @@ impl From<ModelRef> for EntityRef {
     }
 }
 
+impl From<awzy_model::Actor> for crate::authz::v1::Actor {
+    fn from(a: awzy_model::Actor) -> Self {
+        Self { subject: Some(a.subject.into()), on_behalf_of: a.on_behalf_of.map(Into::into) }
+    }
+}
+
+/// Who acted, from a request's `…_actor` field, or its deprecated text field when the caller
+/// predates ADR 0060. None when neither says.
+pub fn actor_from_wire(actor: Option<crate::authz::v1::Actor>, text: &str) -> Option<awzy_model::Actor> {
+    match actor.and_then(|a| Some((a.subject?, a.on_behalf_of))) {
+        Some((subject, on_behalf_of)) => Some(awzy_model::Actor::new(subject.into(), on_behalf_of.map(Into::into))),
+        None => (!text.is_empty()).then(|| awzy_model::Actor::parse(text)),
+    }
+}
+
+/// The `…_actor` field and its deprecated text twin, for a response, from what's stored. Empty
+/// stays empty: nobody has acted yet.
+pub fn actor_to_wire(stored: &str) -> (Option<crate::authz::v1::Actor>, String) {
+    if stored.is_empty() {
+        return (None, String::new());
+    }
+    let actor = awzy_model::Actor::parse(stored);
+    let text = actor.to_string();
+    (Some(actor.into()), text)
+}
+
 impl TryFrom<CheckRequest> for AccessRequest {
     type Error = ConvertError;
 

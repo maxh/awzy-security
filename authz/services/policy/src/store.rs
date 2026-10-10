@@ -228,7 +228,11 @@ impl PolicyStore {
         };
         let target = bundle_from_row(&target)?;
 
-        let actor = format!("break-glass:{}", req.key_id);
+        let actor = awzy_model::Actor::new(
+            awzy_model::EntityRef::new(awzy_model::actor_type::BREAK_GLASS_KEY, req.key_id.clone()),
+            None,
+        )
+        .to_string();
         let copy: Uuid = sqlx::query_scalar(
             "INSERT INTO policy_bundles (id, schema_src, policies_src, status, created_by)
              VALUES ($1, $2, $3, 'draft', $4) RETURNING id",

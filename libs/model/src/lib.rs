@@ -2,8 +2,10 @@
 //!
 //! Every service and both portals agree on these shapes at compile time.
 
+mod actor;
 mod qid;
 
+pub use actor::{actor_type, Actor};
 pub use qid::{
     CeremonyId, ChallengeId, ContainmentId, DecisionId, EventId, InstallId, PolicyBundleId, QidError, SecurityKeyId,
 };
