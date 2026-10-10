@@ -53,7 +53,7 @@ variable "awzy_bot" {
 }
 
 variable "investigations" {
-  description = "awzy-reasoner's investigations of the people it flags (ADR 0070). AWS only: Claude must be enabled in the install account's Bedrock"
+  description = "awzy-reasoner's investigations of the people it flags (ADR 0071). AWS only: Claude must be enabled in the install account's Bedrock"
   type        = bool
   default     = false
 }

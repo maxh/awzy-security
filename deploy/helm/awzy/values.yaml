@@ -101,7 +101,7 @@ reasoner:
   enabled: true
   intervalSeconds: 900
   replicas: 1
-  # Investigations (ADR 0070): Claude on the install's own Bedrock looks into the people the
+  # Investigations (ADR 0071): Claude on the install's own Bedrock looks into the people the
   # reasoner flags. Off until the client enables Claude in Bedrock; the services' workload role
   # may already invoke it (deploy/terraform/aws/install). Bootstrap sets region.
   investigations:

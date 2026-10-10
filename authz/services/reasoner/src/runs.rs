@@ -1,4 +1,4 @@
-//! Investigations on the reasoner's flags (ADR 0070): who gets one this run, within the monthly
+//! Investigations on the reasoner's flags (ADR 0071): who gets one this run, within the monthly
 //! token budget, the case built from awzy's own records, and the outcome kept in awzy-context and
 //! acted on through automated containments (ADR 0066).
 

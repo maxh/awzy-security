@@ -2,7 +2,7 @@
 //! activity in ClickHouse and writes the scores to awzy-context, where the PDPs pick them up
 //! (ADR 0056). Contains people when the day's evidence adds up, in awzy-challenge (ADR 0066).
 //! Investigates the principals it flags, within a monthly token budget, with a model whose
-//! findings are checked in code ([`investigate`], ADR 0067; [`runs`], ADR 0070).
+//! findings are checked in code ([`investigate`], ADR 0067; [`runs`], ADR 0071).
 
 pub mod activity;
 pub mod contain;
@@ -97,7 +97,7 @@ pub struct Reasoner {
     pub context: ContextClient,
     /// None when awzy-challenge or awzy-policy isn't configured: nobody is contained.
     pub containments: Option<contain::Containments>,
-    /// None until the client turns investigations on (ADR 0070).
+    /// None until the client turns investigations on (ADR 0071).
     pub investigations: Option<runs::Investigations<awzy_llm::bedrock::Bedrock>>,
 }
 

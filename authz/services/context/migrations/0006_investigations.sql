@@ -1,4 +1,4 @@
--- Investigations awzy-reasoner ran (ADR 0070): a model's finding about one principal, after the
+-- Investigations awzy-reasoner ran (ADR 0071): a model's finding about one principal, after the
 -- checks in code decided what it may do (ADR 0067). Written once by the reasoner; a person
 -- closing one comes later.
 CREATE TABLE investigations (

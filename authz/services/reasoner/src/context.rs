@@ -79,7 +79,7 @@ impl ContextClient {
         }
     }
 
-    /// Records an investigation (ADR 0070) and returns its QID.
+    /// Records an investigation (ADR 0071) and returns its QID.
     pub async fn put_investigation(&self, record: Value) -> anyhow::Result<String> {
         let body = self.send(Method::POST, "/v1/investigations", Some(record)).await?;
         Ok(body["investigation"]["qid"].as_str().unwrap_or_default().to_string())
