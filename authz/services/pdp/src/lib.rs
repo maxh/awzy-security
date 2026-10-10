@@ -41,6 +41,16 @@ use serde::Deserialize;
 pub const DEFAULT_SCHEMA: &str = include_str!("../../../../policies/awzy.cedarschema");
 pub const DEFAULT_POLICIES: &str = include_str!("../../../../policies/base.cedar");
 
+/// What awzy knows about a request beyond its entities, for the PDP to put in each check's context.
+#[derive(Default)]
+pub struct Facts<'a> {
+    /// Who is assigned to open work on the resource (ADR 0046), for `context.assigned`.
+    pub assignees: Option<&'a HashSet<String>>,
+    /// awzy-reasoner's scores for the subject and the person it acts for, keyed `Type::id`
+    /// (ADR 0056), for `context.risk_score`.
+    pub risk: Option<&'a std::collections::HashMap<String, i64>>,
+}
+
 pub struct Pdp {
     schema: Schema,
     policies: PolicySet,
@@ -155,6 +165,18 @@ impl Pdp {
         assignees: Option<&HashSet<String>>,
         passed: Challenges,
     ) -> anyhow::Result<Decision> {
+        self.decide_with(req, entities, &Facts { assignees, risk: None }, passed)
+    }
+
+    /// The general form: what awzy knows beyond the entities (`facts`), and the challenges the
+    /// request has passed.
+    pub fn decide_with(
+        &self,
+        req: &AccessRequest,
+        entities: &Entities,
+        facts: &Facts<'_>,
+        passed: Challenges,
+    ) -> anyhow::Result<Decision> {
         for key in ["on_behalf_of", "human_present", "assigned"] {
             anyhow::ensure!(
                 !req.context.contains_key(key),
@@ -162,14 +184,15 @@ impl Pdp {
             );
         }
         let mut context = req.context.clone();
-        // TODO: from awzy-reasoner's risk attributes. Enforcement points can't know risk.
+        // Each check replaces this with its own principal's score when awzy-reasoner has one
+        // (ADR 0056); an enforcement point's value only stands for principals it has never scored.
         context.entry("risk_score").or_insert(serde_json::Value::from(0));
         context.insert("human_present".into(), serde_json::Value::Bool(req.human_present()));
         if let Some(h) = &req.on_behalf_of {
             context.insert("on_behalf_of".into(), serde_json::json!({ "__entity": { "type": h.kind, "id": h.id } }));
         }
 
-        let assignees = assignees.filter(|_| self.knows_assigned);
+        let facts = Facts { assignees: facts.assignees.filter(|_| self.knows_assigned), risk: facts.risk };
         let without_passed;
         let policy_set = if passed.is_empty() {
             &self.policies
@@ -185,10 +208,10 @@ impl Pdp {
             )?;
             &without_passed
         };
-        let (verdict, policies) = self.check(policy_set, &req.subject, req, &context, entities, assignees)?;
+        let (verdict, policies) = self.check(policy_set, &req.subject, req, &context, entities, &facts)?;
         let on_behalf_of = match &req.on_behalf_of {
             Some(human) => {
-                let (verdict, policies) = self.check(policy_set, human, req, &context, entities, assignees)?;
+                let (verdict, policies) = self.check(policy_set, human, req, &context, entities, &facts)?;
                 Some(DelegationCheck { verdict, policies })
             }
             None => None,
@@ -213,12 +236,15 @@ impl Pdp {
         req: &AccessRequest,
         context: &serde_json::Map<String, serde_json::Value>,
         entities: &Entities,
-        assignees: Option<&HashSet<String>>,
+        facts: &Facts<'_>,
     ) -> anyhow::Result<(Verdict, Vec<String>)> {
         let action = EntityUid::from_type_name_and_id(EntityTypeName::from_str("Action")?, EntityId::new(&req.action));
         let mut context = context.clone();
-        if let Some(assignees) = assignees {
+        if let Some(assignees) = facts.assignees {
             context.insert("assigned".into(), serde_json::Value::Bool(assignees.contains(&principal.id)));
+        }
+        if let Some(score) = facts.risk.and_then(|r| r.get(&format!("{}::{}", principal.kind, principal.id))) {
+            context.insert("risk_score".into(), serde_json::Value::from(*score));
         }
         let context = Context::from_json_value(serde_json::Value::Object(context), Some((&self.schema, &action)))?;
         let request = Request::new(uid(principal)?, action, uid(&req.resource)?, context, Some(&self.schema))?;
@@ -375,23 +401,15 @@ impl AppState {
             // before any policy is evaluated. The containment IDs explain it.
             None => Decision { policies: contained, ..replay::unregistered() },
             Some(replay::Assembled::Unregistered) => replay::unregistered(),
-            Some(replay::Assembled::Ready { entities, assignees }) => {
+            Some(replay::Assembled::Ready { entities, assignees, risk }) => {
                 let answerer = challenges::answerer(req, &entities);
                 let entities = pdp.entities(entities)?;
-                let decision = pdp.decide_assigned(req, &entities, assignees.as_deref())?;
+                let facts = Facts { assignees: assignees.as_deref(), risk: Some(&risk) };
+                let decision = pdp.decide_with(req, &entities, &facts, Challenges::default())?;
                 match decision.verdict {
                     // In monitor nothing is sent, so there's nothing to resolve (ADR 0007).
                     Verdict::Challenge { challenges } if mode == EnforcementMode::Enforce => {
-                        self.resolve_challenge(
-                            &pdp,
-                            req,
-                            &entities,
-                            assignees.as_deref(),
-                            decision,
-                            challenges,
-                            answerer,
-                        )
-                        .await?
+                        self.resolve_challenge(&pdp, req, &entities, &facts, decision, challenges, answerer).await?
                     }
                     _ => decision,
                 }
@@ -412,7 +430,7 @@ impl AppState {
         pdp: &Pdp,
         req: &AccessRequest,
         entities: &Entities,
-        assignees: Option<&HashSet<String>>,
+        facts: &Facts<'_>,
         mut decision: Decision,
         required: awzy_model::Challenges,
         answerer: Option<String>,
@@ -434,7 +452,7 @@ impl AppState {
         }
         if !resolution.passed.is_empty() {
             let id = decision.id;
-            decision = pdp.decide_passed(req, entities, assignees, resolution.passed)?;
+            decision = pdp.decide_with(req, entities, facts, resolution.passed)?;
             decision.id = id;
         }
         if matches!(decision.verdict, Verdict::Challenge { .. }) {
@@ -765,6 +783,42 @@ mod tests {
 
         enforcement.synced(EnforcementMode::Enforce);
         assert_eq!(state.check(&read("bob", "board-deck", 1), entities).await.unwrap().mode, EnforcementMode::Enforce);
+    }
+
+    #[tokio::test]
+    async fn each_check_sees_its_own_principals_risk_score() {
+        let principals = Arc::new(principals::Principals::awaiting_sync());
+        principals.load_with_risk(
+            1,
+            vec![
+                json!({ "uid": { "type": "Human", "id": "bob" }, "attrs": { "active": true }, "parents": [{ "type": "Group", "id": "engineering" }] }),
+                json!({ "uid": { "type": "Group", "id": "engineering" }, "attrs": {}, "parents": [] }),
+                json!({ "uid": { "type": "ServiceAccount", "id": "sales-genie" },
+                        "attrs": { "owner": { "__entity": { "type": "Human", "id": "bob" } }, "ai": true },
+                        "parents": [{ "type": "Group", "id": "engineering" }] }),
+            ],
+            [("Human::bob".to_string(), 90), ("ServiceAccount::sales-genie".to_string(), 10)].into(),
+        );
+        let state = AppState::new(shared(Pdp::with_defaults().unwrap())).with_principals(principals);
+        let doc = json!([{ "uid": { "type": "Resource", "id": "design-doc" }, "attrs": { "sensitivity": "internal" }, "parents": [] }]);
+        let verify = Verdict::Challenge { challenges: Challenges::of(ChallengeKind::Verification) };
+
+        // The enforcement point says 0; awzy's score for bob is 90, and high-risk-verify fires.
+        let d = state.check(&read("bob", "design-doc", 0), doc.clone()).await.unwrap();
+        assert_eq!((d.verdict, d.policies), (verify, vec!["high-risk-verify".to_string()]));
+
+        // SalesGenie (10) acting for bob (90): its own check passes, bob's is challenged, and the
+        // stricter verdict stands.
+        let req = AccessRequest { human_present: Some(true), ..sa_read("sales-genie", Some("bob"), "design-doc", 0) };
+        let d = state.check(&req, doc.clone()).await.unwrap();
+        assert_eq!(d.verdict, verify);
+        assert_eq!(d.on_behalf_of.unwrap().verdict, verify);
+        assert!(!d.policies.contains(&"high-risk-verify".to_string()), "the agent's own score is low");
+
+        // Someone awzy hasn't scored keeps what the enforcement point sent, as before.
+        let carol = json!([{ "uid": { "type": "Human", "id": "carol" }, "attrs": {}, "parents": [{ "type": "Group", "id": "engineering" }] },
+                          { "uid": { "type": "Resource", "id": "design-doc" }, "attrs": { "sensitivity": "internal" }, "parents": [] }]);
+        assert_eq!(state.check(&read("carol", "design-doc", 5), carol).await.unwrap().verdict, Verdict::Allow);
     }
 
     #[tokio::test]

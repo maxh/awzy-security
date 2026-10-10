@@ -43,6 +43,8 @@ fn uid_key(uid: &Value) -> Option<String> {
 struct Snapshot {
     version: i64,
     entities: HashMap<String, Value>,
+    /// Risk scores from awzy-reasoner (ADR 0056), keyed `Type::id`.
+    risk: HashMap<String, i64>,
 }
 
 pub struct Principals {
@@ -80,8 +82,25 @@ impl Principals {
 
     /// Replaces the snapshot with these Cedar entities.
     pub fn load(&self, version: i64, entities: Vec<Value>) {
+        self.load_with_risk(version, entities, HashMap::new());
+    }
+
+    /// The scores of `who` (the subject and the person it acts for) that awzy has, keyed
+    /// `Type::id`: what each check sees as `context.risk_score` (ADR 0056).
+    pub fn risk_of(&self, who: &[&EntityRef]) -> HashMap<String, i64> {
+        let snapshot = self.snapshot.load();
+        who.iter()
+            .filter_map(|p| {
+                let k = key(&p.kind, &p.id);
+                snapshot.risk.get(&k).map(|score| (k, *score))
+            })
+            .collect()
+    }
+
+    /// Replaces the snapshot with these Cedar entities and risk scores.
+    pub fn load_with_risk(&self, version: i64, entities: Vec<Value>, risk: HashMap<String, i64>) {
         let entities = entities.into_iter().filter_map(|e| Some((uid_key(&e["uid"])?, e))).collect();
-        self.snapshot.store(Arc::new(Snapshot { version, entities }));
+        self.snapshot.store(Arc::new(Snapshot { version, entities, risk }));
         self.loaded.store(true, Ordering::Release);
     }
 
@@ -166,7 +185,10 @@ pub async fn sync_once(
         .cloned()
         .ok_or_else(|| anyhow::anyhow!("no entities in the principals snapshot"))?;
     let count = entities.len();
-    principals.load(version, entities);
+    // Absent from an awzy-context older than ADR 0056: no scores.
+    let risk =
+        body["risk"].as_object().into_iter().flatten().filter_map(|(k, v)| Some((k.clone(), v.as_i64()?))).collect();
+    principals.load_with_risk(version, entities, risk);
     tracing::info!(version, entities = count, "loaded principals from awzy-context");
     Ok(true)
 }

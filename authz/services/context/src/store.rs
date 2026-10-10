@@ -156,7 +156,7 @@ pub struct ContextStore {
     pool: PgPool,
 }
 
-async fn bump(tx: &mut Transaction<'_, Postgres>) -> Result<(), sqlx::Error> {
+pub(crate) async fn bump(tx: &mut Transaction<'_, Postgres>) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE snapshot_version SET version = version + 1").execute(&mut **tx).await?;
     Ok(())
 }
