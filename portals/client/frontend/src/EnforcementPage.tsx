@@ -1,3 +1,4 @@
+import { PageHeader } from "@awzy/ui";
 import { Alert, Badge, Button, Center, Group, Loader, Modal, Stack, Table, Text, Title } from "@mantine/core";
 import { Suspense, useState } from "react";
 import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
@@ -11,7 +12,10 @@ export function EnforcementPage() {
   const [fetchKey, setFetchKey] = useState(0);
   return (
     <Stack gap="md">
-      <Title order={3}>Enforcement</Title>
+      <PageHeader
+        title="Enforcement"
+        description="Whether decisions are enforced or only recorded, and what enforcing would have denied (ADR 0007)."
+      />
       <Suspense
         fallback={
           <Center p="xl">

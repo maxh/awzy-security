@@ -18,7 +18,8 @@
     "relay-runtime": "^21.0.1",
     "@mantine/core": "^9.7.1",
     "@mantine/hooks": "^9.7.1",
-    "@tanstack/react-router": "^1.170.41"
+    "@tanstack/react-router": "^1.170.41",
+    "@tabler/icons-react": "^3.49.0"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",

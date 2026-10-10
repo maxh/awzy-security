@@ -2,7 +2,8 @@
 // session is an HttpOnly cookie the backend sets at /auth/login; who is signed in comes from the
 // GraphQL `viewer` query.
 
-import { Alert, Button, Card, Center, PasswordInput, Stack, Text, TextInput, Title } from "@mantine/core";
+import { AuthLayout, ShellAccount } from "@awzy/ui";
+import { Alert, Button, PasswordInput, Stack, TextInput } from "@mantine/core";
 import { createContext, useContext, useState, type FormEvent } from "react";
 
 export type Staff = { username: string; name: string };
@@ -49,49 +50,45 @@ export function SignInPage({ onSignedIn }: { onSignedIn: (staff: Staff) => void 
   };
 
   return (
-    <Center h="100vh">
-      <Card withBorder w={360} padding="lg">
-        <form onSubmit={submit}>
-          <Stack>
-            <Title order={3}>awzy corp portal</Title>
-            <Text size="sm" c="dimmed">
-              Demo and testing sign-in. Accounts are set up by an admin.
-            </Text>
-            {error && <Alert color="red">{error}</Alert>}
-            <TextInput
-              label="Username"
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.currentTarget.value)}
-              required
-            />
-            <PasswordInput
-              label="Password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.currentTarget.value)}
-              required
-            />
-            <Button type="submit" loading={busy}>
-              Sign in
-            </Button>
-          </Stack>
-        </form>
-      </Card>
-    </Center>
+    <AuthLayout
+      product="Corp portal"
+      title="Sign in"
+      description="For awzy staff. Demo and testing accounts are set up by an admin."
+    >
+      <form onSubmit={submit}>
+        <Stack>
+          {error && (
+            <Alert color="red" variant="light">
+              {error}
+            </Alert>
+          )}
+          <TextInput
+            label="Username"
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.currentTarget.value)}
+            required
+            autoFocus
+          />
+          <PasswordInput
+            label="Password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.currentTarget.value)}
+            required
+          />
+          <Button type="submit" loading={busy} fullWidth mt="xs">
+            Sign in
+          </Button>
+        </Stack>
+      </form>
+    </AuthLayout>
   );
 }
 
-/** The signed-in staff member and a sign-out button, for the header. */
+/** The signed-in staff member and a sign-out menu, for the sidebar. */
 export function Account() {
   const staff = useContext(StaffContext);
   if (!staff) return null;
-  return (
-    <>
-      <Text size="sm">{staff.name}</Text>
-      <Button size="xs" variant="subtle" onClick={() => void signOut()}>
-        Sign out
-      </Button>
-    </>
-  );
+  return <ShellAccount name={staff.name} detail={staff.username} onSignOut={() => void signOut()} />;
 }

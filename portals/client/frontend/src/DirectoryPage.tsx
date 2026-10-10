@@ -1,3 +1,4 @@
+import { PageHeader } from "@awzy/ui";
 import {
   Alert,
   Badge,
@@ -12,7 +13,6 @@ import {
   Tabs,
   Text,
   TextInput,
-  Title,
 } from "@mantine/core";
 import { type FormEvent, Suspense, useState } from "react";
 import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
@@ -35,7 +35,10 @@ const loading = (
 export function DirectoryPage() {
   return (
     <Stack gap="md">
-      <Title order={3}>Directory</Title>
+      <PageHeader
+        title="Directory"
+        description="The people and groups your IdP provisions, and the service accounts and AI agents registered here."
+      />
       <Suspense fallback={loading}>
         <Summary />
       </Suspense>

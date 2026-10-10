@@ -1,5 +1,5 @@
-import { Badge, Card, Center, Group, Loader, SegmentedControl, SimpleGrid, Stack, Text, Title } from "@mantine/core";
-import { LineChart, type LinePoint } from "@awzy/ui";
+import { LineChart, type LinePoint, PageLoader, Section, StatusBadge } from "@awzy/ui";
+import { Card, Group, SegmentedControl, SimpleGrid, Stack, Text } from "@mantine/core";
 import { type ReactNode, Suspense, useState, useTransition } from "react";
 import { graphql, useLazyLoadQuery } from "react-relay";
 
@@ -17,28 +17,24 @@ export function InstallCharts({ id }: { id: string }) {
   const [span, setSpan] = useState<Span>("DAY");
   const [pending, startTransition] = useTransition();
   return (
-    <Stack gap="xs">
-      <Group justify="space-between">
-        <Title order={4}>Over time</Title>
+    <Section
+      title="Over time"
+      description="Gaps are time the install wasn't reporting."
+      actions={
         <SegmentedControl
           size="xs"
           value={span}
           onChange={(v) => startTransition(() => setSpan(v))}
           data={(Object.keys(WINDOWS) as Span[]).map((value) => ({ value, label: WINDOWS[value].label }))}
         />
-      </Group>
-      <Suspense
-        fallback={
-          <Center p="xl">
-            <Loader />
-          </Center>
-        }
-      >
+      }
+    >
+      <Suspense fallback={<PageLoader />}>
         <div style={{ opacity: pending ? 0.5 : 1, transition: "opacity 150ms" }}>
           <Charts key={span} id={id} span={span} />
         </div>
       </Suspense>
-    </Stack>
+    </Section>
   );
 }
 
@@ -97,14 +93,13 @@ function Charts({ id, span }: { id: string; span: Span }) {
   return (
     <Stack gap="sm">
       <Group gap="xs">
-        <Badge color={degraded ? "orange" : "teal"} variant="light">
-          {degraded ? "degraded at times" : "no degraded periods"}
-        </Badge>
+        <StatusBadge tone={degraded ? "warning" : "success"}>
+          {degraded ? "Degraded at times" : "No degraded periods"}
+        </StatusBadge>
         <Text size="sm" c="dimmed">
           {degraded
             ? `${degraded} of ${samples.length} intervals had a service that wasn't fully ready.`
-            : `Every service was ready in all ${samples.length} intervals with a heartbeat.`}{" "}
-          Gaps in the charts are time the install wasn't reporting.
+            : `Every service was ready in all ${samples.length} intervals with a heartbeat.`}
         </Text>
       </Group>
       <SimpleGrid cols={{ base: 1, md: 2 }}>
@@ -151,7 +146,7 @@ function Charts({ id, span }: { id: string; span: Span }) {
 
 function ChartCard({ title, note, children }: { title: string; note: string; children: ReactNode }) {
   return (
-    <Card withBorder padding="sm">
+    <Card padding="sm" shadow="none">
       <Group gap={6} mb={4}>
         <Text size="sm" fw={600}>
           {title}

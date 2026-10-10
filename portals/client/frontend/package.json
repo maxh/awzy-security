@@ -19,7 +19,8 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-relay": "^21.0.1",
-    "relay-runtime": "^21.0.1"
+    "relay-runtime": "^21.0.1",
+    "@tabler/icons-react": "^3.49.0"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",
