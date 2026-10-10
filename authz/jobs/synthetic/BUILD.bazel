@@ -7,6 +7,9 @@ awzy_service(
     name = "synthetic",
     crate_name = "awzy_synthetic",
     binary_name = "awzy-synthetic",
+    # Medium: the scenario test loads all of Larkspur into awzy-context and runs it through the PDP
+    # and awzy-gateway, which takes longer than a minute when the whole suite runs at once.
+    test_size = "medium",
     visibility = ["//tools:client_side"],
     deps = [
         "//authz/libs/service-auth",
