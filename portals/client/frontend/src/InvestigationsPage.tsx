@@ -22,7 +22,7 @@ export function InvestigationsPage() {
         <SegmentedControl
           w="fit-content"
           value={filter}
-          onChange={(v) => setFilter(v as "NEEDS_REVIEW" | "ALL")}
+          onChange={setFilter}
           data={[
             { label: "Needs review", value: "NEEDS_REVIEW" },
             { label: "All", value: "ALL" },
