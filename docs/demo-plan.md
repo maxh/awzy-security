@@ -186,4 +186,8 @@ Each step is usable on its own and shows up in the demo:
    ask for his security key ([ADR 0064](adr/0064-unfamiliar-territory-raises-risk-and-high-risk-operations-need-a-key.md)).
    So does the peer outlier: Riley's morning of sixty finance documents scores past 80 against his
    own days and his team's ([ADR 0056](adr/0056-awzy-scores-principals-risk-and-the-pdp-uses-it.md)), and
-   what he opens next asks for his security key. The rogue agent's containment is still to come.
+   what he opens next asks for his security key. And the rogue agent ends as the paper's does: Nora's
+   morning outside her accounts raises her risk, the plan's owner rejects SalesGenie's request,
+   she exports her accounts, and awzy-reasoner contains her, which stops SalesGenie too
+   ([ADR 0066](adr/0066-the-reasoner-contains-people-automatically-in-its-own-mode.md)). Every
+   scenario now runs end to end.

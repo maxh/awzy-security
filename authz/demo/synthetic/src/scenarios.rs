@@ -4,15 +4,16 @@
 //! ordinary day, with what awzy should do about each, so detection can be scored (demo plan,
 //! "Detection").
 //!
-//! Still to come: the rogue agent's containment.
+//! The rogue agent's ending also needs awzy-challenge (the owner's rejection) and awzy-intake (the
+//! export, [`exfiltration`]).
 
 use std::collections::BTreeSet;
 
 use crate::{
-    activity::{Access, Why, READ},
+    activity::{Access, Why, LIST, READ},
     driver::Outcome,
     org::{cast, Company, Profile},
-    world::{person_documents, BASIC_QUESTIONS},
+    world::{person_documents, work_items, BASIC_QUESTIONS, OUTSIDE_HER_ACCOUNTS},
 };
 
 /// When the scenarios count on awzy-reasoner having scored the day so far: after the foolish
@@ -75,23 +76,78 @@ pub fn curious_contractor() -> Vec<Step> {
     ]
 }
 
-/// SalesGenie, prompted by Nora, reaches for the FY27 strategic plan, which none of her accounts
-/// need: Nora must confirm the agent meant to, and the plan's owner must approve.
-pub fn rogue_agent() -> Vec<Step> {
+/// When the rogue agent's ending counts on awzy-reasoner's second run: after the plan's owner
+/// rejects SalesGenie's request and Nora exports her accounts, before she tries again.
+pub const REASONER_CONTAINS_AT: u32 = 15 * 60 + 30;
+
+/// Nora, a Northeast financial-services rep, spends the morning in strategy's and finance's
+/// material, open to all of sales but nothing her accounts need, which raises her risk (ADR 0064).
+/// In the afternoon SalesGenie, prompted by her, reaches for the FY27 strategic plan: Nora must
+/// confirm the agent meant to, and the plan's owner must approve. The owner rejects it, and Nora
+/// exports her accounts ([`exfiltration`]). On its next run awzy-reasoner contains her
+/// (ADR 0066), and from then on neither she nor SalesGenie acting for her gets anything.
+pub fn rogue_agent(company: &Company, profile: Profile) -> Vec<Step> {
     let nora = cast("sales-northeast-finserv").expect("cast");
-    vec![Step {
-        scenario: "rogue-agent",
-        access: Access {
-            minute: 15 * 60 + 2,
-            subject: "sales-genie".into(),
-            on_behalf_of: Some(nora),
-            human_present: true,
-            team: "sales-northeast-finserv",
-            tool: READ,
-            resource: "synthetic:doc:strategic-plan-fy27".into(),
-            why: Why::Scenario("rogue-agent"),
-        },
-        expect: Expect::Challenge(&["justification", "approval"]),
+    let access = |minute: u32, subject: &str, on_behalf_of: Option<String>, resource: String| Access {
+        minute,
+        subject: subject.into(),
+        on_behalf_of,
+        human_present: true,
+        team: "sales-northeast-finserv",
+        tool: READ,
+        resource,
+        why: Why::Scenario("rogue-agent"),
+    };
+    let step = |access: Access, expect: Expect| Step { scenario: "rogue-agent", access, expect };
+    let mut steps: Vec<Step> = OUTSIDE_HER_ACCOUNTS
+        .iter()
+        .enumerate()
+        .map(|(i, (id, ..))| {
+            step(access(9 * 60 + 3 * i as u32, &nora, None, format!("synthetic:doc:{id}")), Expect::Allow)
+        })
+        .collect();
+    steps.push(step(
+        access(15 * 60 + 2, "sales-genie", Some(nora.clone()), "synthetic:doc:strategic-plan-fy27".into()),
+        Expect::Challenge(&["justification", "approval"]),
+    ));
+    // Contained: even her own accounts are closed to her, and to her agent.
+    let linked: Vec<String> = work_items(company, profile, company.seed)
+        .into_iter()
+        .filter(|w| w.assignees.contains(&nora))
+        .flat_map(|w| w.resources)
+        .collect();
+    let account =
+        linked.iter().find(|r| r.starts_with("synthetic:doc:")).or(linked.first()).cloned().expect("Nora has accounts");
+    let tool = if account.starts_with("synthetic:folder:") { LIST } else { READ };
+    for (minute, subject, on_behalf_of) in
+        [(15 * 60 + 45, "sales-genie", Some(nora.clone())), (15 * 60 + 46, nora.as_str(), None)]
+    {
+        let a = Access { tool, ..access(minute, subject, on_behalf_of, account.clone()) };
+        steps.push(step(a, Expect::Deny));
+    }
+    steps
+}
+
+/// An attempt to move data out, as awzy-intake receives it from the system it happened in.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Exfiltration {
+    pub minute: u32,
+    pub person: String,
+    /// One of awzy-reasoner's exfiltration actions (ADR 0066).
+    pub action: &'static str,
+    pub resource: String,
+    pub system: &'static str,
+}
+
+/// The scenarios' attempts to move data out: Nora exporting her accounts after the plan's owner
+/// said no.
+pub fn exfiltration() -> Vec<Exfiltration> {
+    vec![Exfiltration {
+        minute: 15 * 60 + 20,
+        person: cast("sales-northeast-finserv").expect("cast"),
+        action: "export",
+        resource: "synthetic:folder:sales-northeast-finserv/accounts".into(),
+        system: "larkspur-drive",
     }]
 }
 
@@ -181,7 +237,7 @@ pub fn peer_outlier(company: &Company, profile: Profile) -> Vec<Step> {
 /// Every scenario step, in time order.
 pub fn all(company: &Company, profile: Profile) -> Vec<Step> {
     let mut steps = curious_contractor();
-    steps.extend(rogue_agent());
+    steps.extend(rogue_agent(company, profile));
     steps.extend(foolish_admin());
     steps.extend(peer_outlier(company, profile));
     steps.sort_by_key(|s| s.access.minute);
@@ -253,8 +309,12 @@ mod tests {
         let docs: Vec<String> = scenario_resources(&c).into_iter().map(|r| r.id).collect();
         let work = work_items(&c, Profile::Demo, c.seed);
         let outlier = cast("finance").unwrap();
-        // The peer outlier opens his own team's documents; every other step is about a scenario document.
-        for step in all(&c, Profile::Demo).into_iter().filter(|s| s.access.tool == READ && s.access.subject != outlier)
+        // The peer outlier opens his own team's documents, and the rogue agent's person, once
+        // contained, her own accounts; every other step is about a scenario document.
+        let contained = |s: &Step| s.scenario == "rogue-agent" && s.expect == Expect::Deny;
+        for step in all(&c, Profile::Demo)
+            .into_iter()
+            .filter(|s| s.access.tool == READ && s.access.subject != outlier && !contained(s))
         {
             assert!(docs.contains(&step.access.resource), "{} is a scenario document", step.access.resource);
             let who = step.access.on_behalf_of.as_ref().unwrap_or(&step.access.subject);
@@ -353,9 +413,9 @@ mod tests {
         let c = generate(Profile::Demo, 1);
         let (history, opened) = reasoner_view(&c, 20, REASONER_RUNS_AT, true);
         let human = |team: &str| ("Human".to_string(), cast(team).unwrap());
-        let (lee, riley) = (human("it-admin"), human("finance"));
+        let (lee, riley, nora) = (human("it-admin"), human("finance"), human("sales-northeast-finserv"));
         for s in score_all(&history, &opened, &teams(&c)) {
-            if s.principal == lee {
+            if s.principal == lee || s.principal == nora {
                 assert!(
                     s.score.score > ELEVATED && s.score.score <= 80,
                     "elevated, short of challenging everything: {s:?}"
@@ -366,6 +426,34 @@ mod tests {
                 assert!(s.score.score <= ELEVATED, "{s:?}");
             }
         }
+    }
+
+    /// The rogue agent's ending without awzy-challenge or ClickHouse: at the reasoner's second run,
+    /// Nora's elevated risk, the owner's rejection, and her export add up to her containment, and
+    /// to nobody else's.
+    #[test]
+    fn the_rogue_agents_ending_contains_only_nora() {
+        use awzy_reasoner::contain::{proposals, Evidence};
+
+        let c = generate(Profile::Demo, 1);
+        let (history, opened) = reasoner_view(&c, 20, REASONER_CONTAINS_AT, true);
+        let scores = score_all(&history, &opened, &teams(&c));
+        let nora = cast("sales-northeast-finserv").unwrap();
+        let rejected = [(nora.clone(), vec!["sales-genie read strategic-plan-fy27 rejected by its owner".to_string()])];
+        let exported: std::collections::BTreeMap<String, Vec<String>> = exfiltration()
+            .into_iter()
+            .filter(|e| e.minute < REASONER_CONTAINS_AT)
+            .map(|e| (e.person, vec![format!("{} of {}", e.action, e.resource)]))
+            .collect();
+        let evidence = Evidence { rejected: rejected.into(), exfiltration: exported.clone(), ..Evidence::default() };
+        let contained: Vec<String> = proposals(&scores, &evidence).into_iter().map(|p| p.person).collect();
+        assert_eq!(contained, vec![nora.clone()]);
+
+        // Any one of the three alone contains no one.
+        let no_export = Evidence { exfiltration: Default::default(), ..evidence.clone() };
+        assert!(proposals(&scores, &no_export).is_empty());
+        let no_rejection = Evidence { exfiltration: exported, ..Evidence::default() };
+        assert!(proposals(&scores, &no_rejection).is_empty());
     }
 
     #[test]
@@ -379,8 +467,9 @@ mod tests {
     }
 
     /// Larkspur end to end: awzy-context (on Postgres) with the synthetic directory and world, a
-    /// PDP in enforce mode loading people, documents, and risk scores from it, larkspur-drive and
-    /// larkspur-admin, and awzy-gateway in front, all in-process. awzy-reasoner's scores are
+    /// PDP in enforce mode loading people, documents, and risk scores from it and following
+    /// awzy-challenge's challenges and containments, larkspur-drive and larkspur-admin, and
+    /// awzy-gateway in front, all in-process. awzy-reasoner's scores are
     /// computed from the generated days rather than read from ClickHouse, and written to
     /// awzy-context as the reasoner writes them. Run with `--config=local-stack`; skips otherwise.
     #[tokio::test]
@@ -430,11 +519,51 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
         assert!(principals.is_ready(), "the PDP loaded Larkspur's people");
+        // awzy-challenge, on its own schema, asking the PDP who may approve. The PDP's address is
+        // taken first, since each needs the other's.
+        let pdp_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let pdp = format!("http://{}", pdp_listener.local_addr().unwrap());
+        let challenge_schema = format!("test_{}", uuid::Uuid::now_v7().simple());
+        sqlx::query(&format!("CREATE SCHEMA {challenge_schema}"))
+            .execute(&PgPool::connect(&url).await.unwrap())
+            .await
+            .unwrap();
+        let options = PgConnectOptions::from_str(&url).unwrap().options([("search_path", challenge_schema.as_str())]);
+        let challenges = Arc::new(awzy_challenge::ChallengeStore::new(
+            PgPoolOptions::new().max_connections(5).connect_with(options).await.unwrap(),
+            awzy_challenge::Lifetimes::default(),
+        ));
+        challenges.migrate().await.unwrap();
+        let feed = Arc::new(awzy_challenge::Feed::default());
+        tokio::spawn(feed.clone().follow(challenges.clone()));
+        let approvals = Arc::new(awzy_challenge::approvals::Approvals::Pdp(
+            awzy_authz_proto::authz::v1::authorizer_client::AuthorizerClient::new(awzy_service_auth::grpc_channel(
+                tonic::transport::Channel::from_shared(pdp.clone()).unwrap().connect_lazy(),
+                "awzy-pdp",
+            )),
+        ));
+        let challenge =
+            serve(awzy_challenge::router(challenges, feed, approvals, None, &awzy_challenge::Access::off())).await;
+
+        let containments = Arc::new(awzy_pdp::containments::Containments::from_challenge(&challenge).unwrap());
+        tokio::spawn(containments.clone().follow());
         let state = awzy_pdp::AppState::new(awzy_pdp::shared(awzy_pdp::Pdp::with_defaults().unwrap()))
             .with_enforcement(Arc::new(awzy_pdp::Enforcement::fixed(awzy_model::EnforcementMode::Enforce)))
             .with_principals(principals.clone())
-            .with_resources(Arc::new(awzy_pdp::resources::Resources::from_context(context.clone())));
-        let pdp = serve(awzy_pdp::router(state)).await;
+            .with_resources(Arc::new(awzy_pdp::resources::Resources::from_context(context.clone())))
+            .with_challenges(
+                containments.clone(),
+                Arc::new(awzy_pdp::challenges::ChallengeResolver::from_challenge(&challenge).unwrap()),
+            );
+        for _ in 0..100 {
+            if state.is_ready() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        assert!(state.is_ready(), "the PDP has the containment list");
+        let app = awzy_pdp::router(state);
+        tokio::spawn(async move { axum::serve(pdp_listener, app).await.unwrap() });
 
         // larkspur-drive and larkspur-admin, and the gateway in front of them.
         let drive = serve(crate::drive::router(ContextClient::new(&context, "")).merge(crate::admin::router())).await;
@@ -458,11 +587,21 @@ mod tests {
         let gateway = serve(awzy_gateway::router(awzy_gateway::GatewayState::new(config, pdp_client).unwrap())).await;
         let driver = Driver::new(&format!("{gateway}/mcp"), b"dev-secret", "https://idp.local", "awzy-gateway");
         let reasoner = awzy_reasoner::context::ContextClient::new(&context, awzy_service_auth::TokenSource::off());
+        // awzy-reasoner's containment step, against the real awzy-challenge. Its mode comes from
+        // awzy-policy, which isn't running: the test passes enforce itself.
+        let containing = awzy_reasoner::contain::Containments::connect(&challenge, "http://127.0.0.1:9").unwrap();
+        let mut challenge_client =
+            awzy_authz_proto::challenge::v1::challenge_service_client::ChallengeServiceClient::connect(
+                challenge.clone(),
+            )
+            .await
+            .unwrap();
 
         // Every scenario step gets what the demo plan says awzy should do.
         let steps = all(&company, Profile::Demo);
         let mut detection = Detection::new(&steps);
         let mut scored = false;
+        let mut contained = false;
         for (i, step) in steps.iter().enumerate() {
             if !scored && step.access.minute >= REASONER_RUNS_AT {
                 // awzy-reasoner's run: the morning so far against the month before.
@@ -478,6 +617,58 @@ mod tests {
                 }
                 assert!(!principals.risk_of(&[&lee]).is_empty(), "the PDP has Lee's score");
                 scored = true;
+            }
+            if !contained && step.access.minute >= REASONER_CONTAINS_AT {
+                use awzy_authz_proto::challenge::v1::{ChallengeStatus, DecideRequest, ListChallengesRequest};
+
+                // The strategic plan's owner rejects SalesGenie's request in the client portal.
+                let pending =
+                    ListChallengesRequest { status: ChallengeStatus::Pending.into(), limit: 100, ..Default::default() };
+                let plan = challenge_client
+                    .list_challenges(pending)
+                    .await
+                    .unwrap()
+                    .into_inner()
+                    .challenges
+                    .into_iter()
+                    .find(|c| c.resource.as_ref().is_some_and(|r| r.id == "synthetic:doc:strategic-plan-fy27"))
+                    .expect("SalesGenie's request for the plan is waiting");
+                let owner = company.people.iter().find(|p| p.team == "strategy").unwrap().user_name.clone();
+                challenge_client
+                    .decide(DecideRequest {
+                        challenge_qid: plan.qid,
+                        approve: false,
+                        note: "Not for a sales pitch.".into(),
+                        decided_by_actor: Some(awzy_model::Actor::human(owner).into()),
+                        ..Default::default()
+                    })
+                    .await
+                    .unwrap();
+
+                // awzy-reasoner's next run: the day so far, the rejection, and Nora's export.
+                let (history, opened) = reasoner_view(&company, 20, REASONER_CONTAINS_AT, true);
+                let scores = score_all(&history, &opened, &reasoner.teams().await.unwrap());
+                reasoner.put(&scores).await.unwrap();
+                let mut evidence = containing.evidence(chrono::Utc::now()).await.unwrap();
+                for e in exfiltration().into_iter().filter(|e| e.minute < REASONER_CONTAINS_AT) {
+                    let what = format!("{} of {} in {}", e.action, e.resource, e.system);
+                    evidence.exfiltration.entry(e.person).or_default().push(what);
+                }
+                let proposals = awzy_reasoner::contain::proposals(&scores, &evidence);
+                let nora = cast("sales-northeast-finserv").unwrap();
+                assert_eq!(proposals.iter().map(|p| p.person.as_str()).collect::<Vec<_>>(), vec![nora.as_str()]);
+                for p in &proposals {
+                    containing.contain(p, awzy_model::EnforcementMode::Enforce).await.unwrap();
+                }
+                let nora = awzy_model::EntityRef::new("Human", nora);
+                for _ in 0..100 {
+                    if !containments.find(&[&nora]).await.unwrap_or_default().is_empty() {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+                assert!(!containments.find(&[&nora]).await.unwrap().is_empty(), "the PDP has Nora's containment");
+                contained = true;
             }
             let outcome = driver.send(&step.access, i as u64).await;
             assert!(
