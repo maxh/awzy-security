@@ -31,9 +31,11 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(feed.clone().follow(store.clone()));
     // Not ready until the containment list is loaded, so PDPs never get an empty one by mistake.
     let ready = feed.clone();
+    // Who may call which methods (ADR 0055).
+    let access = awzy_challenge::Access::from_env()?;
     awzy_server::serve_with_readiness(
         "awzy-challenge",
-        awzy_challenge::router(store, feed, Arc::new(approvals)),
+        awzy_challenge::router(store, feed, Arc::new(approvals), &access),
         Arc::new(move || ready.is_loaded()),
     )
     .await

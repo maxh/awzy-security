@@ -18,7 +18,7 @@ pub enum ApprovalError {
 
 pub enum Approvals {
     /// Asks the PDP at this channel.
-    Pdp(AuthorizerClient<Channel>),
+    Pdp(AuthorizerClient<awzy_service_auth::AuthChannel>),
     /// No PDP configured: every approval is refused.
     Off,
     /// These people may approve anything. For tests.
@@ -30,7 +30,8 @@ impl Approvals {
     /// Connects lazily, so the service starts before the PDP is up.
     pub fn pdp(endpoint: &str) -> anyhow::Result<Self> {
         let channel = Channel::from_shared(endpoint.to_string())?.connect_lazy();
-        Ok(Self::Pdp(AuthorizerClient::new(channel)))
+        // With this service's token for the PDP (ADR 0055).
+        Ok(Self::Pdp(AuthorizerClient::new(awzy_service_auth::grpc_channel(channel, "awzy-pdp"))))
     }
 
     /// Ok when the PDP allows `approver` (a person's ID) to approve `resource`. The check is

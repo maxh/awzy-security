@@ -1,10 +1,18 @@
 {{- $sys := .Values.namespaces.system -}}
+{{- $backend := printf "%s/awzy" $sys -}}
+{{- $portal := printf "%s/awzy" .Values.namespaces.portal -}}
 # awzy-challenge: challenges and containments (ADR 0054). In-cluster only: the PDP resolves
 # challenges and follows the containment feed; the client portal answers and manages them.
+# Who may call which methods (ADR 0055): the PDPs resolve and follow; only the portal answers for
+# a person; the portal and the backend contain and lift.
 {{ include "awzy.service" (dict "root" . "name" "awzy-challenge" "namespace" $sys "values" .Values.challenge
+  "tokens" (list "awzy-pdp")
   "env" (list
+    (dict "name" "AWZY_CHALLENGE_CONTAINERS" "value" (printf "%s,%s" $backend $portal))
     (dict "name" "AWZY_CHALLENGE_GRANT_SECS" "value" (toString .Values.challenge.grantSeconds))
+    (dict "name" "AWZY_CHALLENGE_PDPS" "value" $backend)
     (dict "name" "AWZY_CHALLENGE_PENDING_SECS" "value" (toString .Values.challenge.pendingSeconds))
+    (dict "name" "AWZY_CHALLENGE_PEOPLE" "value" $portal)
     (dict "name" "AWZY_PDP_ADDR" "value" (printf "http://awzy-pdp.%s.svc:8080" $sys))
     (dict "name" "AWZY_POSTGRES_URL" "valueFrom" (dict "secretKeyRef" (dict "name" "awzy-postgres" "key" "challenge_url")))
   )) }}

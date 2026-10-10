@@ -33,3 +33,8 @@ Not yet:
 - The client portal pages
 
 Integration tests: `bazel test --config=local-stack //authz/services/challenge:challenge_test`.
+
+Callers need a service token (ADR 0055) from the group a method belongs to: the PDPs resolve
+challenges and follow containments; only the client portal reads and answers challenges for a
+person, since `answered_by` and `decided_by` are taken as given; the portal and the backend
+contain and lift. The chart sets the groups (`AWZY_CHALLENGE_PDPS`, `_PEOPLE`, `_CONTAINERS`).

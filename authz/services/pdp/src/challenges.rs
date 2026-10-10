@@ -5,6 +5,7 @@
 //! challenge verdicts pay for that call. If awzy-challenge can't answer, the verdict stays a
 //! challenge with no ID: the request is never allowed for want of an answer.
 
+use awzy_service_auth::{grpc_channel, AuthChannel};
 use std::time::Duration;
 
 use awzy_authz_proto::{
@@ -29,7 +30,7 @@ pub struct Resolution {
 }
 
 pub struct ChallengeResolver {
-    client: Option<ChallengeServiceClient<Channel>>,
+    client: Option<ChallengeServiceClient<AuthChannel>>,
 }
 
 impl ChallengeResolver {
@@ -40,7 +41,7 @@ impl ChallengeResolver {
 
     pub fn from_challenge(endpoint: &str) -> anyhow::Result<Self> {
         let channel = Channel::from_shared(endpoint.to_string())?.connect_lazy();
-        Ok(Self { client: Some(ChallengeServiceClient::new(channel)) })
+        Ok(Self { client: Some(ChallengeServiceClient::new(grpc_channel(channel, "awzy-challenge"))) })
     }
 
     pub fn is_configured(&self) -> bool {

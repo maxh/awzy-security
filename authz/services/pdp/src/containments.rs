@@ -5,6 +5,7 @@
 //! arrived for [`STALE_AFTER`], each check asks awzy-challenge directly until the feed recovers,
 //! and a check it can't answer fails as unavailable rather than missing a containment.
 
+use awzy_service_auth::{grpc_channel, AuthChannel};
 use std::{
     collections::HashMap,
     sync::{
@@ -35,7 +36,7 @@ pub struct Containments {
     /// `Type::id` to the containment's QID.
     active: ArcSwap<HashMap<String, String>>,
     /// None without awzy-challenge: then nobody is contained and it's always ready.
-    client: Option<ChallengeServiceClient<Channel>>,
+    client: Option<ChallengeServiceClient<AuthChannel>>,
     loaded: AtomicBool,
     started: Instant,
     /// Milliseconds after `started` when the feed was last heard from.
@@ -50,10 +51,10 @@ impl Containments {
     /// Not ready until the first list arrives from awzy-challenge at `endpoint`.
     pub fn from_challenge(endpoint: &str) -> anyhow::Result<Self> {
         let channel = Channel::from_shared(endpoint.to_string())?.connect_lazy();
-        Ok(Self::new(Some(ChallengeServiceClient::new(channel))))
+        Ok(Self::new(Some(ChallengeServiceClient::new(grpc_channel(channel, "awzy-challenge")))))
     }
 
-    fn new(client: Option<ChallengeServiceClient<Channel>>) -> Self {
+    fn new(client: Option<ChallengeServiceClient<AuthChannel>>) -> Self {
         Self {
             active: ArcSwap::from_pointee(HashMap::new()),
             loaded: AtomicBool::new(client.is_none()),
@@ -118,7 +119,7 @@ impl Containments {
         }
     }
 
-    async fn follow_once(&self, mut client: ChallengeServiceClient<Channel>) -> anyhow::Result<()> {
+    async fn follow_once(&self, mut client: ChallengeServiceClient<AuthChannel>) -> anyhow::Result<()> {
         let mut stream = client.watch_containments(WatchContainmentsRequest {}).await?.into_inner();
         while let Some(msg) = stream.message().await? {
             if msg.changed {
