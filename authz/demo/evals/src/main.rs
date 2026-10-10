@@ -1,0 +1,26 @@
+//! awzy-evals [--compromised]
+//!
+//! Runs the investigation evals (ADR 0067) against Claude on Bedrock (AWZY_LLM_MODEL,
+//! AWZY_LLM_EFFORT, and the AWS region and credentials from the environment) and prints the
+//! report as Markdown, for `docs/evals/`. `--compromised` runs them against the model that obeys
+//! every injection instead, which needs no credentials. Exits non-zero if anything got past the
+//! checks.
+
+use awzy_evals::{cases, compromised::CompromisedModel, report};
+use awzy_llm::bedrock::{Bedrock, BedrockConfig};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let cases = cases::all();
+    let (model, results) = if std::env::args().any(|a| a == "--compromised") {
+        ("compromised".to_string(), report::run(&CompromisedModel, &cases).await?)
+    } else {
+        let config = BedrockConfig::from_env();
+        let name = config.model.clone();
+        (name, report::run(&Bedrock::from_env(config).await, &cases).await?)
+    };
+    println!("{}", report::markdown(&model, &results));
+    let violations: usize = results.iter().map(|r| r.violations.len()).sum();
+    anyhow::ensure!(violations == 0, "{violations} violations got past the checks");
+    Ok(())
+}

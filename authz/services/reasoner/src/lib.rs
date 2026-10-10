@@ -1,9 +1,11 @@
 //! awzy-reasoner: the slow path. Scores each person's and service account's risk from their
 //! activity in ClickHouse and writes the scores to awzy-context, where the PDPs pick them up
-//! (ADR 0056). Investigations come later.
+//! (ADR 0056). Investigations, a model's findings checked in code, are in [`investigate`]
+//! (ADR 0067); they don't run on the reasoner's flags yet.
 
 pub mod activity;
 pub mod context;
+pub mod investigate;
 pub mod score;
 
 use std::{collections::HashMap, time::Duration};
