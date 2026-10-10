@@ -4,3 +4,6 @@ postgres: { host: awzy.cluster-example.us-east-2.rds.amazonaws.com, secretRef: "
 kafka: { brokers: "b-1.awzy.example.kafka.us-east-2.amazonaws.com:9092,b-2.awzy.example.kafka.us-east-2.amazonaws.com:9092" }
 clientPortal: { hostname: demo.awzysecurity.com, auth: { issuer: "https://idp.example.com", jwksUrl: "https://idp.example.com/.well-known/jwks.json" } }
 reporter: { installId: install_00000000-0000-7000-8000-000000000000 }
+mcpGateway: { enabled: true, hostname: mcp.example.com, upstreams: [{ name: drive, url: "http://drive-mcp.tools.svc:8080/mcp", default_sensitivity: internal, tools: { delete_file: confidential } }], outage: { failOpenTiers: [public] } }
+intake: { enabled: true }
+connectors: { drive: { subject: awzy-reader@example.com }, jira: { url: "https://example.atlassian.net", user: awzy@example.com, projects: [FIN, ENG] } }

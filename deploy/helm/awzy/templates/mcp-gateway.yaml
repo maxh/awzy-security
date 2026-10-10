@@ -1,0 +1,58 @@
+{{- if .Values.mcpGateway.enabled }}
+{{- $sys := .Values.namespaces.system -}}
+{{- $g := .Values.mcpGateway -}}
+{{- $p := .Values.clientPortal -}}
+{{- /* Tokens from the client's IdP, as the client portal validates them, unless set here. */ -}}
+{{- $issuer := $g.auth.issuer | default $p.auth.issuer -}}
+{{- $jwks := $g.auth.jwksUrl | default $p.auth.jwksUrl -}}
+{{- if .Values.demoIdp.enabled }}
+{{- $issuer = include "awzy.demoIdpIssuer" . -}}
+{{- $jwks = printf "http://awzy-dev-idp.%s.svc:8080/jwks" .Values.namespaces.portal -}}
+{{- end }}
+{{- $token := dict "issuer" (required "mcpGateway.auth.issuer (or clientPortal.auth.issuer) is required" $issuer)
+  "audience" $g.auth.audience "jwks_url" (required "mcpGateway.auth.jwksUrl (or clientPortal.auth.jwksUrl) is required" $jwks) -}}
+{{- with $g.auth.subjectClaim }}{{- $_ := set $token "subject_claim" . }}{{- end }}
+{{- $config := dict "token" $token "upstreams" $g.upstreams "service_account_registry" "awzy-context"
+  "outage" (dict "fail_open_tiers" $g.outage.failOpenTiers "cached_allow_ttl_secs" (int $g.outage.cachedAllowTtlSecs)) -}}
+# awzy-gateway: the MCP proxy agents call instead of each MCP server, checking every tool call
+# with awzy-pdp (ADR 0019) and following awzy-challenge's containment feed for outages (ADR 0030).
+# Service accounts come from awzy-context (ADR 0033).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: awzy-gateway
+  namespace: {{ $sys }}
+  labels: {{- include "awzy.labels" (dict "root" . "name" "awzy-gateway") | nindent 4 }}
+data:
+  config.json: {{ toJson $config | quote }}
+---
+{{ include "awzy.service" (dict "root" . "name" "awzy-gateway" "namespace" $sys "values" $g
+  "tokens" (list "awzy-challenge" "awzy-pdp")
+  "env" (list
+    (dict "name" "AWZY_CHALLENGE_ADDR" "value" (printf "http://awzy-challenge.%s.svc:8080" $sys))
+    (dict "name" "AWZY_GATEWAY_CONFIG" "value" "/etc/awzy/gateway/config.json")
+    (dict "name" "AWZY_PDP_ADDR" "value" (printf "http://awzy-pdp.%s.svc:8080" $sys))
+  )
+  "volumes" (list (dict "name" "config" "configMap" (dict "name" "awzy-gateway")))
+  "mounts" (list (dict "name" "config" "mountPath" "/etc/awzy/gateway" "readOnly" true))) }}
+{{- if $g.hostname }}
+---
+# Agents outside the cluster reach it at https://<hostname>/mcp/<upstream>.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: awzy-gateway
+  namespace: {{ $sys }}
+spec:
+  parentRefs:
+    - name: {{ .Values.gateway.name }}
+      namespace: {{ .Values.gateway.namespace }}
+      sectionName: https-mcp
+  hostnames: [{{ $g.hostname | quote }}]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: /mcp }
+      backendRefs:
+        - { name: awzy-gateway, port: 8080 }
+{{- end }}
+{{- end }}

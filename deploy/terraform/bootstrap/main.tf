@@ -123,6 +123,50 @@ resource "kubernetes_secret_v1" "slack_token" {
   data = { token = var.slack.token }
 }
 
+# Sources send events to awzy-intake with this token. Read it from the `intake` output.
+resource "random_password" "intake" {
+  count   = var.intake == null ? 0 : 1
+  length  = 48
+  special = false
+}
+
+resource "kubernetes_secret_v1" "intake_token" {
+  count = var.intake == null ? 0 : 1
+  metadata {
+    name      = "awzy-intake-token"
+    namespace = kubernetes_namespace_v1.awzy["system"].metadata[0].name
+  }
+  data = { token = random_password.intake[0].result }
+}
+
+output "intake" {
+  description = "Where sources send events, and the token they send"
+  value = var.intake == null ? null : {
+    url   = try(var.intake.hostname, null) == null ? "http://awzy-intake.${local.namespaces.system}.svc:8080/v1/events" : "https://${var.intake.hostname}/v1/events"
+    token = random_password.intake[0].result
+  }
+  sensitive = true
+}
+
+# The connectors' credentials (ADR 0069, 0070).
+resource "kubernetes_secret_v1" "drive" {
+  count = var.drive == null ? 0 : 1
+  metadata {
+    name      = "awzy-connectors-drive"
+    namespace = kubernetes_namespace_v1.awzy["system"].metadata[0].name
+  }
+  data = { "key.json" = var.drive.key_json }
+}
+
+resource "kubernetes_secret_v1" "jira" {
+  count = var.jira == null ? 0 : 1
+  metadata {
+    name      = "awzy-connectors-jira"
+    namespace = kubernetes_namespace_v1.awzy["system"].metadata[0].name
+  }
+  data = { token = var.jira.token }
+}
+
 # The reporter sends heartbeats to the corp portal with this token (ADR 0026).
 resource "kubernetes_secret_v1" "reporting_token" {
   count = var.reporter == null ? 0 : 1

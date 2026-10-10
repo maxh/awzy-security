@@ -1,0 +1,33 @@
+{{- $c := .Values.connectors -}}
+{{- if or $c.drive.subject $c.jira.url }}
+{{- $sys := .Values.namespaces.system -}}
+# awzy-connectors: Google Drive's shared drives (ADR 0069) and Jira's issues (ADR 0070) into
+# awzy-context, read-only, with its service token. One replica: two would sync the same things.
+{{- $env := list (dict "name" "AWZY_CONTEXT_URL" "value" (printf "http://awzy-context.%s.svc:8080" $sys)) -}}
+{{- $volumes := list -}}
+{{- $mounts := list -}}
+{{- with $c.drive }}{{- if .subject }}
+{{- $env = concat $env (list
+  (dict "name" "AWZY_CONNECTORS_DRIVE_INTERVAL_SECS" "value" (toString .intervalSeconds))
+  (dict "name" "AWZY_CONNECTORS_DRIVE_KEY_FILE" "value" "/etc/awzy/drive/key.json")
+  (dict "name" "AWZY_CONNECTORS_DRIVE_SUBJECT" "value" .subject)
+) }}
+{{- with .adminSubject }}{{- $env = append $env (dict "name" "AWZY_CONNECTORS_DRIVE_ADMIN_SUBJECT" "value" .) }}{{- end }}
+{{- with .domain }}{{- $env = append $env (dict "name" "AWZY_CONNECTORS_DRIVE_DOMAIN" "value" .) }}{{- end }}
+{{- $volumes = append $volumes (dict "name" "drive" "secret" (dict "secretName" .keySecret "items" (list (dict "key" "key.json" "path" "key.json")))) }}
+{{- $mounts = append $mounts (dict "name" "drive" "mountPath" "/etc/awzy/drive" "readOnly" true) }}
+{{- end }}{{- end }}
+{{- with $c.jira }}{{- if .url }}
+{{- $env = concat $env (list
+  (dict "name" "AWZY_CONNECTORS_JIRA_INTERVAL_SECS" "value" (toString .intervalSeconds))
+  (dict "name" "AWZY_CONNECTORS_JIRA_TOKEN_FILE" "value" "/etc/awzy/jira/token")
+  (dict "name" "AWZY_CONNECTORS_JIRA_URL" "value" .url)
+  (dict "name" "AWZY_CONNECTORS_JIRA_USER" "value" (required "connectors.jira.user is required with connectors.jira.url" .user))
+) }}
+{{- with .projects }}{{- $env = append $env (dict "name" "AWZY_CONNECTORS_JIRA_PROJECTS" "value" (join "," .)) }}{{- end }}
+{{- $volumes = append $volumes (dict "name" "jira" "secret" (dict "secretName" .tokenSecret "items" (list (dict "key" "token" "path" "token")))) }}
+{{- $mounts = append $mounts (dict "name" "jira" "mountPath" "/etc/awzy/jira" "readOnly" true) }}
+{{- end }}{{- end }}
+{{ include "awzy.service" (dict "root" . "name" "awzy-connectors" "namespace" $sys "values" (merge (dict "replicas" 1) $c)
+  "tokens" (list "awzy-context") "env" $env "volumes" $volumes "mounts" $mounts) }}
+{{- end }}

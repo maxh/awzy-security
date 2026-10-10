@@ -26,6 +26,46 @@ spec:
   ingress:
     - {}
 ---
+{{- if .Values.mcpGateway.enabled }}
+# Agents call awzy-gateway from anywhere in the cluster, or through the Gateway.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awzy-gateway
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: awzy-gateway } }
+  policyTypes: [Ingress]
+  ingress:
+    - {}
+---
+{{- end }}
+{{- if .Values.intake.enabled }}
+# Apps send events to awzy-intake from anywhere in the cluster, or through the Gateway.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awzy-intake
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: awzy-intake } }
+  policyTypes: [Ingress]
+  ingress:
+    - {}
+---
+{{- end }}
+# awzy-connectors serves only /metrics and health, to awzy's own services (the reporter).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awzy-connectors
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: awzy-connectors } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{{ toJson $awzy }}]
+---
 # The policy service (bundles, publishing, break-glass) only from awzy's own services.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

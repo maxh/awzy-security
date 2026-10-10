@@ -98,6 +98,10 @@ Bootstrap takes:
 | `investigations`, `investigation_budget` | Whether awzy-reasoner investigates the people it flags, and its monthly token budget and privileged groups; needs Claude in Bedrock |
 | `llm_model` | The Bedrock model ID for both, when the default isn't reachable directly |
 | `slack` | Your Slack app's bot token and the security team's channel, for notifications; `null` for none |
+| `mcp_gateway` | awzy-gateway, the MCP proxy your agents call: its hostname (with a DNS record to the load balancer; null keeps it in-cluster), the MCP servers it fronts, and the tiers that may fail open while the PDP is unreachable; `null` for none |
+| `intake` | awzy-intake, for your apps' and audit logs' events: its hostname for sources outside the cluster (null keeps it in-cluster); `null` for none |
+| `drive` | The Google Drive connector: the member user it acts as (a Content manager of each shared drive to cover), an admin to name group shares, and the Google service account's JSON key, with domain-wide delegation for `drive.metadata.readonly` and `admin.directory.group.readonly`; `null` for none |
+| `jira` | The Jira connector: your site's URL, an account that can browse the projects, the projects (default: all), and its API token; `null` for none |
 | `demo_idp`, `demo_data` | **Demo installs only:** the dev IdP and the synthetic company |
 
 ```sh
@@ -115,6 +119,8 @@ It makes these Secrets, none of which leave the cluster:
 | `awzy-clickhouse-reasoner` | data, system | awzy-reasoner's read-only user: decisions and events |
 | `awzy-reporting-token` | system | The heartbeat, when `reporter` is set |
 | `awzy-scim-token` | system | Your IdP's SCIM provisioning |
+| `awzy-intake-token` | system | Event sources, when `intake` is set; read it from the `intake` output |
+| `awzy-connectors-drive`, `awzy-connectors-jira` | system | The connectors' credentials, when `drive` or `jira` is set |
 | `awzy-registry`, `awzy-chart-repo` | system, data, portal, Kyverno, ops | Pulling images and the chart |
 
 Postgres credentials stay in Secrets Manager, where RDS keeps them; External Secrets reads them

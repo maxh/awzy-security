@@ -83,6 +83,48 @@ variable "slack" {
   sensitive = true
 }
 
+variable "mcp_gateway" {
+  description = "awzy-gateway, the MCP proxy agents call (ADR 0019): its public hostname (null keeps it in-cluster; it needs a DNS record to the load balancer), the MCP servers it fronts as the chart's mcpGateway.upstreams, and the tiers that may fail open while the PDP is unreachable (ADR 0030). Null leaves it off"
+  type = object({
+    hostname        = optional(string)
+    upstreams       = any
+    fail_open_tiers = optional(list(string), [])
+  })
+  default = null
+}
+
+variable "intake" {
+  description = "awzy-intake, for app and audit-log events: its public hostname for sources outside the cluster (null keeps it in-cluster). Null leaves it off"
+  type = object({
+    hostname = optional(string)
+  })
+  default = null
+}
+
+variable "drive" {
+  description = "The Google Drive connector (ADR 0069): the member user it acts as, an admin to name group shares (optional), the domain (default: the subject's), and the Google service account's JSON key. Null leaves it off"
+  type = object({
+    subject       = string
+    admin_subject = optional(string, "")
+    domain        = optional(string, "")
+    key_json      = string
+  })
+  default   = null
+  sensitive = true
+}
+
+variable "jira" {
+  description = "The Jira connector (ADR 0070): the site URL, the account's email, the projects in scope (default: all it can browse), and its API token. Null leaves it off"
+  type = object({
+    url      = string
+    user     = string
+    projects = optional(list(string), [])
+    token    = string
+  })
+  default   = null
+  sensitive = true
+}
+
 variable "demo_idp" {
   description = "DEMO INSTALLS ONLY (ADR 0032): sign the client portal in against the dev IdP at https://<hostname>/idp"
   type        = bool

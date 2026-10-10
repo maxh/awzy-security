@@ -1,0 +1,31 @@
+{{- if .Values.intake.enabled }}
+{{- $sys := .Values.namespaces.system -}}
+# awzy-intake: events from the client's apps and audit logs, normalized onto Kafka for
+# ClickHouse and awzy-reasoner. Sources send them with the intake token.
+{{ include "awzy.service" (dict "root" . "name" "awzy-intake" "namespace" $sys "values" .Values.intake
+  "env" (list
+    (dict "name" "AWZY_EVENTS_TOPIC" "value" .Values.intake.eventsTopic)
+    (dict "name" "AWZY_INTAKE_TOKEN" "valueFrom" (dict "secretKeyRef" (dict "name" .Values.intake.tokenSecret "key" "token")))
+    (dict "name" "AWZY_KAFKA_BROKERS" "value" (required "kafka.brokers is required" .Values.kafka.brokers))
+  )) }}
+{{- if .Values.intake.hostname }}
+---
+# Sources outside the cluster send events to https://<hostname>/v1/events.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: awzy-intake
+  namespace: {{ $sys }}
+spec:
+  parentRefs:
+    - name: {{ .Values.gateway.name }}
+      namespace: {{ .Values.gateway.namespace }}
+      sectionName: https-intake
+  hostnames: [{{ .Values.intake.hostname | quote }}]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: /v1/events }
+      backendRefs:
+        - { name: awzy-intake, port: 8080 }
+{{- end }}
+{{- end }}
