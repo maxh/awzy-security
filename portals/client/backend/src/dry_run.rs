@@ -376,7 +376,7 @@ mod tests {
             pdp: Some(crate::testing::pdp().await),
             ..Default::default()
         });
-        let alice = crate::testing::person("alice", "security");
+        let alice = crate::testing::human("alice", "security");
         let draft = crate::testing::run(
             &schema,
             &alice,

@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<832f53567626bd5831e706458b3d328a>>
+ * @generated SignedSource<<a4cac2d0c873f5177ee72125d343bf65>>
  * @lightSyntaxTransform
  */
 
@@ -28,7 +28,7 @@ export type DecisionDetail_decision$data = {
       readonly id: string;
       readonly source: string;
     }>;
-    readonly person: {
+    readonly human: {
       readonly id: string;
       readonly type: string;
     };
@@ -132,7 +132,7 @@ return {
           "args": null,
           "concreteType": "EntityRef",
           "kind": "LinkedField",
-          "name": "person",
+          "name": "human",
           "plural": false,
           "selections": (v1/*:: as any*/),
           "storageKey": null
@@ -202,6 +202,6 @@ return {
 };
 })();
 
-(node as any).hash = "ab3ed9b7a48fa4aae0fd5c26d472e071";
+(node as any).hash = "3d14f885a42ce47fcf384e895ce80c72";
 
 export default node;

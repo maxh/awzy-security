@@ -27,7 +27,7 @@ const EVERY: Duration = Duration::from_secs(5);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Recipient {
     /// A person, by `userName`.
-    Person(String),
+    Human(String),
     /// The security team's channel.
     Security,
 }
@@ -35,14 +35,15 @@ pub enum Recipient {
 impl Recipient {
     fn to_text(&self) -> String {
         match self {
-            Self::Person(id) => format!("person:{id}"),
+            // Stored as `person:` until no older awzy-challenge reads these rows (ADR 0075).
+            Self::Human(id) => format!("person:{id}"),
             Self::Security => "security".into(),
         }
     }
 
     fn parse(s: &str) -> Option<Self> {
         match s.split_once(':') {
-            Some(("person", id)) if !id.is_empty() => Some(Self::Person(id.to_string())),
+            Some(("human" | "person", id)) if !id.is_empty() => Some(Self::Human(id.to_string())),
             _ => (s == "security").then_some(Self::Security),
         }
     }
@@ -88,7 +89,7 @@ impl ChallengeStore {
             || c.kinds.contains(ChallengeKind::Verification)
             || c.kinds.contains(ChallengeKind::Biometric);
         if let (true, Some(answerer)) = (for_answerer, c.answerer_id.as_deref()) {
-            self.record("challenge_opened", &Recipient::Person(answerer.into()), &details).await?;
+            self.record("challenge_opened", &Recipient::Human(answerer.into()), &details).await?;
         }
         if c.kinds.contains(ChallengeKind::Approval) {
             let parties: Vec<&str> =
@@ -97,7 +98,7 @@ impl ChallengeStore {
             if let Some(owner) = resource_owner.filter(|o| !parties.contains(o)) {
                 let mut details = details.clone();
                 details["approver"] = json!(true);
-                self.record("challenge_opened", &Recipient::Person(owner.into()), &details).await?;
+                self.record("challenge_opened", &Recipient::Human(owner.into()), &details).await?;
             }
             let mut details = details;
             details["approver"] = json!(true);
@@ -113,7 +114,7 @@ impl ChallengeStore {
         details["approved"] = json!(approved);
         details["decided_by"] = json!(c.decided_by);
         details["passed"] = json!(c.status == crate::ChallengeStatus::Passed);
-        self.record("challenge_decided", &Recipient::Person(answerer.into()), &details).await
+        self.record("challenge_decided", &Recipient::Human(answerer.into()), &details).await
     }
 
     /// A containment, applied or only recorded: the security team, never the contained person.
@@ -137,7 +138,7 @@ pub fn render(kind: &str, details: &Value, portal_url: &str) -> String {
     let s = |k: &str| details[k].as_str().unwrap_or("").to_string();
     let challenges_link = format!("{portal}/challenges?challenge={}", s("challenge_qid"));
     let who = match details["on_behalf_of"].as_str() {
-        Some(person) => format!("{} for {person}", s("subject")),
+        Some(human) => format!("{} for {human}", s("subject")),
         None => s("subject"),
     };
     let request = format!("{who} wants to {} {}", s("action"), s("resource"));
@@ -219,7 +220,7 @@ impl Worker {
             let details: sqlx::types::Json<Value> = row.try_get("details")?;
             let text = render(&kind, &details.0, &self.portal_url);
             let outcome = match Recipient::parse(row.try_get("recipient")?) {
-                Some(Recipient::Person(id)) => self.slack.to_person(&id, &text).await,
+                Some(Recipient::Human(id)) => self.slack.to_human(&id, &text).await,
                 Some(Recipient::Security) => self.slack.to_security(&text).await,
                 None => Err(anyhow::anyhow!("unknown recipient")),
             };
@@ -295,10 +296,11 @@ mod tests {
 
     #[test]
     fn recipients_round_trip() {
-        for r in [Recipient::Person("nora@larkspur.example".into()), Recipient::Security] {
+        for r in [Recipient::Human("nora@larkspur.example".into()), Recipient::Security] {
             assert_eq!(Recipient::parse(&r.to_text()), Some(r));
         }
         assert_eq!(Recipient::parse("person:"), None);
+        assert_eq!(Recipient::parse("human:nora"), Some(Recipient::Human("nora".into())), "the name after ADR 0075");
     }
 
     /// With the local stack: notifications are recorded only when turned on, and for whom.

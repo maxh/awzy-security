@@ -596,7 +596,7 @@ function SecurityKeys({ keys, onChanged }: { keys: ReadonlyArray<Key>; onChanged
 /** For an admin: someone's keys, to remove one they lost so they can enroll again. */
 function ResetKeys() {
   const environment = useRelayEnvironment();
-  const [person, setPerson] = useState("");
+  const [human, setHuman] = useState("");
   const [found, setFound] = useState<ChallengesPageKeysOfQuery["response"]["securityKeys"] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -623,7 +623,7 @@ function ResetKeys() {
   const look = async () => {
     try {
       const res = await fetchQuery<ChallengesPageKeysOfQuery>(environment, keysOf, {
-        humanId: person.trim(),
+        humanId: human.trim(),
       }).toPromise();
       setFound(res?.securityKeys ?? []);
       setError(null);
@@ -647,8 +647,8 @@ function ResetKeys() {
         Removing someone's key lets them add a first key again on their sign-in alone, so check who's asking.
       </Text>
       <Group align="flex-end">
-        <TextInput label="Person" placeholder="bob" value={person} onChange={(e) => setPerson(e.currentTarget.value)} />
-        <Button variant="default" disabled={!person.trim()} onClick={look}>
+        <TextInput label="Person" placeholder="bob" value={human} onChange={(e) => setHuman(e.currentTarget.value)} />
+        <Button variant="default" disabled={!human.trim()} onClick={look}>
           Look up keys
         </Button>
       </Group>

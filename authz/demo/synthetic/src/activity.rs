@@ -17,7 +17,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::{
     org::{Company, Profile},
     rng::Rng,
-    world::{person_documents, work_items, Resource},
+    world::{human_documents, work_items, Resource},
 };
 
 /// The two larkspur-drive tools (ADR 0050).
@@ -104,14 +104,14 @@ pub fn day(company: &Company, profile: Profile, day: u32) -> Vec<Access> {
     }
     // Ordered, so picking another team is the same on every run.
     let mut by_team: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
-    for (i, p) in company.people.iter().enumerate() {
+    for (i, p) in company.humans.iter().enumerate() {
         by_team.entry(p.team).or_default().push(i);
     }
     let index_of: HashMap<&str, usize> =
-        company.people.iter().enumerate().map(|(i, p)| (p.user_name.as_str(), i)).collect();
+        company.humans.iter().enumerate().map(|(i, p)| (p.user_name.as_str(), i)).collect();
 
     let mut out = Vec::new();
-    for (i, p) in company.people.iter().enumerate() {
+    for (i, p) in company.humans.iter().enumerate() {
         let mine = assigned.get(p.user_name.as_str()).map(Vec::as_slice).unwrap_or_default();
         for _ in 0..READS_PER_PERSON - 2 + rng.below(5) {
             let (resource, why) = pick(&mut rng, &mut docs, mine, &by_team[p.team], i, &by_team);
@@ -130,18 +130,18 @@ pub fn day(company: &Company, profile: Profile, day: u32) -> Vec<Access> {
 
     for sa in &company.service_accounts {
         let Some(&owner) = index_of.get(sa.owner.as_str()) else { continue };
-        let person = &company.people[owner];
+        let human = &company.humans[owner];
         // Scheduled agents work alone; the others act for their owner, who is there.
         let unattended = !sa.acts_for_owner();
-        let mine = assigned.get(person.user_name.as_str()).map(Vec::as_slice).unwrap_or_default();
+        let mine = assigned.get(human.user_name.as_str()).map(Vec::as_slice).unwrap_or_default();
         for _ in 0..CALLS_PER_AGENT {
-            let (resource, why) = pick(&mut rng, &mut docs, mine, &by_team[person.team], owner, &by_team);
+            let (resource, why) = pick(&mut rng, &mut docs, mine, &by_team[human.team], owner, &by_team);
             out.push(Access {
                 minute: if unattended { 6 * 60 + rng.below(60) as u32 } else { minute(&mut rng) },
                 subject: sa.id.clone(),
-                on_behalf_of: (!unattended).then(|| person.user_name.clone()),
+                on_behalf_of: (!unattended).then(|| human.user_name.clone()),
                 human_present: !unattended,
-                team: person.team,
+                team: human.team,
                 tool: tool_for(&resource),
                 resource,
                 why,
@@ -150,13 +150,13 @@ pub fn day(company: &Company, profile: Profile, day: u32) -> Vec<Access> {
     }
     // After everything else, so adding them left the rest of each day as it was.
     for i in by_team.get(ADMIN_TEAM).into_iter().flatten() {
-        let p = &company.people[*i];
+        let p = &company.humans[*i];
         for _ in 0..1 + rng.below(MOST_ADMIN_OPS) {
             let (tool, _) = *rng_pick(&mut rng, ADMIN_TOOLS);
             let target = match tool {
                 "rotate_admin_credentials" => rng_pick(&mut rng, &["domain-admin", "backup-service"]).to_string(),
                 "export_directory" => "directory".to_string(),
-                _ => rng_pick(&mut rng, &company.people).user_name.clone(),
+                _ => rng_pick(&mut rng, &company.humans).user_name.clone(),
             };
             out.push(Access {
                 minute: minute(&mut rng),
@@ -198,7 +198,7 @@ fn pick(
     match docs.random(rng, team) {
         Some(d) => (d, Why::Team),
         // A team with no documents: its own folder.
-        None => (format!("synthetic:folder:{}", docs.company.people[me].team), Why::Team),
+        None => (format!("synthetic:folder:{}", docs.company.humans[me].team), Why::Team),
     }
 }
 
@@ -234,10 +234,10 @@ struct Documents<'a> {
 
 impl Documents<'_> {
     /// A document owned by someone in `people`, if they have any.
-    fn random(&mut self, rng: &mut Rng, people: &[usize]) -> Option<String> {
-        let owner = *rng_pick(rng, people);
+    fn random(&mut self, rng: &mut Rng, humans: &[usize]) -> Option<String> {
+        let owner = *rng_pick(rng, humans);
         let (company, profile, seed) = (self.company, self.profile, self.seed);
-        let docs = self.cache.entry(owner).or_insert_with(|| person_documents(company, profile, seed, owner));
+        let docs = self.cache.entry(owner).or_insert_with(|| human_documents(company, profile, seed, owner));
         (!docs.is_empty()).then(|| docs[rng.below(docs.len())].id.clone())
     }
 }
@@ -255,8 +255,8 @@ mod tests {
     fn all_ids(c: &Company) -> HashSet<String> {
         let mut ids: HashSet<String> = folders_and_repositories(c).into_iter().map(|r| r.id).collect();
         ids.extend(scenario_resources(c).into_iter().map(|r| r.id));
-        for i in 0..c.people.len() {
-            ids.extend(person_documents(c, Profile::Demo, c.seed, i).into_iter().map(|r| r.id));
+        for i in 0..c.humans.len() {
+            ids.extend(human_documents(c, Profile::Demo, c.seed, i).into_iter().map(|r| r.id));
         }
         ids
     }
@@ -292,7 +292,7 @@ mod tests {
         let ops: Vec<Access> = (0..5).flat_map(|d| day(&c, Profile::Demo, d)).filter(|a| a.why == Why::Admin).collect();
         assert!(ops.iter().all(|a| a.team == ADMIN_TEAM && server_of(a.tool) == ADMIN));
         assert!(ops.iter().any(|a| a.tool == "export_directory" || a.tool == "disable_mfa"), "{ops:?}");
-        let admins = c.people.iter().filter(|p| p.team == ADMIN_TEAM).count();
+        let admins = c.humans.iter().filter(|p| p.team == ADMIN_TEAM).count();
         assert!((admins * 5..=admins * 5 * MOST_ADMIN_OPS).contains(&ops.len()), "{}", ops.len());
         assert_eq!(server_of(READ), DRIVE);
     }

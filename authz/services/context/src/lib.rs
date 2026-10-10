@@ -359,9 +359,9 @@ mod tests {
         );
         assert_eq!(entity(&snap, "bob@acme.com")["parents"], json!([]), "removed from staff");
 
-        let (_, people) = send(&app, "GET", "/v1/directory/people?search=ali", None).await;
-        assert_eq!(people["people"][0]["user_name"], "alice@acme.com");
-        assert_eq!(people["people"][0]["groups"], json!(["security"]));
+        let (_, humans) = send(&app, "GET", "/v1/directory/people?search=ali", None).await;
+        assert_eq!(humans["people"][0]["user_name"], "alice@acme.com");
+        assert_eq!(humans["people"][0]["groups"], json!(["security"]));
         let (_, groups) = send(&app, "GET", "/v1/directory/groups", None).await;
         let staff_row = groups["groups"].as_array().unwrap().iter().find(|g| g["name"] == "staff").unwrap().clone();
         assert_eq!((staff_row["people"].clone(), staff_row["groups"].clone()), (json!(0), json!(1)));

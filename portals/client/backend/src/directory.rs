@@ -416,8 +416,8 @@ mod tests {
             ..Default::default()
         };
         let schema = crate::schema_with(services);
-        let alice = testing::person("alice", "security");
-        let bob = testing::person("bob", "engineering");
+        let alice = testing::human("alice", "security");
+        let bob = testing::human("bob", "engineering");
 
         let d = testing::run(&schema, &alice, "{ directorySummary { humans activeHumans lastProvisionedAt } humans(search: \"ali\") { userName groups active } }").await;
         // The fake answers with the names before ADR 0074, as an older awzy-context does.

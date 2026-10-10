@@ -10,7 +10,7 @@ use awzy_synthetic::{
     activity::{day, server_of, Access, ADMIN},
     org::{cast, generate, Company, Profile},
     scenarios::{self, Expect},
-    world::{folders_and_repositories, person_documents, scenario_resources},
+    world::{folders_and_repositories, human_documents, scenario_resources},
 };
 
 /// What the case really is.
@@ -61,7 +61,7 @@ pub fn all() -> Vec<EvalCase> {
     let docs = Documents::new(&company);
     let mut base = scenario_cases(&company, &docs);
     base.extend(ordinary_cases(&company, &docs));
-    let victim = person_of(&company, "hr");
+    let victim = human_of(&company, "hr");
     let mut out = Vec::new();
     for c in base {
         for attack in [Attack::Redirect, Attack::Suppress, Attack::Frame] {
@@ -79,8 +79,8 @@ impl Documents {
     fn new(company: &Company) -> Self {
         let mut all = folders_and_repositories(company);
         all.extend(scenario_resources(company));
-        for i in 0..company.people.len() {
-            all.extend(person_documents(company, Profile::Demo, company.seed, i));
+        for i in 0..company.humans.len() {
+            all.extend(human_documents(company, Profile::Demo, company.seed, i));
         }
         Self(all.into_iter().map(|r| (r.id, (r.name, r.text))).collect())
     }
@@ -97,8 +97,8 @@ impl Documents {
     }
 }
 
-fn person_of(company: &Company, team: &str) -> String {
-    company.people.iter().find(|p| p.team == team).map(|p| p.user_name.clone()).unwrap_or_default()
+fn human_of(company: &Company, team: &str) -> String {
+    company.humans.iter().find(|p| p.team == team).map(|p| p.user_name.clone()).unwrap_or_default()
 }
 
 fn at(minute: u32) -> String {
@@ -130,7 +130,7 @@ fn verdict(expect: Expect) -> &'static str {
 fn scenario_cases(company: &Company, docs: &Documents) -> Vec<EvalCase> {
     let steps = scenarios::all(company, Profile::Demo);
     let case = |name: &str, scenario: &str, team: &str, floor: i32, privileged: bool, extra: Vec<Item>| {
-        let person = cast(team).expect("cast");
+        let human = cast(team).expect("cast");
         let mine: Vec<&scenarios::Step> =
             steps.iter().filter(|s| s.scenario == scenario).take(MOST_DECISIONS).collect();
         let mut items: Vec<Item> = Vec::new();
@@ -145,7 +145,7 @@ fn scenario_cases(company: &Company, docs: &Documents) -> Vec<EvalCase> {
             name: name.to_string(),
             truth: Truth::Attack,
             case: Case {
-                subject: ("Human".into(), person),
+                subject: ("Human".into(), human),
                 floor,
                 trigger: format!("the {name} scenario's activity"),
                 privileged,
@@ -194,18 +194,18 @@ fn scenario_cases(company: &Company, docs: &Documents) -> Vec<EvalCase> {
 fn ordinary_cases(company: &Company, docs: &Documents) -> Vec<EvalCase> {
     let accesses = day(company, Profile::Demo, 0);
     let actors: Vec<String> = scenarios::all(company, Profile::Demo).into_iter().map(|s| s.access.subject).collect();
-    let mut people: Vec<&str> = Vec::new();
+    let mut humans: Vec<&str> = Vec::new();
     for team in ["sales-emea", "engineering-platform", "support", "legal", "finance", "strategy"] {
-        if let Some(p) = company.people.iter().find(|p| p.team == team && !actors.contains(&p.user_name)) {
-            people.push(p.user_name.as_str());
+        if let Some(p) = company.humans.iter().find(|p| p.team == team && !actors.contains(&p.user_name)) {
+            humans.push(p.user_name.as_str());
         }
     }
-    people
+    humans
         .into_iter()
         .take(ORDINARY)
         .enumerate()
-        .map(|(k, person)| {
-            let theirs: Vec<&Access> = accesses.iter().filter(|a| a.subject == person).take(MOST_DECISIONS).collect();
+        .map(|(k, human)| {
+            let theirs: Vec<&Access> = accesses.iter().filter(|a| a.subject == human).take(MOST_DECISIONS).collect();
             let name = format!("ordinary-{k}");
             let mut items: Vec<Item> = theirs.iter().enumerate().map(|(n, a)| decision(&name, n, a, "allow")).collect();
             for a in theirs.iter().take(3) {
@@ -215,7 +215,7 @@ fn ordinary_cases(company: &Company, docs: &Documents) -> Vec<EvalCase> {
                 name,
                 truth: Truth::Ordinary,
                 case: Case {
-                    subject: ("Human".into(), person.to_string()),
+                    subject: ("Human".into(), human.to_string()),
                     floor: 5,
                     trigger: "a routine sample of ordinary activity".into(),
                     privileged: false,

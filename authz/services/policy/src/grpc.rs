@@ -350,7 +350,7 @@ mod tests {
             .create_draft(CreateDraftRequest {
                 schema: awzy_pdp::DEFAULT_SCHEMA.into(),
                 policies: awzy_pdp::DEFAULT_POLICIES.into(),
-                created_by_actor: Some(awzy_model::Actor::awzy("awzy-bot").for_person("alice").into()),
+                created_by_actor: Some(awzy_model::Actor::awzy("awzy-bot").for_human("alice").into()),
                 ..Default::default()
             })
             .await
@@ -362,7 +362,7 @@ mod tests {
         // The typed actor comes back as sent, and as its text form for callers that predate it.
         assert_eq!(
             awzy_authz_proto::actor_from_wire(draft.created_by_actor.clone(), ""),
-            Some(awzy_model::Actor::awzy("awzy-bot").for_person("alice"))
+            Some(awzy_model::Actor::awzy("awzy-bot").for_human("alice"))
         );
         assert_eq!(draft.created_by, "AwzyService::awzy-bot for Human::alice");
         let active = client

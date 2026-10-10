@@ -641,7 +641,7 @@ interface Node {
 }
 
 type OnBehalfOf {
-	person: EntityRef!
+	human: EntityRef!
 	verdict: Verdict!
 	policies: [String!]!
 	determiningPolicies: [PolicySource!]!

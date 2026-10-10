@@ -51,7 +51,7 @@ pub enum Kind {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct Person {
+pub struct Human {
     /// The person's email, which is also their ID in awzy (SCIM `userName`).
     pub user_name: String,
     pub given_name: String,
@@ -67,7 +67,7 @@ pub struct Person {
     pub contract_end: Option<&'static str>,
 }
 
-impl Person {
+impl Human {
     pub fn display_name(&self) -> String {
         format!("{} {}", self.given_name, self.family_name)
     }
@@ -77,7 +77,7 @@ impl Person {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Group {
     pub name: String,
-    pub people: Vec<String>,
+    pub humans: Vec<String>,
     pub groups: Vec<String>,
 }
 
@@ -103,7 +103,7 @@ impl ServiceAccount {
 pub struct Company {
     pub seed: u64,
     /// Managers come before the people who report to them.
-    pub people: Vec<Person>,
+    pub humans: Vec<Human>,
     /// Groups come after the groups they contain.
     pub groups: Vec<Group>,
     pub service_accounts: Vec<ServiceAccount>,
@@ -191,7 +191,7 @@ pub fn generate(profile: Profile, seed: u64) -> Company {
     let mut rng = Rng::new(seed);
     let (given, family) = (names::given(), names::family());
     let mut taken: HashSet<String> = CAST.iter().map(|(_, _, g, f)| user_name(g, f)).collect();
-    let mut people: Vec<Person> = Vec::new();
+    let mut humans: Vec<Human> = Vec::new();
     let mut leads: HashMap<&'static str, String> = HashMap::new();
     let executives = TEAMS[0].size;
 
@@ -205,14 +205,14 @@ pub fn generate(profile: Profile, seed: u64) -> Company {
             let manager = if t == 0 && i == 0 {
                 None
             } else if t == 0 {
-                Some(people[0].user_name.clone())
+                Some(humans[0].user_name.clone())
             } else if i == 0 {
                 // Team leads report to one of the executives other than the CEO.
-                Some(people[1 + (t - 1) % (executives - 1)].user_name.clone())
+                Some(humans[1 + (t - 1) % (executives - 1)].user_name.clone())
             } else {
                 Some(leads[team.slug].clone())
             };
-            let person = Person {
+            let human = Human {
                 user_name: user_name(&given_name, &family_name),
                 given_name,
                 family_name,
@@ -220,20 +220,20 @@ pub fn generate(profile: Profile, seed: u64) -> Company {
                 team: team.slug,
                 department: team.department,
                 manager,
-                employee_number: format!("LC-{:05}", people.len() + 1),
+                employee_number: format!("LC-{:05}", humans.len() + 1),
                 kind: if team.contractors { Kind::Contractor } else { Kind::Employee },
                 contract_end: team.contractors.then_some(CONTRACT_END),
             };
             if i == 0 {
-                leads.insert(team.slug, person.user_name.clone());
+                leads.insert(team.slug, human.user_name.clone());
             }
-            people.push(person);
+            humans.push(human);
         }
     }
 
-    let groups = groups(&people);
-    let service_accounts = service_accounts(profile, &mut rng, &people, &leads);
-    Company { seed, people, groups, service_accounts }
+    let groups = groups(&humans);
+    let service_accounts = service_accounts(profile, &mut rng, &humans, &leads);
+    Company { seed, humans, groups, service_accounts }
 }
 
 fn unique_name(rng: &mut Rng, given: &[&str], family: &[&str], taken: &mut HashSet<String>) -> (String, String) {
@@ -250,12 +250,12 @@ fn unique_name(rng: &mut Rng, given: &[&str], family: &[&str], taken: &mut HashS
 
 /// One group per team; a group per department holding its teams (when the department has
 /// teams of another name); `contractors`, `managers`, and `everyone`.
-fn groups(people: &[Person]) -> Vec<Group> {
+fn groups(humans: &[Human]) -> Vec<Group> {
     let mut groups: Vec<Group> = TEAMS
         .iter()
         .map(|t| Group {
             name: t.slug.to_string(),
-            people: people.iter().filter(|p| p.team == t.slug).map(|p| p.user_name.clone()).collect(),
+            humans: humans.iter().filter(|p| p.team == t.slug).map(|p| p.user_name.clone()).collect(),
             groups: vec![],
         })
         .collect();
@@ -271,24 +271,24 @@ fn groups(people: &[Person]) -> Vec<Group> {
             .map(|t| t.slug.to_string())
             .collect();
         if !members.is_empty() {
-            groups.push(Group { name: team.department.to_string(), people: vec![], groups: members });
+            groups.push(Group { name: team.department.to_string(), humans: vec![], groups: members });
         }
         top.push(team.department.to_string());
     }
 
     let contractor_teams = TEAMS.iter().filter(|t| t.contractors).map(|t| t.slug.to_string()).collect();
-    groups.push(Group { name: "contractors".into(), people: vec![], groups: contractor_teams });
-    let managers: HashSet<&str> = people.iter().filter_map(|p| p.manager.as_deref()).collect();
-    let managers = people.iter().filter(|p| managers.contains(p.user_name.as_str())).map(|p| p.user_name.clone());
-    groups.push(Group { name: "managers".into(), people: managers.collect(), groups: vec![] });
-    groups.push(Group { name: "everyone".into(), people: vec![], groups: top });
+    groups.push(Group { name: "contractors".into(), humans: vec![], groups: contractor_teams });
+    let managers: HashSet<&str> = humans.iter().filter_map(|p| p.manager.as_deref()).collect();
+    let managers = humans.iter().filter(|p| managers.contains(p.user_name.as_str())).map(|p| p.user_name.clone());
+    groups.push(Group { name: "managers".into(), humans: managers.collect(), groups: vec![] });
+    groups.push(Group { name: "everyone".into(), humans: vec![], groups: top });
     groups
 }
 
 fn service_accounts(
     profile: Profile,
     rng: &mut Rng,
-    people: &[Person],
+    humans: &[Human],
     leads: &HashMap<&'static str, String>,
 ) -> Vec<ServiceAccount> {
     let sa = |id: &str, owner: String, team: &str, description: &str| ServiceAccount {
@@ -323,7 +323,7 @@ fn service_accounts(
     let teams: Vec<&Team> = TEAMS.iter().filter(|t| !t.fixed).collect();
     for n in accounts.len()..profile.service_accounts() {
         let team = teams[n % teams.len()];
-        let members: Vec<&Person> = people.iter().filter(|p| p.team == team.slug).collect();
+        let members: Vec<&Human> = humans.iter().filter(|p| p.team == team.slug).collect();
         let owner = rng.pick(&members).user_name.clone();
         accounts.push(sa(&format!("agent-{n:03}"), owner, team.slug, "A team's AI assistant (scale profile)"));
     }
@@ -337,16 +337,16 @@ mod tests {
     #[test]
     fn the_same_seed_gives_the_same_company() {
         assert_eq!(generate(Profile::Demo, 1), generate(Profile::Demo, 1));
-        assert_ne!(generate(Profile::Demo, 1).people, generate(Profile::Demo, 2).people);
+        assert_ne!(generate(Profile::Demo, 1).humans, generate(Profile::Demo, 2).humans);
     }
 
     #[test]
     fn profiles_have_the_planned_sizes() {
         let demo = generate(Profile::Demo, 1);
-        assert!((190..=210).contains(&demo.people.len()), "{}", demo.people.len());
+        assert!((190..=210).contains(&demo.humans.len()), "{}", demo.humans.len());
         assert_eq!(demo.service_accounts.len(), 4);
         let scale = generate(Profile::Scale, 1);
-        assert!((9_500..=10_500).contains(&scale.people.len()), "{}", scale.people.len());
+        assert!((9_500..=10_500).contains(&scale.humans.len()), "{}", scale.humans.len());
         assert_eq!(scale.service_accounts.len(), 200);
     }
 
@@ -354,13 +354,13 @@ mod tests {
     fn the_org_is_consistent() {
         for profile in [Profile::Demo, Profile::Scale] {
             let c = generate(profile, 7);
-            let index: HashMap<&str, &Person> = c.people.iter().map(|p| (p.user_name.as_str(), p)).collect();
-            assert_eq!(index.len(), c.people.len(), "user names are unique");
-            assert_eq!(c.people.iter().filter(|p| p.manager.is_none()).count(), 1, "one CEO");
-            for (i, p) in c.people.iter().enumerate() {
+            let index: HashMap<&str, &Human> = c.humans.iter().map(|p| (p.user_name.as_str(), p)).collect();
+            assert_eq!(index.len(), c.humans.len(), "user names are unique");
+            assert_eq!(c.humans.iter().filter(|p| p.manager.is_none()).count(), 1, "one CEO");
+            for (i, p) in c.humans.iter().enumerate() {
                 assert!(p.user_name.ends_with(DOMAIN) && p.user_name.is_ascii());
                 if let Some(m) = &p.manager {
-                    let pos = c.people.iter().position(|q| &q.user_name == m).expect("manager exists");
+                    let pos = c.humans.iter().position(|q| &q.user_name == m).expect("manager exists");
                     assert!(pos < i, "managers come first");
                 }
                 assert_eq!(p.kind == Kind::Contractor, p.contract_end.is_some());
@@ -368,7 +368,7 @@ mod tests {
             let names: HashSet<&str> = c.groups.iter().map(|g| g.name.as_str()).collect();
             assert_eq!(names.len(), c.groups.len(), "group names are unique");
             for (i, g) in c.groups.iter().enumerate() {
-                assert!(g.people.iter().all(|p| index.contains_key(p.as_str())));
+                assert!(g.humans.iter().all(|p| index.contains_key(p.as_str())));
                 for member in &g.groups {
                     let pos = c.groups.iter().position(|h| &h.name == member).expect("member group exists");
                     assert!(pos < i, "groups come after the groups they contain");
@@ -384,7 +384,7 @@ mod tests {
     #[test]
     fn the_cast_is_where_the_scenarios_expect() {
         let c = generate(Profile::Demo, 3);
-        let find = |team: &str| c.people.iter().find(|p| Some(&p.user_name) == cast(team).as_ref()).unwrap();
+        let find = |team: &str| c.humans.iter().find(|p| Some(&p.user_name) == cast(team).as_ref()).unwrap();
         assert_eq!(find("sales-northeast-finserv").user_name, "nora.patel@larkspur.example");
         assert_eq!(find("contractors-quarry-labs").kind, Kind::Contractor);
         assert_eq!(find("it-admin").title, "Systems Administrator");

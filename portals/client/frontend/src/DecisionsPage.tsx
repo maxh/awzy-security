@@ -143,7 +143,7 @@ function DecisionList({ filter, onSelect }: { filter: DecisionFilter; onSelect: 
                 id
               }
               onBehalfOf {
-                person {
+                human {
                   type
                   id
                 }
@@ -203,7 +203,7 @@ function DecisionList({ filter, onSelect }: { filter: DecisionFilter; onSelect: 
                   <Entity e={d.subject} />
                   {d.onBehalfOf && (
                     <Text size="xs" c="dimmed">
-                      for {d.onBehalfOf.person.id}
+                      for {d.onBehalfOf.human.id}
                     </Text>
                   )}
                 </Table.Td>

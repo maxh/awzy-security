@@ -41,7 +41,7 @@ pub struct Access {
     pdps: Allowed,
     /// Reading and answering challenges for a person (`answered_by`, `decided_by` are taken as
     /// given): only the client portal, which authenticates that person.
-    people: Allowed,
+    humans: Allowed,
     /// Containing and lifting: the client portal, and later awzy-reasoner.
     containers: Allowed,
     /// Following containments, so an outage never replays an allow for a contained accessor:
@@ -64,7 +64,7 @@ impl Access {
         Ok(Self {
             verifier: Arc::new(awzy_service_auth::Verifier::from_env("awzy-challenge")?),
             pdps: Allowed::from_env("AWZY_CHALLENGE_PDPS"),
-            people: Allowed::from_env("AWZY_CHALLENGE_PEOPLE"),
+            humans: Allowed::from_env("AWZY_CHALLENGE_PEOPLE"),
             containers: Allowed::from_env("AWZY_CHALLENGE_CONTAINERS"),
             gateways: Allowed::from_env("AWZY_CHALLENGE_GATEWAYS"),
         })
@@ -76,7 +76,7 @@ impl Access {
         Self {
             verifier: Arc::new(awzy_service_auth::Verifier::off()),
             pdps: nobody(),
-            people: nobody(),
+            humans: nobody(),
             containers: nobody(),
             gateways: nobody(),
         }
@@ -92,9 +92,9 @@ impl Access {
         rules.extend(group(&["WatchContainments"], &either(&self.pdps, &self.gateways)));
         // Listing containments: a PDP whose feed is stale, and the portal showing them to admins.
         rules.extend(group(&["ListContainments"], &either(&self.pdps, &self.containers)));
-        rules.extend(group(&["GetChallenge", "Justify", "Decide"], &self.people));
+        rules.extend(group(&["GetChallenge", "Justify", "Decide"], &self.humans));
         // Listing challenges: the portal, and awzy-reasoner reading rejections (ADR 0066).
-        rules.extend(group(&["ListChallenges"], &either(&self.people, &self.containers)));
+        rules.extend(group(&["ListChallenges"], &either(&self.humans, &self.containers)));
         // Security keys (ADR 0059): only the portal, which authenticates the person they belong to.
         rules.extend(group(
             &[
@@ -107,7 +107,7 @@ impl Access {
                 "BeginVerification",
                 "FinishVerification",
             ],
-            &self.people,
+            &self.humans,
         ));
         rules.extend(group(&["Contain", "Lift"], &self.containers));
         PathGuard::new(self.verifier.clone(), rules)
@@ -197,7 +197,7 @@ impl ChallengeService for Service {
 
     async fn justify(&self, req: Request<JustifyRequest>) -> Result<Response<JustifyResponse>, Status> {
         let req = req.into_inner();
-        let answered_by = person(req.answered_by_actor, &req.answered_by, "answered_by_actor")?;
+        let answered_by = human(req.answered_by_actor, &req.answered_by, "answered_by_actor")?;
         let c = self.store.justify(qid(&req.challenge_qid)?, &answered_by, &req.justification).await.map_err(status)?;
         tracing::info!(challenge_id = %c.id, answered_by = %answered_by, status = c.status.as_str(), "challenge justified");
         Ok(Response::new(JustifyResponse { challenge: Some(challenge_to_wire(c)) }))
@@ -286,8 +286,8 @@ impl ChallengeService for Service {
         &self,
         req: Request<ListSecurityKeysRequest>,
     ) -> Result<Response<ListSecurityKeysResponse>, Status> {
-        let person = required(req.into_inner().human_id, "human_id")?;
-        let keys = self.keys()?.list(&person).await.map_err(key_status)?;
+        let human = required(req.into_inner().human_id, "human_id")?;
+        let keys = self.keys()?.list(&human).await.map_err(key_status)?;
         Ok(Response::new(ListSecurityKeysResponse { keys: keys.into_iter().map(key_to_wire).collect() }))
     }
 
@@ -295,8 +295,8 @@ impl ChallengeService for Service {
         &self,
         req: Request<BeginKeyChangeRequest>,
     ) -> Result<Response<BeginKeyChangeResponse>, Status> {
-        let person = required(req.into_inner().human_id, "human_id")?;
-        let c = self.keys()?.begin_key_change(&person).await.map_err(key_status)?;
+        let human = required(req.into_inner().human_id, "human_id")?;
+        let c = self.keys()?.begin_key_change(&human).await.map_err(key_status)?;
         Ok(Response::new(BeginKeyChangeResponse {
             ceremony_qid: c.id.to_string(),
             options_json: c.options.to_string(),
@@ -308,9 +308,9 @@ impl ChallengeService for Service {
         req: Request<BeginKeyRegistrationRequest>,
     ) -> Result<Response<BeginKeyRegistrationResponse>, Status> {
         let req = req.into_inner();
-        let person = required(req.human_id, "human_id")?;
+        let human = required(req.human_id, "human_id")?;
         let authorization = req.authorization.map(assertion);
-        let c = self.keys()?.begin_registration(&person, authorization.as_ref()).await.map_err(key_status)?;
+        let c = self.keys()?.begin_registration(&human, authorization.as_ref()).await.map_err(key_status)?;
         Ok(Response::new(BeginKeyRegistrationResponse {
             ceremony_qid: c.id.to_string(),
             options_json: c.options.to_string(),
@@ -322,13 +322,13 @@ impl ChallengeService for Service {
         req: Request<FinishKeyRegistrationRequest>,
     ) -> Result<Response<FinishKeyRegistrationResponse>, Status> {
         let req = req.into_inner();
-        let person = required(req.human_id, "human_id")?;
+        let human = required(req.human_id, "human_id")?;
         let key = self
             .keys()?
-            .finish_registration(&person, &req.ceremony_qid, &req.name, &req.client_data_json, &req.attestation_object)
+            .finish_registration(&human, &req.ceremony_qid, &req.name, &req.client_data_json, &req.attestation_object)
             .await
             .map_err(key_status)?;
-        tracing::warn!(key_id = %key.id, person = %person, added_with = ?key.added_with, "security key added");
+        tracing::warn!(key_id = %key.id, human = %human, added_with = ?key.added_with, "security key added");
         Ok(Response::new(FinishKeyRegistrationResponse { key: Some(key_to_wire(key)) }))
     }
 
@@ -337,12 +337,11 @@ impl ChallengeService for Service {
         req: Request<RemoveSecurityKeyRequest>,
     ) -> Result<Response<RemoveSecurityKeyResponse>, Status> {
         let req = req.into_inner();
-        let person = required(req.human_id, "human_id")?;
+        let human = required(req.human_id, "human_id")?;
         let authorization =
             req.authorization.map(assertion).ok_or_else(|| Status::invalid_argument("authorization is required"))?;
-        let key =
-            self.keys()?.remove(&person, qid(&req.security_key_qid)?, &authorization).await.map_err(key_status)?;
-        tracing::warn!(key_id = %key.id, person = %person, "security key removed");
+        let key = self.keys()?.remove(&human, qid(&req.security_key_qid)?, &authorization).await.map_err(key_status)?;
+        tracing::warn!(key_id = %key.id, human = %human, "security key removed");
         Ok(Response::new(RemoveSecurityKeyResponse { key: Some(key_to_wire(key)) }))
     }
 
@@ -353,7 +352,7 @@ impl ChallengeService for Service {
         let req = req.into_inner();
         let removed_by = actor(req.removed_by_actor, &req.removed_by, "removed_by_actor")?;
         let key = self.keys()?.reset(qid(&req.security_key_qid)?, &removed_by).await.map_err(key_status)?;
-        tracing::warn!(key_id = %key.id, person = %key.human_id, removed_by = %removed_by, "security key reset by an admin");
+        tracing::warn!(key_id = %key.id, human = %key.human_id, removed_by = %removed_by, "security key reset by an admin");
         Ok(Response::new(ResetSecurityKeyResponse { key: Some(key_to_wire(key)) }))
     }
 
@@ -362,8 +361,8 @@ impl ChallengeService for Service {
         req: Request<BeginVerificationRequest>,
     ) -> Result<Response<BeginVerificationResponse>, Status> {
         let req = req.into_inner();
-        let person = required(req.human_id, "human_id")?;
-        let c = self.keys()?.begin_verification(&person, qid(&req.challenge_qid)?).await.map_err(key_status)?;
+        let human = required(req.human_id, "human_id")?;
+        let c = self.keys()?.begin_verification(&human, qid(&req.challenge_qid)?).await.map_err(key_status)?;
         Ok(Response::new(BeginVerificationResponse {
             ceremony_qid: c.id.to_string(),
             options_json: c.options.to_string(),
@@ -375,10 +374,10 @@ impl ChallengeService for Service {
         req: Request<FinishVerificationRequest>,
     ) -> Result<Response<FinishVerificationResponse>, Status> {
         let req = req.into_inner();
-        let person = required(req.human_id, "human_id")?;
+        let human = required(req.human_id, "human_id")?;
         let a = req.assertion.map(assertion).ok_or_else(|| Status::invalid_argument("assertion is required"))?;
-        let c = self.keys()?.finish_verification(&person, &a).await.map_err(key_status)?;
-        tracing::info!(challenge_id = %c.id, person = %person, status = c.status.as_str(), "challenge verified with a security key");
+        let c = self.keys()?.finish_verification(&human, &a).await.map_err(key_status)?;
+        tracing::info!(challenge_id = %c.id, human = %human, status = c.status.as_str(), "challenge verified with a security key");
         Ok(Response::new(FinishVerificationResponse { challenge: Some(challenge_to_wire(c)) }))
     }
 
@@ -526,7 +525,7 @@ fn actor(actor: Option<awzy_authz_proto::authz::v1::Actor>, text: &str, field: &
 
 /// The person who answered or decided, by their IdP ID: only a person, acting for themselves,
 /// answers for a challenge, and approvals are checked against them as a Cedar principal.
-fn person(actor: Option<awzy_authz_proto::authz::v1::Actor>, text: &str, field: &str) -> Result<String, Status> {
+fn human(actor: Option<awzy_authz_proto::authz::v1::Actor>, text: &str, field: &str) -> Result<String, Status> {
     match awzy_authz_proto::actor_from_wire(actor, text) {
         Some(a) if a.subject.kind == awzy_model::entity_type::HUMAN && a.on_behalf_of.is_none() => Ok(a.subject.id),
         Some(a) => Err(Status::invalid_argument(format!("{field} must be a person acting for themselves, not {a}"))),
@@ -769,7 +768,7 @@ mod tests {
             ..Default::default()
         };
         let for_someone =
-            client.decide(decide(awzy_model::Actor::new(overseer.clone(), None).for_person("carol"))).await;
+            client.decide(decide(awzy_model::Actor::new(overseer.clone(), None).for_human("carol"))).await;
         assert_eq!(for_someone.unwrap_err().code(), Code::InvalidArgument, "approving is on its own authority");
 
         let c = client.decide(decide(awzy_model::Actor::new(overseer, None))).await.unwrap().into_inner();

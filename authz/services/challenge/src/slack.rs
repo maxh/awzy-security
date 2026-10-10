@@ -65,7 +65,7 @@ impl Slack {
 
     /// A direct message to the person whose `userName` is `user_name`, which has to be their
     /// email address for Slack to find them.
-    pub async fn to_person(&self, user_name: &str, text: &str) -> anyhow::Result<()> {
+    pub async fn to_human(&self, user_name: &str, text: &str) -> anyhow::Result<()> {
         if !user_name.contains('@') {
             bail!("{user_name} isn't an email address, so Slack can't find them");
         }
@@ -143,12 +143,12 @@ mod tests {
     async fn people_get_direct_messages_and_the_security_team_its_channel() {
         let posts: Arc<Mutex<Vec<Value>>> = Arc::default();
         let slack = Slack::new(&fake_slack(posts.clone()).await, "xoxb-test", "C0SECURITY");
-        slack.to_person("nora@larkspur.example", "awzy needs a reason").await.unwrap();
+        slack.to_human("nora@larkspur.example", "awzy needs a reason").await.unwrap();
         slack.to_security("awzy asks for an approval").await.unwrap();
 
-        let err = slack.to_person("someone@elsewhere.example", "x").await.unwrap_err();
+        let err = slack.to_human("someone@elsewhere.example", "x").await.unwrap_err();
         assert!(err.to_string().contains("users_not_found"), "{err}");
-        assert!(slack.to_person("nora", "x").await.is_err(), "not an email address");
+        assert!(slack.to_human("nora", "x").await.is_err(), "not an email address");
 
         let posts = posts.lock().unwrap();
         assert_eq!(posts.len(), 2);

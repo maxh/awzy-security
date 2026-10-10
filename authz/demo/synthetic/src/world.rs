@@ -15,7 +15,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::{
-    org::{cast, Company, Person, Profile},
+    org::{cast, Company, Human, Profile},
     rng::Rng,
 };
 
@@ -255,7 +255,7 @@ fn repositories(team: &str) -> &'static [(&'static str, Tier)] {
     }
 }
 
-fn docs_per_person(profile: Profile) -> usize {
+fn docs_per_human(profile: Profile) -> usize {
     match profile {
         Profile::Demo => 20,
         Profile::Scale => 95,
@@ -393,7 +393,7 @@ pub fn folders_and_repositories(company: &Company) -> Vec<Resource> {
 /// Teams in company order, with their leads (each team's first person).
 fn teams(company: &Company) -> Vec<(&'static str, String)> {
     let mut out: Vec<(&'static str, String)> = Vec::new();
-    for p in &company.people {
+    for p in &company.humans {
         if !out.iter().any(|(t, _)| *t == p.team) {
             out.push((p.team, p.user_name.clone()));
         }
@@ -402,7 +402,7 @@ fn teams(company: &Company) -> Vec<(&'static str, String)> {
 }
 
 fn lead(company: &Company, team: &str) -> String {
-    company.people.iter().find(|p| p.team == team).map(|p| p.user_name.clone()).unwrap_or_default()
+    company.humans.iter().find(|p| p.team == team).map(|p| p.user_name.clone()).unwrap_or_default()
 }
 
 /// The demo plan's scenario documents, at fixed IDs.
@@ -613,15 +613,15 @@ pub const BASIC_QUESTIONS: &[(&str, &str, &str)] = &[
 
 /// The documents person `index` (in `company.people`) owns. Deterministic per person, so they can
 /// be generated a person at a time.
-pub fn person_documents(company: &Company, profile: Profile, seed: u64, index: usize) -> Vec<Resource> {
-    let p = &company.people[index];
+pub fn human_documents(company: &Company, profile: Profile, seed: u64, index: usize) -> Vec<Resource> {
+    let p = &company.humans[index];
     let topics = topics(p.team);
     if topics.is_empty() {
         return vec![];
     }
     let mut rng = Rng::new(seed ^ 0x5EED_D0C5 ^ ((index as u64) << 20));
     let accounts = accounts(p.team);
-    (0..docs_per_person(profile))
+    (0..docs_per_human(profile))
         .map(|k| {
             let t = rng.pick(topics);
             let truth = weighted(&mut rng, t.weights);
@@ -647,7 +647,7 @@ fn rep_accounts(index: usize, accounts: &[&'static str]) -> Vec<&'static str> {
     (0..3).map(|i| accounts[(index + i) % accounts.len()]).collect()
 }
 
-fn document(p: &Person, index: usize, k: usize, t: &Topic, truth: Tier, name: String, rng: &mut Rng) -> Resource {
+fn document(p: &Human, index: usize, k: usize, t: &Topic, truth: Tier, name: String, rng: &mut Rng) -> Resource {
     // Sensitivity labels: most crown jewels, some confidential, few others. A few labels are one
     // tier too low, as in real drives.
     let labeled_share = match truth {
@@ -688,7 +688,7 @@ fn document(p: &Person, index: usize, k: usize, t: &Topic, truth: Tier, name: St
 /// Who works on what: each sales rep's accounts (with SalesGenie on Nora's), engineering tickets,
 /// Quarry Labs' statement of work, and the FY27 strategic plan.
 pub fn work_items(company: &Company, profile: Profile, seed: u64) -> Vec<WorkItem> {
-    let mut items = people_work(company, profile, seed);
+    let mut items = humans_work(company, profile, seed);
     // An agent working for its owner is on its owner's work too (SalesGenie on Nora's accounts),
     // so its own assignment check passes where hers does (ADR 0046).
     for item in &mut items {
@@ -705,12 +705,12 @@ pub fn work_items(company: &Company, profile: Profile, seed: u64) -> Vec<WorkIte
 
 /// People's work items: sales accounts, engineering tickets, the contractor's statement of work,
 /// and the strategy team's plan.
-fn people_work(company: &Company, profile: Profile, seed: u64) -> Vec<WorkItem> {
+fn humans_work(company: &Company, profile: Profile, seed: u64) -> Vec<WorkItem> {
     let mut items = Vec::new();
-    for (index, p) in company.people.iter().enumerate() {
+    for (index, p) in company.humans.iter().enumerate() {
         let team_accounts = accounts(p.team);
         if !team_accounts.is_empty() {
-            let docs = person_documents(company, profile, seed, index);
+            let docs = human_documents(company, profile, seed, index);
             for account in rep_accounts(index, team_accounts) {
                 let assignees = vec![p.user_name.clone()];
                 items.push(WorkItem {
@@ -723,7 +723,7 @@ fn people_work(company: &Company, profile: Profile, seed: u64) -> Vec<WorkItem> 
             }
         }
         if p.team.starts_with("engineering-") {
-            let docs = person_documents(company, profile, seed, index);
+            let docs = human_documents(company, profile, seed, index);
             let repos = repositories(p.team);
             for n in 0..2 {
                 let (repo, _) = repos[(index + n) % repos.len()];
@@ -747,7 +747,7 @@ fn people_work(company: &Company, profile: Profile, seed: u64) -> Vec<WorkItem> 
 
     // The contractor's scope: the client apps and their own deliverables, not the platform.
     let contractors: Vec<String> =
-        company.people.iter().filter(|p| p.team == "contractors-quarry-labs").map(|p| p.user_name.clone()).collect();
+        company.humans.iter().filter(|p| p.team == "contractors-quarry-labs").map(|p| p.user_name.clone()).collect();
     let mut sow = vec![topic_folder("contractors-quarry-labs", "Deliverables")];
     sow.extend(repositories("engineering-client-apps").iter().map(|(r, _)| format!("synthetic:repo:{r}")));
     items.push(WorkItem {
@@ -759,7 +759,7 @@ fn people_work(company: &Company, profile: Profile, seed: u64) -> Vec<WorkItem> 
     });
 
     let mut planners: Vec<String> =
-        company.people.iter().filter(|p| p.team == "strategy").map(|p| p.user_name.clone()).collect();
+        company.humans.iter().filter(|p| p.team == "strategy").map(|p| p.user_name.clone()).collect();
     planners.push(lead(company, "finance"));
     items.push(WorkItem {
         id: "synthetic:project:fy27-strategic-plan".into(),
@@ -782,8 +782,8 @@ mod tests {
         let c = generate(Profile::Demo, seed);
         let mut all = folders_and_repositories(&c);
         all.extend(scenario_resources(&c));
-        for i in 0..c.people.len() {
-            all.extend(person_documents(&c, Profile::Demo, seed, i));
+        for i in 0..c.humans.len() {
+            all.extend(human_documents(&c, Profile::Demo, seed, i));
         }
         let work = work_items(&c, Profile::Demo, seed);
         (c, all, work)
@@ -820,15 +820,15 @@ mod tests {
         let (c, all, work) = world(3);
         let ids: HashSet<&str> = all.iter().map(|r| r.id.as_str()).collect();
         assert_eq!(ids.len(), all.len(), "IDs are unique");
-        let people: HashSet<&str> = c.people.iter().map(|p| p.user_name.as_str()).collect();
+        let humans: HashSet<&str> = c.humans.iter().map(|p| p.user_name.as_str()).collect();
         let accounts: HashSet<&str> = c.service_accounts.iter().map(|s| s.id.as_str()).collect();
         for r in &all {
             assert!(r.parent.as_deref().is_none_or(|p| ids.contains(p)), "{} has a real parent", r.id);
-            assert!(people.contains(r.owner.as_str()), "{} has a real owner", r.id);
+            assert!(humans.contains(r.owner.as_str()), "{} has a real owner", r.id);
         }
         for w in &work {
             assert!(w.resources.iter().all(|r| ids.contains(r.as_str())), "{} links real resources", w.id);
-            assert!(w.assignees.iter().all(|a| people.contains(a.as_str()) || accounts.contains(a.as_str())));
+            assert!(w.assignees.iter().all(|a| humans.contains(a.as_str()) || accounts.contains(a.as_str())));
         }
         let mut seen: HashMap<&str, usize> = HashMap::new();
         for w in &work {
@@ -926,7 +926,7 @@ mod tests {
             "outside the contractors' scope"
         );
         assert!(!sow.resources.contains(&"synthetic:repo:payments-service".to_string()));
-        assert!(c.people.iter().any(|p| p.user_name == sam));
+        assert!(c.humans.iter().any(|p| p.user_name == sam));
 
         let runbook = find("synthetic:doc:production-admin-runbook");
         assert!(runbook.sharing.iter().any(|s| s.id == "it-admin"), "IT's own runbook");

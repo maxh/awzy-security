@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
 
     // awzy-publish acting for whoever ran it (ADR 0060).
     let actor = || -> Option<awzy_authz_proto::authz::v1::Actor> {
-        Some(awzy_model::Actor::awzy("awzy-publish").for_person(by.clone()).into())
+        Some(awzy_model::Actor::awzy("awzy-publish").for_human(by.clone()).into())
     };
     let mut client = PolicyServiceClient::connect(endpoint).await?;
     let draft = client

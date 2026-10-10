@@ -142,11 +142,11 @@ async fn activity(args: &[String]) -> anyhow::Result<()> {
                     Some(intake) => {
                         let event = awzy_synthetic::history::exfiltration_event(chrono::Utc::now(), &e);
                         if let Err(err) = intake.send(&[event]).await {
-                            tracing::warn!(error = %err, person = %e.person, "export not sent to awzy-intake");
+                            tracing::warn!(error = %err, human = %e.human, "export not sent to awzy-intake");
                         }
                     }
                     None => {
-                        tracing::info!(person = %e.person, "AWZY_INTAKE_URL is not set; the scenario's export isn't sent")
+                        tracing::info!(human = %e.human, "AWZY_INTAKE_URL is not set; the scenario's export isn't sent")
                     }
                 }
             }

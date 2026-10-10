@@ -128,7 +128,7 @@ mod tests {
         }
     }
 
-    fn with_people() -> Replayer {
+    fn with_humans() -> Replayer {
         let principals = Arc::new(Principals::awaiting_sync());
         principals.load(
             1,
@@ -148,7 +148,7 @@ mod tests {
             &format!("{}\n@id(\"no-security-reads\")\nforbid (principal in Group::\"security\", action == Action::\"read\", resource);", crate::DEFAULT_POLICIES),
         )
         .unwrap();
-        let replay = with_people();
+        let replay = with_humans();
         let (b, a) = replay.compare(&before, &after, &request("alice")).await.unwrap();
         assert_eq!((b.verdict.as_str(), a.verdict.as_str()), ("allow", "deny"));
         assert_eq!(a.policies, ["no-security-reads"]);
@@ -161,7 +161,7 @@ mod tests {
         let mut req = request("alice");
         req.subject = EntityRef::new("ServiceAccount", "nobody-registered-me");
         let pdp = Pdp::with_defaults().unwrap();
-        let (b, a) = with_people().compare(&pdp, &pdp, &req).await.unwrap();
+        let (b, a) = with_humans().compare(&pdp, &pdp, &req).await.unwrap();
         assert_eq!((b.verdict, a.verdict), (Verdict::Deny, Verdict::Deny));
         assert_eq!(b.policies, [principals::UNREGISTERED]);
     }

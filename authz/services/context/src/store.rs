@@ -156,7 +156,7 @@ fn service_account_from_row(row: &PgRow) -> Result<ServiceAccount, sqlx::Error> 
 const USER_COLUMNS: &str = "scim_id, user_name, external_id, display_name, active, resource, created_at, updated_at";
 
 /// userName, display name, active, updated at, and the groups the person is directly in.
-type DirectoryPersonRow = (String, Option<String>, bool, DateTime<Utc>, Vec<String>);
+type DirectoryHumanRow = (String, Option<String>, bool, DateTime<Utc>, Vec<String>);
 /// Name, updated at, people and groups directly in it, and the groups it's in.
 type DirectoryGroupRow = (String, DateTime<Utc>, i64, i64, Vec<String>);
 
@@ -499,7 +499,7 @@ impl ContextStore {
     /// People ordered by userName, optionally those whose userName or display name contains
     /// `search`, with the groups they're directly in.
     pub async fn directory_humans(&self, search: Option<&str>, limit: i64) -> Result<Vec<Value>, sqlx::Error> {
-        let rows: Vec<DirectoryPersonRow> = sqlx::query_as(
+        let rows: Vec<DirectoryHumanRow> = sqlx::query_as(
             "SELECT h.user_name, h.display_name, h.active, h.updated_at,
                     COALESCE(array_agg(g.display_name ORDER BY g.display_name) FILTER (WHERE g.display_name IS NOT NULL), '{}')
              FROM humans h

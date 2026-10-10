@@ -75,8 +75,8 @@ const ALLOW_CACHE_MAX: usize = 100_000;
 
 impl AllowCache {
     fn key(accessor: &Accessor, tool_id: &str) -> String {
-        let person = accessor.on_behalf_of.as_ref().map(|p| format!("{}::{}", p.kind, p.id)).unwrap_or_default();
-        format!("{}::{}|{person}|{tool_id}", accessor.subject.kind, accessor.subject.id)
+        let human = accessor.on_behalf_of.as_ref().map(|p| format!("{}::{}", p.kind, p.id)).unwrap_or_default();
+        format!("{}::{}|{human}|{tool_id}", accessor.subject.kind, accessor.subject.id)
     }
 
     fn record(&self, key: String) {
@@ -105,8 +105,8 @@ impl AllowCache {
         let mut entries = self.entries.lock().expect("allow cache lock");
         entries.retain(|key, _| {
             let mut parts = key.splitn(3, '|');
-            let (subject, person) = (parts.next().unwrap_or_default(), parts.next().unwrap_or_default());
-            !contained.contains(subject) && !contained.contains(person)
+            let (subject, human) = (parts.next().unwrap_or_default(), parts.next().unwrap_or_default());
+            !contained.contains(subject) && !contained.contains(human)
         });
     }
 }
@@ -385,7 +385,7 @@ fn blocked(id: &Value, what: &str, res: &CheckResponse) -> Response<Body> {
         _ => (
             "deny",
             format!(
-                "awzy denied {what} (decision {}; {policies}). If this access is needed, ask the person \
+                "awzy denied {what} (decision {}; {policies}). If this access is needed, ask the human \
                  you're working for or a security admin.",
                 res.decision_qid
             ),

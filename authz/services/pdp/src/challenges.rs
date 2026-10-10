@@ -114,8 +114,8 @@ fn human_ref(v: &Value) -> Option<String> {
 /// The person a challenge goes to: the human subject, the person a service account acts for,
 /// or a service account's owner (from its entity). None when no one is known.
 pub fn answerer(req: &AccessRequest, entities: &Value) -> Option<String> {
-    if let Some(person) = &req.on_behalf_of {
-        return Some(person.id.clone());
+    if let Some(human) = &req.on_behalf_of {
+        return Some(human.id.clone());
     }
     if req.subject.kind == awzy_model::entity_type::HUMAN {
         return Some(req.subject.id.clone());
