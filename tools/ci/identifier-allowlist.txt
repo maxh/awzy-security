@@ -1,0 +1,7 @@
+# Placeholders that look like identifiers but name nothing real (keep-deployments-out skill).
+# One extended regex per line, matched against each finding.
+^(111111111111|222222222222|333333333333|444444444444|000000000000|123456789012)$
+# AWS's own documentation example account.
+^111122223333$
+# Made-up QIDs in tests and examples: all zeros, or a counting pattern.
+^install_00000000-

@@ -21,6 +21,14 @@ failed=""
 staged=$(mktemp -d)  # staged copies of the files being checked
 trap 'rm -rf "$staged"' EXIT
 
+# ---- Identifiers: nothing that names a real account, deployment, or person
+# (.agents/skills/keep-deployments-out).
+
+if ! tools/ci/check-identifiers.sh --staged >/dev/null; then
+  failed="$failed  (identifiers found above; use placeholders)
+"
+fi
+
 # ---- Rust: rustfmt (rustfmt.toml)
 
 rust_files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs')

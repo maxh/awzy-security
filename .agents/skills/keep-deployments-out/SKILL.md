@@ -52,15 +52,18 @@ forever in history.
 - Anything a reader must look up names where to look: "`terraform output docs_bucket`", "the
   `awzy-corp-portal/accounts` secret", "the management account's Service Quotas history".
 
-## Check before pushing
+## Checked automatically
 
-```sh
-git diff origin/main... | grep -nE '^\+' | grep -nE \
-  '\b[0-9]{12}\b|ssoins-[0-9a-f]+|awsapps\.com|install_[0-9a-f]{8}-|arn:aws:[a-z0-9-]+:[a-z0-9-]*:[0-9]{12}|@awzysecurity\.com'
-```
+`tools/ci/check-identifiers.sh` looks for AWS account IDs, ARNs with an account, sign-in portal
+URLs, real install QIDs, and awzy email addresses:
 
-Every hit is either a placeholder from the list above or must go. Read your PR and issue text
-the same way before posting it.
+- the pre-commit hook runs it on staged lines (`--staged`);
+- CI's `identifiers` workflow runs it on every tracked file and on the PR's title and
+  description, again whenever they're edited.
+
+A true placeholder that trips it goes in `tools/ci/identifier-allowlist.txt`. The check can't
+know names, case numbers, or resource IDs without a fixed shape, so still read your diff and
+your PR text against the list above before posting.
 
 ## If one slipped
 
