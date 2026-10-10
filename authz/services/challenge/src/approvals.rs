@@ -1,7 +1,7 @@
 //! Who may approve a challenge: the PDP decides, as `approve` on the challenged resource, so
 //! approvers are set in Cedar like any other access (the base policies let the security team).
 
-use awzy_authz_proto::authz::v1::{authorizer_client::AuthorizerClient, CheckRequest, EntityRef, Verdict};
+use awzy_authz_proto::authz::v1::{authorizer_client::AuthorizerClient, CheckRequest, Entity, EntityRef, Verdict};
 use awzy_model::entity_type;
 use tonic::transport::Channel;
 
@@ -34,9 +34,15 @@ impl Approvals {
         Ok(Self::Pdp(AuthorizerClient::new(awzy_service_auth::grpc_channel(channel, "awzy-pdp"))))
     }
 
-    /// Ok when the PDP allows `approver` (a person's ID) to approve `resource`. The check is
-    /// always enforced, whatever the install's mode, as the portal's own checks are (ADR 0020).
-    pub async fn check(&self, approver: &str, resource: &awzy_model::EntityRef) -> Result<(), ApprovalError> {
+    /// Ok when the PDP allows `approver` (a person's ID) to approve `resource`. `entities` are
+    /// the approver's as the caller validated them. The check is always enforced, whatever the
+    /// install's mode, as the portal's own checks are (ADR 0020).
+    pub async fn check(
+        &self,
+        approver: &str,
+        resource: &awzy_model::EntityRef,
+        entities: Vec<Entity>,
+    ) -> Result<(), ApprovalError> {
         let mut client = match self {
             Self::Pdp(client) => client.clone(),
             Self::Off => return Err(ApprovalError::Unavailable("awzy-challenge has no PDP (AWZY_PDP_ADDR)".into())),
@@ -56,6 +62,7 @@ impl Approvals {
                 resource: Some(resource.clone().into()),
                 human_present: Some(true),
                 always_enforced: true,
+                entities,
                 ..Default::default()
             })
             .await

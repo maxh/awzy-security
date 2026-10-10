@@ -9,6 +9,7 @@
 
 pub mod access;
 pub mod awzy_bot;
+mod challenges;
 mod decisions;
 pub mod directory;
 mod dry_run;
@@ -50,10 +51,13 @@ pub struct Services {
     pub context: Option<directory::ContextClient>,
     /// Awzy Bot's model (ADR 0048); None when the install hasn't turned it on.
     pub bot: Option<awzy_bot::BotModel>,
+    /// awzy-challenge, for challenges and containments (ADR 0054).
+    pub challenge: Option<awzy_authz_proto::challenge::v1::challenge_service_client::ChallengeServiceClient<AuthChannel>>,
 }
 
 impl Services {
-    /// AWZY_POLICY_ADDR, AWZY_PDP_ADDR, AWZY_CONTEXT_ADDR, and AWZY_CLICKHOUSE_{URL,USER,PASSWORD,DATABASE}.
+    /// AWZY_CHALLENGE_ADDR, AWZY_CLICKHOUSE_{URL,USER,PASSWORD,DATABASE}, AWZY_CONTEXT_ADDR,
+    /// AWZY_PDP_ADDR, and AWZY_POLICY_ADDR.
     pub fn from_env() -> anyhow::Result<Self> {
         let channel = |k: &str| -> anyhow::Result<Option<Channel>> {
             Ok(match std::env::var(k) {
@@ -73,7 +77,13 @@ impl Services {
                 .with_database(var("AWZY_CLICKHOUSE_DATABASE", "awzy"))
         });
         let context = std::env::var("AWZY_CONTEXT_ADDR").ok().map(directory::ContextClient::new);
-        Ok(Self { policy, clickhouse, pdp, context, bot: None })
+        let challenge = channel("AWZY_CHALLENGE_ADDR")?.map(|c| {
+            awzy_authz_proto::challenge::v1::challenge_service_client::ChallengeServiceClient::new(grpc_channel(
+                c,
+                "awzy-challenge",
+            ))
+        });
+        Ok(Self { policy, clickhouse, pdp, context, bot: None, challenge })
     }
 }
 
@@ -145,6 +155,7 @@ pub struct ClientPortalQuery(
     directory::DirectoryQuery,
     dry_run::DryRunQuery,
     awzy_bot::AwzyBotQuery,
+    challenges::ChallengeQuery,
 );
 
 #[derive(MergedObject, Default)]
@@ -154,6 +165,7 @@ pub struct ClientPortalMutation(
     enforcement::EnforcementMutation,
     directory::DirectoryMutation,
     awzy_bot::AwzyBotMutation,
+    challenges::ChallengeMutation,
 );
 
 pub type ClientPortalSchema = Schema<ClientPortalQuery, ClientPortalMutation, EmptySubscription>;
@@ -199,6 +211,12 @@ pub(crate) mod testing {
     /// An in-process PDP with the default policies, in monitor mode: the portal must apply its
     /// verdicts anyway.
     pub(crate) async fn pdp() -> AuthorizerClient<AuthChannel> {
+        let channel = Channel::from_shared(pdp_endpoint().await).unwrap().connect().await.unwrap();
+        AuthorizerClient::new(grpc_channel(channel, "awzy-pdp"))
+    }
+
+    /// The same PDP's address, for other services under test that call it.
+    pub(crate) async fn pdp_endpoint() -> String {
         let enforcement = Arc::new(awzy_pdp::Enforcement::fixed(awzy_model::EnforcementMode::Monitor));
         let app = awzy_pdp::router(
             awzy_pdp::AppState::new(awzy_pdp::shared(awzy_pdp::Pdp::with_defaults().unwrap()))
@@ -207,8 +225,7 @@ pub(crate) mod testing {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        let channel = Channel::from_shared(format!("http://{addr}")).unwrap().connect().await.unwrap();
-        AuthorizerClient::new(grpc_channel(channel, "awzy-pdp"))
+        format!("http://{addr}")
     }
 
     pub(crate) fn person(id: &str, group: &str) -> Viewer {

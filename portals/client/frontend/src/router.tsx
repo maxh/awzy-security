@@ -9,6 +9,7 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 
+import { ChallengesPage } from "./ChallengesPage";
 import { DecisionsPage } from "./DecisionsPage";
 import { DirectoryPage } from "./DirectoryPage";
 import { EnforcementPage } from "./EnforcementPage";
@@ -33,6 +34,9 @@ function Nav() {
       </Link>
       <Link to="/directory" {...linkProps}>
         Directory
+      </Link>
+      <Link to="/challenges" {...linkProps}>
+        Challenges
       </Link>
     </>
   );
@@ -84,8 +88,21 @@ const directoryRoute = createRoute({
   component: DirectoryPage,
 });
 
+const challengesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/challenges",
+  component: ChallengesPage,
+});
+
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([indexRoute, decisionsRoute, policiesRoute, enforcementRoute, directoryRoute]),
+  routeTree: rootRoute.addChildren([
+    indexRoute,
+    decisionsRoute,
+    policiesRoute,
+    enforcementRoute,
+    directoryRoute,
+    challengesRoute,
+  ]),
 });
 
 declare module "@tanstack/react-router" {

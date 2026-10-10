@@ -23,6 +23,11 @@ permit (
   resource is PortalArea
 );
 
+// Everyone answers the challenges sent to them in the client portal. Seeing every challenge and
+// containing accessors is `administer`, the security team's above.
+@id("people-answer-their-challenges")
+permit (principal is Human, action == Action::"view", resource == PortalArea::"challenges");
+
 // Approval challenges (awzy-challenge): the security team approves. Clients add data owners and
 // managers as connectors bring those relationships in.
 @id("security-team-approves")

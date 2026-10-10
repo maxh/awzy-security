@@ -2,15 +2,16 @@
 //! `node(id)` routes on the type the ID parses as.
 
 use async_graphql::{Context, Interface, Object, Result, ID};
-use awzy_model::{DecisionId, PolicyBundleId};
+use awzy_model::{ChallengeId, DecisionId, PolicyBundleId};
 
-use crate::{decisions::Decision, policies::PolicyBundle};
+use crate::{challenges::Challenge, decisions::Decision, policies::PolicyBundle};
 
 #[derive(Interface)]
 #[graphql(field(name = "id", ty = "ID"))]
 pub enum Node {
     PolicyBundle(PolicyBundle),
     Decision(Decision),
+    Challenge(Challenge),
 }
 
 #[derive(Default)]
@@ -25,6 +26,9 @@ impl NodeQuery {
         }
         if let Ok(id) = id.parse::<DecisionId>() {
             return Ok(crate::decisions::get_by_id(ctx, id).await?.map(Node::Decision));
+        }
+        if let Ok(id) = id.parse::<ChallengeId>() {
+            return Ok(crate::challenges::get_by_id(ctx, id).await?.map(Node::Challenge));
         }
         Ok(None)
     }

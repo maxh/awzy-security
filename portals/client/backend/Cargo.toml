@@ -35,6 +35,8 @@ uuid.workspace = true
 awzy-service-auth.workspace = true
 
 [dev-dependencies]
+awzy-challenge.workspace = true
 jsonwebtoken.workspace = true
+sqlx.workspace = true
 awzy-clickhouse.workspace = true
 tower.workspace = true
