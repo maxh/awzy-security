@@ -1,0 +1,37 @@
+---
+title: awzy
+description: Per-action authorization for people and AI agents, running in your own cloud.
+template: splash
+hero:
+  tagline: Per-action, per-resource authorization for people and AI agents, installed in your own cloud.
+  image:
+    file: ../../assets/kangaroo.svg
+  actions:
+    - text: What awzy is
+      link: /introduction/
+      icon: right-arrow
+    - text: Install it
+      link: /guides/install/
+      variant: minimal
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+
+<CardGrid>
+  <Card title="Every action, decided" icon="approve-check">
+    Each read, write, and tool call is checked against Cedar policy, the person's context, and
+    the data's sensitivity, not just at sign-in.
+  </Card>
+  <Card title="People and agents alike" icon="puzzle">
+    An AI agent acting for someone gets at most what that person could do, and each is judged on
+    its own risk.
+  </Card>
+  <Card title="Challenges, not just denials" icon="warning">
+    A risky request can ask for a justification, a security key, or an approval instead of
+    failing outright.
+  </Card>
+  <Card title="In your cloud" icon="seti:lock">
+    Single-tenant in your AWS account. awzy has no access to your data; your install pulls signed
+    releases.
+  </Card>
+</CardGrid>

@@ -1,0 +1,47 @@
+name: docs-site
+
+# https://docs.awzysecurity.com (docs/site): builds on every pull request that touches it, and
+# deploys main to Cloudflare Pages. The Pages project and its domain are Terraform
+# (deploy/terraform/corp/corp-portal/docs-site.tf).
+on:
+  pull_request:
+    paths:
+      - "docs/site/**"
+      - "INSTALL.md"
+      - ".github/workflows/docs-site.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/site/**"
+      - "INSTALL.md"
+      - ".github/workflows/docs-site.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: docs-site-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: docs/site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      # Not part of the portals' pnpm workspace: the site has its own lockfile.
+      - run: pnpm install --ignore-workspace --frozen-lockfile
+      - run: pnpm --ignore-workspace build
+      # Only main, and only once the account and a Pages token are configured.
+      - name: Deploy to Cloudflare Pages
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.AWZY_CORP_CLOUDFLARE_ACCOUNT_ID != ''
+        run: npx --yes wrangler@4.149.0 pages deploy dist --project-name awzy-docs --branch main
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.AWZY_CORP_CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.AWZY_CORP_CLOUDFLARE_PAGES_TOKEN }}

@@ -4,3 +4,5 @@ portals/common/relay/node_modules/
 portals/client/frontend/node_modules/
 portals/corp/frontend/node_modules/
 portals/client/e2e/node_modules/
+# The docs site has its own lockfile and isn't built by Bazel.
+docs/site/
