@@ -45,9 +45,9 @@ enum ChallengeStatus {
 
 message Challenge {
   // QID: challenge_<uuid>.
-  string id = 1;
+  string qid = 1;
   // The decision that opened it (QID: decision_<uuid>).
-  string decision_id = 2;
+  string decision_qid = 2;
   awzy.authz.v1.EntityRef subject = 3;
   // Set when a service account acted for a person.
   awzy.authz.v1.EntityRef on_behalf_of = 4;
@@ -74,7 +74,7 @@ message Challenge {
 
 message ResolveRequest {
   // The challenge verdict's decision (QID: decision_<uuid>).
-  string decision_id = 1;
+  string decision_qid = 1;
   awzy.authz.v1.EntityRef subject = 2;
   awzy.authz.v1.EntityRef on_behalf_of = 3;
   string action = 4;
@@ -91,13 +91,13 @@ message ResolveResponse {
   // Required kinds this request has a live grant for.
   repeated awzy.authz.v1.ChallengeKind passed = 1;
   // The pending challenge for the kinds not yet passed, when `open` and some remain.
-  string challenge_id = 2;
+  string challenge_qid = 2;
   // An approver rejected this request recently: the PDP denies it.
   bool rejected = 3;
 }
 
 message GetChallengeRequest {
-  string id = 1;
+  string challenge_qid = 1;
 }
 
 message GetChallengeResponse {
@@ -118,7 +118,7 @@ message ListChallengesResponse {
 }
 
 message JustifyRequest {
-  string id = 1;
+  string challenge_qid = 1;
   // The signed-in person answering.
   string answered_by = 2;
   string justification = 3;
@@ -129,7 +129,7 @@ message JustifyResponse {
 }
 
 message DecideRequest {
-  string id = 1;
+  string challenge_qid = 1;
   // The signed-in person deciding: a Human ID.
   string decided_by = 2;
   bool approve = 3;
@@ -145,7 +145,7 @@ message DecideResponse {
 
 message Containment {
   // QID: containment_<uuid>.
-  string id = 1;
+  string qid = 1;
   awzy.authz.v1.EntityRef subject = 2;
   string reason = 3;
   string created_by = 4;
@@ -167,7 +167,7 @@ message ContainResponse {
 }
 
 message LiftRequest {
-  string id = 1;
+  string containment_qid = 1;
   string lifted_by = 2;
   string reason = 3;
 }

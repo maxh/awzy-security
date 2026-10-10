@@ -240,7 +240,7 @@ async fn check(
                     None
                 }
                 (_, true) => {
-                    tracing::info!(decision = %res.decision_id, what = %c.what, verdict = ?res.verdict(), "monitor mode: forwarding a call that would be blocked");
+                    tracing::info!(decision = %res.decision_qid, what = %c.what, verdict = ?res.verdict(), "monitor mode: forwarding a call that would be blocked");
                     None
                 }
                 _ => Some(blocked(id, &c.what, &res)),
@@ -305,20 +305,20 @@ fn blocked(id: &Value, what: &str, res: &CheckResponse) -> Response<Body> {
                 .map(|c| c.as_str_name().trim_start_matches("CHALLENGE_KIND_").to_lowercase())
                 .collect();
             let kinds = kinds.join(" and ");
-            let next = if res.challenge_id.is_empty() {
+            let next = if res.challenge_qid.is_empty() {
                 "No challenge could be opened, so the call was not made. Try again shortly.".to_string()
             } else {
                 format!(
                     "The call was not made. Challenge {} is waiting for an answer; once it's passed, \
                      retry the same call.",
-                    res.challenge_id
+                    res.challenge_qid
                 )
             };
             (
                 "challenge",
                 format!(
                     "awzy requires {kinds} for {what} (decision {}, policies: {policies}). {next}",
-                    res.decision_id
+                    res.decision_qid
                 ),
             )
         }
@@ -327,13 +327,13 @@ fn blocked(id: &Value, what: &str, res: &CheckResponse) -> Response<Body> {
             format!(
                 "awzy denied {what} (decision {}; {policies}). If this access is needed, ask the person \
                  you're working for or a security admin.",
-                res.decision_id
+                res.decision_qid
             ),
         ),
     };
-    let mut meta = json!({ "awzy/decision_id": res.decision_id, "awzy/verdict": verdict });
-    if !res.challenge_id.is_empty() {
-        meta["awzy/challenge_id"] = json!(res.challenge_id);
+    let mut meta = json!({ "awzy/decision_qid": res.decision_qid, "awzy/verdict": verdict });
+    if !res.challenge_qid.is_empty() {
+        meta["awzy/challenge_qid"] = json!(res.challenge_qid);
     }
     tool_error(id, text, meta)
 }
@@ -581,7 +581,7 @@ mod tests {
         let (_, denied) = call(&app, Some(&token("bob", None, &["engineering"])), "delete_file").await;
         assert_eq!(denied["result"]["isError"], true);
         assert_eq!(denied["result"]["_meta"]["awzy/verdict"], "deny");
-        assert!(denied["result"]["_meta"]["awzy/decision_id"].as_str().unwrap().starts_with("decision_"));
+        assert!(denied["result"]["_meta"]["awzy/decision_qid"].as_str().unwrap().starts_with("decision_"));
         assert_eq!(denied["id"], 7);
 
         // alice (security) may call any tool.

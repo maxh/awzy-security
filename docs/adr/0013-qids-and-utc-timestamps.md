@@ -1,6 +1,6 @@
 # 0013. QIDs and `UtcTimestamp`
 
-- Status: Accepted
+- Status: Accepted; amended by [0058](0058-qid-fields-are-named-qid-on-the-wire.md) (QID field names)
 - Date: 2026-10-08
 
 ## Context

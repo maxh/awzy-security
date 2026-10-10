@@ -1,6 +1,6 @@
 # 0045. SDKs are enforcement points built on a stable proto, starting with a design partner's language
 
-- Status: Accepted
+- Status: Accepted; one-time exception in [0058](0058-qid-fields-are-named-qid-on-the-wire.md) (QID field renames in v1)
 - Date: 2026-10-09
 - Implements part of: [0003](0003-one-pdp-for-every-access-path.md) (SDKs as an access path)
 

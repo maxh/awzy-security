@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<8e50cf840cb1c7b39297291e1b127b01>>
+ * @generated SignedSource<<41dac6ab92c28952cf3f62f2c169dcc8>>
  * @lightSyntaxTransform
  */
 
@@ -9,7 +9,7 @@
 
 import { ConcreteRequest } from 'relay-runtime';
 export type DryRunReportQuery$variables = {
-  draftId: string;
+  draftQid: string;
 };
 export type DryRunReportQuery$data = {
   readonly policyDryRun: {
@@ -49,7 +49,7 @@ var v0 = [
   {
     "defaultValue": null,
     "kind": "LocalArgument",
-    "name": "draftId"
+    "name": "draftQid"
   }
 ],
 v1 = {
@@ -65,8 +65,8 @@ v2 = [
     "args": [
       {
         "kind": "Variable",
-        "name": "draftId",
-        "variableName": "draftId"
+        "name": "draftQid",
+        "variableName": "draftQid"
       }
     ],
     "concreteType": "PolicyDryRun",
@@ -240,16 +240,16 @@ return {
     "selections": (v2/*:: as any*/)
   },
   "params": {
-    "cacheID": "4760dfc91a7d947c1cab6ccfe5ea4ad1",
+    "cacheID": "a31c4a4918e8af269e4e8025ad520182",
     "id": null,
     "metadata": {},
     "name": "DryRunReportQuery",
     "operationKind": "query",
-    "text": "query DryRunReportQuery(\n  $draftId: ID!\n) {\n  policyDryRun(draftId: $draftId) {\n    days\n    comparedWithVersion\n    decisions\n    distinctRequests\n    replayedRequests\n    truncated\n    unchangedDecisions\n    skippedRequests\n    skippedReason\n    changes {\n      from\n      to\n      decisions\n      requests\n      examples {\n        subjectId\n        onBehalfOfId\n        action\n        resourceId\n        decisions\n        policiesBefore\n        policiesAfter\n      }\n    }\n  }\n}\n"
+    "text": "query DryRunReportQuery(\n  $draftQid: ID!\n) {\n  policyDryRun(draftQid: $draftQid) {\n    days\n    comparedWithVersion\n    decisions\n    distinctRequests\n    replayedRequests\n    truncated\n    unchangedDecisions\n    skippedRequests\n    skippedReason\n    changes {\n      from\n      to\n      decisions\n      requests\n      examples {\n        subjectId\n        onBehalfOfId\n        action\n        resourceId\n        decisions\n        policiesBefore\n        policiesAfter\n      }\n    }\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "abba76e319d607cc9a8414abd41f1d1f";
+(node as any).hash = "650f9a457f290bac90a1710902c95595";
 
 export default node;

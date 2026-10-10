@@ -196,7 +196,7 @@ impl BotTool {
                 self.allow(PortalAction::View, PortalArea::Decisions).await?;
                 let p: ExplainDecisionParams = parse(input)?;
                 let id: DecisionId =
-                    p.decision_id.parse().map_err(|e: awzy_model::QidError| ToolOutcome::Error(e.to_string()))?;
+                    p.decision_qid.parse().map_err(|e: awzy_model::QidError| ToolOutcome::Error(e.to_string()))?;
                 let ch = services.clickhouse.as_ref().ok_or_else(|| missing("the decision log"))?;
                 let row = decisions::find(ch, id)
                     .await

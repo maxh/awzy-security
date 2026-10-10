@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<28dc7df751036ecc3b53dd9a718415a6>>
+ * @generated SignedSource<<1d631d1cd2768648545da06a183adf7f>>
  * @lightSyntaxTransform
  */
 
@@ -11,7 +11,7 @@ import { ConcreteRequest } from 'relay-runtime';
 export type ChallengeStatus = "EXPIRED" | "PASSED" | "PENDING" | "REJECTED" | "%future added value";
 export type DecideChallengeInput = {
   approve: boolean;
-  id: string;
+  challengeQid: string;
   note?: string | null | undefined;
 };
 export type ChallengesPageDecideMutation$variables = {

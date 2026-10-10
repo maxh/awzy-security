@@ -17,6 +17,9 @@ pub const SCHEMA_VERSION: u32 = 1;
 pub struct Heartbeat {
     /// Always [`SCHEMA_VERSION`] for this type.
     pub schema_version: u32,
+    /// `install_qid` on the wire (ADR 0058). `install_id` is still read from reporters older than
+    /// the rename, since installs upgrade after the corp portal.
+    #[serde(rename = "install_qid", alias = "install_id")]
     pub install_id: InstallId,
     pub sent_at: DateTime<Utc>,
     /// The awzy Helm chart version the install runs, when the reporter knows it.
@@ -201,7 +204,7 @@ mod tests {
     fn sample() -> serde_json::Value {
         json!({
             "schema_version": 1,
-            "install_id": InstallId::new().to_string(),
+            "install_qid": InstallId::new().to_string(),
             "sent_at": Utc::now(),
             "chart_version": "0.5.0-rc.1",
             "services": [
@@ -216,6 +219,16 @@ mod tests {
         let h: Heartbeat = serde_json::from_value(v).map_err(|e| e.to_string())?;
         h.validate(Utc::now()).map_err(|e| e.to_string())?;
         Ok(h)
+    }
+
+    #[test]
+    fn reporters_from_before_the_qid_rename_are_still_read() {
+        let mut old = sample();
+        let qid = old.as_object_mut().unwrap().remove("install_qid").unwrap();
+        old["install_id"] = qid.clone();
+        assert_eq!(parse(old).unwrap().install_id.to_string(), qid.as_str().unwrap());
+        let sent = serde_json::to_value(parse(sample()).unwrap()).unwrap();
+        assert!(sent.get("install_qid").is_some() && sent.get("install_id").is_none(), "sends the new name");
     }
 
     #[test]

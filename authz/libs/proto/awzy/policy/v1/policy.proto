@@ -38,7 +38,7 @@ enum BundleStatus {
 
 message PolicyBundle {
   // QID: policy_bundle_<uuid>.
-  string id = 1;
+  string qid = 1;
   // Increases with every bundle created. PDPs report the version they enforce.
   int64 version = 2;
   // Cedar schema (human-readable format).
@@ -69,7 +69,7 @@ message CreateDraftResponse {
 
 message PublishRequest {
   // QID: policy_bundle_<uuid>.
-  string id = 1;
+  string policy_bundle_qid = 1;
   string published_by = 2;
 }
 
@@ -100,7 +100,7 @@ message ListBundlesResponse {
 message GetBundleRequest {
   oneof key {
     // QID: policy_bundle_<uuid>.
-    string id = 1;
+    string policy_bundle_qid = 1;
     int64 version = 2;
   }
 }

@@ -63,8 +63,10 @@ bazel build --config=lint //...                    # clippy
   `DateTime`), and `google.protobuf.Timestamp` in protobuf. The exception is a field inside a
   signed payload, which uses integer Unix time so the signed bytes are unambiguous
   (`requested_at_unix` on a break-glass request).
-- **IDs in protobuf**: awzy's own entities are QID strings (`string decision_id`), as everywhere
-  else on the wire. IDs from the client's systems (a person's `EntityRef.id`) stay as they are.
+- **IDs on the wire** (protobuf, GraphQL, JSON): a field holding one of awzy's own QIDs is named
+  `_qid` (`string decision_qid`, `challengeQid`; a message's own is `qid`), so it can't be
+  mistaken for an ID from the client's systems, which keeps `_id` (`person_id`, `EntityRef.id`).
+  GraphQL objects keep `id`, which Relay requires (ADR 0058).
 - **Names** are specific and easy to grep (`ClientPortalSchema`, `CorpPortalQuery`, not `Query`).
   The products are "portals", never "consoles".
 - **Rust errors:** `thiserror` types in libraries, `anyhow` in binaries and at the edges.

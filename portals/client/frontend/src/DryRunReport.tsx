@@ -16,7 +16,7 @@ function VerdictBadge({ verdict }: { verdict: string }) {
  * What a draft would change (ADR 0049): the last week's requests replayed under the active bundle
  * and the draft, with today's people and resources.
  */
-export function DryRunReport({ draftId }: { draftId: string }) {
+export function DryRunReport({ draftQid }: { draftQid: string }) {
   return (
     <Suspense
       fallback={
@@ -30,16 +30,16 @@ export function DryRunReport({ draftId }: { draftId: string }) {
         </Center>
       }
     >
-      <Report draftId={draftId} />
+      <Report draftQid={draftQid} />
     </Suspense>
   );
 }
 
-function Report({ draftId }: { draftId: string }) {
+function Report({ draftQid }: { draftQid: string }) {
   const { policyDryRun: r } = useLazyLoadQuery<DryRunReportQuery>(
     graphql`
-      query DryRunReportQuery($draftId: ID!) {
-        policyDryRun(draftId: $draftId) {
+      query DryRunReportQuery($draftQid: ID!) {
+        policyDryRun(draftQid: $draftQid) {
           days
           comparedWithVersion
           decisions
@@ -67,7 +67,7 @@ function Report({ draftId }: { draftId: string }) {
         }
       }
     `,
-    { draftId },
+    { draftQid },
     { fetchPolicy: "network-only" },
   );
   const changed = r.changes.reduce((n, c) => n + c.decisions, 0);

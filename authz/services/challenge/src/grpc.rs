@@ -100,7 +100,7 @@ type FeedStream = Pin<Box<dyn Stream<Item = Result<WatchContainmentsResponse, St
 impl ChallengeService for Service {
     async fn resolve(&self, req: Request<ResolveRequest>) -> Result<Response<ResolveResponse>, Status> {
         let req = req.into_inner();
-        let decision_id = qid::<DecisionId>(&req.decision_id)?;
+        let decision_id = qid::<DecisionId>(&req.decision_qid)?;
         let required = challenges_from_wire(&req.kinds);
         if required.is_empty() {
             return Err(Status::invalid_argument("kinds is required"));
@@ -118,13 +118,13 @@ impl ChallengeService for Service {
         }
         Ok(Response::new(ResolveResponse {
             passed: challenges_to_wire(r.passed),
-            challenge_id: r.challenge_id.map(|id| id.to_string()).unwrap_or_default(),
+            challenge_qid: r.challenge_id.map(|id| id.to_string()).unwrap_or_default(),
             rejected: r.rejected,
         }))
     }
 
     async fn get_challenge(&self, req: Request<GetChallengeRequest>) -> Result<Response<GetChallengeResponse>, Status> {
-        let c = self.store.get(qid(&req.into_inner().id)?).await.map_err(status)?;
+        let c = self.store.get(qid(&req.into_inner().challenge_qid)?).await.map_err(status)?;
         Ok(Response::new(GetChallengeResponse { challenge: Some(challenge_to_wire(c)) }))
     }
 
@@ -152,7 +152,8 @@ impl ChallengeService for Service {
         if req.answered_by.is_empty() {
             return Err(Status::invalid_argument("answered_by is required"));
         }
-        let c = self.store.justify(qid(&req.id)?, &req.answered_by, &req.justification).await.map_err(status)?;
+        let c =
+            self.store.justify(qid(&req.challenge_qid)?, &req.answered_by, &req.justification).await.map_err(status)?;
         tracing::info!(challenge_id = %c.id, answered_by = %req.answered_by, status = c.status.as_str(), "challenge justified");
         Ok(Response::new(JustifyResponse { challenge: Some(challenge_to_wire(c)) }))
     }
@@ -162,7 +163,7 @@ impl ChallengeService for Service {
         if req.decided_by.is_empty() {
             return Err(Status::invalid_argument("decided_by is required"));
         }
-        let id = qid(&req.id)?;
+        let id = qid(&req.challenge_qid)?;
         // Checked before the store's own checks so a refusal names the policy decision; the store
         // then re-checks the challenge is still pending as it records the answer.
         let c = self.store.get(id).await.map_err(status)?;
@@ -190,7 +191,11 @@ impl ChallengeService for Service {
 
     async fn lift(&self, req: Request<LiftRequest>) -> Result<Response<LiftResponse>, Status> {
         let req = req.into_inner();
-        let c = self.store.lift(qid::<ContainmentId>(&req.id)?, &req.lifted_by, &req.reason).await.map_err(status)?;
+        let c = self
+            .store
+            .lift(qid::<ContainmentId>(&req.containment_qid)?, &req.lifted_by, &req.reason)
+            .await
+            .map_err(status)?;
         tracing::warn!(containment_id = %c.id, subject = ?c.subject, lifted_by = %req.lifted_by, "containment lifted");
         self.refresh_feed().await;
         Ok(Response::new(LiftResponse { containment: Some(containment_to_wire(c)) }))
@@ -292,8 +297,8 @@ fn ts(t: DateTime<Utc>) -> Timestamp {
 
 fn challenge_to_wire(c: Challenge) -> WireChallenge {
     WireChallenge {
-        id: c.id.to_string(),
-        decision_id: c.decision_id.to_string(),
+        qid: c.id.to_string(),
+        decision_qid: c.decision_id.to_string(),
         subject: Some(c.request.subject.into()),
         on_behalf_of: c.request.on_behalf_of.map(Into::into),
         action: c.request.action,
@@ -320,7 +325,7 @@ fn challenge_to_wire(c: Challenge) -> WireChallenge {
 
 fn containment_to_wire(c: Containment) -> WireContainment {
     WireContainment {
-        id: c.id.to_string(),
+        qid: c.id.to_string(),
         subject: Some(c.subject.into()),
         reason: c.reason,
         created_by: c.created_by,
@@ -431,7 +436,7 @@ mod tests {
 
         let challenge = client
             .justify(JustifyRequest {
-                id: challenge_id.to_string(),
+                challenge_qid: challenge_id.to_string(),
                 answered_by: "alice".into(),
                 justification: "Preparing the audit committee's review of Q3".into(),
             })
@@ -456,7 +461,7 @@ mod tests {
 
         let id = check(&state, "bob", "payroll").await.challenge_id.unwrap().to_string();
         let decide = |by: &str, approve: bool| DecideRequest {
-            id: id.clone(),
+            challenge_qid: id.clone(),
             decided_by: by.into(),
             approve,
             note: String::new(),
@@ -470,7 +475,7 @@ mod tests {
         let id = check(&state, "erin", "payroll").await.challenge_id.unwrap().to_string();
         client
             .decide(DecideRequest {
-                id,
+                challenge_qid: id,
                 decided_by: "carol".into(),
                 approve: false,
                 note: "no".into(),
@@ -504,11 +509,15 @@ mod tests {
             .unwrap();
         until(|| async { check(&state, "mallory", "design-doc").await.verdict == Verdict::Deny }).await;
         assert!(started.elapsed() < Duration::from_secs(2), "took {:?}", started.elapsed());
-        assert_eq!(check(&state, "mallory", "design-doc").await.policies, std::slice::from_ref(&containment.id));
+        assert_eq!(check(&state, "mallory", "design-doc").await.policies, std::slice::from_ref(&containment.qid));
         assert_eq!(check(&state, "alice", "design-doc").await.verdict, Verdict::Allow, "only mallory");
 
         client
-            .lift(LiftRequest { id: containment.id, lifted_by: "carol".into(), reason: "reviewed".into() })
+            .lift(LiftRequest {
+                containment_qid: containment.qid,
+                lifted_by: "carol".into(),
+                reason: "reviewed".into(),
+            })
             .await
             .unwrap();
         until(|| async { check(&state, "mallory", "design-doc").await.verdict == Verdict::Allow }).await;

@@ -138,7 +138,7 @@ impl From<Decision> for CheckResponse {
     fn from(d: Decision) -> Self {
         let (verdict, challenges) = wire_verdict(d.verdict);
         CheckResponse {
-            decision_id: d.id.to_string(),
+            decision_qid: d.id.to_string(),
             verdict: verdict.into(),
             challenges,
             policies: d.policies,
@@ -147,7 +147,7 @@ impl From<Decision> for CheckResponse {
                 DelegationCheck { verdict: verdict.into(), challenges, policies: c.policies }
             }),
             mode: EnforcementMode::from(d.mode).into(),
-            challenge_id: d.challenge_id.map(|id| id.to_string()).unwrap_or_default(),
+            challenge_qid: d.challenge_id.map(|id| id.to_string()).unwrap_or_default(),
         }
     }
 }

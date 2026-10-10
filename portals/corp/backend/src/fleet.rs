@@ -571,7 +571,7 @@ pub(crate) mod tests {
 
     fn beat(install: InstallId, p99: f64, dps: f64, ready: u32) -> Heartbeat {
         serde_json::from_value(serde_json::json!({
-            "schema_version": 1, "install_id": install, "sent_at": Utc::now(), "chart_version": "0.5.0",
+            "schema_version": 1, "install_qid": install, "sent_at": Utc::now(), "chart_version": "0.5.0",
             "services": [{ "service": "awzy-pdp", "version": "0.5.0", "image_digest": null, "replicas_desired": 2,
                            "replicas_ready": ready, "restarts_24h": 0, "ready": true }],
             "metrics": { "decisions_per_second": dps, "pdp_p99_ms": p99 },

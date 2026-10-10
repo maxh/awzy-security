@@ -85,7 +85,7 @@ mod tests {
         assert_eq!(res.mode(), awzy_authz_proto::authz::v1::EnforcementMode::Monitor);
         let human = res.on_behalf_of.as_ref().expect("a delegated request reports the person's check");
         assert_eq!(human.verdict(), Verdict::Challenge);
-        let id: awzy_model::DecisionId = res.decision_id.parse().unwrap();
+        let id: awzy_model::DecisionId = res.decision_qid.parse().unwrap();
         assert_eq!(id.uuid().get_version_num(), 7);
     }
 }

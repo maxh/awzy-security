@@ -256,7 +256,7 @@ mod tests {
 
     fn beat(install: awzy_model::InstallId, ready: u32) -> awzy_heartbeat::Heartbeat {
         serde_json::from_value(serde_json::json!({
-            "schema_version": 1, "install_id": install, "sent_at": Utc::now(), "chart_version": "0.5.0",
+            "schema_version": 1, "install_qid": install, "sent_at": Utc::now(), "chart_version": "0.5.0",
             "services": [{ "service": "awzy-pdp", "version": "0.5.0", "image_digest": null, "replicas_desired": 3,
                            "replicas_ready": ready, "restarts_24h": 0, "ready": true }],
             "metrics": {},

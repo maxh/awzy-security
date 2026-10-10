@@ -235,7 +235,7 @@ mod tests {
 
         let beat = |chart: &str, ready: u32| {
             json!({
-                "schema_version": 1, "install_id": id, "sent_at": chrono::Utc::now(), "chart_version": chart,
+                "schema_version": 1, "install_qid": id, "sent_at": chrono::Utc::now(), "chart_version": chart,
                 "services": [
                     { "service": "awzy-pdp", "version": chart, "image_digest": null, "replicas_desired": 3, "replicas_ready": ready, "restarts_24h": 0, "ready": true },
                     { "service": "awzy-policy", "version": chart, "image_digest": null, "replicas_desired": 2, "replicas_ready": 2, "restarts_24h": null, "ready": true },
@@ -245,7 +245,7 @@ mod tests {
         };
         assert_eq!(send(&app, heartbeat("awzyrt_nope", beat("0.4.2", 3))).await.0, StatusCode::UNAUTHORIZED);
         let mut other = beat("0.4.2", 3);
-        other["install_id"] = json!(awzy_model::InstallId::new().to_string());
+        other["install_qid"] = json!(awzy_model::InstallId::new().to_string());
         assert_eq!(
             send(&app, heartbeat(&token, other)).await.0,
             StatusCode::FORBIDDEN,

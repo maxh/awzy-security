@@ -237,7 +237,7 @@ function PendingChallenge({ challenge: c, onJustified }: { challenge: Pending; o
 
   const justify = () =>
     commit({
-      variables: { input: { id: c.id, justification: text } },
+      variables: { input: { challengeQid: c.id, justification: text } },
       onCompleted: ({ justifyChallenge: { challenge: done } }) => {
         setError(null);
         onJustified({
@@ -389,7 +389,7 @@ function Approval({ challenge: c, onChanged }: { challenge: AdminPending; onChan
   const [error, setError] = useState<string | null>(null);
   const decide = (approve: boolean) =>
     commit({
-      variables: { input: { id: c.id, approve, note } },
+      variables: { input: { challengeQid: c.id, approve, note } },
       onCompleted: () => {
         setError(null);
         onChanged();
@@ -486,7 +486,7 @@ function Containments({
   const submitLift = () =>
     lifting &&
     lift({
-      variables: { input: { id: lifting.id, reason: liftReason } },
+      variables: { input: { containmentQid: lifting.id, reason: liftReason } },
       onCompleted: () => {
         setLifting(null);
         setLiftReason("");

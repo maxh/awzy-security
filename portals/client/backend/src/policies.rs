@@ -35,7 +35,7 @@ pub struct PolicyBundle(pub WireBundle);
 impl PolicyBundle {
     /// QID: policy_bundle_<uuid>.
     pub async fn id(&self) -> ID {
-        ID(self.0.id.clone())
+        ID(self.0.qid.clone())
     }
 
     /// Increases with every bundle; decisions record the version they were made under.
@@ -90,7 +90,7 @@ pub async fn get_by_id(ctx: &Context<'_>, id: PolicyBundleId) -> Result<Option<P
 // ---- Operations, shared by the GraphQL types below and the MCP tools (crate::mcp).
 
 pub async fn get(mut policy: PolicyClient, id: PolicyBundleId) -> anyhow::Result<Option<WireBundle>> {
-    match policy.get_bundle(GetBundleRequest { key: Some(Key::Id(id.to_string())) }).await {
+    match policy.get_bundle(GetBundleRequest { key: Some(Key::PolicyBundleQid(id.to_string())) }).await {
         Ok(res) => Ok(res.into_inner().bundle),
         Err(s) if matches!(s.code(), Code::NotFound | Code::InvalidArgument) => Ok(None),
         Err(s) => Err(s.into()),
@@ -132,7 +132,7 @@ pub async fn create_draft(
 }
 
 pub async fn publish(mut policy: PolicyClient, id: PolicyBundleId, actor: &str) -> anyhow::Result<WireBundle> {
-    let req = PublishRequest { id: id.to_string(), published_by: actor.into() };
+    let req = PublishRequest { policy_bundle_qid: id.to_string(), published_by: actor.into() };
     policy.publish(req).await?.into_inner().bundle.ok_or_else(|| anyhow::anyhow!("awzy-policy returned no bundle"))
 }
 
@@ -176,8 +176,8 @@ pub struct CreatePolicyDraftPayload {
 
 #[derive(InputObject)]
 pub struct PublishPolicyBundleInput {
-    /// A draft bundle's ID.
-    pub id: ID,
+    /// A draft bundle's QID.
+    pub policy_bundle_qid: ID,
 }
 
 #[derive(SimpleObject)]
@@ -212,7 +212,7 @@ impl PolicyMutation {
         input: PublishPolicyBundleInput,
     ) -> Result<PublishPolicyBundlePayload> {
         let viewer = require(ctx, Administer, PortalArea::Policies).await?;
-        let id: PolicyBundleId = input.id.parse()?;
+        let id: PolicyBundleId = input.policy_bundle_qid.parse()?;
         let bundle = publish(policy_client(ctx)?, id, &viewer.actor()).await?;
         Ok(PublishPolicyBundlePayload { bundle: PolicyBundle(bundle) })
     }
@@ -249,7 +249,7 @@ pub(crate) mod tests {
             awzy_pdp::validate(&req.schema, &req.policies).map_err(|e| Status::invalid_argument(e.to_string()))?;
             let mut all = self.0.lock().unwrap();
             let bundle = WireBundle {
-                id: PolicyBundleId::new().to_string(),
+                qid: PolicyBundleId::new().to_string(),
                 version: all.len() as i64 + 1,
                 schema: req.schema,
                 policies: req.policies,
@@ -266,7 +266,10 @@ pub(crate) mod tests {
             for b in all.iter_mut().filter(|b| b.status() == BundleStatus::Active) {
                 b.status = BundleStatus::Superseded.into();
             }
-            let b = all.iter_mut().find(|b| b.id == req.id).ok_or_else(|| Status::not_found("no such bundle"))?;
+            let b = all
+                .iter_mut()
+                .find(|b| b.qid == req.policy_bundle_qid)
+                .ok_or_else(|| Status::not_found("no such bundle"))?;
             b.status = BundleStatus::Active.into();
             b.published_by = req.published_by;
             Ok(Response::new(PublishResponse { bundle: Some(b.clone()) }))
@@ -283,7 +286,7 @@ pub(crate) mod tests {
         async fn get_bundle(&self, req: Request<GetBundleRequest>) -> Result<Response<GetBundleResponse>, Status> {
             let all = self.0.lock().unwrap();
             let found = match req.into_inner().key {
-                Some(Key::Id(id)) => all.iter().find(|b| b.id == id),
+                Some(Key::PolicyBundleQid(id)) => all.iter().find(|b| b.qid == id),
                 Some(Key::Version(v)) => all.iter().find(|b| b.version == v),
                 None => None,
             };
@@ -376,7 +379,7 @@ pub(crate) mod tests {
         assert_eq!(draft["createPolicyDraft"]["bundle"]["status"], "DRAFT");
 
         let published = run(format!(
-            "mutation {{ publishPolicyBundle(input: {{ id: \"{id}\" }}) {{ bundle {{ status publishedBy }} }} }}"
+            "mutation {{ publishPolicyBundle(input: {{ policyBundleQid: \"{id}\" }}) {{ bundle {{ status publishedBy }} }} }}"
         ))
         .await;
         assert_eq!(published["publishPolicyBundle"]["bundle"]["status"], "ACTIVE");

@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<e7bb2ee03663fa268083806cbe988e29>>
+ * @generated SignedSource<<1dddb614ba69111814e99c119d081274>>
  * @lightSyntaxTransform
  */
 
@@ -9,7 +9,7 @@
 
 import { ConcreteRequest } from 'relay-runtime';
 export type LiftContainmentInput = {
-  id: string;
+  containmentQid: string;
   reason: string;
 };
 export type ChallengesPageLiftMutation$variables = {

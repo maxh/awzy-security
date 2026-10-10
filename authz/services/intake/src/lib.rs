@@ -99,8 +99,8 @@ async fn accept<S: EventSink>(intake: &Intake<S>, events: Result<Vec<EventRecord
     };
     match intake.sink.send(&events).await {
         Ok(()) => {
-            let ids: Vec<String> = events.iter().map(|e| e.id.to_string()).collect();
-            (StatusCode::ACCEPTED, Json(json!({ "accepted": events.len(), "ids": ids }))).into_response()
+            let qids: Vec<String> = events.iter().map(|e| e.id.to_string()).collect();
+            (StatusCode::ACCEPTED, Json(json!({ "accepted": events.len(), "qids": qids }))).into_response()
         }
         Err(e) => {
             tracing::warn!(error = %e, count = events.len(), "events not delivered to Kafka; the sender should retry");
@@ -164,7 +164,7 @@ mod tests {
         assert_eq!(status, StatusCode::ACCEPTED);
         let stored = sink.events.lock().unwrap().clone();
         assert_eq!(stored.len(), 1);
-        assert_eq!(body["ids"][0], stored[0].id.to_string());
+        assert_eq!(body["qids"][0], stored[0].id.to_string());
     }
 
     #[tokio::test]

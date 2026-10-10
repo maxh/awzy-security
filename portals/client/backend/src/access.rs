@@ -135,7 +135,7 @@ pub async fn authorize(
         always_enforced: true,
     };
     let res = pdp.check(req).await.map_err(|s| AccessError::Unavailable(s.message().to_string()))?.into_inner();
-    let (actor, action, area, decision) = (viewer.actor(), action.as_str(), area.as_str(), res.decision_id.clone());
+    let (actor, action, area, decision) = (viewer.actor(), action.as_str(), area.as_str(), res.decision_qid.clone());
     match res.verdict() {
         Verdict::Allow => Ok(()),
         Verdict::Challenge => {
