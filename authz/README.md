@@ -1,14 +1,17 @@
 # awzy-authz
 
 The services that run in each client's cluster and make and enforce authorization decisions,
-the jobs that prepare their data stores, and the libraries they share. They hold the client's data, so nothing here runs in awzy's own
+the jobs that prepare their data stores, the libraries they share, and the demo's synthetic
+company. They hold the client's data, so nothing here runs in awzy's own
 accounts, and only the fixed-schema heartbeat leaves an install
 ([ADR 0002](../docs/adr/0002-single-tenant-installs-in-client-clouds.md),
 [ADR 0009](../docs/adr/0009-no-vendor-access-to-client-data.md)).
 
-The folders say what each crate is ([ADR 0040](../docs/adr/0040-authz-grouped-into-services-jobs-and-libs.md)):
-`services/` run continuously, `jobs/` run to completion once per release, and `libs/` are
-crates the others build on.
+The folders say what each crate is ([ADR 0040](../docs/adr/0040-authz-grouped-into-services-jobs-and-libs.md),
+[ADR 0063](../docs/adr/0063-demo-only-code-in-authz-demo.md)):
+`services/` run continuously, `jobs/` run to completion once per release, `libs/` are crates
+the others build on, and `demo/` is for demo installs and tests only, which nothing else may
+depend on.
 
 All services are Rust binaries in the Bazel monorepo, each built into its own container image
 and installed together by one Helm umbrella chart (`deploy/helm/awzy`). None of them imports a
@@ -33,7 +36,14 @@ cloud SDK directly; they go through the `libs/cloud` traits.
 | Job | Does |
 | --- | --- |
 | [awzy-clickhouse-migrate](jobs/clickhouse-migrate/README.md) | Applies the ClickHouse schema before the services roll out |
-| [awzy-synthetic](jobs/synthetic/README.md) | Provisions the demo's synthetic company into awzy-context, like an IdP would (demo installs only) |
+
+## Demo
+
+Never on a real install. Bazel refuses a dependency on these from anywhere else.
+
+| Crate | Does |
+| --- | --- |
+| [awzy-synthetic](demo/synthetic/README.md) | Larkspur Capital, the demo's synthetic company: provisions it, serves its stand-in MCP servers (larkspur-drive, larkspur-admin), and drives its activity and scenarios |
 
 ## Libraries
 

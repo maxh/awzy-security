@@ -8,7 +8,8 @@ description: Add a new deployable Rust service (awzy-<name>) to the monorepo, wi
 A service is a library crate plus a binary and an image, made by the `awzy_service` macro in
 `tools/rust.bzl`. Use an existing small service (`authz/services/reporter`, `authz/services/challenge`) as the
 template, and put it with the area that owns it (`authz/services/`, `portals/<client|corp>/`;
-ADR 0011, 0040). Something that runs once per release and exits goes in `authz/jobs/`.
+ADR 0011, 0040). Something that runs once per release and exits goes in `authz/jobs/`, and anything only for
+demo installs and tests in `authz/demo/` (ADR 0063).
 A significant new service usually deserves an ADR first (see the write-adr skill).
 
 1. **Crate.** `authz/services/<name>/Cargo.toml` with `name = "awzy-<name>"`, workspace `version`,
