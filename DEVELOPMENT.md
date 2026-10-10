@@ -117,7 +117,9 @@ frontend (`AWZY_PORTAL_STATIC_DIR`) next to `/graphql`, and the portal image shi
 ### Dependencies
 
 - Rust crates: declare them once in the root `Cargo.toml` `[workspace.dependencies]`, then
-  `CARGO_BAZEL_REPIN=1 bazel test //...` to update `Cargo.lock` and `MODULE.bazel.lock`.
+  `CARGO_BAZEL_REPIN=1 bazel test //...` to update `Cargo.lock` and `MODULE.bazel.lock`, then
+  `bazel test //...` once without it: `MODULE.bazel.lock` records the variable, and a lockfile
+  committed with it set changes on everyone's next build.
 - Lockfile conflicts: `MODULE.bazel.lock` records a hash of every `Cargo.toml`, so any two
   branches that change a crate's dependencies conflict there. Nobody merges them by hand:
   - Locally, the merge driver keeps one side and the hooks re-pin and commit after a rebase or

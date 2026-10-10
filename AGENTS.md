@@ -44,8 +44,9 @@ bazel build --config=lint //...                    # clippy
   without `--config=local-stack` didn't exercise the database code.
 - Rust dependencies are declared once in the root `Cargo.toml` `[workspace.dependencies]` and
   used with `x.workspace = true`. After changing a dependency or adding a crate, run
-  `CARGO_BAZEL_REPIN=1 bazel test //...` to update `Cargo.lock` and `MODULE.bazel.lock`, and
-  commit both.
+  `CARGO_BAZEL_REPIN=1 bazel test //...` to update `Cargo.lock` and `MODULE.bazel.lock`, then
+  `bazel test //...` once without it, since `MODULE.bazel.lock` records the variable, and commit
+  both.
 - First-party Rust deps go in the `deps` of the package's `BUILD.bazel` (`awzy_service` /
   `awzy_rust_library` in `tools/rust.bzl`) as well as its `Cargo.toml`.
 - pnpm runs with `hoist=false`: every TypeScript package declares every dependency it imports.

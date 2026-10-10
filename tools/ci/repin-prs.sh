@@ -42,6 +42,8 @@ while read -r number branch; do
   if git merge -q --no-edit origin/main; then
     if [ -f "$marker" ]; then
       CARGO_BAZEL_REPIN=1 bazel query --noshow_progress --ui_event_filters=-info,-warning //... >/dev/null
+      # Again without it, so MODULE.bazel.lock doesn't record CARGO_BAZEL_REPIN=1.
+      bazel query --noshow_progress --ui_event_filters=-info,-warning //... >/dev/null
       git add Cargo.lock MODULE.bazel.lock
       git diff --cached --quiet || git commit -q -m "Re-pin crates after merging main"
     fi
