@@ -355,6 +355,12 @@ AWZY_GATEWAY_URL=http://127.0.0.1:8086 AWZY_GATEWAY_DEV_SECRET=dev-secret \
 The driver signs each call's token with the gateway's dev secret (issuer `https://idp.local`,
 audience `awzy-gateway`; override with `AWZY_TOKEN_ISSUER` and `AWZY_TOKEN_AUDIENCE`).
 
+The first day includes the demo plan's scenarios (step 6): the curious contractor and the rogue
+agent's first half. The run ends with a `detection` line: scenario steps caught, and ordinary
+accesses challenged. Switch the install to enforce first, because in monitor mode the gateway
+allows everything and nothing is caught. Leave them out with `--no-scenarios`. To run them end
+to end without any of this, `bazel test --config=local-stack //authz/jobs/synthetic:synthetic_test`.
+
 For baselines, send a backdated month of the same activity to awzy-intake (demo plan step 5c):
 
 ```sh

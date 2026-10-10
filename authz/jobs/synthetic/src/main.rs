@@ -11,7 +11,9 @@
 //! AWZY_LISTEN_ADDR (default 127.0.0.1:8095) `/mcp`, for awzy-gateway to front (ADR 0050).
 //! `activity` makes the company's everyday tool calls on larkspur-drive through the gateway at
 //! AWZY_GATEWAY_URL, `--rate` per second (default 5) for `--days` generated days (default 1),
-//! with tokens signed by the gateway's development secret in AWZY_GATEWAY_DEV_SECRET.
+//! with tokens signed by the gateway's development secret in AWZY_GATEWAY_DEV_SECRET. The first
+//! day includes the demo plan's scenarios (`--no-scenarios` leaves them out), and the run reports
+//! how many awzy caught and how much ordinary work it challenged.
 //! `history` sends the `--days` workdays before today (default 30) to awzy-intake at
 //! AWZY_INTAKE_URL as app events, with its shippers' token in AWZY_INTAKE_TOKEN (demo plan 5c).
 
@@ -23,7 +25,7 @@ use awzy_synthetic::{
 
 const USAGE: &str =
     "usage: awzy-synthetic directory|world|all [--profile demo|scale] [--seed N] [--print] | awzy-synthetic drive \
-     | awzy-synthetic activity [--profile demo|scale] [--seed N] [--days N] [--rate N] \
+     | awzy-synthetic activity [--profile demo|scale] [--seed N] [--days N] [--rate N] [--no-scenarios] \
      | awzy-synthetic history [--profile demo|scale] [--seed N] [--days N]";
 
 #[tokio::main]
@@ -81,6 +83,7 @@ async fn activity(args: &[String]) -> anyhow::Result<()> {
     use awzy_synthetic::{
         activity,
         driver::{Driver, Tally},
+        scenarios::{self, Detection},
     };
     let flag = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
     let profile_name = flag("--profile").unwrap_or_else(|| "demo".into());
@@ -101,19 +104,37 @@ async fn activity(args: &[String]) -> anyhow::Result<()> {
         &env("AWZY_TOKEN_AUDIENCE", "awzy-gateway"),
     );
 
+    let with_scenarios = !args.iter().any(|a| a == "--no-scenarios");
+
     let company = generate(profile, seed);
     let mut tally = Tally::default();
+    let mut detection = Detection::default();
     let mut tick = tokio::time::interval(std::time::Duration::from_secs_f64(1.0 / rate));
     let mut id = 0;
     for d in 0..days {
-        let accesses = activity::day(&company, profile, d);
-        tracing::info!(day = d, calls = accesses.len(), %endpoint, "replaying a day of activity");
-        for a in &accesses {
+        // The scenarios happen on the first day, among its ordinary accesses.
+        let mut calls: Vec<(activity::Access, Option<scenarios::Step>)> =
+            activity::day(&company, profile, d).into_iter().map(|a| (a, None)).collect();
+        if d == 0 && with_scenarios {
+            calls.extend(scenarios::all().into_iter().map(|s| (s.access.clone(), Some(s))));
+            calls.sort_by_key(|(a, _)| a.minute);
+        }
+        tracing::info!(day = d, calls = calls.len(), %endpoint, "replaying a day of activity");
+        for (a, step) in &calls {
             tick.tick().await;
             id += 1;
             let outcome = driver.send(a, id).await;
             if let awzy_synthetic::driver::Outcome::Failed(why) = &outcome {
                 tracing::warn!(subject = %a.subject, resource = %a.resource, %why, "call failed");
+            }
+            match step {
+                Some(step) => {
+                    let caught = step.expect.met_by(&outcome);
+                    tracing::info!(scenario = step.scenario, subject = %a.subject, resource = %a.resource,
+                        expected = ?step.expect, ?outcome, caught, "scenario step");
+                    detection.add_step(step, &outcome);
+                }
+                None => detection.add_ordinary(a, &outcome),
             }
             tally.add(&outcome);
             if id % 500 == 0 {
@@ -122,6 +143,17 @@ async fn activity(args: &[String]) -> anyhow::Result<()> {
         }
     }
     tracing::info!(calls = id, ?tally, "activity done");
+    if with_scenarios {
+        // In monitor mode the gateway allows everything, so nothing is caught here; the would-be
+        // verdicts are on the Decisions page.
+        tracing::info!(
+            caught = detection.caught,
+            steps = detection.steps,
+            ordinary_challenged = detection.ordinary_challenged,
+            ordinary = detection.ordinary,
+            "detection"
+        );
+    }
     Ok(())
 }
 

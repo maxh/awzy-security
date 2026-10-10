@@ -1163,7 +1163,12 @@ name = "awzy-synthetic"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "awzy-authz-proto",
  "awzy-classify",
+ "awzy-context",
+ "awzy-gateway",
+ "awzy-model",
+ "awzy-pdp",
  "awzy-service-auth",
  "awzy-telemetry",
  "axum",
@@ -1176,8 +1181,11 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
+ "sqlx",
  "tokio",
+ "tonic",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

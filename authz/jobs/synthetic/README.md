@@ -22,6 +22,13 @@ Generates Larkspur Capital, the synthetic company in the [demo plan](../../../do
   mostly their work's and their team's documents, with agents acting for their owners and a
   little noise, made as tool calls on larkspur-drive through awzy-gateway, so each is a real
   decision. Each access records why it was generated, to score detection against later.
+- **Scenarios** (demo plan step 6): the curious contractor (Sam's stolen credentials at 2am on the
+  payments design, which is shared with all of engineering but not his statement of work, and on
+  the client holdings export, which isn't shared with him) and the rogue agent's first half
+  (SalesGenie, for Nora, on the overshared FY27 strategic plan). `activity` adds them to its first
+  day and reports how many awzy caught and how much ordinary work it challenged. A test runs them
+  end to end through awzy-context, the PDP, larkspur-drive, and awzy-gateway
+  ([ADR 0061](../../../docs/adr/0061-ownership-and-sharing-in-the-resource-entity.md)).
 - **History** (demo plan step 5c, `awzy-synthetic history --days 30`): the same seeded days,
   placed on the workdays before today and sent to awzy-intake as app events from
   `larkspur-drive`, so baselines have a month to learn from. Why each access was generated

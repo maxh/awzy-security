@@ -88,6 +88,8 @@ fn user_from_row(row: &PgRow) -> Result<User, sqlx::Error> {
 /// A service account to register: an agent, a backend service, or a scheduled job.
 #[derive(Debug, Clone, PartialEq, serde::Deserialize)]
 pub struct ServiceAccountInput {
+    /// From the URL path; a body needn't repeat it.
+    #[serde(default)]
     pub id: String,
     pub owner: String,
     pub ai: bool,

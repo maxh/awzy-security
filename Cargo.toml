@@ -93,6 +93,8 @@ uuid = { version = "1", features = ["serde", "v7"] }
 awzy-challenge = { path = "authz/services/challenge" }
 awzy-clickhouse = { path = "authz/jobs/clickhouse-migrate" }
 awzy-cloud = { path = "libs/cloud" }
+awzy-context = { path = "authz/services/context" }
+awzy-gateway = { path = "authz/services/gateway" }
 awzy-heartbeat = { path = "libs/heartbeat" }
 awzy-portal = { path = "libs/portal" }
 awzy-authz-proto = { path = "authz/libs/proto" }
