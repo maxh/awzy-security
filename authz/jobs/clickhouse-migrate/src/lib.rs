@@ -251,7 +251,8 @@ mod tests {
             events_topic,
             consumer_group: database.clone(),
         };
-        assert_eq!(migrate(&client, &settings).await.unwrap(), vec![1, 2, 3, 4, 5]);
+        let every: Vec<u32> = MIGRATIONS.iter().map(|(v, ..)| *v).collect();
+        assert_eq!(migrate(&client, &settings).await.unwrap(), every);
         assert!(migrate(&client, &settings).await.unwrap().is_empty(), "migrations apply once");
 
         let pdp = awzy_pdp::Pdp::with_defaults().unwrap();
