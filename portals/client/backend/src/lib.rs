@@ -61,7 +61,7 @@ impl Services {
                 Err(_) => None,
             })
         };
-        // With this portal's service tokens for each (ADR 0054).
+        // With this portal's service tokens for each (ADR 0055).
         let policy = channel("AWZY_POLICY_ADDR")?.map(|c| PolicyServiceClient::new(grpc_channel(c, "awzy-policy")));
         let pdp = channel("AWZY_PDP_ADDR")?.map(|c| AuthorizerClient::new(grpc_channel(c, "awzy-pdp")));
         let clickhouse = std::env::var("AWZY_CLICKHOUSE_URL").ok().map(|url| {

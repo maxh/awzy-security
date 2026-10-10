@@ -34,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
             None
         }
     };
-    // Who may call which methods (ADR 0054).
+    // Who may call which methods (ADR 0055).
     let access = awzy_policy::Access::from_env()?;
     awzy_server::serve("awzy-policy", awzy_policy::router(Arc::new(store), break_glass, &access)).await
 }

@@ -1,6 +1,6 @@
 {{- $backend := printf "%s/awzy" .Values.namespaces.system -}}
 {{- $portal := printf "%s/awzy" .Values.namespaces.portal -}}
-# Who may call which methods (ADR 0054): the PDP and the portal read bundles and the mode; only
+# Who may call which methods (ADR 0055): the PDP and the portal read bundles and the mode; only
 # the portal drafts, publishes, and switches the mode. Break-glass rollback is signed instead.
 {{ include "awzy.service" (dict "root" . "name" "awzy-policy" "namespace" .Values.namespaces.system "values" .Values.policy
   "env" (list

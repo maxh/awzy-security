@@ -224,7 +224,7 @@ pub struct AppState {
     pub principals: Arc<principals::Principals>,
     /// Resources from awzy-context, if configured.
     pub resources: Arc<resources::Resources>,
-    /// Checks callers' service tokens (ADR 0054). Off in tests and local runs.
+    /// Checks callers' service tokens (ADR 0055). Off in tests and local runs.
     pub service_auth: Arc<awzy_service_auth::Verifier>,
 }
 
@@ -331,7 +331,7 @@ pub struct EvaluationRequest {
 /// HTTP (AuthZEN-style) and gRPC on one port. axum serves HTTP/1 and HTTP/2 cleartext,
 /// so gRPC clients connect to the same address.
 ///
-/// Deciding needs a service token from any workload in the cluster (ADR 0054): enforcement points
+/// Deciding needs a service token from any workload in the cluster (ADR 0055): enforcement points
 /// run anywhere, and the policies decide what they may do. `/metrics` stays open for the reporter.
 pub fn router(state: AppState) -> Router {
     let metrics = state.metrics.clone();

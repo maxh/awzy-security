@@ -10,7 +10,7 @@ async fn main() -> anyhow::Result<()> {
         serde_json::from_slice(&std::fs::read(&path).with_context(|| format!("reading {path}"))?)
             .with_context(|| format!("parsing {path}"))?;
     let pdp_addr = std::env::var("AWZY_PDP_ADDR").context("AWZY_PDP_ADDR is not set")?;
-    // With this gateway's service token for the PDP (ADR 0054).
+    // With this gateway's service token for the PDP (ADR 0055).
     let pdp = AuthorizerClient::new(awzy_service_auth::grpc_channel(
         Channel::from_shared(pdp_addr)?.connect_lazy(),
         "awzy-pdp",

@@ -45,7 +45,7 @@ pub async fn sync_once(
     client: &mut Option<PolicyServiceClient<AuthChannel>>,
 ) -> anyhow::Result<bool> {
     if client.is_none() {
-        // With this PDP's service token for awzy-policy (ADR 0054).
+        // With this PDP's service token for awzy-policy (ADR 0055).
         let channel = Channel::from_shared(endpoint.to_string())?.connect().await?;
         *client = Some(PolicyServiceClient::new(grpc_channel(channel, "awzy-policy")));
     }

@@ -9,7 +9,7 @@ use awzy_pdp::{AppState, DecisionLog, Enforcement, DEFAULT_DECISIONS_TOPIC};
 async fn main() -> anyhow::Result<()> {
     awzy_telemetry::init("awzy-pdp");
     let pdp = awzy_pdp::shared(awzy_pdp::Pdp::with_defaults()?);
-    // Deciding needs a service token from a workload in the cluster (ADR 0054).
+    // Deciding needs a service token from a workload in the cluster (ADR 0055).
     let mut state = AppState::new(pdp.clone()).with_service_auth(awzy_service_auth::Verifier::from_env("awzy-pdp")?);
 
     match std::env::var("AWZY_POLICY_ADDR") {

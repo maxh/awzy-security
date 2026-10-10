@@ -26,7 +26,7 @@ use crate::{
     BreakGlassRequest, BundleStatus, EnforcementSetting, PolicyBundle, PolicyStore, StoreError, INSTALL_SCOPE,
 };
 
-/// Who may call which methods (ADR 0054). Each group's callers come from the chart, as
+/// Who may call which methods (ADR 0055). Each group's callers come from the chart, as
 /// `namespace/service-account`; a method no group names is refused.
 pub struct Access {
     verifier: Arc<awzy_service_auth::Verifier>,
