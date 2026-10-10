@@ -121,6 +121,12 @@ calls, and the client portal serves its own MCP endpoint.
 enforcement points allow everything, so you can see what enforcing would do first. See
 [Monitor, then enforce](/concepts/monitor-and-enforce/).
 
+**Notifications.** Messages in your own Slack when something waits for someone: a person who
+needs to give a reason or touch their security key, an owner or the security team asked to
+approve, a requester whose request was decided, and the security team about containments. They
+link into the client portal and never carry document contents or evidence. Off until you add a
+Slack app's token.
+
 **Policy.** A Cedar `permit` or `forbid` rule. A `forbid` annotated with `@challenge(...)` asks for
 a challenge instead of denying.
 
