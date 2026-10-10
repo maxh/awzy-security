@@ -42,6 +42,7 @@ cloud SDK directly; they go through the `libs/cloud` traits.
 | [classify](libs/classify/README.md) | Placing resources in a sensitivity tier from labels, content markings, names, and folders |
 | [identity](libs/identity/README.md) | Who is calling, from a validated bearer token |
 | [proto](libs/proto/README.md) | Protobuf definitions and generated gRPC types |
+| [service-auth](libs/service-auth/README.md) | Services in an install proving who is calling, with Kubernetes service-account tokens |
 | [signing](libs/signing/README.md) | Signing and verifying policy bundles |
 
 How these fit together for one decision: [Decision path](../docs/platform-plan.md#decision-path).

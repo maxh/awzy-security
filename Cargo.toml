@@ -25,6 +25,7 @@ members = [
     "authz/services/reporter",
     "authz/libs/signing",
     "authz/libs/classify",
+    "authz/libs/service-auth",
     "portals/client/backend",
     "portals/corp/backend",
     "portals/corp/registry",
@@ -100,5 +101,6 @@ awzy-pdp = { path = "authz/services/pdp" }
 awzy-server = { path = "libs/server" }
 awzy-signing = { path = "authz/libs/signing" }
 awzy-classify = { path = "authz/libs/classify" }
+awzy-service-auth = { path = "authz/libs/service-auth" }
 awzy-store = { path = "libs/store" }
 awzy-telemetry = { path = "libs/telemetry" }
