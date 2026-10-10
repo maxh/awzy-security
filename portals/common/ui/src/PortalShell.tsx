@@ -109,6 +109,7 @@ export function ShellAccount({ name, detail, onSignOut }: { name: string; detail
     <Menu position="top-start" width={220} withinPortal>
       <Menu.Target>
         <UnstyledButton
+          aria-label="Account menu"
           w="100%"
           p={8}
           style={{ borderRadius: "var(--mantine-radius-md)", background: "rgba(255, 255, 255, 0.05)" }}

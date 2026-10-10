@@ -173,12 +173,14 @@ try {
   );
 
   // This test runs no awzy-policy, so the Policies page can't load. The error must show inside
-  // the page, with the header and sign-out still there.
+  // the page, with the sidebar and its account menu still there.
   await page.waitForFunction(() => document.body.innerText.includes("This page couldn't load"), { timeout: 10000 });
   const text = await page.evaluate(() => document.body.innerText);
   check(
-    text.includes("AWZY_POLICY_ADDR") && text.includes("Sign out") && text.includes("Alice (security)"),
-    "a page that fails to load keeps the header and sign-out",
+    text.includes("AWZY_POLICY_ADDR") &&
+      text.includes("Alice (security)") &&
+      (await page.$('[aria-label="Account menu"]')) !== null,
+    "a page that fails to load keeps the sidebar and the account menu",
   );
 
   const anonymous = await page.evaluate(
@@ -187,6 +189,7 @@ try {
   );
   check(anonymous === 401, "a request without the token is refused");
 
+  await page.locator('[aria-label="Account menu"]').click();
   await Promise.all([page.waitForNavigation(), page.locator("::-p-text(Sign out)").click()]);
   await signInAs("Bob (engineering)");
   const bob = await whoAmI();
