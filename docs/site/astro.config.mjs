@@ -16,7 +16,7 @@ export default defineConfig({
       editLink: { baseUrl: "https://github.com/maxh/awzy-security/edit/main/docs/site/" },
       customCss: ["./src/styles/theme.css"],
       sidebar: [
-        { label: "Start here", items: ["introduction", "concepts/how-awzy-decides"] },
+        { label: "Start here", items: ["introduction", "concepts/how-awzy-decides", "client-portal"] },
         {
           label: "Concepts",
           items: [
