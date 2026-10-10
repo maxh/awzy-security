@@ -94,6 +94,7 @@ resource "aws_ecs_task_definition" "corp" {
         { name = "AWZY_CORP_PORTAL_ACCOUNTS_FILE", value = "${local.accounts_dir}/accounts.json" },
         { name = "AWZY_CORP_PORTAL_PUBLIC_URL", value = "https://${local.hostname}" },
         { name = "AWZY_LOG_FORMAT", value = "json" },
+        { name = "AWZY_RELEASE_VERSION", value = var.image_tag },
       ]
       secrets = [
         { name = "AWZY_CORP_PORTAL_ALERTS_SLACK_WEBHOOK_URL", valueFrom = aws_secretsmanager_secret.alerts_slack_webhook.arn },

@@ -39,6 +39,15 @@ async fn main() -> anyhow::Result<()> {
         tokio::spawn(awzy_pdp::principals::sync_principals(principals, endpoint, Duration::from_secs(5)));
     }
 
+    // Containments and challenges (ADR 0054). Without it, challenge verdicts carry no
+    // challenge to answer and no one is contained.
+    if let Ok(endpoint) = std::env::var("AWZY_CHALLENGE_ADDR") {
+        let containments = Arc::new(awzy_pdp::containments::Containments::from_challenge(&endpoint)?);
+        let resolver = Arc::new(awzy_pdp::challenges::ChallengeResolver::from_challenge(&endpoint)?);
+        state = state.with_challenges(containments.clone(), resolver);
+        tokio::spawn(containments.follow());
+    }
+
     match std::env::var("AWZY_KAFKA_BROKERS") {
         Ok(brokers) => {
             let topic = std::env::var("AWZY_DECISIONS_TOPIC").unwrap_or_else(|_| DEFAULT_DECISIONS_TOPIC.into());

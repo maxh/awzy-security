@@ -91,6 +91,16 @@ qid!(
     EventId,
     "event"
 );
+qid!(
+    /// One challenge awzy-challenge opened for a request: what the accessor must pass first.
+    ChallengeId,
+    "challenge"
+);
+qid!(
+    /// One containment: an accessor whose access awzy-challenge revoked until it's lifted.
+    ContainmentId,
+    "containment"
+);
 
 #[cfg(test)]
 mod tests {

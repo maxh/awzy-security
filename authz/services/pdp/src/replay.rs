@@ -56,6 +56,7 @@ pub(crate) fn unregistered() -> Decision {
         policies: vec![principals::UNREGISTERED.to_string()],
         on_behalf_of: None,
         mode: EnforcementMode::Monitor,
+        challenge_id: None,
     }
 }
 

@@ -42,6 +42,10 @@ found = False
 for c in td["containerDefinitions"]:
     if c["name"] == container:
         c["image"] = image
+        # What /version reports: the commit being deployed (the image's tag).
+        env = [e for e in c.get("environment", []) if e["name"] != "AWZY_RELEASE_VERSION"]
+        env.append({"name": "AWZY_RELEASE_VERSION", "value": image.rsplit(":", 1)[1]})
+        c["environment"] = sorted(env, key=lambda e: e["name"])
         found = True
 if not found:
     sys.exit(f"no container {container!r} in the task definition")
