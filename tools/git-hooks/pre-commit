@@ -11,6 +11,12 @@ set -eu
 
 root=$(git rev-parse --show-toplevel)
 cd "$root"
+
+# ---- Lockfiles: a merge or rebase that stopped on another conflict never ran the re-pin
+# (tools/git-merge-lockfile left a marker); do it now and include them in this commit.
+if [ -f "$(git rev-parse --git-dir)/awzy-repin-needed" ] && [ -z "${AWZY_REPINNED:-}" ]; then
+  "$root/tools/git-hooks/repin-if-needed" --stage
+fi
 failed=""
 staged=$(mktemp -d)  # staged copies of the files being checked
 trap 'rm -rf "$staged"' EXIT
