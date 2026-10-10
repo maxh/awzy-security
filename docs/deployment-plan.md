@@ -187,6 +187,7 @@ Dashboards and alert rules live in the repository as code, so every install, inc
 | Attribute freshness | Time from an attribute change to every PDP snapshot | Within the proposed 60 s, or the target is revised |
 | Ingest | Decisions and events per second through Kafka into ClickHouse | 1,500 decisions/s and 3,000 events/s with consumer lag under 60 s |
 | Failure drills | ElastiCache failover, PDP pod loss, ClickHouse down then replay from Kafka, PDP unreachable from the PEP | Decisions continue as designed, no decision records are lost, and no allow is replayed for a contained accessor |
+| Upgrade under load | `helm upgrade` to the next release, and a node drain, during steady-state load ([ADR 0072](adr/0072-deploys-are-zero-downtime.md)) | Zero failed checks and zero failed tool calls |
 
 > **Target load (proposed):** 1,500 checks/s sustained and 5,000/s bursts, sized for 10,000 employees and 500 agents. The reasoning and the full list of targets are in the [demo plan](demo-plan.md#scale-and-performance); revise them with a design partner's numbers.
 

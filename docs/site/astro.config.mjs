@@ -26,7 +26,7 @@ export default defineConfig({
             "concepts/risk",
           ],
         },
-        { label: "Guides", items: ["guides/install", "guides/writing-policies"] },
+        { label: "Guides", items: ["guides/install", "guides/upgrading", "guides/writing-policies"] },
         {
           label: "Reference",
           items: ["reference/decision-api", "reference/domain-model", "reference/security-model"],

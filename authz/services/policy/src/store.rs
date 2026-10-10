@@ -5,7 +5,14 @@ use chrono::{DateTime, Utc};
 use sqlx::{postgres::PgRow, PgPool, Row};
 use uuid::Uuid;
 
-static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
+/// Its migrations, tolerating ones a newer version already applied (ADR 0072): an older version
+/// restarted mid-rollout, or rolled back to, still starts against the schema the newer one
+/// expanded.
+fn migrator() -> sqlx::migrate::Migrator {
+    let mut migrator = sqlx::migrate!("./migrations");
+    migrator.set_ignore_missing(true);
+    migrator
+}
 
 /// Serializes publishes so two can't both supersede the same active bundle.
 const PUBLISH_LOCK: i64 = 0x0061_777a_7970_6f6c; // "awzypol"
@@ -117,7 +124,7 @@ impl PolicyStore {
     }
 
     pub async fn migrate(&self) -> Result<(), sqlx::migrate::MigrateError> {
-        MIGRATOR.run(&self.pool).await
+        migrator().run(&self.pool).await
     }
 
     /// Validates the bundle (strict Cedar validation) and stores it as a draft.

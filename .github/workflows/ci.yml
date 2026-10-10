@@ -131,6 +131,10 @@ jobs:
       # Every image the chart runs is awzy's or a listed, mirrored one (ADR 0057).
       - name: Chart images are mirrored
         run: tools/ci/mirror-images.sh --check
+      # New migrations only expand, so the version still running during a rollout keeps working
+      # (ADR 0072).
+      - name: Migrations only expand
+        run: tools/ci/check-migrations.sh
       - uses: ./.github/actions/setup-bazel
         with:
           buildbuddy-api-key: ${{ secrets.AWZY_CORP_BUILDBUDDY_API_KEY }}

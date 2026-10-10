@@ -155,6 +155,13 @@ migration, to read. After adding a migration, run `tools/db-schema` with the sta
 the result; CI fails if one is stale. Explanations go in the migration, or in `COMMENT ON` to
 show up in `schema.sql` too.
 
+Migrations expand, then contract (ADR 0072), because during a rollout the old version runs
+against the new schema. A migration may add tables, nullable columns or columns with a default,
+and indexes. To drop, rename, or retype something, first ship a release that stops using it; the
+next release's migration drops it, with the line marked `-- awzy: contract (stopped using in
+<version>)`. `tools/ci/check-migrations.sh` checks every migration that isn't on `main` yet, in CI
+and locally.
+
 Each database test creates its own `test_*` schema. `docker compose -f deploy/local/compose.yaml down -v`
 wipes everything.
 

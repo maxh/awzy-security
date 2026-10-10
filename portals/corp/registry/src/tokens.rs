@@ -17,7 +17,14 @@ use sqlx::{
 };
 use uuid::Uuid;
 
-static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
+/// Its migrations, tolerating ones a newer version already applied (ADR 0072): an older version
+/// restarted mid-rollout, or rolled back to, still starts against the schema the newer one
+/// expanded.
+fn migrator() -> sqlx::migrate::Migrator {
+    let mut migrator = sqlx::migrate!("./migrations");
+    migrator.set_ignore_missing(true);
+    migrator
+}
 
 /// Tokens start with this, so a leaked one is easy to recognize.
 pub const TOKEN_PREFIX: &str = "awzy_pull_";
@@ -44,7 +51,7 @@ impl TokenStore {
         let options = PgConnectOptions::from_str(url)?.options([("search_path", schema)]);
         let pool = PgPoolOptions::new().max_connections(5).connect_with(options).await?;
         pool.execute(format!("CREATE SCHEMA IF NOT EXISTS {schema}").as_str()).await?;
-        MIGRATOR.run(&pool).await?;
+        migrator().run(&pool).await?;
         Ok(Self { pool, cache: Mutex::new(HashMap::new()) })
     }
 
