@@ -1,0 +1,26 @@
+name: identifiers
+
+# Nothing that identifies a real deployment, account, or person goes in this public repository
+# or its pull request text (.agents/skills/keep-deployments-out). Runs again when a PR's title or
+# description is edited, since with squash merges they become the commit message.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  identifiers:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Files
+        run: tools/ci/check-identifiers.sh
+      - name: Pull request title and description
+        if: github.event_name == 'pull_request'
+        run: printf '%s\n%s\n' "$TITLE" "$BODY" | tools/ci/check-identifiers.sh --text
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
