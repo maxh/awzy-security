@@ -29,7 +29,13 @@ export default defineConfig({
         { label: "Guides", items: ["guides/install", "guides/upgrading", "guides/writing-policies"] },
         {
           label: "Reference",
-          items: ["reference/decision-api", "reference/domain-model", "reference/security-model", "reference/glossary"],
+          items: [
+            "reference/services",
+            "reference/decision-api",
+            "reference/domain-model",
+            "reference/security-model",
+            "reference/glossary",
+          ],
         },
       ],
     }),
