@@ -769,6 +769,7 @@ dependencies = [
  "awzy-service-auth",
  "awzy-telemetry",
  "axum",
+ "base64 0.22.1",
  "bytes",
  "chrono",
  "http-body-util",
@@ -1191,6 +1192,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "awzy-authz-proto",
+ "awzy-challenge",
  "awzy-classify",
  "awzy-context",
  "awzy-gateway",

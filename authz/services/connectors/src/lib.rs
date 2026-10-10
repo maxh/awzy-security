@@ -1,12 +1,14 @@
 //! awzy-connectors: syncs systems of record (IdP, HR, work tracking, data catalogs) into awzy-context.
 //!
-//! Each source implements [`Connector`]. Google Drive is the first (ADR 0069): shared drives'
-//! files, folders, and sharing, read-only.
+//! Each source implements [`Connector`]. Google Drive (ADR 0069): shared drives' files, folders,
+//! and sharing. Jira (ADR 0070): issues as work items, linked to the Drive files they cite. Both
+//! read-only.
 
 pub mod context;
 pub mod drive;
 pub mod google;
 pub mod http;
+pub mod jira;
 
 use axum::Router;
 

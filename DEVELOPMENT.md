@@ -512,6 +512,16 @@ curl -s 'http://127.0.0.1:8084/v1/resources?source=google_drive&limit=5'
 
 Keep the key file out of the repository.
 
+Jira (ADR 0070) runs in the same process, with an Atlassian API token in a file:
+
+```sh
+AWZY_LISTEN_ADDR=127.0.0.1:8088 AWZY_CONTEXT_URL=http://127.0.0.1:8084 \
+  AWZY_CONNECTORS_JIRA_URL=https://example.atlassian.net AWZY_CONNECTORS_JIRA_USER=awzy@example.com \
+  AWZY_CONNECTORS_JIRA_TOKEN_FILE=$PWD/jira-token AWZY_CONNECTORS_JIRA_PROJECTS=FIN,ENG \
+  bazel run //authz/services/connectors:awzy-connectors   # add the Drive variables to run both
+curl -s 'http://127.0.0.1:8084/v1/work-items?source=jira&limit=5'
+```
+
 ### Events (awzy-intake)
 
 `awzy-intake` takes app and audit-log events, normalizes them, and puts them on Kafka, from

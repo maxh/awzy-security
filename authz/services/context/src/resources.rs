@@ -352,11 +352,13 @@ pub struct ResourceFilter {
     pub limit: Option<i64>,
 }
 
-/// Filters for listing work items: by assignee or by a resource the work needs.
+/// Filters for listing work items: by assignee, by a resource the work needs, or by the source
+/// that wrote them (a connector finding what it no longer sees, ADR 0070).
 #[derive(Debug, Default, Deserialize)]
 pub struct WorkItemFilter {
     pub assignee: Option<String>,
     pub resource: Option<String>,
+    pub source: Option<String>,
     pub after: Option<String>,
     pub limit: Option<i64>,
 }
@@ -521,13 +523,14 @@ impl ContextStore {
         let rows = sqlx::query(&format!(
             "SELECT {WORK_ITEM_COLUMNS} FROM work_items
              WHERE ($1::text IS NULL OR $1 = ANY(assignees)) AND ($2::text IS NULL OR $2 = ANY(resources))
-               AND id > $3
+               AND ($5::text IS NULL OR source = $5) AND id > $3
              ORDER BY id LIMIT $4"
         ))
         .bind(&f.assignee)
         .bind(&f.resource)
         .bind(f.after.as_deref().unwrap_or(""))
         .bind(f.limit.unwrap_or(100).clamp(1, MAX_PAGE))
+        .bind(&f.source)
         .fetch_all(self.pool())
         .await?;
         rows.iter().map(work_item_from_row).collect()
@@ -959,6 +962,9 @@ mod tests {
         assert_eq!(store.work_items(&by_assignee).await.unwrap().len(), 1);
         let by_resource = WorkItemFilter { resource: Some("synthetic:doc:1".into()), ..Default::default() };
         assert_eq!(store.work_items(&by_resource).await.unwrap()[0].kind, "account");
+        let by_source = |source: &str| WorkItemFilter { source: Some(source.into()), ..Default::default() };
+        assert_eq!(store.work_items(&by_source("synthetic")).await.unwrap().len(), 1);
+        assert!(store.work_items(&by_source("jira")).await.unwrap().is_empty());
 
         assert!(store.delete_resource("synthetic:doc:2").await.unwrap());
         assert!(!store.delete_resource("synthetic:doc:2").await.unwrap());
