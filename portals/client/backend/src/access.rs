@@ -67,6 +67,8 @@ pub enum PortalArea {
     Enforcement,
     /// People and groups from the IdP, and service accounts.
     Directory,
+    /// `view`: answer your own challenges. `administer`: every challenge, and containments.
+    Challenges,
 }
 
 impl PortalArea {
@@ -76,6 +78,7 @@ impl PortalArea {
             Self::Policies => "policies",
             Self::Enforcement => "enforcement",
             Self::Directory => "directory",
+            Self::Challenges => "challenges",
         }
     }
 }

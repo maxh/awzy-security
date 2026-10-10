@@ -30,7 +30,10 @@ Not yet:
 - Prompts over Slack, Teams, or email
 - Lifting a containment by challenge
 - Valkey for grants and the feed
-- The client portal pages
+
+The client portal's Challenges page is where people answer and admins approve and contain
+(`portals/client/backend/src/challenges.rs`). The portal sends the approver's entities from their
+token with `Decide`, so the PDP's `approve` check sees their groups even without awzy-context.
 
 Integration tests: `bazel test --config=local-stack //authz/services/challenge:challenge_test`.
 

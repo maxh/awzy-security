@@ -344,6 +344,7 @@ pub(crate) mod tests {
         let client = serve_fake_policy(FakePolicy::default()).await;
         let schema = crate::schema_with(Services {
             policy: Some(client),
+            challenge: None,
             clickhouse: None,
             pdp: Some(testing::pdp().await),
             context: None,
@@ -406,6 +407,7 @@ pub(crate) mod tests {
         let client = serve_fake_policy(FakePolicy::default()).await;
         let schema = crate::schema_with(Services {
             policy: Some(client),
+            challenge: None,
             clickhouse: None,
             pdp: Some(testing::pdp().await),
             context: None,
@@ -431,8 +433,14 @@ pub(crate) mod tests {
 
         let anonymous = schema.execute("{ policyBundles { id } }").await;
         assert_eq!(anonymous.errors[0].message, "sign in first");
-        let no_pdp =
-            crate::schema_with(Services { policy: None, clickhouse: None, pdp: None, context: None, bot: None });
+        let no_pdp = crate::schema_with(Services {
+            policy: None,
+            clickhouse: None,
+            pdp: None,
+            context: None,
+            bot: None,
+            challenge: None,
+        });
         let err = testing::run_err(&no_pdp, &alice, "{ policyBundles { id } }").await;
         assert!(err.contains("AWZY_PDP_ADDR"), "nothing is authorized without a PDP: {err}");
     }
