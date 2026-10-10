@@ -229,6 +229,75 @@ pub async fn require(State(guard): State<Guard>, req: Request, next: Next) -> Re
     }
 }
 
+/// Where a guarded router sends each request path: the first rule whose path matches decides,
+/// and a path no rule names is refused. For gRPC services, which tonic mounts as one route, so
+/// per-method rules have to go by path (`/awzy.policy.v1.PolicyService/Publish`).
+#[derive(Clone)]
+pub struct PathGuard {
+    verifier: Arc<Verifier>,
+    rules: Arc<Vec<(String, Rule)>>,
+}
+
+#[derive(Clone, Debug)]
+pub enum Rule {
+    /// Callers this group allows.
+    Allow(Allowed),
+    /// No service token: the method authenticates its callers another way (signatures).
+    Exempt,
+}
+
+impl PathGuard {
+    pub fn new(verifier: Arc<Verifier>, rules: Vec<(String, Rule)>) -> Self {
+        Self { verifier, rules: Arc::new(rules) }
+    }
+}
+
+/// axum middleware for a `PathGuard`: the matching rule's callers, 401/403 otherwise.
+pub async fn require_by_path(State(guard): State<PathGuard>, req: Request, next: Next) -> Response {
+    let rule = guard.rules.iter().find(|(path, _)| path == req.uri().path()).map(|(_, r)| r.clone());
+    match rule {
+        Some(Rule::Exempt) => next.run(req).await,
+        Some(Rule::Allow(allowed)) => require(State(Guard::new(guard.verifier.clone(), allowed)), req, next).await,
+        None if guard.verifier.0.is_none() => next.run(req).await,
+        None => {
+            tracing::warn!(path = %req.uri().path(), "refused a call to a method no rule names");
+            (StatusCode::FORBIDDEN, "no caller may call this").into_response()
+        }
+    }
+}
+
+/// A gRPC channel that sends the service token for `audience` with every call.
+pub type AuthChannel = tonic::service::interceptor::InterceptedService<tonic::transport::Channel, TokenInterceptor>;
+
+/// Wraps `channel` to send this workload's token for `audience` (`TokenSource::from_env`).
+pub fn grpc_channel(channel: tonic::transport::Channel, audience: &str) -> AuthChannel {
+    tonic::service::interceptor::InterceptedService::new(
+        channel,
+        TokenInterceptor { audience: audience.to_string(), tokens: Arc::new(TokenSource::from_env()) },
+    )
+}
+
+/// Adds `authorization` metadata to each gRPC call, read from the mounted token.
+#[derive(Clone)]
+pub struct TokenInterceptor {
+    audience: String,
+    tokens: Arc<TokenSource>,
+}
+
+impl tonic::service::Interceptor for TokenInterceptor {
+    fn call(&mut self, mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+        let authorization = self
+            .tokens
+            .authorization(&self.audience)
+            .map_err(|e| tonic::Status::unauthenticated(format!("no service token to send: {e}")))?;
+        if let Some(a) = authorization {
+            let value = a.parse().map_err(|_| tonic::Status::internal("the service token isn't a valid header"))?;
+            req.metadata_mut().insert("authorization", value);
+        }
+        Ok(req)
+    }
+}
+
 /// The tokens a workload sends, one per audience, as the chart mounts them.
 #[derive(Clone)]
 pub struct TokenSource(Option<PathBuf>);
@@ -401,6 +470,48 @@ mod tests {
         assert_eq!(callers, ["awzy-system/awzy", "awzy-portal/awzy"]);
         let Allowed::Only(none) = Allowed::from_env("AWZY_TEST_SERVICE_AUTH_UNSET") else { panic!() };
         assert!(none.is_empty(), "a group the chart didn't fill is closed");
+    }
+
+    #[tokio::test]
+    async fn grpc_methods_are_guarded_by_path_and_unknown_ones_refused() {
+        let c = cluster("awzy-policy");
+        let rules = vec![
+            ("/svc/Read".to_string(), Rule::Allow(Allowed::only(&["awzy-system/awzy-pdp"]))),
+            ("/svc/BreakGlass".to_string(), Rule::Exempt),
+        ];
+        let app = Router::new()
+            .route("/svc/{method}", axum::routing::post(|| async { "ok" }))
+            .route_layer(from_fn_with_state(PathGuard::new(c.verifier.clone(), rules), require_by_path));
+        let call = |path: &'static str, auth: Option<String>| {
+            let app = app.clone();
+            async move {
+                let mut req = HttpRequest::post(path);
+                if let Some(a) = auth {
+                    req = req.header(header::AUTHORIZATION, a);
+                }
+                app.oneshot(req.body(Body::empty()).unwrap()).await.unwrap().status()
+            }
+        };
+        assert_eq!(call("/svc/Read", None).await, StatusCode::UNAUTHORIZED);
+        assert_eq!(call("/svc/Read", Some(token(&c, PDP, json!({ "aud": ["awzy-policy"] })))).await, StatusCode::OK);
+        assert_eq!(call("/svc/BreakGlass", None).await, StatusCode::OK, "exempt: its own signatures authenticate it");
+        let pdp = Some(token(&c, PDP, json!({ "aud": ["awzy-policy"] })));
+        assert_eq!(call("/svc/Publish", pdp).await, StatusCode::FORBIDDEN, "a method no rule names is refused");
+    }
+
+    #[test]
+    fn grpc_calls_carry_the_token() {
+        use tonic::service::Interceptor;
+        let dir = std::env::temp_dir().join(format!("awzy-service-auth-grpc-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("awzy-pdp"), "t0k3n").unwrap();
+        let mut interceptor =
+            TokenInterceptor { audience: "awzy-pdp".into(), tokens: Arc::new(TokenSource::in_dir(&dir)) };
+        let req = interceptor.call(tonic::Request::new(())).unwrap();
+        assert_eq!(req.metadata().get("authorization").unwrap(), "Bearer t0k3n");
+        let mut off = TokenInterceptor { audience: "awzy-pdp".into(), tokens: Arc::new(TokenSource::off()) };
+        assert!(off.call(tonic::Request::new(())).unwrap().metadata().get("authorization").is_none());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

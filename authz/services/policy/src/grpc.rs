@@ -1,5 +1,6 @@
 //! `awzy.policy.v1.PolicyService` over gRPC.
 
+use awzy_service_auth::{require_by_path, Allowed, PathGuard, Rule};
 use std::sync::Arc;
 
 use awzy_authz_proto::{
@@ -25,10 +26,59 @@ use crate::{
     BreakGlassRequest, BundleStatus, EnforcementSetting, PolicyBundle, PolicyStore, StoreError, INSTALL_SCOPE,
 };
 
+/// Who may call which methods (ADR 0055). Each group's callers come from the chart, as
+/// `namespace/service-account`; a method no group names is refused.
+pub struct Access {
+    verifier: Arc<awzy_service_auth::Verifier>,
+    /// Reading bundles and the mode: the PDP and the client portal.
+    readers: Allowed,
+    /// Drafting, publishing, and switching the mode: the client portal.
+    writers: Allowed,
+}
+
+impl Access {
+    /// From `AWZY_POLICY_READERS` and `AWZY_POLICY_WRITERS`.
+    pub fn from_env() -> anyhow::Result<Self> {
+        Ok(Self {
+            verifier: Arc::new(awzy_service_auth::Verifier::from_env("awzy-policy")?),
+            readers: Allowed::from_env("AWZY_POLICY_READERS"),
+            writers: Allowed::from_env("AWZY_POLICY_WRITERS"),
+        })
+    }
+
+    /// Everyone may call everything: for tests and local runs.
+    pub fn off() -> Self {
+        Self {
+            verifier: Arc::new(awzy_service_auth::Verifier::off()),
+            readers: Allowed::only(&[]),
+            writers: Allowed::only(&[]),
+        }
+    }
+
+    fn guard(&self) -> PathGuard {
+        let method = |m: &str| format!("/awzy.policy.v1.PolicyService/{m}");
+        let mut rules: Vec<(String, Rule)> =
+            ["GetActive", "GetEnforcement", "ListBundles", "GetBundle", "ListEnforcementChanges"]
+                .into_iter()
+                .map(|m| (method(m), Rule::Allow(self.readers.clone())))
+                .collect();
+        rules.extend(
+            ["CreateDraft", "Publish", "SetEnforcement"]
+                .into_iter()
+                .map(|m| (method(m), Rule::Allow(self.writers.clone()))),
+        );
+        // Signed by enrolled admin keys, and needed when everything else is broken (ADR 0022).
+        rules.push((method("BreakGlassRollback"), Rule::Exempt));
+        PathGuard::new(self.verifier.clone(), rules)
+    }
+}
+
 /// `break_glass`: the public keys enrolled at install time for break-glass rollback. None turns
-/// the RPC off.
-pub fn router(store: Arc<PolicyStore>, break_glass: Option<Arc<BundleVerifier>>) -> Router {
-    tonic::service::Routes::new(PolicyServiceServer::new(Service(store, break_glass))).into_axum_router()
+/// the RPC off. `access`: who may call which methods.
+pub fn router(store: Arc<PolicyStore>, break_glass: Option<Arc<BundleVerifier>>, access: &Access) -> Router {
+    tonic::service::Routes::new(PolicyServiceServer::new(Service(store, break_glass)))
+        .into_axum_router()
+        .route_layer(axum::middleware::from_fn_with_state(access.guard(), require_by_path))
 }
 
 /// How far a break-glass request's timestamp may be from now.
@@ -268,7 +318,7 @@ mod tests {
                 .unwrap()
                 .verifying_key()])
             .unwrap();
-        let app = router(Arc::new(store), Some(Arc::new(enrolled)));
+        let app = router(Arc::new(store), Some(Arc::new(enrolled)), &Access::off());
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let mut client = PolicyServiceClient::connect(endpoint.clone()).await.unwrap();
 

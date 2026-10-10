@@ -23,6 +23,8 @@ serde_json.workspace = true
 thiserror.workspace = true
 tonic.workspace = true
 
+awzy-service-auth.workspace = true
+
 [dev-dependencies]
 jsonwebtoken.workspace = true
 awzy-pdp.workspace = true

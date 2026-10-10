@@ -4,6 +4,7 @@
 //! bundle is published. A bundle that fails to load is logged and the current one stays. The
 //! enforcement mode is read on every poll; the first successful poll makes the PDP ready.
 
+use awzy_service_auth::{grpc_channel, AuthChannel};
 use std::{sync::Arc, time::Duration};
 
 use awzy_authz_proto::policy::v1::{
@@ -41,10 +42,12 @@ pub async fn sync_once(
     enforcement: &Enforcement,
     verifier: Option<&BundleVerifier>,
     endpoint: &str,
-    client: &mut Option<PolicyServiceClient<Channel>>,
+    client: &mut Option<PolicyServiceClient<AuthChannel>>,
 ) -> anyhow::Result<bool> {
     if client.is_none() {
-        *client = Some(PolicyServiceClient::connect(endpoint.to_string()).await?);
+        // With this PDP's service token for awzy-policy (ADR 0055).
+        let channel = Channel::from_shared(endpoint.to_string())?.connect().await?;
+        *client = Some(PolicyServiceClient::new(grpc_channel(channel, "awzy-policy")));
     }
     let client = client.as_mut().expect("connected above");
 

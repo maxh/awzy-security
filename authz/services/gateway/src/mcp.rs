@@ -7,6 +7,7 @@
 //! for every other MCP message, the request is forwarded unchanged and the response streamed
 //! back. The caller's token is never forwarded upstream.
 
+use awzy_service_auth::AuthChannel;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -34,7 +35,6 @@ use hyper_util::{
     rt::TokioExecutor,
 };
 use serde_json::{json, Value};
-use tonic::transport::Channel;
 
 use awzy_identity::{Accessor, IdentityError, Verifier};
 
@@ -50,7 +50,7 @@ pub struct GatewayState(Arc<Inner>);
 struct Inner {
     config: GatewayConfig,
     verifier: Verifier,
-    pdp: AuthorizerClient<Channel>,
+    pdp: AuthorizerClient<AuthChannel>,
     upstream: Client<HttpConnector, Full<Bytes>>,
     /// The last mode the PDP reported. If the PDP becomes unreachable, a monitoring install
     /// keeps allowing; an enforcing one (or one never heard from) falls back to `outage`.
@@ -94,7 +94,7 @@ impl AllowCache {
 }
 
 impl GatewayState {
-    pub fn new(config: GatewayConfig, pdp: AuthorizerClient<Channel>) -> anyhow::Result<Self> {
+    pub fn new(config: GatewayConfig, pdp: AuthorizerClient<AuthChannel>) -> anyhow::Result<Self> {
         config.validate()?;
         let verifier = Verifier::new(&config.token)?;
         let upstream = Client::builder(TokioExecutor::new()).build_http();
@@ -500,7 +500,8 @@ mod tests {
                 next.run(req).await
             }
         }));
-        let pdp = AuthorizerClient::connect(serve(pdp_app).await).await.unwrap();
+        let channel = tonic::transport::Channel::from_shared(serve(pdp_app).await).unwrap().connect().await.unwrap();
+        let pdp = AuthorizerClient::new(awzy_service_auth::grpc_channel(channel, "awzy-pdp"));
         let config = GatewayConfig {
             token: TokenConfig {
                 issuer: "https://idp.test".into(),

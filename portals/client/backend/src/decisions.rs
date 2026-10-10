@@ -16,7 +16,6 @@ use awzy_authz_proto::policy::v1::{
 use awzy_model::DecisionId;
 use awzy_portal::UtcTimestamp;
 use chrono::{DateTime, Duration, Utc};
-use tonic::transport::Channel;
 use uuid::Uuid;
 
 use crate::{
@@ -320,7 +319,7 @@ pub async fn find(ch: &::clickhouse::Client, id: DecisionId) -> anyhow::Result<O
 
 /// The source of the policies `ids` in bundle `version` (0: the built-in defaults).
 pub async fn explain(
-    policy: Option<PolicyServiceClient<Channel>>,
+    policy: Option<PolicyServiceClient<awzy_service_auth::AuthChannel>>,
     version: i64,
     ids: &[String],
 ) -> anyhow::Result<Vec<PolicySource>> {

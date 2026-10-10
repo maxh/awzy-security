@@ -8,7 +8,7 @@
 mod grpc;
 mod store;
 
-pub use grpc::router;
+pub use grpc::{router, Access};
 pub use store::{
     BreakGlassOutcome, BreakGlassRequest, BundleStatus, EnforcementSetting, PolicyBundle, PolicyStore, StoreError,
     INSTALL_SCOPE,
