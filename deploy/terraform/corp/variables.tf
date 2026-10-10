@@ -13,14 +13,8 @@ variable "build_profile" {
   default     = null
 }
 
-variable "cloudflare_account_id" {
-  description = "Cloudflare account that holds `domain`, for the docs site on Cloudflare Pages; null leaves the docs site out"
-  type        = string
-  default     = null
-}
-
 variable "cloudflare_token_file" {
-  description = "File holding a Cloudflare API token that can edit `domain`'s DNS (and Cloudflare Pages, for the docs site)"
+  description = "File holding a Cloudflare API token that can edit `domain`'s DNS"
   type        = string
   default     = "~/.config/awzy/cf-token"
 }

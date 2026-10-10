@@ -11,4 +11,5 @@ pnpm --ignore-workspace dev        # http://localhost:4321
 ```
 
 It has its own lockfile, outside the portals' pnpm workspace and Bazel. CI builds it on pull
-requests and deploys main to Cloudflare Pages (`.github/workflows/docs-site.yml`).
+requests and deploys main to S3 behind CloudFront (`.github/workflows/docs-site.yml`,
+`deploy/terraform/corp/corp-portal/docs-site.tf`).
