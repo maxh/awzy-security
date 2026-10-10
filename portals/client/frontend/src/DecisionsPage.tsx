@@ -1,12 +1,13 @@
-import { PageHeader } from "@awzy/ui";
-import { Badge, Button, Center, Drawer, Group, Loader, Select, Stack, Table, Text, TextInput } from "@mantine/core";
+import { EmptyState, PageHeader, PageLoader, Section } from "@awzy/ui";
+import { Button, Drawer, Group, Select, Table, Text, TextInput } from "@mantine/core";
+import { IconListSearch, IconSearch } from "@tabler/icons-react";
 import { type FormEvent, Suspense, useState } from "react";
 import { graphql, useLazyLoadQuery, usePaginationFragment } from "react-relay";
 
 import type { DecisionsPage_decisions$key } from "./__generated__/DecisionsPage_decisions.graphql";
 import type { DecisionFilter, DecisionsPageQuery } from "./__generated__/DecisionsPageQuery.graphql";
 import { DecisionDetail } from "./DecisionDetail";
-import { entityLabel, formatTime, VERDICT_COLOR, verdictLabel } from "./format";
+import { Entity, Time, VerdictBadge } from "./format";
 
 type Verdict = NonNullable<DecisionFilter["verdict"]>;
 type Mode = NonNullable<DecisionFilter["mode"]>;
@@ -16,29 +17,31 @@ export function DecisionsPage() {
   const [selected, setSelected] = useState<string | null>(null);
 
   return (
-    <Stack gap="md">
+    <>
       <PageHeader
         title="Decisions"
         description="Every allow, deny, and challenge the PDPs decided, with the policies behind each one."
       />
-      <Filters onApply={setFilter} />
-      <Suspense
-        fallback={
-          <Center p="xl">
-            <Loader />
-          </Center>
-        }
+      <Section flush>
+        <Filters onApply={setFilter} />
+        <Suspense fallback={<PageLoader />}>
+          <DecisionList filter={filter} onSelect={setSelected} />
+        </Suspense>
+      </Section>
+      <Drawer
+        opened={selected !== null}
+        onClose={() => setSelected(null)}
+        position="right"
+        size="xl"
+        title={<Text fw={600}>Decision</Text>}
       >
-        <DecisionList filter={filter} onSelect={setSelected} />
-      </Suspense>
-      <Drawer opened={selected !== null} onClose={() => setSelected(null)} position="right" size="xl" title="Decision">
         {selected && (
-          <Suspense fallback={<Loader />}>
+          <Suspense fallback={<PageLoader />}>
             <DecisionDetail id={selected} />
           </Suspense>
         )}
       </Drawer>
-    </Stack>
+    </>
   );
 }
 
@@ -59,8 +62,8 @@ function Filters({ onApply }: { onApply: (f: DecisionFilter) => void }) {
   };
 
   return (
-    <form onSubmit={submit}>
-      <Group align="end" gap="sm">
+    <form onSubmit={submit} style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
+      <Group align="end" gap="sm" p="md">
         <TextInput
           id="filter-subject"
           label="Subject ID"
@@ -100,7 +103,9 @@ function Filters({ onApply }: { onApply: (f: DecisionFilter) => void }) {
           value={mode}
           onChange={setMode}
         />
-        <Button type="submit">Search</Button>
+        <Button type="submit" variant="light" leftSection={<IconSearch size={16} />}>
+          Search
+        </Button>
       </Group>
     </form>
   );
@@ -162,60 +167,65 @@ function DecisionList({ filter, onSelect }: { filter: DecisionFilter; onSelect: 
 
   const edges = data.decisions.edges;
   if (edges.length === 0) {
-    return <Text c="dimmed">No decisions in the last 24 hours match these filters.</Text>;
+    return (
+      <EmptyState
+        icon={<IconListSearch size={22} />}
+        title="No matching decisions"
+        description="Nothing in the last 24 hours matches these filters."
+      />
+    );
   }
 
   return (
-    <Stack gap="sm">
-      <Table highlightOnHover striped>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Time</Table.Th>
-            <Table.Th>Subject</Table.Th>
-            <Table.Th>Action</Table.Th>
-            <Table.Th>Resource</Table.Th>
-            <Table.Th>Verdict</Table.Th>
-            <Table.Th>Policies</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {edges.map(({ node: d }) => (
-            <Table.Tr key={d.id} onClick={() => onSelect(d.id)} style={{ cursor: "pointer" }}>
-              <Table.Td style={{ whiteSpace: "nowrap" }}>{formatTime(d.at)}</Table.Td>
-              <Table.Td>
-                {entityLabel(d.subject)}
-                {d.onBehalfOf && (
-                  <Text size="xs" c="dimmed">
-                    for {entityLabel(d.onBehalfOf.person)}
-                  </Text>
-                )}
-              </Table.Td>
-              <Table.Td>{d.action}</Table.Td>
-              <Table.Td>{entityLabel(d.resource)}</Table.Td>
-              <Table.Td>
-                <Badge
-                  color={VERDICT_COLOR[d.verdict as keyof typeof VERDICT_COLOR]}
-                  variant={d.mode === "MONITOR" ? "outline" : "light"}
-                >
-                  {verdictLabel(d.verdict, d.mode, d.challenges)}
-                </Badge>
-              </Table.Td>
-              <Table.Td>
-                <Text size="sm" ff="monospace">
-                  {d.policies.join(", ") || "none"}
-                </Text>
-              </Table.Td>
+    <>
+      <Table.ScrollContainer minWidth={900}>
+        <Table style={{ whiteSpace: "nowrap" }}>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Time</Table.Th>
+              <Table.Th>Verdict</Table.Th>
+              <Table.Th>Subject</Table.Th>
+              <Table.Th>Action</Table.Th>
+              <Table.Th>Resource</Table.Th>
+              <Table.Th>Policies</Table.Th>
             </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
+          </Table.Thead>
+          <Table.Tbody>
+            {edges.map(({ node: d }) => (
+              <Table.Tr key={d.id} onClick={() => onSelect(d.id)} style={{ cursor: "pointer" }}>
+                <Table.Td>
+                  <Time at={d.at} />
+                </Table.Td>
+                <Table.Td>
+                  <VerdictBadge verdict={d.verdict} mode={d.mode} challenges={d.challenges} />
+                </Table.Td>
+                <Table.Td>
+                  <Entity e={d.subject} />
+                  {d.onBehalfOf && (
+                    <Text size="xs" c="dimmed">
+                      for {d.onBehalfOf.person.id}
+                    </Text>
+                  )}
+                </Table.Td>
+                <Table.Td>{d.action}</Table.Td>
+                <Table.Td>
+                  <Entity e={d.resource} />
+                </Table.Td>
+                <Table.Td ff="monospace" fz="xs" c={d.policies.length ? undefined : "dimmed"}>
+                  {d.policies.join(", ") || "none"}
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </Table.ScrollContainer>
       {hasNext && (
-        <Group>
+        <Group justify="center" p="md">
           <Button variant="default" loading={isLoadingNext} onClick={() => loadNext(50)}>
             Load more
           </Button>
         </Group>
       )}
-    </Stack>
+    </>
   );
 }

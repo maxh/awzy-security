@@ -1,12 +1,12 @@
-import { PageHeader } from "@awzy/ui";
+import { PageHeader, PageLoader, Stat, StatusBadge } from "@awzy/ui";
 import {
   Alert,
   Badge,
   Button,
-  Center,
+  Card,
   Group,
-  Loader,
   Modal,
+  SimpleGrid,
   Stack,
   Switch,
   Table,
@@ -25,11 +25,7 @@ import type { DirectoryPageServiceAccountsQuery } from "./__generated__/Director
 import type { DirectoryPageSummaryQuery } from "./__generated__/DirectoryPageSummaryQuery.graphql";
 import { formatTime } from "./format";
 
-const loading = (
-  <Center p="xl">
-    <Loader />
-  </Center>
-);
+const loading = <PageLoader />;
 
 /** People and groups from the IdP (read-only here), and the service accounts admins register. */
 export function DirectoryPage() {
@@ -42,24 +38,26 @@ export function DirectoryPage() {
       <Suspense fallback={loading}>
         <Summary />
       </Suspense>
-      <Tabs defaultValue="people" keepMounted={false}>
-        <Tabs.List>
-          <Tabs.Tab value="people">People</Tabs.Tab>
-          <Tabs.Tab value="groups">Groups</Tabs.Tab>
-          <Tabs.Tab value="service-accounts">Service accounts</Tabs.Tab>
-        </Tabs.List>
-        <Tabs.Panel value="people" pt="md">
-          <People />
-        </Tabs.Panel>
-        <Tabs.Panel value="groups" pt="md">
-          <Suspense fallback={loading}>
-            <Groups />
-          </Suspense>
-        </Tabs.Panel>
-        <Tabs.Panel value="service-accounts" pt="md">
-          <ServiceAccounts />
-        </Tabs.Panel>
-      </Tabs>
+      <Card padding="lg">
+        <Tabs defaultValue="people" keepMounted={false}>
+          <Tabs.List>
+            <Tabs.Tab value="people">People</Tabs.Tab>
+            <Tabs.Tab value="groups">Groups</Tabs.Tab>
+            <Tabs.Tab value="service-accounts">Service accounts</Tabs.Tab>
+          </Tabs.List>
+          <Tabs.Panel value="people" pt="md">
+            <People />
+          </Tabs.Panel>
+          <Tabs.Panel value="groups" pt="md">
+            <Suspense fallback={loading}>
+              <Groups />
+            </Suspense>
+          </Tabs.Panel>
+          <Tabs.Panel value="service-accounts" pt="md">
+            <ServiceAccounts />
+          </Tabs.Panel>
+        </Tabs>
+      </Card>
     </Stack>
   );
 }
@@ -81,12 +79,20 @@ function Summary() {
     { fetchPolicy: "store-and-network" },
   );
   return (
-    <Text c="dimmed" size="sm">
-      {s.activePeople} active of {s.people} people and {s.groups} groups from your IdP over SCIM
-      {s.lastProvisionedAt ? `, last changed ${formatTime(s.lastProvisionedAt)}` : ", nothing provisioned yet"}.{" "}
-      {s.serviceAccounts} service {s.serviceAccounts === 1 ? "account" : "accounts"} registered. Changes reach every PDP
-      within seconds.
-    </Text>
+    <SimpleGrid cols={{ base: 2, md: 4 }}>
+      <Stat label="People" value={s.activePeople.toLocaleString()} hint={`active, of ${s.people.toLocaleString()}`} />
+      <Stat label="Groups" value={s.groups.toLocaleString()} hint="from your IdP over SCIM" />
+      <Stat label="Service accounts" value={s.serviceAccounts.toLocaleString()} hint="registered here" />
+      <Stat
+        label="Last provisioned"
+        value={
+          <Text fz="md" fw={600}>
+            {s.lastProvisionedAt ? formatTime(s.lastProvisionedAt) : "Never"}
+          </Text>
+        }
+        hint="changes reach every PDP within seconds"
+      />
+    </SimpleGrid>
   );
 }
 
@@ -160,16 +166,14 @@ function PeopleTable({ search }: { search: string }) {
             <Table.Td>
               <Group gap={4}>
                 {p.groups.map((g) => (
-                  <Badge key={g} variant="light" color="gray" style={{ textTransform: "none" }}>
+                  <Badge key={g} variant="default">
                     {g}
                   </Badge>
                 ))}
               </Group>
             </Table.Td>
             <Table.Td>
-              <Badge color={p.active ? "teal" : "red"} variant="light">
-                {p.active ? "active" : "deactivated"}
-              </Badge>
+              <StatusBadge tone={p.active ? "success" : "danger"}>{p.active ? "Active" : "Deactivated"}</StatusBadge>
             </Table.Td>
             <Table.Td>{formatTime(p.updatedAt)}</Table.Td>
           </Table.Tr>
@@ -295,7 +299,7 @@ function ServiceAccountsTable({ fetchKey, onChanged }: { fetchKey: number; onCha
                 <Table.Td>{sa.owner}</Table.Td>
                 <Table.Td>
                   <Badge color={sa.ai ? "grape" : "gray"} variant="light">
-                    {sa.ai ? "AI agent" : "software"}
+                    {sa.ai ? "AI agent" : "Software"}
                   </Badge>
                 </Table.Td>
                 <Table.Td>{sa.groups.join(", ")}</Table.Td>

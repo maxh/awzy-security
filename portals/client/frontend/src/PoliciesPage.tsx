@@ -1,19 +1,6 @@
-import { PageHeader } from "@awzy/ui";
-import {
-  Alert,
-  Badge,
-  Button,
-  Center,
-  Drawer,
-  Group,
-  Loader,
-  Modal,
-  Stack,
-  Table,
-  Text,
-  Textarea,
-  Title,
-} from "@mantine/core";
+import { PageHeader, PageLoader, Section, StatusBadge, type Tone } from "@awzy/ui";
+import { Alert, Button, Drawer, Group, Modal, Stack, Table, Text, Textarea } from "@mantine/core";
+import { IconSparkles } from "@tabler/icons-react";
 import { Suspense, useState } from "react";
 import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
 
@@ -25,7 +12,11 @@ import type { PoliciesPageAwzyBotQuery } from "./__generated__/PoliciesPageAwzyB
 import type { PoliciesPageQuery } from "./__generated__/PoliciesPageQuery.graphql";
 import { formatTime } from "./format";
 
-const STATUS_COLOR = { ACTIVE: "teal", DRAFT: "blue", SUPERSEDED: "gray" } as const;
+const STATUS: Record<string, { label: string; tone: Tone }> = {
+  ACTIVE: { label: "Active", tone: "success" },
+  DRAFT: { label: "Draft", tone: "info" },
+  SUPERSEDED: { label: "Superseded", tone: "neutral" },
+};
 
 export function PoliciesPage() {
   // Bumped after a mutation to refetch the bundle list.
@@ -54,13 +45,7 @@ export function PoliciesPage() {
       >
         <AwzyBotPanel onDraftSaved={onChanged} />
       </Drawer>
-      <Suspense
-        fallback={
-          <Center p="xl">
-            <Loader />
-          </Center>
-        }
-      >
+      <Suspense fallback={<PageLoader />}>
         <Policies fetchKey={fetchKey} onChanged={onChanged} />
       </Suspense>
     </Stack>
@@ -78,7 +63,7 @@ function AskAwzyBotButton({ onClick }: { onClick: () => void }) {
     {},
   );
   return awzyBotEnabled ? (
-    <Button variant="light" onClick={onClick}>
+    <Button variant="light" leftSection={<IconSparkles size={16} />} onClick={onClick}>
       Ask Awzy Bot
     </Button>
   ) : null;
@@ -136,18 +121,84 @@ function Policies({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => 
   const active = data.activePolicyBundle;
   return (
     <Stack gap="lg">
-      <Text>
-        {active ? (
-          <>
-            Enforcing <b>version {active.version}</b>, published{" "}
-            {active.publishedAt ? formatTime(active.publishedAt) : ""}
-            {active.publishedBy ? ` by ${active.publishedBy}` : ""}. PDPs pick up a newly published bundle within about
-            10 seconds.
-          </>
-        ) : (
-          "No bundle has been published. PDPs enforce the built-in default policies."
+      <Section>
+        <Group gap="sm" wrap="nowrap" align="flex-start">
+          <StatusBadge tone={active ? "success" : "neutral"}>
+            {active ? `Version ${active.version}` : "Built-in defaults"}
+          </StatusBadge>
+          <Text size="sm">
+            {active ? (
+              <>
+                Published {active.publishedAt ? formatTime(active.publishedAt) : ""}
+                {active.publishedBy ? ` by ${active.publishedBy}` : ""}. PDPs pick up a newly published bundle within
+                about 10 seconds.
+              </>
+            ) : (
+              "No bundle has been published. PDPs enforce the built-in default policies."
+            )}
+          </Text>
+        </Group>
+      </Section>
+
+      <Section title="Bundles" description="Drafts, what's active, and what it replaced." flush>
+        {publishError && (
+          <Alert color="red" title="Publish failed" m="md">
+            {publishError}
+          </Alert>
         )}
-      </Text>
+        <Table.ScrollContainer minWidth={720}>
+          <Table style={{ whiteSpace: "nowrap" }}>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Version</Table.Th>
+                <Table.Th>Status</Table.Th>
+                <Table.Th>Created</Table.Th>
+                <Table.Th>Published</Table.Th>
+                <Table.Th />
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {data.policyBundles.map((b) => {
+                const status = STATUS[b.status] ?? { label: b.status.toLowerCase(), tone: "neutral" as Tone };
+                return (
+                  <Table.Tr key={b.id}>
+                    <Table.Td fw={600}>v{b.version}</Table.Td>
+                    <Table.Td>
+                      <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+                    </Table.Td>
+                    <Table.Td>
+                      {b.createdAt ? formatTime(b.createdAt) : ""}
+                      <Text span size="xs" c="dimmed">
+                        {" "}
+                        by {b.createdBy}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>{b.publishedAt ? formatTime(b.publishedAt) : "—"}</Table.Td>
+                    <Table.Td>
+                      {b.status === "DRAFT" && (
+                        <Group gap="xs" justify="flex-end" wrap="nowrap">
+                          <Button
+                            size="xs"
+                            variant="default"
+                            onClick={() => setDryRun({ id: b.id, version: b.version })}
+                          >
+                            Dry run
+                          </Button>
+                          {data.canPublish && (
+                            <Button size="xs" loading={isPublishing} onClick={() => publish(b.id)}>
+                              Publish
+                            </Button>
+                          )}
+                        </Group>
+                      )}
+                    </Table.Td>
+                  </Table.Tr>
+                );
+              })}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+      </Section>
 
       {data.canPublish ? (
         <Editor
@@ -162,60 +213,11 @@ function Policies({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => 
         </Text>
       )}
 
-      <Stack gap="xs">
-        <Title order={4}>Bundles</Title>
-        {publishError && (
-          <Alert color="red" title="Publish failed">
-            {publishError}
-          </Alert>
-        )}
-        <Table>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Version</Table.Th>
-              <Table.Th>Status</Table.Th>
-              <Table.Th>Created</Table.Th>
-              <Table.Th>Published</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {data.policyBundles.map((b) => (
-              <Table.Tr key={b.id}>
-                <Table.Td>{b.version}</Table.Td>
-                <Table.Td>
-                  <Badge color={STATUS_COLOR[b.status as keyof typeof STATUS_COLOR]} variant="light">
-                    {b.status.toLowerCase()}
-                  </Badge>
-                </Table.Td>
-                <Table.Td>
-                  {b.createdAt ? formatTime(b.createdAt) : ""} by {b.createdBy}
-                </Table.Td>
-                <Table.Td>{b.publishedAt ? formatTime(b.publishedAt) : ""}</Table.Td>
-                <Table.Td>
-                  {b.status === "DRAFT" && (
-                    <Group gap="xs" justify="flex-end" wrap="nowrap">
-                      <Button size="xs" variant="light" onClick={() => setDryRun({ id: b.id, version: b.version })}>
-                        Dry run
-                      </Button>
-                      {data.canPublish && (
-                        <Button size="xs" loading={isPublishing} onClick={() => publish(b.id)}>
-                          Publish
-                        </Button>
-                      )}
-                    </Group>
-                  )}
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-      </Stack>
       <Modal
         opened={dryRun !== null}
         onClose={() => setDryRun(null)}
         size="xl"
-        title={dryRun ? `What draft version ${dryRun.version} would change` : ""}
+        title={<Text fw={600}>{dryRun ? `What draft version ${dryRun.version} would change` : ""}</Text>}
       >
         {dryRun && <DryRunReport draftId={dryRun.id} />}
       </Modal>
@@ -265,43 +267,47 @@ function Editor({
     });
 
   return (
-    <Stack gap="sm">
-      <Title order={4}>New draft</Title>
-      <Textarea
-        id="policy-editor-policies"
-        label="Policies (Cedar)"
-        autosize
-        minRows={8}
-        styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
-        value={policies}
-        onChange={(e) => setPolicies(e.currentTarget.value)}
-      />
-      <Textarea
-        id="policy-editor-schema"
-        label="Schema (Cedar)"
-        autosize
-        minRows={6}
-        styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
-        value={schema}
-        onChange={(e) => setSchema(e.currentTarget.value)}
-      />
-      {result?.kind === "invalid" && (
-        <Alert color="red" title="Not saved: the bundle doesn't validate">
-          <Text size="sm" ff="monospace" style={{ whiteSpace: "pre-wrap" }}>
-            {result.message}
-          </Text>
-        </Alert>
-      )}
-      {result?.kind === "saved" && (
-        <Alert color="teal" title={`Saved draft version ${result.version}`}>
-          Publish it from the list below to start enforcing it.
-        </Alert>
-      )}
-      <Group>
-        <Button onClick={save} loading={isSaving}>
-          Save draft
-        </Button>
-      </Group>
-    </Stack>
+    <Section
+      title="New draft"
+      description="Starts from the active bundle. Saving validates it against the schema; publishing is a separate step."
+    >
+      <Stack gap="sm">
+        <Textarea
+          id="policy-editor-policies"
+          label="Policies (Cedar)"
+          autosize
+          minRows={8}
+          styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
+          value={policies}
+          onChange={(e) => setPolicies(e.currentTarget.value)}
+        />
+        <Textarea
+          id="policy-editor-schema"
+          label="Schema (Cedar)"
+          autosize
+          minRows={6}
+          styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
+          value={schema}
+          onChange={(e) => setSchema(e.currentTarget.value)}
+        />
+        {result?.kind === "invalid" && (
+          <Alert color="red" title="Not saved: the bundle doesn't validate">
+            <Text size="sm" ff="monospace" style={{ whiteSpace: "pre-wrap" }}>
+              {result.message}
+            </Text>
+          </Alert>
+        )}
+        {result?.kind === "saved" && (
+          <Alert color="awzy" title={`Saved draft version ${result.version}`}>
+            Publish it from Bundles above to start enforcing it.
+          </Alert>
+        )}
+        <Group>
+          <Button onClick={save} loading={isSaving}>
+            Save draft
+          </Button>
+        </Group>
+      </Stack>
+    </Section>
   );
 }
