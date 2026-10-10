@@ -176,7 +176,8 @@ Your systems of record, as resources and work items.
 
 ### Client portal
 
-Your team's web app, served with its own frontend.
+Your team's web app, served with its own frontend. See [The client portal](/client-portal/) for
+what each page does.
 
 - **APIs:**
   - `/graphql`: the portal's GraphQL API, for decisions, explanations, policies and dry runs,
