@@ -3,7 +3,11 @@
 //! A caller sends the projected Kubernetes service-account token the chart mounts for the
 //! service it calls (`TokenSource`). The receiver checks it locally against the cluster's signing
 //! keys, its own name as the audience, and the cluster's issuer (`Verifier`), then lets through
-//! only the service accounts a route allows (`require`). No call to the API server per request.
+//! only the callers a route group allows (`require`). No call to the API server per request.
+//!
+//! A caller is a namespace and service account (`awzy-system/awzy`). Which callers belong to a
+//! route group comes from the chart, which knows the install's namespaces
+//! (`Allowed::from_env("AWZY_CONTEXT_WRITERS")`).
 //!
 //! `AWZY_SERVICE_AUTH=off` turns both sides off for local development and tests.
 
@@ -55,19 +59,26 @@ pub enum AuthError {
     Forbidden(String),
 }
 
-/// Who may call a route.
+/// Who may call a route group.
 #[derive(Debug, Clone)]
 pub enum Allowed {
     /// Any workload in the cluster with a valid token. For the PDP, which enforcement points
     /// anywhere call, and whose policies decide what they may do.
     AnyServiceAccount,
-    /// These service accounts, in the install's own namespaces.
+    /// These callers, as `namespace/service-account`.
     Only(Vec<String>),
 }
 
 impl Allowed {
-    pub fn only(names: &[&str]) -> Self {
-        Self::Only(names.iter().map(|n| n.to_string()).collect())
+    pub fn only(callers: &[&str]) -> Self {
+        Self::Only(callers.iter().map(|c| c.to_string()).collect())
+    }
+
+    /// The callers in `var`, comma-separated `namespace/service-account`. Unset or empty means
+    /// nobody, so a route group the chart forgot stays closed.
+    pub fn from_env(var: &str) -> Self {
+        let callers = std::env::var(var).unwrap_or_default();
+        Self::Only(callers.split(',').map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect())
     }
 }
 
@@ -88,8 +99,6 @@ impl Keys {
 struct Checks {
     audience: String,
     issuer: String,
-    /// The install's namespaces: where `Allowed::Only` accounts must live.
-    namespaces: Vec<String>,
     keys: Keys,
 }
 
@@ -101,40 +110,27 @@ impl Verifier {
         Self(None)
     }
 
-    /// The cluster's keys and issuer, and the install's namespaces from
-    /// `AWZY_SERVICE_AUTH_NAMESPACES` (comma-separated). Off when `AWZY_SERVICE_AUTH=off`.
+    /// The cluster's keys and issuer. Off when `AWZY_SERVICE_AUTH=off`.
     pub fn from_env(audience: &str) -> anyhow::Result<Self> {
         if turned_off() {
             tracing::warn!(audience, "AWZY_SERVICE_AUTH=off: callers are not authenticated");
             return Ok(Self::off());
         }
-        let namespaces: Vec<String> = std::env::var("AWZY_SERVICE_AUTH_NAMESPACES")
-            .map_err(|_| anyhow::anyhow!("AWZY_SERVICE_AUTH_NAMESPACES is not set (or set AWZY_SERVICE_AUTH=off)"))?
-            .split(',')
-            .map(|n| n.trim().to_string())
-            .filter(|n| !n.is_empty())
-            .collect();
-        anyhow::ensure!(!namespaces.is_empty(), "AWZY_SERVICE_AUTH_NAMESPACES names no namespace");
         let own = std::fs::read_to_string(POD_TOKEN).map_err(|e| anyhow::anyhow!("reading {POD_TOKEN}: {e}"))?;
         let issuer = issuer_of(&own)?;
         let ca = std::fs::read(CLUSTER_CA).map_err(|e| anyhow::anyhow!("reading {CLUSTER_CA}: {e}"))?;
         let jwks = Jwks::new(CLUSTER_JWKS, Some(&ca))?.with_bearer_file(POD_TOKEN);
-        tracing::info!(audience, %issuer, ?namespaces, "checking service tokens");
-        Ok(Self::with_keys(audience, &issuer, namespaces, Keys::Cluster(jwks)))
+        tracing::info!(audience, %issuer, "checking service tokens");
+        Ok(Self::with_keys(audience, &issuer, Keys::Cluster(jwks)))
     }
 
     /// Fixed keys, by key ID: for tests.
-    pub fn with_fixed_keys(
-        audience: &str,
-        issuer: &str,
-        namespaces: Vec<String>,
-        keys: HashMap<String, DecodingKey>,
-    ) -> Self {
-        Self::with_keys(audience, issuer, namespaces, Keys::Fixed(keys))
+    pub fn with_fixed_keys(audience: &str, issuer: &str, keys: HashMap<String, DecodingKey>) -> Self {
+        Self::with_keys(audience, issuer, Keys::Fixed(keys))
     }
 
-    fn with_keys(audience: &str, issuer: &str, namespaces: Vec<String>, keys: Keys) -> Self {
-        Self(Some(Checks { audience: audience.into(), issuer: issuer.into(), namespaces, keys }))
+    fn with_keys(audience: &str, issuer: &str, keys: Keys) -> Self {
+        Self(Some(Checks { audience: audience.into(), issuer: issuer.into(), keys }))
     }
 
     /// Checks the request's `Authorization` header against `allowed`. `Ok(None)` when off.
@@ -144,8 +140,8 @@ impl Verifier {
         let caller = checks.verify(token).await?;
         match allowed {
             Allowed::AnyServiceAccount => Ok(Some(caller)),
-            Allowed::Only(names) => {
-                if checks.namespaces.contains(&caller.namespace) && names.contains(&caller.service_account) {
+            Allowed::Only(callers) => {
+                if callers.contains(&caller.to_string()) {
                     Ok(Some(caller))
                 } else {
                     Err(AuthError::Forbidden(caller.to_string()))
@@ -287,7 +283,7 @@ mod tests {
         let signing = EncodingKey::from_ec_pem(key.to_pkcs8_pem(LineEnding::LF).unwrap().as_bytes()).unwrap();
         let public = key.verifying_key().to_public_key_pem(LineEnding::LF).unwrap();
         let keys = [("k1".to_string(), DecodingKey::from_ec_pem(public.as_bytes()).unwrap())].into();
-        let verifier = Verifier::with_fixed_keys(audience, ISSUER, vec!["awzy-system".into()], keys);
+        let verifier = Verifier::with_fixed_keys(audience, ISSUER, keys);
         Cluster { signing, verifier: Arc::new(verifier) }
     }
 
@@ -309,7 +305,8 @@ mod tests {
     #[tokio::test]
     async fn an_allowed_service_account_in_the_install_passes() {
         let c = cluster("awzy-context");
-        let caller = c.verifier.check(Some(&token(&c, PDP, json!({}))), &Allowed::only(&["awzy-pdp"])).await;
+        let caller =
+            c.verifier.check(Some(&token(&c, PDP, json!({}))), &Allowed::only(&["awzy-system/awzy-pdp"])).await;
         assert_eq!(
             caller.unwrap(),
             Some(Caller { namespace: "awzy-system".into(), service_account: "awzy-pdp".into() })
@@ -319,7 +316,7 @@ mod tests {
     #[tokio::test]
     async fn tokens_for_another_service_or_cluster_or_expired_are_refused() {
         let c = cluster("awzy-context");
-        let only_pdp = Allowed::only(&["awzy-pdp"]);
+        let only_pdp = Allowed::only(&["awzy-system/awzy-pdp"]);
         for (why, overrides) in [
             ("for awzy-policy", json!({ "aud": ["awzy-policy"] })),
             ("from another cluster", json!({ "iss": "https://elsewhere.test" })),
@@ -339,7 +336,7 @@ mod tests {
         let c = cluster("awzy-context");
         let imposter = token(&c, "system:serviceaccount:some-app:awzy-pdp", json!({}));
         assert_eq!(
-            c.verifier.check(Some(&imposter), &Allowed::only(&["awzy-pdp"])).await,
+            c.verifier.check(Some(&imposter), &Allowed::only(&["awzy-system/awzy-pdp"])).await,
             Err(AuthError::Forbidden("some-app/awzy-pdp".into()))
         );
         // The PDP itself accepts any workload in the cluster; its policies decide the rest.
@@ -358,9 +355,10 @@ mod tests {
     #[tokio::test]
     async fn the_middleware_answers_401_403_or_passes() {
         let c = cluster("awzy-context");
-        let app = Router::new()
-            .route("/v1/principals", get(|| async { "ok" }))
-            .route_layer(from_fn_with_state(Guard::new(c.verifier.clone(), Allowed::only(&["awzy-pdp"])), require));
+        let app = Router::new().route("/v1/principals", get(|| async { "ok" })).route_layer(from_fn_with_state(
+            Guard::new(c.verifier.clone(), Allowed::only(&["awzy-system/awzy-pdp"])),
+            require,
+        ));
         let call = |auth: Option<String>| {
             let app = app.clone();
             async move {
@@ -383,6 +381,15 @@ mod tests {
             .route_layer(from_fn_with_state(Guard::new(Arc::new(Verifier::off()), Allowed::only(&[])), require));
         let res = off.oneshot(HttpRequest::get("/").body(Body::empty()).unwrap()).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK, "off lets everyone through");
+    }
+
+    #[test]
+    fn route_groups_come_from_the_chart_and_default_to_nobody() {
+        std::env::set_var("AWZY_TEST_SERVICE_AUTH_GROUP", " awzy-system/awzy, awzy-portal/awzy ,");
+        let Allowed::Only(callers) = Allowed::from_env("AWZY_TEST_SERVICE_AUTH_GROUP") else { panic!() };
+        assert_eq!(callers, ["awzy-system/awzy", "awzy-portal/awzy"]);
+        let Allowed::Only(none) = Allowed::from_env("AWZY_TEST_SERVICE_AUTH_UNSET") else { panic!() };
+        assert!(none.is_empty(), "a group the chart didn't fill is closed");
     }
 
     #[test]
