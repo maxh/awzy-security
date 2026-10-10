@@ -41,7 +41,7 @@ Three databases on your managed Postgres (Aurora on AWS). Each service migrates 
 
 | Database | Owner | Tables |
 | --- | --- | --- |
-| `awzy` | awzy-policy | `policy_bundles`, `enforcement_mode_changes` (append-only), `break_glass_events` |
+| `awzy_policy` | awzy-policy | `policy_bundles`, `enforcement_mode_changes` (append-only), `break_glass_events` |
 | `awzy_context` | awzy-context | `humans`, `groups`, `group_members`, `service_accounts`, `resources`, `work_items`, `risk_scores`, `investigations`, `snapshot_version` |
 | `awzy_challenge` | awzy-challenge | `challenges`, `containments`, `containment_feed`, `security_keys`, `webauthn_ceremonies`, `notifications` |
 
@@ -102,7 +102,7 @@ Policy bundles and enforcement modes.
   - `GetEnforcement`, `SetEnforcement`, `ListEnforcementChanges`: the install's mode, and the mode
     for automated containments;
   - `BreakGlassRollback`: a rollback signed with an admin's break-glass key.
-- **Stores:** Postgres `awzy`.
+- **Stores:** Postgres `awzy_policy`.
 - **Called by:** each PDP, which polls for the active bundle and mode; the client portal; and
   awzy-reasoner, which reads the automated-containments mode.
 

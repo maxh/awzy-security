@@ -6,5 +6,5 @@
   "env" (list
     (dict "name" "AWZY_POLICY_READERS" "value" (printf "%s,%s" $backend $portal))
     (dict "name" "AWZY_POLICY_WRITERS" "value" $portal)
-    (dict "name" "AWZY_POSTGRES_URL" "valueFrom" (dict "secretKeyRef" (dict "name" "awzy-postgres" "key" "url")))
+    (dict "name" "AWZY_POSTGRES_URL" "valueFrom" (dict "secretKeyRef" (dict "name" "awzy-postgres" "key" "policy_url")))
   )) }}
