@@ -230,6 +230,11 @@ type Mutation {
 	fleet views, and its client and environment can be registered again.
 	"""
 	retireInstall(input: RetireInstallInput!): RetireInstallPayload!
+	"""
+	A token for an agent of yours on the corp portal's MCP endpoint (`/mcp`): read-only
+	tools, for 30 days, and nothing else here. Shown once.
+	"""
+	mcpToken: String!
 }
 
 interface Node {

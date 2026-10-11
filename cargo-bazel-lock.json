@@ -1,5 +1,5 @@
 {
-  "checksum": "add32ddcf9d99ab2eaec9c3cfa727b6f6b515700fb5babba0b3e650c639b5be6",
+  "checksum": "9807169ff72a1fe2d93523fcc3ce13ef0785d9473e1986cacdf1f2503f0b9173",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -3648,6 +3648,10 @@
           {
             "id": "hyper-util 0.1.21",
             "target": "hyper_util"
+          },
+          {
+            "id": "rmcp 3.5.1",
+            "target": "rmcp"
           },
           {
             "id": "rustls 0.23.45",
