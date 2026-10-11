@@ -69,6 +69,9 @@ type RequestContext = {
   // or "mcp" (awzy-gateway). A Human arriving through "mcp" is software holding a person's own
   // token.
   client?: String,
+  // Set by the PDP: for a person, 0-100, how much their requests look like software using their
+  // credentials (awzy-reasoner, ADR 0085). Absent until scored, so test it with `has`.
+  automation_score?: Long,
   // The MCP client's name, as its session's `initialize` gave it (awzy-gateway), e.g.
   // "claude-code". What the client says it is: a hint, not proof.
   mcp_client?: String,

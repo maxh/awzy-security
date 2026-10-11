@@ -1,7 +1,8 @@
 //! Risk scores from awzy-reasoner (ADR 0056): one per person or service account, 0 to 100, with
 //! the reasons. Written in batches at `POST /v1/risk`; the PDPs get them with the principals
 //! snapshot, as `risk`, keyed `Type::id`, and each check sees its own principal's score as
-//! `context.risk_score`.
+//! `context.risk_score`. A person's score may come with an automation score (ADR 0085), carried
+//! the same way as `automation` and seen as `context.automation_score`.
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::post, Json, Router};
 use serde::Deserialize;
@@ -20,6 +21,11 @@ pub struct RiskInput {
     pub score: i32,
     #[serde(default)]
     pub reasons: Vec<String>,
+    /// For a person: how much their requests look like software using their credentials.
+    #[serde(default)]
+    pub automation: Option<i32>,
+    #[serde(default)]
+    pub automation_reasons: Vec<String>,
 }
 
 impl RiskInput {
@@ -32,6 +38,14 @@ impl RiskInput {
         }
         if !(0..=100).contains(&self.score) {
             return Err(format!("{}: score is 0 to 100, not {}", self.principal.id, self.score));
+        }
+        if let Some(a) = self.automation {
+            if self.principal.kind != entity_type::HUMAN {
+                return Err(format!("{}: only people have automation scores", self.principal.id));
+            }
+            if !(0..=100).contains(&a) {
+                return Err(format!("{}: automation is 0 to 100, not {a}", self.principal.id));
+            }
         }
         Ok(())
     }
@@ -48,21 +62,33 @@ impl ContextStore {
         let mut tx = self.pool().begin().await?;
         for r in scores {
             sqlx::query(
-                "INSERT INTO risk_scores (principal_type, principal_id, score, reasons, computed_at)
-                 VALUES ($1, $2, $3, $4, now())
+                "INSERT INTO risk_scores (principal_type, principal_id, score, reasons, automation_score, automation_reasons, computed_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, now())
                  ON CONFLICT (principal_type, principal_id)
-                 DO UPDATE SET score = $3, reasons = $4, computed_at = now()",
+                 DO UPDATE SET score = $3, reasons = $4, automation_score = $5, automation_reasons = $6, computed_at = now()",
             )
             .bind(&r.principal.kind)
             .bind(&r.principal.id)
             .bind(r.score)
             .bind(sqlx::types::Json(&r.reasons))
+            .bind(r.automation)
+            .bind(sqlx::types::Json(&r.automation_reasons))
             .execute(&mut *tx)
             .await?;
         }
         crate::store::bump(&mut tx).await?;
         tx.commit().await?;
         Ok(scores.len())
+    }
+
+    /// Every automation score, keyed `Type::id`, as the snapshot carries them.
+    pub async fn automation_scores(&self) -> Result<serde_json::Map<String, Value>, sqlx::Error> {
+        let rows: Vec<(String, String, i32)> = sqlx::query_as(
+            "SELECT principal_type, principal_id, automation_score FROM risk_scores WHERE automation_score IS NOT NULL",
+        )
+        .fetch_all(self.pool())
+        .await?;
+        Ok(rows.into_iter().map(|(t, id, score)| (format!("{t}::{id}"), json!(score))).collect())
     }
 
     /// Every score, keyed `Type::id`, as the snapshot carries them.
@@ -102,7 +128,13 @@ mod tests {
     use crate::store::tests::test_store;
 
     fn score(kind: &str, id: &str, score: i32) -> RiskInput {
-        RiskInput { principal: EntityRef::new(kind, id), score, reasons: vec!["test".into()] }
+        RiskInput {
+            principal: EntityRef::new(kind, id),
+            score,
+            reasons: vec!["test".into()],
+            automation: None,
+            automation_reasons: vec![],
+        }
     }
 
     #[test]
@@ -111,6 +143,10 @@ mod tests {
         assert!(score("Resource", "doc", 10).validate().is_err());
         assert!(score("Human", "nora", 101).validate().is_err());
         assert!(score("ServiceAccount", "", 5).validate().is_err());
+        let automated = |kind: &str, a: i32| RiskInput { automation: Some(a), ..score(kind, "nora", 10) };
+        assert!(automated("Human", 80).validate().is_ok());
+        assert!(automated("Human", 120).validate().is_err());
+        assert!(automated("ServiceAccount", 80).validate().is_err(), "software already");
     }
 
     #[tokio::test]
@@ -123,5 +159,13 @@ mod tests {
         assert_eq!(scores["Human::nora"], 12, "replaced");
         assert_eq!(scores["ServiceAccount::sales-genie"], 80);
         assert!(store.version().await.unwrap() > before, "PDPs reload");
+
+        let automated = RiskInput { automation: Some(85), ..score("Human", "nora", 12) };
+        store.put_risk(&[automated]).await.unwrap();
+        let automation = store.automation_scores().await.unwrap();
+        assert_eq!(
+            (automation["Human::nora"].clone(), automation.get("ServiceAccount::sales-genie")),
+            (json!(85), None)
+        );
     }
 }

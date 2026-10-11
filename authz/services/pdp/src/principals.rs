@@ -45,6 +45,8 @@ struct Snapshot {
     entities: HashMap<String, Value>,
     /// Risk scores from awzy-reasoner (ADR 0056), keyed `Type::id`.
     risk: HashMap<String, i64>,
+    /// People's automation scores from awzy-reasoner (ADR 0085), keyed `Type::id`.
+    automation: HashMap<String, i64>,
 }
 
 pub struct Principals {
@@ -88,19 +90,39 @@ impl Principals {
     /// The scores of `who` (the principal and the person it acts for) that awzy has, keyed
     /// `Type::id`: what each check sees as `context.risk_score` (ADR 0056).
     pub fn risk_of(&self, who: &[&EntityRef]) -> HashMap<String, i64> {
-        let snapshot = self.snapshot.load();
+        Self::scores_of(&self.snapshot.load().risk, who)
+    }
+
+    /// The automation scores of `who` that awzy has, keyed `Type::id`: what each check sees as
+    /// `context.automation_score` (ADR 0085).
+    pub fn automation_of(&self, who: &[&EntityRef]) -> HashMap<String, i64> {
+        Self::scores_of(&self.snapshot.load().automation, who)
+    }
+
+    fn scores_of(scores: &HashMap<String, i64>, who: &[&EntityRef]) -> HashMap<String, i64> {
         who.iter()
             .filter_map(|p| {
                 let k = key(&p.kind, &p.id);
-                snapshot.risk.get(&k).map(|score| (k, *score))
+                scores.get(&k).map(|score| (k, *score))
             })
             .collect()
     }
 
     /// Replaces the snapshot with these Cedar entities and risk scores.
     pub fn load_with_risk(&self, version: i64, entities: Vec<Value>, risk: HashMap<String, i64>) {
+        self.load_with_scores(version, entities, risk, HashMap::new());
+    }
+
+    /// Replaces the snapshot with these Cedar entities, risk scores, and automation scores.
+    pub fn load_with_scores(
+        &self,
+        version: i64,
+        entities: Vec<Value>,
+        risk: HashMap<String, i64>,
+        automation: HashMap<String, i64>,
+    ) {
         let entities = entities.into_iter().filter_map(|e| Some((uid_key(&e["uid"])?, e))).collect();
-        self.snapshot.store(Arc::new(Snapshot { version, entities, risk }));
+        self.snapshot.store(Arc::new(Snapshot { version, entities, risk, automation }));
         self.loaded.store(true, Ordering::Release);
     }
 
@@ -213,9 +235,11 @@ pub async fn sync_waiting(
         .ok_or_else(|| anyhow::anyhow!("no entities in the principals snapshot"))?;
     let count = entities.len();
     // Absent from an awzy-context older than ADR 0056: no scores.
-    let risk =
-        body["risk"].as_object().into_iter().flatten().filter_map(|(k, v)| Some((k.clone(), v.as_i64()?))).collect();
-    principals.load_with_risk(version, entities, risk);
+    let scores = |field: &str| -> HashMap<String, i64> {
+        body[field].as_object().into_iter().flatten().filter_map(|(k, v)| Some((k.clone(), v.as_i64()?))).collect()
+    };
+    // Either is absent from an awzy-context older than it: no scores.
+    principals.load_with_scores(version, entities, scores("risk"), scores("automation"));
     tracing::info!(version, entities = count, "loaded principals from awzy-context");
     Ok(true)
 }

@@ -121,6 +121,22 @@ when { resource.sensitivity == "crown_jewels" && context.risk_score > 40 };
 forbid (principal is ServiceAccount, action, resource)
 when { principal.ai && !(context has on_behalf_of) && resource.sensitivity == "crown_jewels" };
 
+// Software working with a person's own credentials, such as a coding agent signed in as them, is
+// that person to awzy (ADR 0085). When awzy-reasoner scores someone's requests as an agent's, their
+// reads, writes, and tool calls on sensitive data need their security key, which no agent can
+// touch.
+@id("automated-people-verify")
+@challenge("verification")
+forbid (
+  principal is Human,
+  action in [Action::"read", Action::"write", Action::"call"],
+  resource
+)
+when {
+  context has automation_score && context.automation_score > 80 &&
+  (resource.sensitivity == "confidential" || resource.sensitivity == "crown_jewels")
+};
+
 // A service account acting for someone who isn't there needs approval when risk is elevated.
 @id("absent-human-approval")
 @challenge("approval")

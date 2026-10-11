@@ -115,11 +115,16 @@ impl ContextClient {
             let scores: Vec<Value> = chunk
                 .iter()
                 .map(|s| {
-                    json!({
+                    let mut score = json!({
                         "principal": { "type": s.principal.0, "id": s.principal.1 },
                         "score": s.score.score,
                         "reasons": s.score.reasons,
-                    })
+                    });
+                    if let Some(a) = &s.automation {
+                        score["automation"] = json!(a.score);
+                        score["automation_reasons"] = json!(a.reasons);
+                    }
+                    score
                 })
                 .collect();
             self.send(Method::POST, "/v1/risk", Some(json!({ "scores": scores }))).await?;

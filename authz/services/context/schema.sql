@@ -139,6 +139,8 @@ CREATE TABLE public.risk_scores (
     score integer NOT NULL,
     reasons jsonb DEFAULT '[]'::jsonb NOT NULL,
     computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    automation_score integer,
+    automation_reasons jsonb DEFAULT '[]'::jsonb NOT NULL,
     CONSTRAINT risk_scores_score_check CHECK (((score >= 0) AND (score <= 100)))
 );
 
