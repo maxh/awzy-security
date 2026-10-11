@@ -351,6 +351,13 @@ pub enum Node {
     SupportSession(crate::support::SupportSession),
 }
 
+/// A cloud awzy installs in, and its regions.
+#[derive(SimpleObject)]
+pub struct CloudRegions {
+    pub cloud: String,
+    pub regions: Vec<String>,
+}
+
 #[derive(Default)]
 pub struct FleetQuery;
 
@@ -378,6 +385,17 @@ impl FleetQuery {
             | E::Ceremony
             | E::Investigation => None,
         })
+    }
+
+    /// The regions an install can be registered in, per cloud; the first of each is the default.
+    async fn cloud_regions(&self) -> Vec<CloudRegions> {
+        crate::regions::CLOUDS
+            .iter()
+            .map(|(cloud, regions)| CloudRegions {
+                cloud: cloud.to_string(),
+                regions: regions.iter().map(|r| r.to_string()).collect(),
+            })
+            .collect()
     }
 
     /// Every registered install, in registration order.

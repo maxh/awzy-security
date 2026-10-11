@@ -133,8 +133,11 @@ impl NewInstall {
         if !is_slug(&self.client) || !is_slug(&self.environment) || !is_slug(&self.region) {
             return invalid("client, environment, and region must be lowercase letters, digits, and hyphens");
         }
-        if !["aws", "gcp", "azure"].contains(&self.cloud.as_str()) {
+        let Some(regions) = crate::regions::of(&self.cloud) else {
             return invalid("cloud must be aws, gcp, or azure");
+        };
+        if !regions.contains(&self.region.as_str()) {
+            return Err(RegisterError::Invalid(format!("{} isn't a {} region", self.region, self.cloud)));
         }
         check_release(self.channel, self.pinned_version.as_deref())
     }
@@ -744,6 +747,17 @@ pub(crate) mod tests {
             channel: Channel::Fast,
             pinned_version: None,
         }
+    }
+
+    #[test]
+    fn an_install_is_registered_in_one_of_its_clouds_regions() {
+        assert!(new_install("acme", "prod").validate().is_ok());
+        let gcp =
+            |region: &str| NewInstall { cloud: "gcp".into(), region: region.into(), ..new_install("acme", "gcp") };
+        assert!(gcp("us-central1").validate().is_ok());
+        let wrong_cloud = gcp("us-east-2").validate().unwrap_err().to_string();
+        assert!(wrong_cloud.contains("us-east-2 isn't a gcp region"), "{wrong_cloud}");
+        assert!(NewInstall { region: "us-esat-2".into(), ..new_install("acme", "prod") }.validate().is_err(), "a typo");
     }
 
     #[test]

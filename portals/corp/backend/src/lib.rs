@@ -13,6 +13,7 @@ pub mod fleet;
 mod installs;
 pub mod licenses;
 pub mod mcp;
+pub mod regions;
 pub mod support;
 
 use async_graphql::{http::GraphiQLSource, Context, EmptySubscription, MergedObject, Object, Result, Schema};
