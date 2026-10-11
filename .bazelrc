@@ -27,6 +27,9 @@ test:local-stack --test_env=AWZY_TEST_CLICKHOUSE_URL=http://localhost:8123
 test:local-stack --test_env=AWZY_TEST_CLICKHOUSE_KAFKA_BROKERS=kafka:29092
 
 # CI profile.
+# A stale MODULE.bazel.lock fails the build instead of being quietly recomputed: what's on main is
+# what every build resolves (repin with `CARGO_BAZEL_REPIN=1 bazel query //... && bazel query //...`).
+common:ci --lockfile_mode=error
 build:ci --color=yes
 build:ci --show_progress_rate_limit=10
 # Tests and lint need no build outputs on the runner, only results. Publishing leaves this off

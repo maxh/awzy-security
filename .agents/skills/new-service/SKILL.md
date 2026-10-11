@@ -25,7 +25,7 @@ A significant new service usually deserves an ADR first (see the write-adr skill
 4. **Bazel.** `BUILD.bazel` with `awzy_service(name, crate_name = "awzy_<name>",
    binary_name = "awzy-<name>", deps = [first-party targets])`. Client-side services set
    `visibility = ["//tools:client_side"]`; corp code may never depend on them (ADR 0009).
-5. **Locks.** `CARGO_BAZEL_REPIN=1 bazel build //authz/services/<name>/...` updates `Cargo.lock` and
+5. **Locks.** `CARGO_BAZEL_REPIN=1 bazel query //... && bazel query //...` updates `Cargo.lock` and
    `MODULE.bazel.lock` for the new crate and any new dependency; commit both.
 6. **Heartbeat.** If it runs in client installs, add it to the closed `Service` enum in
    `libs/heartbeat/src/lib.rs` (variant, serde rename, `ALL`, `as_str`), or the reporter can't
