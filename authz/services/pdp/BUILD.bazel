@@ -8,6 +8,8 @@ awzy_service(
         "pdp_freshness",
         "pdp_loadtest",
     ],
+    # The load test runs in the cluster from the published image, so it measures what ships (#94).
+    image_binaries = ["pdp_loadtest"],
     deps = [
         "//libs/server",
         "//libs/telemetry",
