@@ -1,6 +1,6 @@
 # 0104. Connectors are configured in the client portal
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-11
 
 ## Context
