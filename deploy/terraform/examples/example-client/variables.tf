@@ -8,8 +8,14 @@ variable "acme_email" {
 }
 
 variable "demo_hostname" {
-  description = "The install's public hostname for the client portal, e.g. demo.example.com"
+  description = "The install's public hostname for the client portal, e.g. aws.demo.example.com"
   type        = string
+}
+
+variable "demo_redirect_hostnames" {
+  description = "Older hostnames that redirect to demo_hostname, e.g. demo.example.com"
+  type        = list(string)
+  default     = []
 }
 
 variable "install_account" {

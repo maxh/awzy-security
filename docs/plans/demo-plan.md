@@ -8,7 +8,7 @@ the [deployment plan](deployment-plan.md) and [ADR 0027](../adr/0027-demo-and-co
 
 ## What the demo shows
 
-At `https://demo.awzysecurity.com`, signed in through the demo IdP
+At `https://aws.demo.awzysecurity.com` (and `gcp.demo.awzysecurity.com` for Google Cloud; ADR 0106), signed in through the demo IdP
 ([ADR 0032](../adr/0032-dev-idp-for-the-demo-install.md)) as a security admin of the synthetic
 company:
 
@@ -110,7 +110,7 @@ Kubernetes Job in the chart for the demo install, behind a demo-only value next 
 ## Where it runs
 
 - **Local stack**: a `demo` profile for development and the browser tests.
-- **The demo install** (`demo.awzysecurity.com`): seeded on install, then the driver replays a
+- **The demo install** (`aws.demo.awzysecurity.com`; `demo.awzysecurity.com` redirects there): seeded on install, then the driver replays a
   day of activity on a schedule so the demo always has fresh decisions.
 - **Scale tests**: the `scale` profile against the example install, per the deployment plan's
   performance scenarios.
