@@ -26,6 +26,7 @@ pub mod entity_type {
     pub const MCP_SERVER: &str = "McpServer";
     pub const MCP_TOOL: &str = "McpTool";
     pub const PORTAL_AREA: &str = "PortalArea";
+    pub const PORTAL_FIELD: &str = "PortalField";
 }
 
 /// A typed reference to a world-model entity, e.g. `Human::"alice"`.

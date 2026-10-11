@@ -17,6 +17,7 @@ mod diagnostics;
 pub mod directory;
 mod dry_run;
 mod enforcement;
+mod fields;
 mod investigations;
 mod lookup;
 mod mcp;
@@ -237,6 +238,7 @@ fn schema_builder(
         .extension(support::SupportAudit)
         // Every mutation, recorded as the viewer's activity.
         .extension(audit::MutationAudit)
+        .extension(fields::FieldAuthz)
 }
 
 /// GraphQL at `/graphql` and MCP at `/mcp`, each behind sign-in with its own tokens (`auth` and

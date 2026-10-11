@@ -159,9 +159,9 @@ impl Decision {
         self.0.policy_version
     }
 
-    /// The request context, as JSON text.
-    async fn context(&self) -> &str {
-        &self.0.context
+    /// The request context, as JSON text. Null when a policy hides it (ADR 0103).
+    async fn context(&self) -> Option<&str> {
+        Some(&self.0.context)
     }
 
     /// Explain the principal's check: the source of each determining policy, from the bundle the

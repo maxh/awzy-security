@@ -301,8 +301,8 @@ pub struct PolicySourceOut {
 #[schemars(crate = "rmcp::schemars")]
 pub struct Explanation {
     pub decision: DecisionSummary,
-    /// The request context the PDP saw, as JSON text.
-    pub context: String,
+    /// The request context the PDP saw, as JSON text; null when a policy hides it (ADR 0103).
+    pub context: Option<String>,
     /// One sentence on why the verdict came out as it did.
     pub summary: String,
     /// Policies that determined the principal's own check.
@@ -484,7 +484,10 @@ impl ClientPortalMcp {
             decisions::explain(policy, row.policy_version, &row.on_behalf_of_policies).await.map_err(internal)?;
         Ok(Json(Explanation {
             decision: summary_of(&row),
-            context: row.context.clone(),
+            context: self
+                .visible(&viewer, PortalArea::Decisions, "Decision.context")
+                .await?
+                .then(|| row.context.clone()),
             summary: explain_sentence(&row, &own),
             determining_policies: own.into_iter().map(|p| PolicySourceOut { id: p.id, source: p.source }).collect(),
             on_behalf_of_policies: human.into_iter().map(|p| PolicySourceOut { id: p.id, source: p.source }).collect(),
@@ -551,7 +554,17 @@ impl ClientPortalMcp {
         let viewer = self.allow(&parts, PortalAction::View, PortalArea::Directory).await?;
         self.record(&viewer, "get_principal");
         let snapshot: serde_json::Value = self.context()?.get("/v1/principals").await.map_err(internal)?;
-        Ok(Json(principal_from_snapshot(&snapshot, &p.principal_type, &p.principal_id)))
+        let mut out = principal_from_snapshot(&snapshot, &p.principal_type, &p.principal_id);
+        // The fields a policy may hide (ADR 0103), as the portal's PrincipalDetail does.
+        if !self.visible(&viewer, PortalArea::Directory, "PrincipalDetail.attributes").await? {
+            if let Some(entity) = out.entity.as_mut().and_then(|e| e.as_object_mut()) {
+                entity.remove("attrs");
+            }
+        }
+        if !self.visible(&viewer, PortalArea::Directory, "PrincipalDetail.riskScore").await? {
+            out.risk_score = None;
+        }
+        Ok(Json(out))
     }
 
     #[tool(
@@ -580,10 +593,16 @@ impl ClientPortalMcp {
         let strings = |v: &serde_json::Value| -> Vec<String> {
             v.as_array().into_iter().flatten().filter_map(|x| x.as_str().map(str::to_string)).collect()
         };
-        Ok(Json(ResourceOut {
-            entities: found["entities"].as_array().cloned().unwrap_or_default(),
-            assignees: strings(&found["assignees"]),
-        }))
+        let mut entities = found["entities"].as_array().cloned().unwrap_or_default();
+        // Who a resource and its folders are shared with, unless a policy hides it (ADR 0103).
+        if !self.visible(&viewer, PortalArea::Directory, "ResourceDetail.sharing").await? {
+            for e in &mut entities {
+                if let Some(attrs) = e["attrs"].as_object_mut() {
+                    attrs.retain(|k, _| !k.starts_with("shared_"));
+                }
+            }
+        }
+        Ok(Json(ResourceOut { entities, assignees: strings(&found["assignees"]) }))
     }
 
     #[tool(
@@ -747,6 +766,13 @@ impl ClientPortalMcp {
 
 impl ClientPortalMcp {
     /// The signed-in caller, if the PDP lets them do `action` in `area`.
+    /// Whether the viewer may see one of the sensitive fields (ADR 0103), as the portal checks it.
+    async fn visible(&self, viewer: &Viewer, area: PortalArea, field: &str) -> Result<bool, ErrorData> {
+        access::field_visible(&self.services, viewer, Surface::Mcp, area, field)
+            .await
+            .map_err(|e| ErrorData::internal_error(e.to_string(), None))
+    }
+
     async fn allow(&self, parts: &Parts, action: PortalAction, area: PortalArea) -> Result<Viewer, ErrorData> {
         let viewer = parts
             .extensions

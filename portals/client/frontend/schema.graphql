@@ -381,9 +381,9 @@ type Decision implements Node {
 	"""
 	policyVersion: Int!
 	"""
-	The request context, as JSON text.
+	The request context, as JSON text. Null when a policy hides it (ADR 0103).
 	"""
-	context: String!
+	context: String
 	"""
 	Explain the principal's check: the source of each determining policy, from the bundle the
 	decision was made under.
@@ -991,7 +991,8 @@ type PrincipalDetail {
 	"""
 	known: Boolean!
 	"""
-	Its Cedar attributes, as JSON: `active`, a service account's `owner` and `ai`.
+	Its Cedar attributes, as JSON: `active`, a service account's `owner` and `ai`. Null when a
+	policy hides them (ADR 0103).
 	"""
 	attributes: String
 	"""
@@ -999,7 +1000,7 @@ type PrincipalDetail {
 	"""
 	groups: [String!]!
 	"""
-	awzy-reasoner's risk score, 0 to 100, when it has one.
+	awzy-reasoner's risk score, 0 to 100, when it has one and no policy hides it (ADR 0103).
 	"""
 	riskScore: Int
 }
@@ -1248,9 +1249,10 @@ type ResourceDetail {
 	sensitivity: String
 	classification: ResourceClassification
 	"""
-	Who it's shared with, as JSON (the connector's sharing entries).
+	Who it's shared with, as JSON (the connector's sharing entries). Null when a policy hides
+	it (ADR 0103).
 	"""
-	sharing: String!
+	sharing: String
 	labels: [String!]!
 	url: String
 	"""
