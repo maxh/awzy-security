@@ -1,7 +1,8 @@
-# awzy's namespaces run only awzy's images: each must come from the release registry (ADR 0057)
-# and carry a cosign signature from the release key (ADR 0009). Third-party images there are
-# mirrored into the registry and signed like awzy's own. Signatures are not in the public Rekor
-# log, so only the key is checked.
+# awzy's namespaces run only awzy's images: each must come from the release registry (ADR 0057),
+# carry a cosign signature from the release key (ADR 0009), and carry its SBOM as an attestation
+# signed by the same key (ADR 0093). Third-party images there are mirrored into the registry and
+# signed and attested like awzy's own. Signatures are not in the public Rekor log, so only the key
+# is checked.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -36,6 +37,16 @@ spec:
                       {{- .Values.cosignPubKey | trim | nindent 22 }}
                     rekor: { ignoreTlog: true }
                     ctlog: { ignoreSCT: true }
+          # An SPDX SBOM (cosign attest --type spdxjson), signed by the release key.
+          attestations:
+            - type: https://spdx.dev/Document
+              attestors:
+                - entries:
+                    - keys:
+                        publicKeys: |-
+                          {{- .Values.cosignPubKey | trim | nindent 26 }}
+                        rekor: { ignoreTlog: true }
+                        ctlog: { ignoreSCT: true }
     - name: only-the-release-registry
       match:
         any:

@@ -8,9 +8,10 @@ description: What awzy can and can't see, and how releases reach your install.
 - **No vendor access.** awzy has no credentials for your install, even in an emergency. Repairs
   are run by your team.
 - **Pull-based, signed releases.** Your install pulls releases from awzy's registry with its own
-  revocable token. Every image is signed with awzy's release key, and the cluster refuses any
-  image in awzy's namespaces that isn't from that registry with that signature, third-party
-  images included.
+  revocable token. Every image is signed with awzy's release key and carries its SBOM, signed
+  with the same key, and the cluster refuses any image in awzy's namespaces that isn't from that
+  registry with both, third-party images included. Each release's chart carries an SBOM of every
+  Rust crate and npm package it's built from.
 - **A heartbeat, and nothing else, to awzy.** The only thing that leaves your install for awzy is
   a heartbeat to its corp portal: versions, readiness, and a few aggregate numbers, in a fixed
   schema with no free-form fields. You can turn it off. A diagnostics bundle from the client

@@ -166,6 +166,9 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
       - if: env.AWZY_CI_PUBLISH == 'true'
         uses: sigstore/cosign-installer@v3
+      # Each image's SBOM, and the release's (ADR 0093).
+      - if: env.AWZY_CI_PUBLISH == 'true'
+        uses: anchore/sbom-action/download-syft@v0
       - name: Publish the authz release's images
         if: env.AWZY_CI_PUBLISH == 'true'
         run: tools/ci/publish-images.sh authz

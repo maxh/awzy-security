@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Part of the authz release (ADR 0053): packages deploy/helm/awzy as 0.1.0-g<sha> (appVersion = the image tag), pushes it to
-# oci://$AWZY_AUTHZ_RELEASE_REGISTRY/awzy/charts, and signs it. Runs after publish-images.sh, so the chart only
+# oci://$AWZY_AUTHZ_RELEASE_REGISTRY/awzy/charts, signs it, and attaches the release's SBOM: every Rust
+# crate and npm package the release builds from (Cargo.lock, pnpm-lock.yaml), which images' own
+# SBOMs can't list, since the binaries carry no package metadata (ADR 0093). Runs after publish-images.sh, so the chart only
 # ever names images that exist. The chart carries those images' digests (image-digests.yaml, from
 # publish-images.sh): Kyverno writes a digest into any image without one, which Argo CD would
 # otherwise see as drift from the chart on every sync.
@@ -18,4 +20,10 @@ push=$(helm push "$out/awzy-$version.tgz" "oci://$AWZY_AUTHZ_RELEASE_REGISTRY/aw
 digest=$(sed -n 's/^Digest: \(sha256:[0-9a-f]*\).*/\1/p' <<< "$push")
 [ -n "$digest" ] || { echo "no digest in helm push output" >&2; exit 1; }
 cosign sign --yes --tlog-upload=false --key "$AWZY_AUTHZ_RELEASE_COSIGN_KEY" "$AWZY_AUTHZ_RELEASE_REGISTRY/awzy/charts/awzy@$digest" </dev/null
+# Only the lockfiles, so it doesn't matter what Bazel or pnpm left in the tree.
+lockfiles=$(mktemp -d)
+cp Cargo.lock pnpm-lock.yaml "$lockfiles/"
+syft scan -q "dir:$lockfiles" --source-name awzy --source-version "$version" -o "spdx-json=$out/release.spdx.json"
+cosign attest --yes --tlog-upload=false --key "$AWZY_AUTHZ_RELEASE_COSIGN_KEY" --type spdxjson \
+  --predicate "$out/release.spdx.json" "$AWZY_AUTHZ_RELEASE_REGISTRY/awzy/charts/awzy@$digest" </dev/null
 echo "chart_version=$version" >> "${GITHUB_OUTPUT:-/dev/null}"
