@@ -123,6 +123,8 @@ jobs:
       AWZY_CORP_PORTAL_RELEASE_TAG: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the quality ratchets compare with where this branch meets main
       - uses: azure/setup-helm@v4
       # The awzy chart and bootstrap's config chart render with example values.
       - name: Lint charts
