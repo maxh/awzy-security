@@ -234,11 +234,7 @@ function Editor({
 }) {
   return (
     <Stack gap="md">
-      <Checkbox.Group
-        label="Tiers that fail open"
-        value={failOpen}
-        onChange={(v) => setFailOpen(v as SensitivityTier[])}
-      >
+      <Checkbox.Group label="Tiers that fail open" value={failOpen} onChange={setFailOpen}>
         <Group mt="xs">
           {TIERS.map((t) => (
             <Checkbox key={t.value} value={t.value} label={t.label} disabled={!CAN_FAIL_OPEN.includes(t.value)} />
@@ -282,7 +278,7 @@ function Rows({
             data={TIERS}
             value={r.tier}
             allowDeselect={false}
-            onChange={(v) => v && update(i, { tier: v as SensitivityTier })}
+            onChange={(v) => v && update(i, { tier: v })}
             w={160}
           />
           <ActionIcon
