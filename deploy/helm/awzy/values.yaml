@@ -47,6 +47,9 @@ clickhouse:
   # awzy-reasoner's read-only user (ADR 0056): decisions and events only.
   # Secret in the data and system namespaces with key "password" (created by bootstrap).
   reasonerPasswordSecret: awzy-clickhouse-reasoner
+  # How many days decisions and events are kept before they expire; 0 keeps them all. Applied on
+  # every sync, so it can change after install.
+  retentionDays: 0
 
 pdp:
   replicas: 2

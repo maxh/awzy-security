@@ -56,7 +56,10 @@ Three databases on your managed Postgres (Aurora on AWS). Each service migrates 
 
 Runs in your cluster through its operator. Its Kafka-engine tables read both topics into
 `decisions` and `events`, the history that the client portal searches and awzy-reasoner scores.
-The `awzy-clickhouse-migrate` job applies its schema on each release. awzy-reasoner and
+The `awzy-clickhouse-migrate` job applies its schema on each release, and the install's retention:
+the chart's `clickhouse.retentionDays` sets how many days decisions and events are kept (0, the
+default, keeps them all), and can change at any time. Both tables are also kept in resource order,
+for "who touched this resource". awzy-reasoner and
 awzy-reporter each read it as their own read-only user.
 
 ### Outside services, only when you turn them on
