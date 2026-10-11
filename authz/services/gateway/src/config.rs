@@ -26,6 +26,10 @@ pub struct GatewayConfig {
     /// clients find the IdP with (ADR 0081). Unset, the gateway publishes none.
     #[serde(default)]
     pub public_url: Option<String>,
+    /// The client portal, e.g. `https://portal.example.com`, so a challenged call links to the
+    /// challenge to answer. Unset, the message names the challenge without a link.
+    #[serde(default)]
+    pub portal_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]

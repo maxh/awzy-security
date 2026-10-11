@@ -449,7 +449,7 @@ async fn check(
                 }
                 _ => {
                     crate::metrics::BLOCKED.inc();
-                    Some(blocked(id, &c.what, &res))
+                    Some(blocked(id, &c.what, &res, state.0.config.portal_url.as_deref()))
                 }
             }
         }
@@ -517,7 +517,17 @@ fn outage(
 }
 
 /// An MCP tool error: the model sees why the call didn't run.
-fn blocked(id: &Value, what: &str, res: &CheckResponse) -> Response<Body> {
+fn blocked(id: &Value, what: &str, res: &CheckResponse, portal_url: Option<&str>) -> Response<Body> {
+    let (text, meta) = blocked_message(what, res, portal_url);
+    tool_error(id, text, meta)
+}
+
+/// What a blocked call's result says, and its `_meta`: the decision, and for a challenge, where
+/// to answer it, so the person, or the agent working for them, can go straight there.
+fn blocked_message(what: &str, res: &CheckResponse, portal_url: Option<&str>) -> (String, Value) {
+    let challenge_url = portal_url
+        .filter(|_| !res.challenge_qid.is_empty())
+        .map(|u| format!("{}/challenges?challenge={}", u.trim_end_matches('/'), res.challenge_qid));
     let policies = if res.policies.is_empty() { "no policy permits it".to_string() } else { res.policies.join(", ") };
     let (verdict, text) = match res.verdict() {
         Verdict::Challenge => {
@@ -529,8 +539,9 @@ fn blocked(id: &Value, what: &str, res: &CheckResponse) -> Response<Body> {
             let next = if res.challenge_qid.is_empty() {
                 "No challenge could be opened, so the call was not made. Try again shortly.".to_string()
             } else {
+                let open = challenge_url.as_ref().map(|u| format!(" Answer it at {u}.")).unwrap_or_default();
                 format!(
-                    "The call was not made. Challenge {} is waiting for an answer; once it's passed, \
+                    "The call was not made. Challenge {} is waiting for an answer;{open} Once it's passed, \
                      retry the same call.",
                     res.challenge_qid
                 )
@@ -556,7 +567,10 @@ fn blocked(id: &Value, what: &str, res: &CheckResponse) -> Response<Body> {
     if !res.challenge_qid.is_empty() {
         meta["awzy/challenge_qid"] = json!(res.challenge_qid);
     }
-    tool_error(id, text, meta)
+    if let Some(url) = challenge_url {
+        meta["awzy/challenge_url"] = json!(url);
+    }
+    (text, meta)
 }
 
 fn tool_error(id: &Value, text: String, meta: Value) -> Response<Body> {
@@ -776,6 +790,7 @@ mod tests {
             outage: crate::config::OutageConfig { cached_allow_ttl_secs: 300 },
             service_account_registry: crate::config::Registry::Config,
             public_url: Some("https://mcp.test".into()),
+            portal_url: Some("https://portal.test".into()),
         };
         let state = GatewayState::with_containments(config, pdp, containments)
             .unwrap()
@@ -1114,5 +1129,24 @@ mod tests {
         }))
         .unwrap();
         assert!(config.validate().unwrap_err().to_string().contains("read or write"));
+    }
+
+    #[test]
+    fn a_challenged_call_links_to_the_challenge_in_the_portal() {
+        let res = CheckResponse {
+            decision_qid: "decision_0199a8f2-6c1e-7b3a-9d4e-2f8c1a5b7e90".into(),
+            challenge_qid: "challenge_0199a8f2-6c1e-7b3a-9d4e-2f8c1a5b7e91".into(),
+            verdict: Verdict::Challenge as i32,
+            ..Default::default()
+        };
+        let url = "https://portal.test/challenges?challenge=challenge_0199a8f2-6c1e-7b3a-9d4e-2f8c1a5b7e91";
+        let (text, meta) = blocked_message("drive/read_document", &res, Some("https://portal.test/"));
+        assert!(text.contains(&format!("Answer it at {url}.")), "{text}");
+        assert_eq!(meta["awzy/challenge_url"], url);
+        let (text, meta) = blocked_message("drive/read_document", &res, None);
+        assert!(!text.contains("Answer it at") && meta.get("awzy/challenge_url").is_none(), "no portal, no link");
+        let no_challenge = CheckResponse { challenge_qid: String::new(), ..res };
+        let (_, meta) = blocked_message("drive/read_document", &no_challenge, Some("https://portal.test"));
+        assert!(meta.get("awzy/challenge_url").is_none(), "nothing to link to");
     }
 }
