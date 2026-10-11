@@ -15,9 +15,14 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("migrations applied");
         return Ok(());
     }
-    // An install signs with its KMS key, which never leaves KMS (ADR 0092); run locally, with a
-    // PEM key, or not at all.
+    // An install signs with its cloud's KMS key, which never leaves KMS (ADR 0092): AWS KMS's ARN,
+    // or Cloud KMS's key version name. Run locally, with a PEM key, or not at all.
     match (std::env::var("AWZY_POLICY_SIGNING_KMS_KEY"), std::env::var("AWZY_POLICY_SIGNING_KEY_FILE")) {
+        (Ok(key), _) if awzy_signing_gcp::is_key_name(&key) => {
+            let signer = awzy_signing_gcp::KmsSigner::connect(&key).await?;
+            tracing::info!(key_id = awzy_signing::PayloadSigner::key_id(&signer), kms_key = %key, "signing with Cloud KMS");
+            store = store.with_signer(signer);
+        }
         (Ok(key), _) => {
             let signer = awzy_signing_aws::KmsSigner::connect(&key).await?;
             tracing::info!(key_id = awzy_signing::PayloadSigner::key_id(&signer), kms_key = %key, "signing with KMS");

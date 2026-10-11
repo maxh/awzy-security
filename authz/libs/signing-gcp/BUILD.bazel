@@ -1,0 +1,10 @@
+load("//tools:rust.bzl", "awzy_rust_library")
+
+# awzy-policy's signer in a Google Cloud install (ADR 0092). Apart from awzy-signing, so only
+# awzy-policy talks to Cloud KMS; PDPs and gateways only verify.
+awzy_rust_library(
+    name = "signing-gcp",
+    crate_name = "awzy_signing_gcp",
+    visibility = ["//tools:client_side"],
+    deps = ["//authz/libs/signing"],
+)

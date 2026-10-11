@@ -19,6 +19,7 @@ awzy-model.workspace = true
 awzy-pdp.workspace = true
 awzy-signing.workspace = true
 awzy-signing-aws.workspace = true
+awzy-signing-gcp.workspace = true
 chrono.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
