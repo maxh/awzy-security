@@ -41,8 +41,3 @@ read [AGENTS.md](AGENTS.md).
 
 [INSTALL.md](INSTALL.md) is the runbook for installing awzy in your own cloud account: the cloud
 layer, bootstrap, DNS and your IdP, and checking the install.
-
-## Status
-
-What each service does today: [Built so far](docs/platform-plan.md#built-so-far). What isn't done
-yet: [TODO.md](TODO.md).
