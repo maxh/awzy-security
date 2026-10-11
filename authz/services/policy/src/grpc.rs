@@ -312,6 +312,10 @@ fn status(e: StoreError) -> Status {
         StoreError::NotDraft { .. } => Status::failed_precondition(e.to_string()),
         StoreError::UnknownScope(_) => Status::invalid_argument(e.to_string()),
         StoreError::InvalidFallback(_) => Status::invalid_argument(e.to_string()),
+        StoreError::Signing(error) => {
+            tracing::error!(%error, "signing failed");
+            Status::unavailable("awzy-policy couldn't sign; nothing changed")
+        }
         StoreError::NonceReused => Status::permission_denied(e.to_string()),
         StoreError::NoRollbackTarget(_) => Status::failed_precondition(e.to_string()),
         StoreError::Db(error) => {

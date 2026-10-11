@@ -6,24 +6,23 @@
 {{- if .Values.demoData.enabled }}{{- $writers = printf "%s,%s/awzy-demo-data" $portal .Values.namespaces.system -}}{{- end }}
 # Who may call which methods (ADR 0055): the PDP and the portal read bundles and the mode; only
 # the portal drafts, publishes, and switches the mode. Break-glass rollback is signed instead.
-# awzy-policy signs each bundle and mode change, and the PDPs check them (ADR 0080).
+# awzy-policy signs each bundle, mode change, and outage fallback with the install's KMS key, under
+# its own account, which alone may use it; the PDPs and gateways check them (ADR 0080, 0092).
 {{- $env := list
     (dict "name" "AWZY_CHALLENGE_ADDR" "value" (printf "http://awzy-challenge.%s.svc:8080" .Values.namespaces.system))
     (dict "name" "AWZY_POLICY_READERS" "value" (printf "%s,%s" $backend $portal))
-    (dict "name" "AWZY_POLICY_SIGNING_KEY_FILE" "value" "/var/run/secrets/awzy/policy-signing/signing.pem")
+    (dict "name" "AWZY_POLICY_SIGNING_KMS_KEY" "value" (required "policy.signingKmsKey is required" .Values.policy.signingKmsKey))
     (dict "name" "AWZY_POLICY_WRITERS" "value" $writers)
     (dict "name" "AWZY_POSTGRES_URL" "valueFrom" (dict "secretKeyRef" (dict "name" "awzy-postgres" "key" "policy_url")))
     (dict "name" "AWZY_POSTGRES_MIGRATE" "value" "check")
 -}}
-{{- $volumes := list
-    (dict "name" "policy-signing" "secret" (dict "secretName" (required "policy.signingKeySecret is required" .Values.policy.signingKeySecret)))
--}}
-{{- $mounts := list (dict "name" "policy-signing" "mountPath" "/var/run/secrets/awzy/policy-signing" "readOnly" true) -}}
+{{- $volumes := list -}}
+{{- $mounts := list -}}
 {{- if $glass }}
 {{- $env = append $env (dict "name" "AWZY_POLICY_BREAK_GLASS_KEYS_FILE" "value" "/var/run/secrets/awzy/break-glass/keys.pem") -}}
 {{- $volumes = append $volumes (dict "name" "break-glass" "secret" (dict "secretName" $glass)) -}}
 {{- $mounts = append $mounts (dict "name" "break-glass" "mountPath" "/var/run/secrets/awzy/break-glass" "readOnly" true) -}}
 {{- end }}
 {{ include "awzy.service" (dict "root" . "name" "awzy-policy" "namespace" .Values.namespaces.system "values" .Values.policy
-  "tokens" (list "awzy-challenge")
+  "serviceAccount" "awzy-policy" "tokens" (list "awzy-challenge")
   "env" $env "volumes" $volumes "mounts" $mounts) }}

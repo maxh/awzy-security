@@ -28,6 +28,7 @@ members = [
     "authz/services/reasoner",
     "authz/services/reporter",
     "authz/libs/signing",
+    "authz/libs/signing-aws",
     "authz/libs/classify",
     "authz/libs/service-auth",
     "portals/client/backend",
@@ -44,6 +45,7 @@ license = "UNLICENSED"
 [workspace.dependencies]
 aws-config = { version = "1", default-features = false, features = ["rt-tokio", "behavior-version-latest", "sso", "credentials-process"] }
 aws-sdk-bedrockruntime = { version = "1", default-features = false, features = ["rt-tokio", "behavior-version-latest"] }
+aws-sdk-kms = { version = "1", default-features = false, features = ["rt-tokio", "behavior-version-latest"] }
 # The AWS SDK's HTTPS client on ring, the crypto the rest of the workspace uses, so aws-lc (C)
 # stays out of the build.
 aws-smithy-types = "1"
@@ -118,6 +120,7 @@ awzy-synthetic = { path = "authz/demo/synthetic" }
 awzy-dev-idp = { path = "tools/dev-idp" }
 awzy-server = { path = "libs/server" }
 awzy-signing = { path = "authz/libs/signing" }
+awzy-signing-aws = { path = "authz/libs/signing-aws" }
 awzy-classify = { path = "authz/libs/classify" }
 awzy-service-auth = { path = "authz/libs/service-auth" }
 awzy-store = { path = "libs/store" }

@@ -16,8 +16,11 @@ async fn main() -> anyhow::Result<()> {
         Ok(endpoint) => {
             let enforcement = Arc::new(Enforcement::awaiting_sync());
             state = state.with_enforcement(enforcement.clone());
+            // One or more public keys, so a new signing key is trusted before it signs (ADR 0092).
             let verifier = match std::env::var("AWZY_POLICY_VERIFY_KEY_FILE") {
-                Ok(path) => Some(Arc::new(awzy_signing::BundleVerifier::from_pem(&std::fs::read_to_string(&path)?)?)),
+                Ok(path) => {
+                    Some(Arc::new(awzy_signing::BundleVerifier::from_pem_bundle(&std::fs::read_to_string(&path)?)?))
+                }
                 Err(_) => {
                     tracing::warn!("AWZY_POLICY_VERIFY_KEY_FILE is not set; policy bundle signatures are not verified");
                     None

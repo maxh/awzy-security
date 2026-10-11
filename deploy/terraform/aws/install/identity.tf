@@ -16,6 +16,8 @@ locals {
     clickhouse = { namespace = "awzy-data", service_account = "clickhouse" }
     services   = { namespace = "awzy-system", service_account = "awzy" }
     portal     = { namespace = "awzy-portal", service_account = "awzy" }
+    # Apart from the other services, so only awzy-policy may sign policy (signing.tf).
+    policy = { namespace = "awzy-system", service_account = "awzy-policy" }
   }
 }
 

@@ -20,10 +20,6 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
-    tls = {
-      source  = "hashicorp/tls"
-      version = ">= 4.0.0"
-    }
   }
 }
 
@@ -208,29 +204,17 @@ output "scim" {
   sensitive = true
 }
 
-# awzy-policy signs every bundle it publishes and every enforcement mode change with this key, and
-# the PDPs apply only what verifies against its public key (ADR 0021, 0080), so writing to
-# awzy-policy's database doesn't change what's enforced. The private key is in this state, like
-# the other secrets here, until a KMS-backed signer replaces it.
-resource "tls_private_key" "policy_signing" {
-  algorithm   = "ECDSA"
-  ecdsa_curve = "P256"
-}
-
-resource "kubernetes_secret_v1" "policy_signing" {
-  metadata {
-    name      = "awzy-policy-signing"
-    namespace = kubernetes_namespace_v1.awzy["system"].metadata[0].name
-  }
-  data = { "signing.pem" = tls_private_key.policy_signing.private_key_pem_pkcs8 }
-}
-
+# awzy-policy signs every bundle, enforcement mode change, and outage fallback with the install's
+# KMS key, and the PDPs and gateways apply only what verifies against its public key (ADR 0021,
+# 0080, 0092), so writing to awzy-policy's database doesn't change what's enforced. The private
+# key never leaves KMS; only the public key is here. To rotate, add the new key's public key to
+# this secret, roll the PDPs and gateways, then point awzy-policy at the new key.
 resource "kubernetes_secret_v1" "policy_verify" {
   metadata {
     name      = "awzy-policy-verify"
     namespace = kubernetes_namespace_v1.awzy["system"].metadata[0].name
   }
-  data = { "verify.pem" = tls_private_key.policy_signing.public_key_pem }
+  data = { "verify.pem" = local.c.policy_signing.public_key_pem }
 }
 
 # The public keys of the admins enrolled for break-glass rollback (ADR 0022).
