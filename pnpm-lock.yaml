@@ -10,6 +10,9 @@ importers:
 
   .:
     devDependencies:
+      graphql:
+        specifier: ^16.11.0
+        version: 16.14.2
       oxfmt:
         specifier: 0.72.0
         version: 0.72.0

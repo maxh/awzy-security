@@ -5,10 +5,12 @@ use std::path::{Path, PathBuf};
 
 mod actor;
 mod persisted;
+mod qid;
 mod scalars;
 
 pub use actor::Actor;
 pub use persisted::{PersistedQueries, PersistedQueriesError};
+pub use qid::Qid;
 pub use scalars::UtcTimestamp;
 
 /// The deepest query either portal runs. Deep enough for the frontends' Relay queries and

@@ -1,13 +1,13 @@
 //! Enforcement modes (ADR 0007): the install's mode and automated containments' (ADR 0066), their
 //! history, the would-deny rates that tell an admin whether it's safe to enforce, and the switch.
 
-use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject, ID};
+use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject};
 use awzy_authz_proto::{
     authz::v1::EnforcementMode as WireMode,
     policy::v1::{EnforcementSetting, GetEnforcementRequest, ListEnforcementChangesRequest, SetEnforcementRequest},
 };
-use awzy_model::EnforcementMode;
-use awzy_portal::{Actor, UtcTimestamp};
+use awzy_model::{ChallengeId, EnforcementMode};
+use awzy_portal::{Actor, Qid, UtcTimestamp};
 use chrono::DateTime;
 
 use crate::{
@@ -200,17 +200,19 @@ pub struct SetEnforcementModePayload {
     pub enforcement: Option<Setting>,
     /// The security-key challenge to pass first, when the switch needs one: answer it, then switch
     /// again within its grant.
-    pub challenge_qid: Option<ID>,
+    pub challenge_qid: Option<Qid<ChallengeId>>,
 }
 
 /// Whether policy lets `viewer` change what's enforced now (`switch_enforcement`, ADR 0080):
 /// `Some` names the challenge to pass first, as the base policies ask for a security key.
-pub(crate) async fn switch_challenge(ctx: &Context<'_>, viewer: &access::Viewer) -> Result<Option<ID>> {
+pub(crate) async fn switch_challenge(ctx: &Context<'_>, viewer: &access::Viewer) -> Result<Option<Qid<ChallengeId>>> {
     let services = ctx.data::<crate::Services>()?;
     let switch = "switch_enforcement";
     match access::authorize_action(services, viewer, Surface::Portal, switch, PortalArea::Enforcement).await {
         Ok(()) => Ok(None),
-        Err(access::AccessError::Challenged { challenge_qid: Some(qid), .. }) => Ok(Some(ID(qid))),
+        Err(access::AccessError::Challenged { challenge_qid: Some(qid), .. }) => {
+            Ok(Some(Qid(qid.parse::<ChallengeId>()?)))
+        }
         Err(access::AccessError::Challenged { challenges, decision, .. }) => Err(format!(
             "changing what's enforced needs a {challenges} challenge, and none could be opened: is awzy-challenge \
              reachable? (decision {decision})"

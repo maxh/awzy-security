@@ -252,7 +252,7 @@ type Mutation {
 	"""
 	Signs the staff member who asked in to an approved session's client portal.
 	"""
-	signInToSupportSession(supportSessionQid: ID!): SupportSignIn!
+	signInToSupportSession(supportSessionQid: Qid!): SupportSignIn!
 }
 
 interface Node {
@@ -280,6 +280,12 @@ type PageInfo {
 	"""
 	endCursor: String
 }
+
+"""
+One of awzy's IDs, `<entity_type>_<uuid>`, e.g. `challenge_0199a8f2-6c1e-7b3a-9d4e-2f8c1a5b7e90`.
+Each field and argument takes one entity's; any other is refused.
+"""
+scalar Qid
 
 type Query {
 	"""
@@ -360,7 +366,7 @@ enum ReleaseChannel {
 }
 
 input RequestSupportSessionInput {
-	installQid: ID!
+	installQid: Qid!
 	"""
 	Client portal areas, e.g. "decisions".
 	"""
@@ -374,7 +380,7 @@ input RequestSupportSessionInput {
 }
 
 input RetireInstallInput {
-	installQid: ID!
+	installQid: Qid!
 }
 
 type RetireInstallPayload {
@@ -382,7 +388,7 @@ type RetireInstallPayload {
 }
 
 input SetInstallReleaseInput {
-	installQid: ID!
+	installQid: Qid!
 	channel: ReleaseChannel!
 	"""
 	Required for PINNED, and only then.

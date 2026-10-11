@@ -8,6 +8,7 @@
     "**/__generated__/**"
   ],
   "customScalarTypes": {
+    "Qid": "string",
     "UtcTimestamp": "string"
   },
   "persistConfig": {

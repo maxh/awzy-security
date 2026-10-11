@@ -11,7 +11,8 @@ use awzy_authz_proto::challenge::v1::{
     FinishKeyRegistrationRequest, FinishVerificationRequest, ListSecurityKeysRequest, RemoveSecurityKeyRequest,
     ResetSecurityKeyRequest, SecurityKey as WireKey,
 };
-use awzy_portal::UtcTimestamp;
+use awzy_model::{CeremonyId, ChallengeId, SecurityKeyId};
+use awzy_portal::{Qid, UtcTimestamp};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 
 use crate::{
@@ -29,7 +30,7 @@ pub struct SecurityKey(WireKey);
 #[Object]
 impl SecurityKey {
     /// QID: security_key_<uuid>.
-    async fn id(&self) -> ID {
+    pub async fn id(&self) -> ID {
         ID(self.0.qid.clone())
     }
 
@@ -44,8 +45,12 @@ impl SecurityKey {
     }
 
     /// The key that authorized adding this one; null for a person's first key.
-    async fn added_with_qid(&self) -> Option<&str> {
-        Some(self.0.added_with_qid.as_str()).filter(|s| !s.is_empty())
+    async fn added_with_qid(&self) -> Result<Option<Qid<SecurityKeyId>>> {
+        Ok(Some(&self.0.added_with_qid)
+            .filter(|s| !s.is_empty())
+            .map(|s| s.parse::<SecurityKeyId>())
+            .transpose()?
+            .map(Qid))
     }
 
     async fn created_at(&self) -> Option<UtcTimestamp> {
@@ -61,7 +66,7 @@ impl SecurityKey {
 #[derive(SimpleObject)]
 pub struct WebAuthnCeremony {
     /// Pass back with the browser's response.
-    pub ceremony_qid: ID,
+    pub ceremony_qid: Qid<CeremonyId>,
     /// The options for `navigator.credentials.create()` or `.get()`, as WebAuthn's JSON (binary
     /// fields base64url).
     pub options_json: String,
@@ -70,7 +75,7 @@ pub struct WebAuthnCeremony {
 /// A `navigator.credentials.get()` response.
 #[derive(InputObject)]
 pub struct AssertionInput {
-    pub ceremony_qid: ID,
+    pub ceremony_qid: Qid<CeremonyId>,
     /// `rawId`, base64url.
     pub credential_id: String,
     /// `response.clientDataJSON`, base64url.
@@ -84,7 +89,7 @@ pub struct AssertionInput {
 impl AssertionInput {
     fn wire(self) -> Result<WireAssertion> {
         Ok(WireAssertion {
-            ceremony_qid: self.ceremony_qid.0,
+            ceremony_qid: self.ceremony_qid.to_string(),
             credential_id: bytes("credentialId", &self.credential_id)?,
             client_data_json: bytes("clientDataJson", &self.client_data_json)?,
             authenticator_data: bytes("authenticatorData", &self.authenticator_data)?,
@@ -101,7 +106,7 @@ pub struct BeginSecurityKeyRegistrationInput {
 
 #[derive(InputObject)]
 pub struct FinishSecurityKeyRegistrationInput {
-    pub ceremony_qid: ID,
+    pub ceremony_qid: Qid<CeremonyId>,
     /// What to call the key, e.g. "YubiKey on my keychain".
     pub name: String,
     /// `response.clientDataJSON`, base64url.
@@ -112,19 +117,19 @@ pub struct FinishSecurityKeyRegistrationInput {
 
 #[derive(InputObject)]
 pub struct RemoveSecurityKeyInput {
-    pub security_key_qid: ID,
+    pub security_key_qid: Qid<SecurityKeyId>,
     /// An assertion over a `beginSecurityKeyChange` ceremony, from any of your keys.
     pub authorization: AssertionInput,
 }
 
 #[derive(InputObject)]
 pub struct ResetSecurityKeyInput {
-    pub security_key_qid: ID,
+    pub security_key_qid: Qid<SecurityKeyId>,
 }
 
 #[derive(InputObject)]
 pub struct BeginChallengeVerificationInput {
-    pub challenge_qid: ID,
+    pub challenge_qid: Qid<ChallengeId>,
 }
 
 #[derive(InputObject)]
@@ -137,8 +142,8 @@ pub struct SecurityKeyPayload {
     pub security_key: SecurityKey,
 }
 
-fn ceremony(ceremony_qid: String, options_json: String) -> WebAuthnCeremony {
-    WebAuthnCeremony { ceremony_qid: ID(ceremony_qid), options_json }
+fn ceremony(ceremony_qid: String, options_json: String) -> Result<WebAuthnCeremony> {
+    Ok(WebAuthnCeremony { ceremony_qid: Qid(ceremony_qid.parse::<CeremonyId>()?), options_json })
 }
 
 fn key(k: Option<WireKey>) -> Result<SecurityKeyPayload> {
@@ -166,6 +171,16 @@ impl SecurityKeyQuery {
     }
 }
 
+/// One of the signed-in person's own security keys, for `node(id)`. Someone else's key isn't
+/// found this way, since awzy-challenge lists keys by person; `securityKeys(humanId)` shows them.
+pub(crate) async fn get_by_id(ctx: &Context<'_>, id: SecurityKeyId) -> Result<Option<SecurityKey>> {
+    let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
+    let human_id = answering_human(&viewer)?;
+    let keys = client(ctx)?.list_security_keys(ListSecurityKeysRequest { human_id }).await.map_err(grpc)?;
+    let qid = id.to_string();
+    Ok(keys.into_inner().keys.into_iter().find(|k| k.qid == qid).map(SecurityKey))
+}
+
 #[derive(Default)]
 pub struct SecurityKeyMutation;
 
@@ -177,7 +192,7 @@ impl SecurityKeyMutation {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req = BeginKeyChangeRequest { human_id: answering_human(&viewer)? };
         let res = client(ctx)?.begin_key_change(req).await.map_err(grpc)?.into_inner();
-        Ok(ceremony(res.ceremony_qid, res.options_json))
+        ceremony(res.ceremony_qid, res.options_json)
     }
 
     /// A registration ceremony. Your first key needs nothing else; a later one needs
@@ -193,7 +208,7 @@ impl SecurityKeyMutation {
             authorization: input.authorization.map(AssertionInput::wire).transpose()?,
         };
         let res = client(ctx)?.begin_key_registration(req).await.map_err(grpc)?.into_inner();
-        Ok(ceremony(res.ceremony_qid, res.options_json))
+        ceremony(res.ceremony_qid, res.options_json)
     }
 
     async fn finish_security_key_registration(
@@ -203,7 +218,7 @@ impl SecurityKeyMutation {
     ) -> Result<SecurityKeyPayload> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req = FinishKeyRegistrationRequest {
-            ceremony_qid: input.ceremony_qid.0,
+            ceremony_qid: input.ceremony_qid.to_string(),
             human_id: answering_human(&viewer)?,
             name: input.name,
             client_data_json: bytes("clientDataJson", &input.client_data_json)?,
@@ -219,7 +234,7 @@ impl SecurityKeyMutation {
     ) -> Result<SecurityKeyPayload> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req = RemoveSecurityKeyRequest {
-            security_key_qid: input.security_key_qid.0,
+            security_key_qid: input.security_key_qid.to_string(),
             human_id: answering_human(&viewer)?,
             authorization: Some(input.authorization.wire()?),
         };
@@ -231,7 +246,7 @@ impl SecurityKeyMutation {
     async fn reset_security_key(&self, ctx: &Context<'_>, input: ResetSecurityKeyInput) -> Result<SecurityKeyPayload> {
         let viewer = require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
         let req = ResetSecurityKeyRequest {
-            security_key_qid: input.security_key_qid.0,
+            security_key_qid: input.security_key_qid.to_string(),
             removed_by_actor: Some(viewer.actor().into()),
             ..Default::default()
         };
@@ -245,10 +260,12 @@ impl SecurityKeyMutation {
         input: BeginChallengeVerificationInput,
     ) -> Result<WebAuthnCeremony> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
-        let req =
-            BeginVerificationRequest { challenge_qid: input.challenge_qid.0, human_id: answering_human(&viewer)? };
+        let req = BeginVerificationRequest {
+            challenge_qid: input.challenge_qid.to_string(),
+            human_id: answering_human(&viewer)?,
+        };
         let res = client(ctx)?.begin_verification(req).await.map_err(grpc)?.into_inner();
-        Ok(ceremony(res.ceremony_qid, res.options_json))
+        ceremony(res.ceremony_qid, res.options_json)
     }
 
     /// Passes the verification with your key's assertion.

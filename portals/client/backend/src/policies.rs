@@ -9,7 +9,7 @@ use awzy_authz_proto::{
     prost_types::Timestamp,
 };
 use awzy_model::PolicyBundleId;
-use awzy_portal::{Actor, UtcTimestamp};
+use awzy_portal::{Actor, Qid, UtcTimestamp};
 use chrono::DateTime;
 use tonic::Code;
 
@@ -186,7 +186,7 @@ pub struct CreatePolicyDraftPayload {
 #[derive(InputObject)]
 pub struct PublishPolicyBundleInput {
     /// A draft bundle's QID.
-    pub policy_bundle_qid: ID,
+    pub policy_bundle_qid: Qid<PolicyBundleId>,
     /// Publish even though the draft would stop the signed-in person administering policies.
     #[graphql(default)]
     pub accept_lockout: bool,
@@ -230,7 +230,7 @@ impl PolicyMutation {
         input: PublishPolicyBundleInput,
     ) -> Result<PublishPolicyBundlePayload> {
         let viewer = require(ctx, Administer, PortalArea::Policies).await?;
-        let id: PolicyBundleId = input.policy_bundle_qid.parse()?;
+        let id = input.policy_bundle_qid.0;
         if !input.accept_lockout {
             if let Some(why) = locks_out(ctx, &viewer, id).await? {
                 return Ok(PublishPolicyBundlePayload { bundle: None, would_lock_you_out: Some(why) });

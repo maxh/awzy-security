@@ -3,7 +3,8 @@
 //! person closes one here once they've reviewed it.
 
 use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject, ID};
-use awzy_portal::{Actor, UtcTimestamp};
+use awzy_model::InvestigationId;
+use awzy_portal::{Actor, Qid, UtcTimestamp};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -183,7 +184,7 @@ pub struct Investigation(pub WireInvestigation);
 #[Object]
 impl Investigation {
     /// QID: investigation_<uuid>.
-    async fn id(&self) -> ID {
+    pub async fn id(&self) -> ID {
         ID(self.0.qid.clone())
     }
 
@@ -289,17 +290,17 @@ impl InvestigationQuery {
         let list = list(context(ctx)?, status.map(InvestigationStatus::as_str), first).await?;
         Ok(list.into_iter().map(Investigation).collect())
     }
+}
 
-    /// One investigation by its QID.
-    async fn investigation(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Investigation>> {
-        require(ctx, PortalAction::View, PortalArea::Investigations).await?;
-        Ok(get(context(ctx)?, &id.0).await?.map(Investigation))
-    }
+/// One investigation, for `node(id)`. For those who may view investigations.
+pub(crate) async fn get_by_id(ctx: &Context<'_>, id: InvestigationId) -> Result<Option<Investigation>> {
+    require(ctx, PortalAction::View, PortalArea::Investigations).await?;
+    Ok(get(context(ctx)?, &id.to_string()).await?.map(Investigation))
 }
 
 #[derive(InputObject)]
 pub struct CloseInvestigationInput {
-    pub investigation_qid: ID,
+    pub investigation_qid: Qid<InvestigationId>,
     /// What the review found.
     pub reason: String,
 }
@@ -325,7 +326,7 @@ impl InvestigationMutation {
         if reason.is_empty() {
             return Err("say what the review found".into());
         }
-        let closed = close(context(ctx)?, &input.investigation_qid.0, reason, &viewer.actor()).await?;
+        let closed = close(context(ctx)?, &input.investigation_qid.to_string(), reason, &viewer.actor()).await?;
         Ok(CloseInvestigationPayload { investigation: Investigation(closed) })
     }
 }

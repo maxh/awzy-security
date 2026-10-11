@@ -7,11 +7,13 @@
 
 use std::collections::BTreeMap;
 
-use async_graphql::{Context, Object, Result, SimpleObject, ID};
-use awzy_model::{Check, Decision, EntityRef, PolicyBundleId, Verdict};
+use async_graphql::{Context, Object, Result, SimpleObject};
+use awzy_model::{Check, Decision, DecisionId, EntityRef, PolicyBundleId, Verdict};
 use awzy_pdp::{replay::Replayer, Pdp};
+use awzy_portal::Qid;
 use chrono::{Duration, Utc};
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::{
     access::{require, PortalAction, PortalArea},
@@ -106,7 +108,8 @@ pub struct PolicyDryRunExample {
     /// How many times this exact request was decided in the window.
     pub decisions: u64,
     /// One of those decisions, `decision_<uuid>`.
-    pub sample_decision_qid: String,
+    /// Null if the sample's ID in ClickHouse isn't a UUID.
+    pub sample_decision_qid: Option<Qid<DecisionId>>,
     /// The policies that decided it under the active bundle, and under the draft.
     pub policies_before: Vec<String>,
     pub policies_after: Vec<String>,
@@ -195,7 +198,7 @@ pub async fn compare(
                 action: g.action.clone(),
                 resource_id: g.resource_id.clone(),
                 decisions: g.decisions,
-                sample_decision_qid: format!("decision_{}", g.sample_id),
+                sample_decision_qid: Uuid::parse_str(&g.sample_id).ok().map(|u| Qid(DecisionId::from_uuid(u))),
                 policies_before: before.policies,
                 policies_after: after.policies,
             });
@@ -214,10 +217,15 @@ impl DryRunQuery {
     /// What a draft bundle would change (ADR 0049): recent requests replayed under the active
     /// bundle and the draft, with today's people and resources, and the verdicts compared.
     /// `days` defaults to 7, at most 30.
-    async fn policy_dry_run(&self, ctx: &Context<'_>, draft_qid: ID, days: Option<u32>) -> Result<PolicyDryRun> {
+    async fn policy_dry_run(
+        &self,
+        ctx: &Context<'_>,
+        draft_qid: Qid<PolicyBundleId>,
+        days: Option<u32>,
+    ) -> Result<PolicyDryRun> {
         require(ctx, PortalAction::View, PortalArea::Policies).await?;
         require(ctx, PortalAction::View, PortalArea::Decisions).await?;
-        Ok(run(ctx.data::<Services>()?, &draft_qid, days).await?)
+        Ok(run(ctx.data::<Services>()?, &draft_qid.to_string(), days).await?)
     }
 }
 
@@ -230,7 +238,7 @@ pub(crate) fn to_json(r: &PolicyDryRun) -> serde_json::Value {
             "action": e.action,
             "resource_id": e.resource_id,
             "decisions": e.decisions,
-            "sample_decision_qid": e.sample_decision_qid,
+            "sample_decision_qid": e.sample_decision_qid.map(|q| q.to_string()),
             "policies_before": e.policies_before,
             "policies_after": e.policies_after,
         })
@@ -303,7 +311,6 @@ mod tests {
 
     use awzy_pdp::{principals::Principals, resources::Resources};
     use serde_json::json;
-    use uuid::Uuid;
 
     use super::*;
     use crate::policies::tests::{serve_fake_policy, FakePolicy};
@@ -361,7 +368,7 @@ mod tests {
         assert_eq!(c.examples[0].principal_id, "alice", "most frequent first");
         assert_eq!(c.examples[0].policies_before, ["security-team-read"]);
         assert_eq!(c.examples[0].policies_after, ["no-security-reads"]);
-        assert!(c.examples[0].sample_decision_qid.starts_with("decision_"));
+        assert!(c.examples[0].sample_decision_qid.is_some(), "a UUID from ClickHouse is a decision QID");
         assert_eq!(unchanged, 7, "bob isn't in security");
         assert_eq!(skipped, 1);
         assert!(reason.unwrap().contains("broken"));
