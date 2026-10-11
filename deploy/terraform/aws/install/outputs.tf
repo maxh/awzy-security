@@ -26,6 +26,8 @@ output "install_contract" {
     }
     object_store = {
       bucket = aws_s3_bucket.data.id
+      # S3-compatible URL, for ClickHouse's backups (ADR 0104).
+      url = "https://${aws_s3_bucket.data.bucket_regional_domain_name}"
     }
     kms_key_id = aws_kms_key.install.arn
     # awzy-policy signs with the key; the PDPs and gateways trust the public key (ADR 0092).

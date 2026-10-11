@@ -1,0 +1,76 @@
+{{- $ch := .Values.clickhouse }}
+{{- if and $ch.enabled $ch.backup.url }}
+# Backs up decisions and events to the install's bucket (ADR 0104). ClickHouse runs the backup and
+# writes it with its own workload identity; this Job only asks. The Kafka queues and views aren't
+# backed up: the migrate Job recreates them, and a restore rewinds their consumer group instead
+# (docs site, "Data retention and backups").
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: awzy-clickhouse-backup
+  namespace: {{ .Values.namespaces.data }}
+  labels: {{- include "awzy.labels" (dict "root" . "name" "awzy-clickhouse-backup") | nindent 4 }}
+spec:
+  schedule: {{ $ch.backup.schedule | quote }}
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels: {{- include "awzy.labels" (dict "root" . "name" "awzy-clickhouse-backup") | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          {{- with .Values.image.pullSecret }}
+          imagePullSecrets: [{ name: {{ . }} }]
+          {{- end }}
+          securityContext:
+            runAsNonRoot: true
+            # The image's clickhouse user.
+            runAsUser: 101
+            runAsGroup: 101
+            seccompProfile: { type: RuntimeDefault }
+          volumes:
+            - { name: tmp, emptyDir: {} }
+          containers:
+            - name: backup
+              image: {{ include "awzy.thirdPartyImage" (dict "root" $ "ref" "clickhouse-server:25.8-0152dd511bef@sha256:0152dd511befe6a2c2ef53e930726179669b08116da78500b37c51c96ff5ee77") }}
+              command: [/bin/sh, -c]
+              args:
+                - |
+                  set -eu
+                  q() { clickhouse-client --host "clickhouse-awzy.$NAMESPACE.svc" --user "$CH_USER" --password "$CH_PASSWORD" --query "$1"; }
+                  week=$(date -u +%G-W%V)
+                  now=$(date -u +%Y%m%dT%H%M%SZ)
+                  tables="TABLE $CH_DATABASE.decisions, TABLE $CH_DATABASE.events"
+                  # This week's full backup, if there is one.
+                  full=$(q "SELECT max(_path) FROM s3('$BACKUP_URL/$week/*-full/.backup', 'One') SETTINGS s3_throw_on_zero_files_match = 0")
+                  if [ -z "$full" ]; then
+                    q "BACKUP $tables TO S3('$BACKUP_URL/$week/$now-full')"
+                    echo "full backup $week/$now-full"
+                  else
+                    base=$(basename "$(dirname "$full")")
+                    q "BACKUP $tables TO S3('$BACKUP_URL/$week/$now') SETTINGS base_backup = S3('$BACKUP_URL/$week/$base')"
+                    echo "incremental backup $week/$now, on $week/$base"
+                  fi
+              env:
+                - { name: NAMESPACE, value: {{ .Values.namespaces.data | quote }} }
+                - { name: BACKUP_URL, value: {{ trimSuffix "/" $ch.backup.url | quote }} }
+                - { name: CH_DATABASE, value: {{ $ch.database | quote }} }
+                - { name: CH_USER, value: {{ $ch.user | quote }} }
+                - name: CH_PASSWORD
+                  valueFrom: { secretKeyRef: { name: {{ $ch.passwordSecret }}, key: password } }
+                - { name: HOME, value: /tmp }
+              volumeMounts:
+                - { name: tmp, mountPath: /tmp }
+              resources:
+                requests: { cpu: 10m, memory: 64Mi }
+                limits: { memory: 256Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+{{- end }}

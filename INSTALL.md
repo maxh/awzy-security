@@ -85,8 +85,9 @@ tofu apply install.plan                      # 20–30 minutes, most of it EKS a
 ```
 
 `aws/install` takes `azs` (two zones), `registry_prefix` (`registry.awzysecurity.com/awzy`),
-and optionally `size_profile`, `vpc_cidr`, `eks_version`, `eks_public_access_cidrs`, and
-`deletion_protection`. Its one output, `install_contract`, is everything bootstrap needs.
+and optionally `size_profile`, `vpc_cidr`, `eks_version`, `eks_public_access_cidrs`,
+`deletion_protection`, and `backup_retention_days` (how long ClickHouse's backups are kept). Its
+one output, `install_contract`, is everything bootstrap needs.
 
 `size_profile` sets what costs the most:
 
