@@ -18,7 +18,8 @@ description: What awzy can and can't see, and how releases reach your install.
   a heartbeat to its corp portal: versions, readiness, and a few aggregate numbers, in a fixed
   schema with no free-form fields. You can turn it off. A diagnostics bundle from the client
   portal reaches awzy only if an admin downloads it and sends it, and holds no data about your
-  people, resources, decisions, or policies.
+  people, resources, decisions, or policies. How the heartbeat compares with your own monitoring
+  is in [Monitoring and alerts](/guides/monitoring/#what-awzy-sees-and-what-you-see).
 - **Your own services, only when you turn them on.** Awzy Bot and investigations send prompts,
   including decisions and document text, to the model service in your own cloud account. Slack
   notifications send short messages naming the request to your own Slack workspace. Connectors
