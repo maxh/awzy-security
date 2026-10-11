@@ -1,5 +1,5 @@
 {
-  "checksum": "f39ff2d658aa2c853fa4dd9791c1858337488510f1fb8fb3f79a68b3ef5121a5",
+  "checksum": "920228cb8e2f0f4f79595299bc7fb38f2ba803bfd8c8262e6c71d7ae45bcb1b0",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -5231,32 +5231,16 @@
             "target": "base64"
           },
           {
-            "id": "bytes 1.12.1",
-            "target": "bytes"
-          },
-          {
-            "id": "http-body-util 0.1.5",
-            "target": "http_body_util"
-          },
-          {
-            "id": "hyper 1.12.0",
-            "target": "hyper"
-          },
-          {
-            "id": "hyper-rustls 0.27.10",
-            "target": "hyper_rustls"
-          },
-          {
-            "id": "hyper-util 0.1.21",
-            "target": "hyper_util"
+            "id": "http 1.5.0",
+            "target": "http"
           },
           {
             "id": "p256 0.13.2",
             "target": "p256"
           },
           {
-            "id": "rustls 0.23.45",
-            "target": "rustls"
+            "id": "serde 1.0.229",
+            "target": "serde"
           },
           {
             "id": "serde_json 1.0.151",
