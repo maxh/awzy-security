@@ -137,6 +137,9 @@ jobs:
           tofu_wrapper: false
       - name: Terraform is valid
         run: tools/ci/check-terraform.sh
+      # A release needs exactly the bootstrap level the same commit provides (ADR 0098).
+      - name: Bootstrap level matches the chart
+        run: tools/ci/check-bootstrap-level.sh
       # Every image the chart runs is awzy's or a listed, mirrored one (ADR 0057).
       - name: Chart images are mirrored
         run: tools/ci/mirror-images.sh --check

@@ -115,7 +115,8 @@ resource "helm_release" "config" {
     cosignPubKey = var.cosign_public_key
     chart        = { repository = "${local.registry_host}/awzy/charts", version = var.chart_version }
     awzyValues = {
-      image = { registry = local.c.registry_prefix }
+      bootstrap = { level = local.bootstrap_level }
+      image     = { registry = local.c.registry_prefix }
       postgres = {
         host      = local.c.postgres.host
         port      = local.c.postgres.port

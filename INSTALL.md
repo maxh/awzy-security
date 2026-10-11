@@ -216,10 +216,18 @@ You can use your own monitoring instead: scrape each awzy pod's `/metrics` (port
 - **Upgrades** follow the release channel the install was registered with: Argo CD moves to the
   version the channel names within minutes of awzy moving it. `fast` gets every release as it's
   published; a release reaches `stable` after it has run on `fast` for at least a day and awzy
-  promotes it. A pinned install stays on its version. Setting `chart_version`
-  to an exact version and applying bootstrap again holds any install there, and setting an earlier
-  one rolls it back. Apply bootstrap from the same awzy commit as the chart: a release can change
-  what bootstrap makes for it (the policy signing key moved to KMS this way). Upgrades and
+  promotes it. A pinned install stays on its version. awzy's registry serves an install only the
+  version its channel names or the one it's pinned to, so holding an install on a version, or
+  rolling it back to an earlier one, is a pin: ask awzy to pin the install in the corp portal, then
+  set `chart_version` to that version and apply bootstrap. A `chart_version` the registry isn't
+  serving shows in Argo CD as `ComparisonError … not found`. Apply bootstrap from the same awzy
+  commit as the chart: a release can change what bootstrap makes for it (the policy signing key
+  moved to KMS this way).
+- **A release that needs a newer bootstrap waits.** Each release names the bootstrap level it needs,
+  and bootstrap passes the install's. When a channel brings a release your bootstrap is too old for,
+  Argo CD installs nothing and keeps the release you have running; `kubectl -n awzy-ops get
+  application awzy` shows `ComparisonError` and a message naming the awzy commit to apply. Apply the
+  cloud layer and then bootstrap from that commit, and the release installs. Upgrades and
   rollbacks were tested on the example install under load (the deployment plan's step 4). If a sync failed (a hook
   Job that kept failing, say), Argo CD keeps retrying that revision after you move on; stop it
   with `kubectl -n awzy-ops patch application awzy --type merge -p
