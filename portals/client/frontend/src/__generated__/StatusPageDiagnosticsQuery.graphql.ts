@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<da879d7936380efcdaf616de46f6942b>>
+ * @generated SignedSource<<ddd5632c3d7b4946f19bb707a18902f0>>
+ * @relayHash 40073846613a6a1d62e6320776eebd27
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID de0ad711c5c39e99744046155fff8a5ed7f1d3a0af00477c59e06ed9a4d1aa61
 
 import { ConcreteRequest } from 'relay-runtime';
 export type StatusPageDiagnosticsQuery$variables = Record<PropertyKey, never>;
@@ -45,12 +48,11 @@ return {
     "selections": (v0/*:: as any*/)
   },
   "params": {
-    "cacheID": "40073846613a6a1d62e6320776eebd27",
-    "id": null,
+    "id": "de0ad711c5c39e99744046155fff8a5ed7f1d3a0af00477c59e06ed9a4d1aa61",
     "metadata": {},
     "name": "StatusPageDiagnosticsQuery",
     "operationKind": "query",
-    "text": "query StatusPageDiagnosticsQuery {\n  diagnosticsBundle\n}\n"
+    "text": null
   }
 };
 })();

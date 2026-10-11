@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<eed146c61f929f8e397a8fb69814a6cb>>
+ * @generated SignedSource<<0ef90585b1db0c2f39c336fc81f674d7>>
+ * @relayHash 180122e31113716b55fda2d4f4f5710a
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 8cc56bbb9ac454042ab80d1afe8efb4f3e814a9e59fa6dcd2bba59e25222b7d4
 
 import { ConcreteRequest } from 'relay-runtime';
 export type RegisterServiceAccountInput = {
@@ -93,12 +96,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "180122e31113716b55fda2d4f4f5710a",
-    "id": null,
+    "id": "8cc56bbb9ac454042ab80d1afe8efb4f3e814a9e59fa6dcd2bba59e25222b7d4",
     "metadata": {},
     "name": "DirectoryPageRegisterMutation",
     "operationKind": "mutation",
-    "text": "mutation DirectoryPageRegisterMutation(\n  $input: RegisterServiceAccountInput!\n) {\n  registerServiceAccount(input: $input) {\n    serviceAccount {\n      id\n    }\n  }\n}\n"
+    "text": null
   }
 };
 })();

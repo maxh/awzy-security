@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<4b15ac520882a730611eb25b67f72b1e>>
+ * @generated SignedSource<<79798d6273a90ea0594aca32b6f7b56b>>
+ * @relayHash 73adbd631dc96e7273015acda3c5287f
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID eaa3a9a04f5287ac6817615e5d6bf77c3c66e6dda69e9a3b3ea642ef27f27e08
 
 import { ConcreteRequest } from 'relay-runtime';
 export type BeginSecurityKeyRegistrationInput = {
@@ -91,12 +94,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "73adbd631dc96e7273015acda3c5287f",
-    "id": null,
+    "id": "eaa3a9a04f5287ac6817615e5d6bf77c3c66e6dda69e9a3b3ea642ef27f27e08",
     "metadata": {},
     "name": "ChallengesPageBeginRegistrationMutation",
     "operationKind": "mutation",
-    "text": "mutation ChallengesPageBeginRegistrationMutation(\n  $input: BeginSecurityKeyRegistrationInput!\n) {\n  beginSecurityKeyRegistration(input: $input) {\n    ceremonyQid\n    optionsJson\n  }\n}\n"
+    "text": null
   }
 };
 })();

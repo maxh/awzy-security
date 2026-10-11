@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<0e9e88e1eb487f7deaceed53dfc8811a>>
+ * @generated SignedSource<<99b0be8237d94730c22206f705a04819>>
+ * @relayHash e5ac17c05b6013710b95636ede7ad447
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID c9859bae49af9e63fd8517414b3c42621d97fd5308824d84d5ccfc7bfd9bbf24
 
 import { ConcreteRequest } from 'relay-runtime';
 export type ChallengeKind = "APPROVAL" | "BIOMETRIC" | "JUSTIFICATION" | "VERIFICATION" | "%future added value";
@@ -347,12 +350,11 @@ return {
     "selections": (v9/*:: as any*/)
   },
   "params": {
-    "cacheID": "e5ac17c05b6013710b95636ede7ad447",
-    "id": null,
+    "id": "c9859bae49af9e63fd8517414b3c42621d97fd5308824d84d5ccfc7bfd9bbf24",
     "metadata": {},
     "name": "ChallengesPageQuery",
     "operationKind": "query",
-    "text": "query ChallengesPageQuery {\n  canAdminister: viewerCan(action: ADMINISTER, area: CHALLENGES)\n  pending: myChallenges(status: PENDING) {\n    id\n    principal {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    kinds\n    passed\n    expiresAt\n  }\n  recent: myChallenges(first: 20) {\n    id\n    principal {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    status\n    createdAt\n    decidedBy {\n      label\n    }\n    grantExpiresAt\n  }\n  mySecurityKeys {\n    id\n    name\n    createdAt\n    lastUsedAt\n  }\n  toApprove: challengesToApprove {\n    id\n    principal {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    kinds\n    passed\n    answererId\n    justification\n    createdAt\n  }\n}\n"
+    "text": null
   }
 };
 })();

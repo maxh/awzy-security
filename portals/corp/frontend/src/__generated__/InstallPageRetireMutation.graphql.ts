@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<bc24670a700489c05f2f23ccbb319923>>
+ * @generated SignedSource<<036d5e8eca145f4cd4e78838ec598363>>
+ * @relayHash 77193d1036930d84b27f9ef9f893411f
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 2c4d5141282284cb7703d1051df1d05f1b07ecd4aa6960c802f093b644f08aae
 
 import { ConcreteRequest } from 'relay-runtime';
 export type RetireInstallInput = {
@@ -97,12 +100,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "77193d1036930d84b27f9ef9f893411f",
-    "id": null,
+    "id": "2c4d5141282284cb7703d1051df1d05f1b07ecd4aa6960c802f093b644f08aae",
     "metadata": {},
     "name": "InstallPageRetireMutation",
     "operationKind": "mutation",
-    "text": "mutation InstallPageRetireMutation(\n  $input: RetireInstallInput!\n) {\n  retireInstall(input: $input) {\n    install {\n      id\n      retiredAt\n    }\n  }\n}\n"
+    "text": null
   }
 };
 })();

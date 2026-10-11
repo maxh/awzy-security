@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<94ba2e6fd3eee9f7fc6e6485ada15c04>>
+ * @generated SignedSource<<15cfd12215643463d5185e2954b4e204>>
+ * @relayHash 2b1c524e41ac3ce4a7daa3aee28dc9ed
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID b5c697674e42f5b45e5745129b1bc493c02cf123dc68cc6f1622599ee8949221
 
 import { ConcreteRequest } from 'relay-runtime';
 export type InstallHealth = "DEGRADED" | "NEVER_REPORTED" | "NOT_REPORTING" | "OK" | "%future added value";
@@ -129,12 +132,11 @@ return {
     "selections": (v0/*:: as any*/)
   },
   "params": {
-    "cacheID": "2b1c524e41ac3ce4a7daa3aee28dc9ed",
-    "id": null,
+    "id": "b5c697674e42f5b45e5745129b1bc493c02cf123dc68cc6f1622599ee8949221",
     "metadata": {},
     "name": "ReleasesPageQuery",
     "operationKind": "query",
-    "text": "query ReleasesPageQuery {\n  releases {\n    version\n    installCount\n    installs {\n      id\n      client\n      environment\n      channel\n      pinnedVersion\n      health\n    }\n  }\n}\n"
+    "text": null
   }
 };
 })();

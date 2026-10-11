@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<02aa00951524189bce89d352a121a8a0>>
+ * @generated SignedSource<<14d8343dca81228ce2be63fe0257bfcd>>
+ * @relayHash 10c289993e13974506f6fde744eb10c6
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 1b26eb8f2d31f3ba7cf6aed1abd592699344692db7d618ee1947bb836b0d094b
 
 import { ConcreteRequest } from 'relay-runtime';
 export type EnforcementMode = "ENFORCE" | "MONITOR" | "%future added value";
@@ -129,12 +132,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "10c289993e13974506f6fde744eb10c6",
-    "id": null,
+    "id": "1b26eb8f2d31f3ba7cf6aed1abd592699344692db7d618ee1947bb836b0d094b",
     "metadata": {},
     "name": "EnforcementPageSetModeMutation",
     "operationKind": "mutation",
-    "text": "mutation EnforcementPageSetModeMutation(\n  $input: SetEnforcementModeInput!\n) {\n  setEnforcementMode(input: $input) {\n    enforcement {\n      mode\n      changedBy {\n        label\n      }\n      changedAt\n    }\n    challengeQid\n  }\n}\n"
+    "text": null
   }
 };
 })();

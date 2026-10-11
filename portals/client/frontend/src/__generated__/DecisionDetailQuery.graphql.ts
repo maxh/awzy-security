@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<137c831801933b97ccdf00d7960f6c6f>>
+ * @generated SignedSource<<99fbb81902d7758fbd28f59e19fa7e0e>>
+ * @relayHash 34a0e32510b0bec291f00b43da39c286
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID d03a2c38da327e09426ffebcf0fac5688429c550070e3d80c46394f9849068b0
 
 import { ConcreteRequest } from 'relay-runtime';
 import { FragmentRefs } from "relay-runtime";
@@ -249,12 +252,11 @@ return {
     ]
   },
   "params": {
-    "cacheID": "34a0e32510b0bec291f00b43da39c286",
-    "id": null,
+    "id": "d03a2c38da327e09426ffebcf0fac5688429c550070e3d80c46394f9849068b0",
     "metadata": {},
     "name": "DecisionDetailQuery",
     "operationKind": "query",
-    "text": "query DecisionDetailQuery(\n  $id: ID!\n) {\n  node(id: $id) {\n    __typename\n    ...DecisionDetail_decision\n    id\n  }\n}\n\nfragment DecisionDetail_decision on Decision {\n  id\n  at\n  principal {\n    type\n    id\n  }\n  onBehalfOf {\n    human {\n      type\n      id\n    }\n    verdict\n    determiningPolicies {\n      id\n      source\n    }\n  }\n  humanPresent\n  action\n  resource {\n    type\n    id\n  }\n  verdict\n  mode\n  challenges\n  policyVersion\n  context\n  determiningPolicies {\n    id\n    source\n  }\n}\n"
+    "text": null
   }
 };
 })();

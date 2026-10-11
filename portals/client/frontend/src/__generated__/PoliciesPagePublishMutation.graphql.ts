@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<6749616d18dc81321badcea6968dd716>>
+ * @generated SignedSource<<72924728b6bccbe8aa6e66b7318bb4cc>>
+ * @relayHash 24d3283630f83f10782cdde3b420478c
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 4ad651c35ee3bd13abb6e171752d81497dbf846c19110a96817d73158ed7c575
 
 import { ConcreteRequest } from 'relay-runtime';
 export type PolicyBundleStatus = "ACTIVE" | "DRAFT" | "SUPERSEDED" | "%future added value";
@@ -115,12 +118,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "24d3283630f83f10782cdde3b420478c",
-    "id": null,
+    "id": "4ad651c35ee3bd13abb6e171752d81497dbf846c19110a96817d73158ed7c575",
     "metadata": {},
     "name": "PoliciesPagePublishMutation",
     "operationKind": "mutation",
-    "text": "mutation PoliciesPagePublishMutation(\n  $input: PublishPolicyBundleInput!\n) {\n  publishPolicyBundle(input: $input) {\n    bundle {\n      id\n      status\n      publishedAt\n    }\n    wouldLockYouOut\n  }\n}\n"
+    "text": null
   }
 };
 })();

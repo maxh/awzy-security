@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<90d0b02b790217847d511652644d3a50>>
+ * @generated SignedSource<<68d77cea4b92d2c5687a22cfea188d67>>
+ * @relayHash 5ee87055a013971c0b9706bad26264e8
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 0a35645f54555793d91788a6c5c0e9e39aa98c2874f51e13662df462e238064c
 
 import { ConcreteRequest } from 'relay-runtime';
 export type InstallHealth = "DEGRADED" | "NEVER_REPORTED" | "NOT_REPORTING" | "OK" | "%future added value";
@@ -371,12 +374,11 @@ return {
     ]
   },
   "params": {
-    "cacheID": "5ee87055a013971c0b9706bad26264e8",
-    "id": null,
+    "id": "0a35645f54555793d91788a6c5c0e9e39aa98c2874f51e13662df462e238064c",
     "metadata": {},
     "name": "InstallPageQuery",
     "operationKind": "query",
-    "text": "query InstallPageQuery(\n  $id: ID!\n) {\n  node(id: $id) {\n    __typename\n    ... on Install {\n      client\n      environment\n      cloud\n      region\n      channel\n      pinnedVersion\n      health\n      chartVersion\n      lastSeenAt\n      createdBy {\n        label\n      }\n      createdAt\n      retiredAt\n      retiredBy {\n        label\n      }\n      services {\n        name\n        version\n        imageDigest\n        replicasReady\n        replicasDesired\n        restarts24h\n        healthy\n      }\n      metrics {\n        decisionsPerSecond\n        pdpP99Ms\n        errorRate\n        kafkaLag\n        clickhouseDiskUsedPercent\n      }\n      versionHistory {\n        chartVersion\n        firstSeenAt\n      }\n    }\n    id\n  }\n}\n"
+    "text": null
   }
 };
 })();

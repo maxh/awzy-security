@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<ce58c38bdf1ddf70420924f537814643>>
+ * @generated SignedSource<<b3cda0b2fd643b32ee735f6fb36371b0>>
+ * @relayHash 7b2821b51818af82f530c0fb65d8e045
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID bac2903429b62a969e916feb25804e6197adf082bbb60a5081c46c3354011025
 
 import { ConcreteRequest } from 'relay-runtime';
 export type InvestigationContainment = "NONE" | "PROPOSE" | "RECOMMEND" | "%future added value";
@@ -286,12 +289,11 @@ return {
     "selections": (v2/*:: as any*/)
   },
   "params": {
-    "cacheID": "7b2821b51818af82f530c0fb65d8e045",
-    "id": null,
+    "id": "bac2903429b62a969e916feb25804e6197adf082bbb60a5081c46c3354011025",
     "metadata": {},
     "name": "InvestigationsPageQuery",
     "operationKind": "query",
-    "text": "query InvestigationsPageQuery(\n  $status: InvestigationStatus\n) {\n  canClose: viewerCan(action: ADMINISTER, area: INVESTIGATIONS)\n  investigations(status: $status, first: 100) {\n    id\n    principal {\n      type\n      id\n    }\n    trigger\n    floor\n    status\n    verdict\n    risk\n    summary\n    evidence {\n      evidenceId\n      why\n    }\n    containment\n    notes\n    model\n    inputTokens\n    outputTokens\n    finishedAt\n    closedBy {\n      label\n    }\n    closedAt\n    closeReason\n  }\n}\n"
+    "text": null
   }
 };
 })();

@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<cb2153c5a800eb6a0cd2553ccb7cc089>>
+ * @generated SignedSource<<91b85d6821f0e366d2713e4751c64ca6>>
+ * @relayHash ad856d27a9f5f6ebefe573fe4011b36a
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 30d03cb15626a8f0bb2b0cbd9931abcbef34e0053df04f129c78f33bbcbb0686
 
 import { ConcreteRequest } from 'relay-runtime';
 export type DirectoryPageSummaryQuery$variables = Record<PropertyKey, never>;
@@ -90,12 +93,11 @@ return {
     "selections": (v0/*:: as any*/)
   },
   "params": {
-    "cacheID": "ad856d27a9f5f6ebefe573fe4011b36a",
-    "id": null,
+    "id": "30d03cb15626a8f0bb2b0cbd9931abcbef34e0053df04f129c78f33bbcbb0686",
     "metadata": {},
     "name": "DirectoryPageSummaryQuery",
     "operationKind": "query",
-    "text": "query DirectoryPageSummaryQuery {\n  directorySummary {\n    humans\n    activeHumans\n    groups\n    serviceAccounts\n    lastProvisionedAt\n  }\n}\n"
+    "text": null
   }
 };
 })();
