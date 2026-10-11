@@ -105,6 +105,11 @@ spec:
             - { name: AWZY_SHUTDOWN_DELAY_SECS, value: {{ $root.Values.shutdownDelaySeconds | quote }} }
             # The commit this chart was released from (appVersion, set by publish-chart.sh).
             - { name: AWZY_RELEASE_VERSION, value: {{ $root.Chart.AppVersion | quote }} }
+            {{- with $root.Values.tracing.otlpEndpoint }}
+            # OpenTelemetry traces to your collector (ADR 0097).
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: {{ . | quote }} }
+            - { name: OTEL_TRACES_SAMPLER_ARG, value: {{ $root.Values.tracing.sampleRatio | quote }} }
+            {{- end }}
             {{- with .env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

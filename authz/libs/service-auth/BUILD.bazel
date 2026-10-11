@@ -4,6 +4,9 @@ load("//tools:rust.bzl", "awzy_rust_library")
 awzy_rust_library(
     name = "service-auth",
     crate_name = "awzy_service_auth",
-    deps = ["//authz/libs/identity"],
+    deps = [
+        "//authz/libs/identity",
+        "//libs/telemetry",
+    ],
     visibility = ["//tools:client_side"],
 )

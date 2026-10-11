@@ -275,3 +275,10 @@ gateway:
 shutdownDelaySeconds: 10
 
 logFormat: json
+
+# OpenTelemetry traces from every service (ADR 0097), over OTLP gRPC to your collector, e.g.
+# http://otel-collector.observability.svc:4317. Empty: no traces. sampleRatio is the share sent
+# (1: all, so the collector can keep the slow ones).
+tracing:
+  otlpEndpoint: ""
+  sampleRatio: 1
