@@ -215,7 +215,8 @@ function Connectors({ queryRef }: { queryRef: PreloadedQuery<ConnectorsPageQuery
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 
-function Configure({
+/** The form that sets a connector up or changes it, in a modal. */
+export function Configure({
   connector,
   current,
   credentialsSupported,
