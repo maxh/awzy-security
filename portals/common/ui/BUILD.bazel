@@ -1,5 +1,6 @@
 load("@aspect_rules_js//npm:defs.bzl", "npm_package")
 load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//portals/common/ui:vitest/package_json.bzl", vitest_bin = "bin")
 
 npm_link_all_packages()
 
@@ -11,4 +12,17 @@ npm_package(
         ":node_modules",
     ],
     visibility = ["//visibility:public"],
+)
+
+# The unit tests (`*.test.ts`), with Vitest (#226), unsandboxed like the portals' builds.
+vitest_bin.vitest_test(
+    name = "unit",
+    size = "small",
+    args = ["run"],
+    chdir = package_name(),
+    data = glob(["src/**/*.ts", "src/**/*.tsx"]) + [
+        "package.json",
+        ":node_modules",
+    ],
+    tags = ["no-sandbox"],
 )

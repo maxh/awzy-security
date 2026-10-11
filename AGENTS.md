@@ -108,7 +108,8 @@ bazel build --config=lint //...                    # clippy
   removing (JSON read by field name, hand-built HTTP and Kubernetes clients, string errors, files
   over 800 lines) and fails if a count grows; lower its baseline when you shrink one.
 - **Tests** sit next to the code in `#[cfg(test)] mod tests` and read as statements of behavior
-  (`delegation_never_exceeds_the_person`).
+  (`delegation_never_exceeds_the_person`). TypeScript tests are `*.test.ts` beside the module,
+  run by Vitest (`pnpm test`, and each package's `:unit` Bazel target).
 - **Comments and docs** explain why, briefly, in plain sentences. Match the comment density of the
   surrounding code. Doc comments on public items say what they're for, not how.
 - **Public docs** (`docs/site/`, and `INSTALL.md`, which the site publishes) describe the product
