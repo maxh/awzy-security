@@ -3,8 +3,8 @@
 //! So far: app events in awzy's own schema (`POST /v1/events`) and AWS CloudTrail log files
 //! (`POST /v1/events/aws-cloudtrail`), each normalized into an `EventRecord` and acknowledged
 //! once Kafka has it. Log shippers authenticate with a bearer token the client sets
-//! (AWZY_INTAKE_TOKEN). Mapping source identities to people and service accounts, and the other
-//! clouds' audit logs, DLP signals, and agent traces, come next.
+//! (AWZY_INTAKE_TOKEN). A CloudTrail session of a people role is mapped to its person (ADR 0086).
+//! The other clouds' audit logs, DLP signals, and agent traces come next.
 
 pub mod kafka;
 pub mod normalize;
@@ -41,17 +41,20 @@ struct Intake<S> {
     sink: Arc<S>,
     /// SHA-256 of the shippers' bearer token, compared in constant time.
     token_sha256: [u8; 32],
+    /// Which CloudTrail callers are people (ADR 0086).
+    humans: Arc<normalize::CloudTrailHumans>,
 }
 
 impl<S> Clone for Intake<S> {
     fn clone(&self) -> Self {
-        Self { sink: self.sink.clone(), token_sha256: self.token_sha256 }
+        Self { sink: self.sink.clone(), token_sha256: self.token_sha256, humans: self.humans.clone() }
     }
 }
 
 /// Routes this service serves in addition to the shared health routes, behind `token`.
 pub fn router<S: EventSink>(sink: Arc<S>, token: &str) -> Router {
-    let state = Intake { sink, token_sha256: Sha256::digest(token.as_bytes()).into() };
+    let humans = Arc::new(normalize::CloudTrailHumans::from_env());
+    let state = Intake { sink, token_sha256: Sha256::digest(token.as_bytes()).into(), humans };
     Router::new()
         .route("/v1/events", post(app_events::<S>))
         .route("/v1/events/aws-cloudtrail", post(cloudtrail_events::<S>))
@@ -87,7 +90,7 @@ async fn cloudtrail_events<S: EventSink>(
     body: Result<Json<normalize::CloudTrailBatch>, JsonRejection>,
 ) -> Response {
     match body {
-        Ok(Json(batch)) => accept(&intake, normalize::aws_cloudtrail(batch, chrono::Utc::now())).await,
+        Ok(Json(batch)) => accept(&intake, normalize::aws_cloudtrail(batch, chrono::Utc::now(), &intake.humans)).await,
         Err(rejection) => error(StatusCode::BAD_REQUEST, rejection.body_text()),
     }
 }

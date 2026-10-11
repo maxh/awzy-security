@@ -191,6 +191,9 @@ intake:
   replicas: 2
   tokenSecret: awzy-intake-token
   eventsTopic: awzy.events.v1
+  # AWS roles, besides IAM Identity Center's, whose CloudTrail sessions are people: the session
+  # name is the person's user name as the IdP federates it (ADR 0086).
+  humanRoles: []
   # Public hostname for sources outside the cluster: https://<hostname>/v1/events. Empty: in-cluster only.
   hostname: ""
   resources:

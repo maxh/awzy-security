@@ -129,15 +129,51 @@ pub struct CloudTrailBatch {
     pub records: Vec<Value>,
 }
 
-/// The principal is the calling AWS principal's ARN (`AwsPrincipal`), or the AWS service that
-/// called (`AwsService`). Mapping ARNs to people and service accounts is awzy-context's job, so
-/// the event keeps what CloudTrail said.
-pub fn aws_cloudtrail(batch: CloudTrailBatch, now: DateTime<Utc>) -> Result<Vec<EventRecord>, NormalizeError> {
-    check_count(batch.records.len())?;
-    batch.records.iter().enumerate().map(|(i, r)| cloudtrail_record(i, r, now)).collect()
+/// Which CloudTrail callers are people (ADR 0086): a session of an IAM Identity Center role
+/// (`AWSReservedSSO_…`), or of a role the install names, whose session name is the person's user
+/// name as the IdP federates it.
+#[derive(Debug, Clone, Default)]
+pub struct CloudTrailHumans {
+    /// Roles besides Identity Center's whose sessions are people, by name.
+    pub roles: Vec<String>,
 }
 
-fn cloudtrail_record(i: usize, r: &Value, now: DateTime<Utc>) -> Result<EventRecord, NormalizeError> {
+impl CloudTrailHumans {
+    /// AWZY_INTAKE_HUMAN_ROLES: role names, comma-separated.
+    pub fn from_env() -> Self {
+        let roles = std::env::var("AWZY_INTAKE_HUMAN_ROLES").unwrap_or_default();
+        Self { roles: roles.split(',').map(|r| r.trim().to_string()).filter(|r| !r.is_empty()).collect() }
+    }
+
+    /// The person behind `arn`, an assumed-role session ARN
+    /// (`arn:<partition>:sts::<account>:assumed-role/<role>/<session>`), when its role is a people role.
+    pub fn human(&self, arn: &str) -> Option<String> {
+        let parts: Vec<&str> = arn.splitn(6, ':').collect();
+        let [_, _, "sts", _, _, resource] = parts.as_slice() else { return None };
+        let [kind, role, session] = resource.splitn(3, '/').collect::<Vec<_>>()[..] else { return None };
+        let human_role = role.starts_with("AWSReservedSSO_") || self.roles.iter().any(|r| r == role);
+        (kind == "assumed-role" && human_role && !session.is_empty()).then(|| session.to_string())
+    }
+}
+
+/// The principal is the calling AWS principal's ARN (`AwsPrincipal`), the AWS service that called
+/// (`AwsService`), or, for a people role's session, the person (`Human`), with the ARN kept as
+/// `awsPrincipal`.
+pub fn aws_cloudtrail(
+    batch: CloudTrailBatch,
+    now: DateTime<Utc>,
+    humans: &CloudTrailHumans,
+) -> Result<Vec<EventRecord>, NormalizeError> {
+    check_count(batch.records.len())?;
+    batch.records.iter().enumerate().map(|(i, r)| cloudtrail_record(i, r, now, humans)).collect()
+}
+
+fn cloudtrail_record(
+    i: usize,
+    r: &Value,
+    now: DateTime<Utc>,
+    humans: &CloudTrailHumans,
+) -> Result<EventRecord, NormalizeError> {
     let text = |v: &Value| v.as_str().unwrap_or_default().to_string();
     let required = |field: &str| match r.get(field).and_then(Value::as_str) {
         Some(s) if !s.is_empty() => Ok(s.to_string()),
@@ -173,6 +209,14 @@ fn cloudtrail_record(i: usize, r: &Value, now: DateTime<Utc>) -> Result<EventRec
     if let Some(t) = identity["type"].as_str() {
         attributes.insert("userIdentityType".into(), json!(t));
     }
+    let (principal_type, principal_id) = match humans.human(&principal_id).filter(|_| principal_type == "AwsPrincipal")
+    {
+        Some(human) => {
+            attributes.insert("awsPrincipal".into(), json!(principal_id));
+            (awzy_model::entity_type::HUMAN, human)
+        }
+        None => (principal_type, principal_id),
+    };
 
     Ok(EventRecord {
         id: EventId::new(),
@@ -280,7 +324,7 @@ mod tests {
             "userIdentity": { "type": "AWSService", "invokedBy": "s3.amazonaws.com" },
             "errorCode": "AccessDenied"
         }]})).unwrap();
-        let [s3, kms] = aws_cloudtrail(batch, now()).unwrap().try_into().unwrap();
+        let [s3, kms] = aws_cloudtrail(batch, now(), &CloudTrailHumans::default()).unwrap().try_into().unwrap();
         assert_eq!(
             (s3.source.as_str(), s3.system.as_str(), s3.action.as_str()),
             ("aws_cloudtrail", "s3.amazonaws.com", "GetObject")
@@ -308,6 +352,34 @@ mod tests {
         let batch: CloudTrailBatch = serde_json::from_value(json!({ "Records": [{
             "eventTime": "2026-10-09T14:00:00Z", "eventSource": "s3.amazonaws.com", "eventName": "GetObject", "userIdentity": {}
         }]})).unwrap();
-        assert!(matches!(aws_cloudtrail(batch, now()), Err(NormalizeError::Invalid { index: 0, .. })));
+        assert!(matches!(
+            aws_cloudtrail(batch, now(), &CloudTrailHumans::default()),
+            Err(NormalizeError::Invalid { index: 0, .. })
+        ));
+    }
+
+    #[test]
+    fn identity_center_and_named_roles_sessions_are_people() {
+        let humans = CloudTrailHumans { roles: vec!["Analyst".into()] };
+        let sso = "arn:aws:sts::111122223333:assumed-role/AWSReservedSSO_ReadOnly_0123abcd/carol@larkspur.example";
+        assert_eq!(humans.human(sso).as_deref(), Some("carol@larkspur.example"));
+        let named = "arn:aws-us-gov:sts::111122223333:assumed-role/Analyst/dan@larkspur.example";
+        assert_eq!(humans.human(named).as_deref(), Some("dan@larkspur.example"));
+        for not_a_human in [
+            "arn:aws:sts::111122223333:assumed-role/data-pipeline/i-0abc",
+            "arn:aws:iam::111122223333:user/ci",
+            "arn:aws:sts::111122223333:federated-user/AWSReservedSSO_x",
+        ] {
+            assert_eq!(humans.human(not_a_human), None, "{not_a_human}");
+        }
+
+        let batch: CloudTrailBatch = serde_json::from_value(json!({ "Records": [{
+            "eventTime": "2026-10-09T14:00:00Z", "eventSource": "s3.amazonaws.com", "eventName": "GetObject",
+            "userIdentity": { "type": "AssumedRole", "arn": sso },
+        }] }))
+        .unwrap();
+        let [e] = aws_cloudtrail(batch, now(), &humans).unwrap().try_into().unwrap();
+        assert_eq!((e.principal_type.as_str(), e.principal_id.as_str()), ("Human", "carol@larkspur.example"));
+        assert!(e.attributes.contains(&format!("\"awsPrincipal\":\"{sso}\"")), "{}", e.attributes);
     }
 }
