@@ -43,16 +43,27 @@ pub struct TokenStore {
 }
 
 impl TokenStore {
-    /// Connects with `schema` first on the search path, creates it if needed, and migrates it.
+    /// Connects with `schema` first on the search path, creates it if needed, and migrates it,
+    /// or with `AWZY_POSTGRES_MIGRATE=check` only checks it's migrated (ADR 0087).
     pub async fn connect(url: &str, schema: &str) -> anyhow::Result<Self> {
+        let pool = Self::pool(url, schema).await?;
+        awzy_migrations::on_start(&migrator(), &pool).await?;
+        Ok(Self { pool, cache: Mutex::new(HashMap::new()) })
+    }
+
+    /// Creates `schema` if needed and applies its migrations: the corp portal's migrate task.
+    pub async fn migrate(url: &str, schema: &str) -> anyhow::Result<()> {
+        Ok(migrator().run(&Self::pool(url, schema).await?).await?)
+    }
+
+    async fn pool(url: &str, schema: &str) -> anyhow::Result<PgPool> {
         let valid = schema.starts_with(|c: char| c.is_ascii_lowercase())
             && schema.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
         anyhow::ensure!(valid, "bad schema name {schema:?}");
         let options = PgConnectOptions::from_str(url)?.options([("search_path", schema)]);
         let pool = PgPoolOptions::new().max_connections(5).connect_with(options).await?;
         pool.execute(format!("CREATE SCHEMA IF NOT EXISTS {schema}").as_str()).await?;
-        migrator().run(&pool).await?;
-        Ok(Self { pool, cache: Mutex::new(HashMap::new()) })
+        Ok(pool)
     }
 
     /// Makes a new pull token for `install`, replacing any it had. Returns the token, which

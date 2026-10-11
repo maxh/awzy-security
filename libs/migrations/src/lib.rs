@@ -1,8 +1,9 @@
-//! When a service's Postgres migrations run (ADR 0083).
+//! When a service's Postgres migrations run (ADR 0083, 0087).
 //!
-//! In an install a release Job applies them before the services roll (`<service> migrate`), so a
-//! failed migration stops the sync rather than crash-looping pods, and a service only checks that
-//! the schema has what it needs. Run locally, a service still applies its own at start.
+//! Deployed, a release step applies them before the services roll (`<service> migrate`: a Job in
+//! an install, a one-off ECS task for the corp portal), so a failed migration stops the release
+//! rather than crash-looping the services, and a service only checks that the schema has what it
+//! needs. Run locally, a service still applies its own at start.
 
 use sqlx::{migrate::Migrator, PgPool};
 
@@ -27,7 +28,7 @@ pub async fn ensure_applied(migrator: &Migrator, pool: &PgPool) -> anyhow::Resul
     let applied: Vec<i64> = sqlx::query_scalar("SELECT version FROM _sqlx_migrations WHERE success")
         .fetch_all(pool)
         .await
-        .map_err(|e| anyhow::anyhow!("can't read the applied migrations (has the migrate Job run?): {e}"))?;
+        .map_err(|e| anyhow::anyhow!("can't read the applied migrations (has the migrate step run?): {e}"))?;
     let missing: Vec<String> = migrator
         .iter()
         .filter(|m| !applied.contains(&m.version))
@@ -35,7 +36,7 @@ pub async fn ensure_applied(migrator: &Migrator, pool: &PgPool) -> anyhow::Resul
         .collect();
     anyhow::ensure!(
         missing.is_empty(),
-        "the database is behind this release, which needs migrations {}: the migrate Job runs them first",
+        "the database is behind this release, which needs migrations {}: its migrate step runs them first",
         missing.join(", ")
     );
     Ok(())
@@ -67,7 +68,7 @@ mod tests {
         let migrator = Migrator::new(dir.as_path()).await.unwrap();
 
         let err = ensure_applied(&migrator, &pool).await.unwrap_err();
-        assert!(err.to_string().contains("migrate Job"), "{err}");
+        assert!(err.to_string().contains("migrate step"), "{err}");
         migrator.run(&pool).await.unwrap();
         ensure_applied(&migrator, &pool).await.unwrap();
         std::fs::remove_dir_all(dir).unwrap();

@@ -89,6 +89,7 @@ resource "aws_ecs_task_definition" "registry" {
     portMappings = [{ containerPort = 8080, protocol = "tcp" }]
     environment = [
       { name = "AWZY_LOG_FORMAT", value = "json" },
+      { name = "AWZY_POSTGRES_MIGRATE", value = "check" },
       { name = "AWZY_REGISTRY_REALM", value = local.registry_hostname },
       { name = "AWZY_REGISTRY_UPSTREAM", value = local.ecr_host },
       { name = "AWZY_RELEASE_VERSION", value = var.registry_image_tag },

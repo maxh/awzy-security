@@ -294,6 +294,12 @@ impl FleetStore {
         migrator().run(&self.pool).await
     }
 
+    /// At startup: apply the migrations, or with `AWZY_POSTGRES_MIGRATE=check` (deployed, where
+    /// the migrate task applied them) only check they're applied (ADR 0087).
+    pub async fn migrate_on_start(&self) -> anyhow::Result<()> {
+        awzy_migrations::on_start(&migrator(), &self.pool).await
+    }
+
     /// Registers an install. Returns it and its reporting token, which isn't stored.
     pub async fn register(&self, new: &NewInstall, created_by: &str) -> Result<(InstallRecord, String), RegisterError> {
         new.validate()?;
