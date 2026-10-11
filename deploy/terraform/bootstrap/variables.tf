@@ -154,6 +154,15 @@ variable "clickhouse_retention_days" {
   }
 }
 
+variable "tracing" {
+  description = "OpenTelemetry traces from every service (ADR 0097): your collector's OTLP gRPC endpoint (on AWS, aws/monitoring's otlp_endpoint output), and the share of traces sent to it (1: all, so the collector can keep the slow ones); null for none"
+  type = object({
+    otlp_endpoint = string
+    sample_ratio  = optional(number, 1)
+  })
+  default = null
+}
+
 variable "demo_data" {
   description = "DEMO INSTALLS ONLY (ADR 0039): provision the synthetic company into awzy-context"
   type        = bool

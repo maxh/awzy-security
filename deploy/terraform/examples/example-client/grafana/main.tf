@@ -50,4 +50,8 @@ module "grafana" {
     authType      = "ec2_iam_role"
     defaultRegion = local.grafana.region
   }
+  xray_json_data = {
+    authType      = "ec2_iam_role"
+    defaultRegion = local.grafana.region
+  }
 }

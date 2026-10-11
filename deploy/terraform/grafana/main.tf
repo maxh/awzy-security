@@ -24,6 +24,12 @@ variable "prometheus_json_data" {
   default     = {}
 }
 
+variable "xray_json_data" {
+  description = "jsonData for an X-Ray data source, for traces (ADR 0097); null for none"
+  type        = map(any)
+  default     = null
+}
+
 variable "cloudwatch_json_data" {
   description = "jsonData for a CloudWatch data source (Aurora, MSK, ElastiCache); null for none"
   type        = map(any)
@@ -46,6 +52,14 @@ resource "grafana_data_source" "cloudwatch" {
   name              = "CloudWatch"
   uid               = "cloudwatch"
   json_data_encoded = jsonencode(var.cloudwatch_json_data)
+}
+
+resource "grafana_data_source" "xray" {
+  count             = var.xray_json_data == null ? 0 : 1
+  type              = "grafana-x-ray-datasource"
+  name              = "X-Ray"
+  uid               = "xray"
+  json_data_encoded = jsonencode(var.xray_json_data)
 }
 
 resource "grafana_folder" "awzy" {

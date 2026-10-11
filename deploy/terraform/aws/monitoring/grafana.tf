@@ -1,5 +1,5 @@
-# Amazon Managed Grafana, signed in to through the account's IAM Identity Center. It reads AMP and
-# CloudWatch (Aurora, MSK, ElastiCache) with its own role. deploy/terraform/grafana loads the data
+# Amazon Managed Grafana, signed in to through the account's IAM Identity Center. It reads AMP,
+# CloudWatch (Aurora, MSK, ElastiCache), and X-Ray traces with its own role. deploy/terraform/grafana loads the data
 # sources and dashboards, with the service account token below.
 data "aws_iam_policy_document" "grafana_trust" {
   statement {
@@ -20,6 +20,7 @@ resource "aws_iam_role_policy_attachment" "grafana" {
   for_each = toset([
     "arn:aws:iam::aws:policy/AmazonPrometheusQueryAccess",
     "arn:aws:iam::aws:policy/service-role/AmazonGrafanaCloudWatchAccess",
+    "arn:aws:iam::aws:policy/AWSXrayReadOnlyAccess",
   ])
   role       = aws_iam_role.grafana.name
   policy_arn = each.value
@@ -31,7 +32,7 @@ resource "aws_grafana_workspace" "awzy" {
   authentication_providers = ["AWS_SSO"]
   permission_type          = "CUSTOMER_MANAGED"
   role_arn                 = aws_iam_role.grafana.arn
-  data_sources             = ["PROMETHEUS", "CLOUDWATCH"]
+  data_sources             = ["PROMETHEUS", "CLOUDWATCH", "XRAY"]
 }
 
 resource "aws_grafana_role_association" "admins" {

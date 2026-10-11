@@ -13,3 +13,8 @@ output "alerts_topic_arn" {
   description = "The SNS topic alerts go to; subscribe anything else to it"
   value       = aws_sns_topic.alerts.arn
 }
+
+output "otlp_endpoint" {
+  description = "Where awzy's services send traces: bootstrap's tracing.otlp_endpoint"
+  value       = "http://${kubernetes_service_v1.collector.metadata[0].name}.${kubernetes_namespace_v1.traces.metadata[0].name}.svc:4317"
+}
