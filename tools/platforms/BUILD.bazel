@@ -16,3 +16,13 @@ platform(
     ],
     visibility = ["//visibility:public"],
 )
+
+# Building for linux/arm64, as opposed to on an arm64 Mac.
+config_setting(
+    name = "is_linux_arm64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
+    ],
+    visibility = ["//visibility:public"],
+)

@@ -17,3 +17,9 @@ package_group(
     name = "demo_only",
     packages = ["//authz/demo/..."],
 )
+
+# The linker for linux/arm64 Rust binaries (tools/rust.bzl, #93).
+exports_files(
+    ["zig_aarch64_link.sh"],
+    visibility = ["//visibility:public"],
+)
