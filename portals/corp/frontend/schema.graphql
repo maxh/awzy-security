@@ -382,7 +382,7 @@ type RetireInstallPayload {
 }
 
 input SetInstallReleaseInput {
-	installQid: ID!
+	installQid: Qid!
 	channel: ReleaseChannel!
 	"""
 	Required for PINNED, and only then.
