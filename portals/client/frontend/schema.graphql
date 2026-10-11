@@ -618,6 +618,11 @@ type Mutation {
 	"""
 	setEnforcementMode(input: SetEnforcementModeInput!): SetEnforcementModePayload!
 	"""
+	Replaces the outage fallback setting. Like switching enforcement, policy can ask for a
+	security key first: then nothing changes, and the payload names the challenge to pass.
+	"""
+	setOutageFallback(input: SetOutageFallbackInput!): SetOutageFallbackPayload!
+	"""
 	Registers a service account, or changes one. Until it's registered, the PDP denies it.
 	"""
 	registerServiceAccount(input: RegisterServiceAccountInput!): RegisterServiceAccountPayload!
@@ -673,11 +678,6 @@ type Mutation {
 	Closes an investigation once a person has reviewed it. It stays, with who closed it and why.
 	"""
 	closeInvestigation(input: CloseInvestigationInput!): CloseInvestigationPayload!
-	"""
-	Replaces the outage fallback setting. Like switching enforcement, policy can ask for a
-	security key first: then nothing changes, and the payload names the challenge to pass.
-	"""
-	setOutageFallback(input: SetOutageFallbackInput!): SetOutageFallbackPayload!
 }
 
 interface Node {
@@ -691,9 +691,6 @@ type OnBehalfOf {
 	determiningPolicies: [PolicySource!]!
 }
 
-"""
-Information about pagination in a connection
-"""
 type OutageFallback {
 	"""
 	0 when never set: every tool is unclassified (confidential) and fails closed.
@@ -712,6 +709,9 @@ type OutageFallback {
 	changedAt: UtcTimestamp
 }
 
+"""
+Information about pagination in a connection
+"""
 type PageInfo {
 	"""
 	When paginating backwards, are there more items?
@@ -1002,16 +1002,16 @@ type Query {
 	"""
 	installStatus: [ComponentStatus!]!
 	"""
+	What awzy-gateway does while the PDP is unreachable: each tool's tier, and which tiers
+	fail open.
+	"""
+	outageFallback: OutageFallback!
+	"""
 	A diagnostics bundle as JSON: each service's status, the portal's release, and which
 	settings it was started with, with no client data. For those who may administer the
 	enforcement area, to review before sending it to awzy support.
 	"""
 	diagnosticsBundle: String!
-	"""
-	What awzy-gateway does while the PDP is unreachable: each tool's tier, and which tiers
-	fail open.
-	"""
-	outageFallback: OutageFallback!
 }
 
 input RegisterServiceAccountInput {
@@ -1077,27 +1077,6 @@ type SecurityKeyPayload {
 	securityKey: SecurityKey!
 }
 
-"""
-An agent, backend service, or scheduled job, with the person accountable for it.
-"""
-type ServiceAccount {
-	"""
-	Its ID in policies and tokens.
-	"""
-	id: String!
-	"""
-	The accountable person's userName.
-	"""
-	owner: String!
-	ai: Boolean!
-	groups: [String!]!
-	description: String!
-	createdBy: Actor
-	createdAt: UtcTimestamp!
-	updatedBy: Actor
-	updatedAt: UtcTimestamp!
-}
-
 enum SensitivityTier {
 	PUBLIC
 	INTERNAL
@@ -1121,24 +1100,25 @@ input ServerTierInput {
 	tier: SensitivityTier!
 }
 
-input SetOutageFallbackInput {
-	tools: [ToolTierInput!]!
-	servers: [ServerTierInput!]!
+"""
+An agent, backend service, or scheduled job, with the person accountable for it.
+"""
+type ServiceAccount {
 	"""
-	Never CONFIDENTIAL or CROWN_JEWELS.
+	Its ID in policies and tokens.
 	"""
-	failOpenTiers: [SensitivityTier!]!
-}
-
-type SetOutageFallbackPayload {
+	id: String!
 	"""
-	The new setting; null when a challenge must be passed first.
+	The accountable person's userName.
 	"""
-	outageFallback: OutageFallback
-	"""
-	The challenge to pass, then save again.
-	"""
-	challengeQid: ID
+	owner: String!
+	ai: Boolean!
+	groups: [String!]!
+	description: String!
+	createdBy: Actor
+	createdAt: UtcTimestamp!
+	updatedBy: Actor
+	updatedAt: UtcTimestamp!
 }
 
 input SetEnforcementModeInput {
@@ -1157,6 +1137,26 @@ type SetEnforcementModePayload {
 	"""
 	The security-key challenge to pass first, when the switch needs one: answer it, then switch
 	again within its grant.
+	"""
+	challengeQid: ID
+}
+
+input SetOutageFallbackInput {
+	tools: [ToolTierInput!]!
+	servers: [ServerTierInput!]!
+	"""
+	Never CONFIDENTIAL or CROWN_JEWELS.
+	"""
+	failOpenTiers: [SensitivityTier!]!
+}
+
+type SetOutageFallbackPayload {
+	"""
+	The new setting; null when a challenge must be passed first.
+	"""
+	outageFallback: OutageFallback
+	"""
+	The challenge to pass, then save again.
 	"""
 	challengeQid: ID
 }
