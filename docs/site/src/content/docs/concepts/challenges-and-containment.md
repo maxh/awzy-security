@@ -10,31 +10,44 @@ A challenge turns a "no" into "yes, once you've done this":
 | Challenge | Who answers | How |
 | --- | --- | --- |
 | **Justification** | The person | Says why, in the client portal. |
-| **Verification** | The person | Signs in with an enrolled security key (WebAuthn). No agent can pass it. |
+| **Verification** | The person | Touches an enrolled security key (WebAuthn). No agent can pass it. |
 | **Approval** | Whoever policy allows to approve the resource: a person, or an agent you name | Approves or rejects in the client portal. |
 
 The person is whoever the request is for: the signed-in human, the person an agent acts for, or an
-unattended service account's owner. An approval never comes from the request's own subject or the
-person it's for.
+unattended service account's owner. An approval never comes from the request's own principal or
+the person it's for.
+
+Today the client portal lists requests waiting for approval only to those who may `administer`
+the challenges area: your security team, under the base policies. Someone else whom policy lets
+approve, such as a resource's owner, is told about the request when Slack is connected, but
+can't open it in the portal yet; they ask the security team, who can approve it.
 
 ### Agents as approvers
 
 As agents take on more work, you may want an overseer agent to approve routine requests instead
-of asking a person each time. Name it in two policies: one lets it see challenges, the other lets
-it approve.
+of asking a person each time. Name it in two policies: one lets it find what's waiting, the other
+lets it approve.
 
 ```cedar
-permit (principal == ServiceAccount::"overseer", action == Action::"view",
+permit (principal == ServiceAccount::"overseer", action == Action::"administer",
         resource == PortalArea::"challenges");
 permit (principal == ServiceAccount::"overseer", action == Action::"approve", resource)
 when { resource.sensitivity == "internal" };
 ```
 
+Finding waiting requests takes `administer` on the challenges area, which also lets it see every
+challenge and contain or lift principals. Grant it only to an agent you'd trust with that, or give
+it challenge QIDs another way and grant only `approve`.
+
 It approves through the client portal's API with its own token, and the decision records it as the
 approver. Two limits hold whatever your policies say: an agent never approves a request its own
 owner answers for, since that would be the owner approving themselves, and `crown_jewels` always
-need a person. Verification and justification always come from a person, so every chain of agents
-ends at someone accountable.
+need a person. A token that acts for someone can't answer or approve anything, so an agent with
+its own identity can never pass a challenge meant for its person.
+
+An agent that runs with a person's own token is a different matter: to awzy it is that person,
+and can answer a justification or approve as them. Only a security key proves a person was
+there. See [An agent using a person's own credentials](/concepts/principals-and-delegation/#an-agent-using-a-persons-own-credentials).
 
 An enforcement point that gets a challenge verdict returns it to the caller with a challenge ID.
 The person answers it, and the caller retries the same request. A passed challenge is good for a

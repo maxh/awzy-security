@@ -46,7 +46,8 @@ replaced.
 - **Dry run:** replays the last week's distinct requests under the active bundle and the draft,
   with today's people and resources, and lists every request whose verdict would change, most
   frequent first. That's what you'd break before you break it.
-- **Publish:** signs the draft and makes it active. PDPs load it within about ten seconds.
+- **Publish:** signs the draft and makes it active. Every PDP picks it up as soon as it's
+  published, usually within a second.
 - **Awzy Bot,** when your install turns it on: ask it why something was denied, or to draft a
   policy. It searches and explains decisions and reads the active policies, as you, and only ever
   drafts: a person publishes. It runs on your cloud's own model service.
@@ -79,8 +80,9 @@ Who awzy knows about.
 What's waiting for people. See [Challenges and containment](/concepts/challenges-and-containment/).
 
 - **Waiting for you:** challenges sent to you. Give a reason, or touch your security key.
-- **Waiting for approval,** for those who may approve: approve or reject someone else's request,
-  with a note.
+- **Waiting for approval,** for those who administer challenges: approve or reject someone else's
+  request, with a note. Others whom policy lets approve, such as a resource's owner, don't see
+  this list yet; see [Data owners and approvers](/workflows/approvers/).
 - **Containments:** who is contained, and why. Contain a principal yourself, or lift a
   containment with a reason. While automated containments are in monitor, the ones awzy-reasoner
   would have made appear as "would contain": contain the person, or dismiss the record.
@@ -106,7 +108,8 @@ once you've reviewed it, with what you found. It stays, as the record of that re
 
 The portal also serves an [MCP](https://modelcontextprotocol.io) endpoint at `/mcp`, so your
 security team's own agents, such as Claude or an internal copilot, can work with awzy. Each call
-is checked as the person the agent acts for, the same way the pages are.
+is checked the same way the pages are: with a token-exchange token, as the agent and as the person
+it acts for; with the person's own token, as the person.
 
 | Tool | Does |
 | --- | --- |
@@ -121,3 +124,8 @@ is checked as the person the agent acts for, the same way the pages are.
 
 All but `propose_policy` only read, and it only drafts. Nothing through MCP publishes policy,
 switches modes, or contains anyone.
+
+The same token works on the portal's GraphQL API. An agent given a person's own token can do
+there whatever the person may, including answering their justification challenges, so prefer a
+token exchange for agents. See
+[An agent using a person's own credentials](/concepts/principals-and-delegation/#an-agent-using-a-persons-own-credentials).

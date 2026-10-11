@@ -150,7 +150,10 @@ the cluster on it.
    bearer token. Enter both in your IdP's provisioning settings (Okta, Entra) so people and
    groups reach awzy-context.
 3. **Sign-in:** register the client portal as an OIDC application in your IdP, with the issuer
-   and JWKS URL you gave bootstrap as `client_portal`.
+   and JWKS URL you gave bootstrap as `client_portal`. Its access tokens are for the audience
+   `awzy`, and carry each person's SCIM user name as `sub`: awzy matches people by `sub`, and an
+   install can't choose another claim yet. Someone whose `sub` doesn't match is checked with the
+   groups in their token alone.
 
 ## 7. Check the install
 

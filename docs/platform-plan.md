@@ -81,8 +81,6 @@ A policy engine on its own is a commodity: OPA, Amazon Verified Permissions, and
 - Self-hosted models as the default. The cloud's hosted model service is the default; a GPU pool is an option.
 - awzy operating a client's install with standing access.
 
-> **Still missing from this plan: team size, timeline, and cost per install.** The phases below have exit criteria but no dates. The `small` profile's monthly infrastructure cost on AWS should be measured in Phase 0 and written here, because it sets the floor on pricing.
-
 ## Beyond Zero mapping
 
 The paper describes four cooperating components in a feedback loop. Each one maps to one or more awzy-authz services.
@@ -195,21 +193,21 @@ flowchart LR
   A --> GW
   GW -->|check| PDP[awzy-pdp<br>Cedar + attributes]
   PDP -->|allow / deny / challenge| GW
-  GW -.challenge.-> CH[awzy-challenge]
-  CH -.grants and containments.-> VK[(Valkey)]
-  VK -.containment feed.-> PDP
+  GW -.->|challenge| CH[awzy-challenge]
+  CH -.->|grants and containments| VK[(Valkey)]
+  VK -.->|containment feed| PDP
   PDP -->|resource entity, cache miss| VK
-  PDP -.decision.-> K[(Kafka)]
+  PDP -.->|decision| K[(Kafka)]
   SRC[App logs, cloud audit logs, DLP, agent traces] -.-> IN[awzy-intake] -.-> K
   K -.-> CHDB[(ClickHouse)]
-  CHDB -.windows and baselines.-> RS[awzy-reasoner]
+  CHDB -.->|windows and baselines| RS[awzy-reasoner]
   K -.-> RS
-  RS -.risk attributes.-> CTX[awzy-context]
-  RS -.containment request.-> CH
+  RS -.->|risk attributes| CTX[awzy-context]
+  RS -.->|containment request| CH
   CON[awzy-connectors<br>IdP, HR, Jira, Drive] -.-> CTX
-  CTX -.write-through.-> VK
-  CTX -.attributes.v1.-> K
-  K -.snapshot updates.-> PDP
+  CTX -.->|write-through| VK
+  CTX -.->|attributes.v1| K
+  K -.->|snapshot updates| PDP
 ```
 
 ### Latency budget for one check
