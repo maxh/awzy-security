@@ -8,6 +8,8 @@ awzy_service(
         "awzy-break-glass",
         "awzy-publish",
     ],
+    # An admin runs break-glass in awzy-policy's pod (kubectl exec), so it ships with it.
+    image_binaries = ["awzy-break-glass"],
     # Embedded by sqlx::migrate!.
     compile_data = glob(["migrations/*.sql"]),
     visibility = ["//tools:client_side"],

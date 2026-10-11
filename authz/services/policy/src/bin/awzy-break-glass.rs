@@ -3,6 +3,9 @@
 //!   awzy-break-glass --endpoint http://awzy-policy:8080 --key admin.pem \
 //!     --reason "forbid-all bundle locked us out" [--to-version 12]
 //!
+//! `--key -` reads the key from standard input, so it can be run in awzy-policy's own pod
+//! (`kubectl exec -i … < admin.pem`) without the key ever being written there.
+//!
 //! Signs the request with an admin key enrolled at install time and sends it straight to
 //! awzy-policy, so it works when the IdP, the PDP, or the portal is what's broken. Without
 //! `--to-version` it restores the bundle published before the active one. Every use is recorded
@@ -26,7 +29,12 @@ async fn main() -> anyhow::Result<()> {
     };
     let to_version: i64 =
         arg(&args, "--to-version").map(|v| v.parse()).transpose().context("--to-version")?.unwrap_or(0);
-    let signer = BundleSigner::from_pem(&std::fs::read_to_string(&key).with_context(|| format!("reading {key}"))?)?;
+    let pem = if key == "-" {
+        std::io::read_to_string(std::io::stdin()).context("reading the key from standard input")?
+    } else {
+        std::fs::read_to_string(&key).with_context(|| format!("reading {key}"))?
+    };
+    let signer = BundleSigner::from_pem(&pem)?;
 
     let requested_at_unix = chrono::Utc::now().timestamp();
     let nonce = uuid::Uuid::now_v7().to_string();
@@ -42,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
     let res = PolicyServiceClient::connect(endpoint).await?.break_glass_rollback(req).await?.into_inner();
     let bundle = res.bundle.context("awzy-policy returned no bundle")?;
     println!(
-        "Restored version {} as version {} ({}). Replaced version {}. PDPs pick it up within about 10 seconds.",
+        "Restored version {} as version {} ({}). Replaced version {}. Every PDP picks it up as it's published.",
         res.restored_version, bundle.version, bundle.qid, res.replaced_version
     );
     Ok(())
