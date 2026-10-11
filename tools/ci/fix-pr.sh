@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Makes a pull request's mechanical fixes so nobody has to run Bazel locally for them: re-pins
-# crate_universe's lockfiles, regenerates both portals' GraphQL schemas and Relay artifacts, and
-# formats the Rust (rustfmt) and TypeScript (oxfmt) the PR changed. Each step runs only when
-# the PR touches what it fixes. When anything changed, it pushes one commit to the PR's branch
-# and starts the PR's CI, which the workflow token's push doesn't.
+# crate_universe's lockfiles, regenerates both portals' GraphQL schemas and Relay artifacts (with
+# the persisted queries the backends embed), and formats the Rust (rustfmt) and TypeScript
+# (oxfmt) the PR changed. Each step runs only when the PR touches what it fixes. When anything
+# changed, it pushes one commit to the PR's branch and starts the PR's CI, which the workflow
+# token's push doesn't.
 #
 # Lint findings aren't fixed here: clippy's and oxlint's fixes can change behavior, so CI
 # reports them instead.
@@ -37,12 +38,16 @@ if touches '^libs/(model|portal)/|^portals/[^/]+/backend/|^portals/[^/]+/fronten
     bazel run --config=ci "//portals/$portal/frontend:update_schema" </dev/null
   done
   pnpm install --frozen-lockfile
+  # From nothing, so persisted_queries.json holds exactly the queries the frontend sends (ADR
+  # 0088): the compiler adds to it but never removes, and persists only the artifacts it writes.
   for portal in client corp; do
+    rm -rf "portals/$portal/frontend/src/__generated__"
+    echo '{}' >"portals/$portal/frontend/persisted_queries.json"
     (cd "portals/$portal/frontend" && pnpm relay)
   done
-  [ -z "$(git status --porcelain -- 'portals/*/frontend/schema.graphql' 'portals/*/frontend/src/__generated__')" ] ||
-    fixed+=("regenerate schemas")
-  paths+=('portals/*/frontend/schema.graphql' 'portals/*/frontend/src/__generated__')
+  generated=('portals/*/frontend/schema.graphql' 'portals/*/frontend/persisted_queries.json' 'portals/*/frontend/src/__generated__')
+  [ -z "$(git status --porcelain -- "${generated[@]}")" ] || fixed+=("regenerate schemas")
+  paths+=("${generated[@]}")
   echo "::endgroup::"
 fi
 

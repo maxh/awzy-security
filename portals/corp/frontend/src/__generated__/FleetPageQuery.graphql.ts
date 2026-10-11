@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<6d078a4f408732c8071b5969e154cfc6>>
+ * @generated SignedSource<<06080d13c097fb2dcabd68d1ad6a3fcf>>
+ * @relayHash 793d50cf055b4ca543f6663757041066
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 8341a9fa1f0c8e893f8ab924ec991c698957f63d8bb7560d4e3e379fbd59aa83
 
 import { ConcreteRequest } from 'relay-runtime';
 export type InstallHealth = "DEGRADED" | "NEVER_REPORTED" | "NOT_REPORTING" | "OK" | "%future added value";
@@ -214,12 +217,11 @@ return {
     "selections": (v0/*:: as any*/)
   },
   "params": {
-    "cacheID": "793d50cf055b4ca543f6663757041066",
-    "id": null,
+    "id": "8341a9fa1f0c8e893f8ab924ec991c698957f63d8bb7560d4e3e379fbd59aa83",
     "metadata": {},
     "name": "FleetPageQuery",
     "operationKind": "query",
-    "text": "query FleetPageQuery {\n  installs(first: 200) {\n    edges {\n      node {\n        id\n        client\n        environment\n        cloud\n        region\n        channel\n        pinnedVersion\n        health\n        chartVersion\n        lastSeenAt\n        services {\n          healthy\n        }\n        metrics {\n          decisionsPerSecond\n          pdpP99Ms\n        }\n      }\n    }\n  }\n}\n"
+    "text": null
   }
 };
 })();

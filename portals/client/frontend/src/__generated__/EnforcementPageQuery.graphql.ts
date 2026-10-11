@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<4691cd21dce135ec19f24c2b2d73e441>>
+ * @generated SignedSource<<b4b51df9e59d1d2b13746a563df22e95>>
+ * @relayHash 072b28e4f4ff16bea2a9105c78497c6a
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 05cf2158ae47947bc8c18e3ebfb6b34348acd0619de508d30cae509c1c3b2667
 
 import { ConcreteRequest } from 'relay-runtime';
 export type EnforcementMode = "ENFORCE" | "MONITOR" | "%future added value";
@@ -347,12 +350,11 @@ return {
     "selections": (v3/*:: as any*/)
   },
   "params": {
-    "cacheID": "072b28e4f4ff16bea2a9105c78497c6a",
-    "id": null,
+    "id": "05cf2158ae47947bc8c18e3ebfb6b34348acd0619de508d30cae509c1c3b2667",
     "metadata": {},
     "name": "EnforcementPageQuery",
     "operationKind": "query",
-    "text": "query EnforcementPageQuery {\n  canSwitch: viewerCan(action: ADMINISTER, area: ENFORCEMENT)\n  enforcement {\n    mode\n    changedBy {\n      label\n    }\n    changedAt\n  }\n  containmentEnforcement: enforcement(scope: AUTOMATED_CONTAINMENTS) {\n    mode\n    changedBy {\n      label\n    }\n    changedAt\n  }\n  enforcementSummary {\n    since\n    total\n    monitored\n    wouldDeny\n    wouldChallenge\n    enforcedDeny\n    enforcedChallenge\n  }\n  wouldDeny: decisions(first: 5, filter: {mode: MONITOR, verdict: DENY}) {\n    edges {\n      node {\n        id\n        at\n        principal {\n          type\n          id\n        }\n        action\n        resource {\n          type\n          id\n        }\n        policies\n      }\n    }\n  }\n  enforcementHistory(first: 10) {\n    mode\n    changedBy {\n      label\n    }\n    changedAt\n  }\n}\n"
+    "text": null
   }
 };
 })();

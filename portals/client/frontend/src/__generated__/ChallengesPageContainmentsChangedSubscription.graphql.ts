@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<b3155b1515b5df4d5942167d1b6602a9>>
+ * @generated SignedSource<<051be6051cbb3debf48b74327f61537b>>
+ * @relayHash 8dcf991428a90977a42db316b98e0a1c
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 6e2a6d3088377a43e2b1c37303cf00f4d8cb4a2c3bc20c1d6628abaa547022b0
 
 import { ConcreteRequest } from 'relay-runtime';
 export type ChallengesPageContainmentsChangedSubscription$variables = Record<PropertyKey, never>;
@@ -58,12 +61,11 @@ return {
     "selections": (v0/*:: as any*/)
   },
   "params": {
-    "cacheID": "8dcf991428a90977a42db316b98e0a1c",
-    "id": null,
+    "id": "6e2a6d3088377a43e2b1c37303cf00f4d8cb4a2c3bc20c1d6628abaa547022b0",
     "metadata": {},
     "name": "ChallengesPageContainmentsChangedSubscription",
     "operationKind": "subscription",
-    "text": "subscription ChallengesPageContainmentsChangedSubscription {\n  containmentsChanged {\n    id\n  }\n}\n"
+    "text": null
   }
 };
 })();

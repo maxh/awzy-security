@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<2d43f670fbec75a675ba0bae7d029e4b>>
+ * @generated SignedSource<<dde65ea0b20ffca5df876759c5047ab0>>
+ * @relayHash 15a0876436173315aa0ac792156bae01
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 1922b51be10435bd8d4d430224602e24f6aeb0a4c6a97a779932fdc1bfeaa687
 
 import { ConcreteRequest } from 'relay-runtime';
 export type DryRunReportQuery$variables = {
@@ -240,12 +243,11 @@ return {
     "selections": (v2/*:: as any*/)
   },
   "params": {
-    "cacheID": "15a0876436173315aa0ac792156bae01",
-    "id": null,
+    "id": "1922b51be10435bd8d4d430224602e24f6aeb0a4c6a97a779932fdc1bfeaa687",
     "metadata": {},
     "name": "DryRunReportQuery",
     "operationKind": "query",
-    "text": "query DryRunReportQuery(\n  $draftQid: ID!\n) {\n  policyDryRun(draftQid: $draftQid) {\n    days\n    comparedWithVersion\n    decisions\n    distinctRequests\n    replayedRequests\n    truncated\n    unchangedDecisions\n    skippedRequests\n    skippedReason\n    changes {\n      from\n      to\n      decisions\n      requests\n      examples {\n        principalId\n        onBehalfOfId\n        action\n        resourceId\n        decisions\n        policiesBefore\n        policiesAfter\n      }\n    }\n  }\n}\n"
+    "text": null
   }
 };
 })();

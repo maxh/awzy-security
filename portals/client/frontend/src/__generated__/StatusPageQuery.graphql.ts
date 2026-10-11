@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<706e138f10cd86870e4c8c7d32a058d6>>
+ * @generated SignedSource<<c19bce4fff039e41aa5e774b4c3101fa>>
+ * @relayHash 1456a2eeddfd8b3d08731e68a8bfbbc9
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 0b4ec95ee5ceaaaab5a17c58e9156603074b89d0fe393a295b648a34d82135ea
 
 import { ConcreteRequest } from 'relay-runtime';
 export type StatusPageQuery$variables = Record<PropertyKey, never>;
@@ -109,12 +112,11 @@ return {
     "selections": (v0/*:: as any*/)
   },
   "params": {
-    "cacheID": "1456a2eeddfd8b3d08731e68a8bfbbc9",
-    "id": null,
+    "id": "0b4ec95ee5ceaaaab5a17c58e9156603074b89d0fe393a295b648a34d82135ea",
     "metadata": {},
     "name": "StatusPageQuery",
     "operationKind": "query",
-    "text": "query StatusPageQuery {\n  canGenerateDiagnostics: viewerCan(action: ADMINISTER, area: ENFORCEMENT)\n  installStatus {\n    name\n    ready\n    version\n    detail\n    runbookUrl\n  }\n}\n"
+    "text": null
   }
 };
 })();

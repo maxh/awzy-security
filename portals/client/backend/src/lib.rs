@@ -196,21 +196,39 @@ pub fn schema() -> ClientPortalSchema {
 }
 
 pub fn schema_with(services: Services) -> ClientPortalSchema {
+    schema_builder(services).finish()
+}
+
+fn schema_builder(
+    services: Services,
+) -> async_graphql::SchemaBuilder<ClientPortalQuery, ClientPortalMutation, ClientPortalSubscription> {
     Schema::build(ClientPortalQuery::default(), ClientPortalMutation::default(), ClientPortalSubscription::default())
         .data(services)
         .limit_depth(awzy_portal::MAX_QUERY_DEPTH)
         .limit_complexity(awzy_portal::MAX_QUERY_COMPLEXITY)
-        .finish()
 }
+
+/// The frontend's queries by ID, from the Relay compiler (ADR 0088).
+const PERSISTED_QUERIES: &str =
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../frontend/persisted_queries.json"));
 
 /// GraphQL at `/graphql` and MCP at `/mcp`, each behind sign-in with its own tokens (`auth` and
 /// `mcp_auth`, ADR 0081), plus the unauthenticated sign-in discovery routes. `mcp_allowed_hosts`
 /// are the Host headers the MCP endpoint accepts; empty means loopback only (see
-/// AWZY_MCP_ALLOWED_HOSTS in main).
-pub fn router(services: Services, auth: Auth, mcp_auth: Auth, mcp_allowed_hosts: Vec<String>) -> Router {
+/// AWZY_MCP_ALLOWED_HOSTS in main). With `persisted_only`, GraphQL runs only the frontend's own
+/// queries (ADR 0088).
+pub fn router(
+    services: Services,
+    auth: Auth,
+    mcp_auth: Auth,
+    mcp_allowed_hosts: Vec<String>,
+    persisted_only: bool,
+) -> Router {
     let signed_in = middleware::from_fn_with_state(auth.clone(), access::require_viewer);
     let mcp_signed_in = middleware::from_fn_with_state(mcp_auth.clone(), access::require_viewer);
-    let schema = schema_with(services.clone());
+    let persisted = awzy_portal::PersistedQueries::new(PERSISTED_QUERIES, persisted_only)
+        .expect("persisted_queries.json is the Relay compiler's");
+    let schema = schema_builder(services.clone()).extension(persisted).finish();
     // GET: subscriptions over a WebSocket (graphql-ws), or GraphiQL in a browser.
     let graphql = get(graphql_get)
         .with_state((schema.clone(), auth.clone()))
@@ -312,6 +330,16 @@ pub(crate) mod testing {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_frontends_queries_are_embedded_and_parse() {
+        let queries: std::collections::HashMap<String, String> =
+            serde_json::from_str(super::PERSISTED_QUERIES).unwrap();
+        assert!(!queries.is_empty());
+        for text in queries.values() {
+            async_graphql::parser::parse_query(text).unwrap();
+        }
+    }
+
     #[tokio::test]
     async fn api_version_query() {
         let res = super::schema().execute("{ apiVersion }").await;

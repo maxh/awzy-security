@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<b75afb52348f3ceccf36118d27e21d89>>
+ * @generated SignedSource<<3fdba272d92e15caca059d2b71d9e7f1>>
+ * @relayHash ea6fad51560636d3a7375baa4cbc9b63
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 5820aca120b7aa0228a0efa911d505b50bbce114ec09d17f6cc04a564f97c58a
 
 import { ConcreteRequest } from 'relay-runtime';
 export type AskAwzyBotInput = {
@@ -130,12 +133,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "ea6fad51560636d3a7375baa4cbc9b63",
-    "id": null,
+    "id": "5820aca120b7aa0228a0efa911d505b50bbce114ec09d17f6cc04a564f97c58a",
     "metadata": {},
     "name": "AwzyBotPanelAskMutation",
     "operationKind": "mutation",
-    "text": "mutation AwzyBotPanelAskMutation(\n  $input: AskAwzyBotInput!\n) {\n  askAwzyBot(input: $input) {\n    reply\n    transcript\n    toolsUsed\n    refused\n    drafts {\n      id\n      version\n    }\n  }\n}\n"
+    "text": null
   }
 };
 })();

@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<2950f397d64e53e959dc95591759a7de>>
+ * @generated SignedSource<<d31fab1df8d06497085ea0834225db47>>
+ * @relayHash 5153f5bc3dd94f87d9536c7582a3221d
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID ddffdb32ed14ab288a4661f7a976b438828841140d53e22ac76b47709d32b1fc
 
 import { ConcreteRequest } from 'relay-runtime';
 export type CreatePolicyDraftInput = {
@@ -106,12 +109,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "5153f5bc3dd94f87d9536c7582a3221d",
-    "id": null,
+    "id": "ddffdb32ed14ab288a4661f7a976b438828841140d53e22ac76b47709d32b1fc",
     "metadata": {},
     "name": "PoliciesPageCreateDraftMutation",
     "operationKind": "mutation",
-    "text": "mutation PoliciesPageCreateDraftMutation(\n  $input: CreatePolicyDraftInput!\n) {\n  createPolicyDraft(input: $input) {\n    bundle {\n      id\n      version\n    }\n    validationError\n  }\n}\n"
+    "text": null
   }
 };
 })();

@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<f9b8376844c817655b683e15f22a928a>>
+ * @generated SignedSource<<29cd2d45fd8035266bf59abb180a17da>>
+ * @relayHash ad86849b3c74bbaa75f41eba18428ec7
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID abd083120fcbb19ca7dfe9c294b8c36cec5356fd84fb22d41ca36964890fe61e
 
 import { ConcreteRequest } from 'relay-runtime';
 export type ReleaseChannel = "FAST" | "PINNED" | "STABLE" | "%future added value";
@@ -111,12 +114,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "ad86849b3c74bbaa75f41eba18428ec7",
-    "id": null,
+    "id": "abd083120fcbb19ca7dfe9c294b8c36cec5356fd84fb22d41ca36964890fe61e",
     "metadata": {},
     "name": "FleetPageRegisterMutation",
     "operationKind": "mutation",
-    "text": "mutation FleetPageRegisterMutation(\n  $input: RegisterInstallInput!\n) {\n  registerInstall(input: $input) {\n    install {\n      id\n    }\n    reportingToken\n    pullToken\n  }\n}\n"
+    "text": null
   }
 };
 })();

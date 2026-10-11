@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<a65e790b08e093cf59375cda87633662>>
+ * @generated SignedSource<<49c5fa940dcc59e12ca959ec1dae1c12>>
+ * @relayHash 447cccd313f55c6abdce6448366fb0f9
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 8e57d6327b0c6e8bc8d390ea01e34900f86dfa540f467b5935cea2442614e7a0
 
 import { ConcreteRequest } from 'relay-runtime';
 export type PolicyBundleStatus = "ACTIVE" | "DRAFT" | "SUPERSEDED" | "%future added value";
@@ -189,12 +192,11 @@ return {
     "selections": (v4/*:: as any*/)
   },
   "params": {
-    "cacheID": "447cccd313f55c6abdce6448366fb0f9",
-    "id": null,
+    "id": "8e57d6327b0c6e8bc8d390ea01e34900f86dfa540f467b5935cea2442614e7a0",
     "metadata": {},
     "name": "PoliciesPageQuery",
     "operationKind": "query",
-    "text": "query PoliciesPageQuery {\n  canPublish: viewerCan(action: ADMINISTER, area: POLICIES)\n  activePolicyBundle {\n    id\n    version\n    schema\n    policies\n    publishedAt\n    publishedBy {\n      label\n    }\n  }\n  policyBundles(first: 20) {\n    id\n    version\n    status\n    createdAt\n    createdBy {\n      label\n    }\n    publishedAt\n  }\n}\n"
+    "text": null
   }
 };
 })();

@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<1d631d1cd2768648545da06a183adf7f>>
+ * @generated SignedSource<<6d065f0bcbf2ae1e7e44bfc702df1773>>
+ * @relayHash 30f3fd76945267dd121b105496d77398
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 7057bef6b72a54e22d4fc05ee0057152fc4ae14ab11bc66618d1653a5df2439d
 
 import { ConcreteRequest } from 'relay-runtime';
 export type ChallengeStatus = "EXPIRED" | "PASSED" | "PENDING" | "REJECTED" | "%future added value";
@@ -100,12 +103,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "30f3fd76945267dd121b105496d77398",
-    "id": null,
+    "id": "7057bef6b72a54e22d4fc05ee0057152fc4ae14ab11bc66618d1653a5df2439d",
     "metadata": {},
     "name": "ChallengesPageDecideMutation",
     "operationKind": "mutation",
-    "text": "mutation ChallengesPageDecideMutation(\n  $input: DecideChallengeInput!\n) {\n  decideChallenge(input: $input) {\n    challenge {\n      id\n      status\n    }\n  }\n}\n"
+    "text": null
   }
 };
 })();

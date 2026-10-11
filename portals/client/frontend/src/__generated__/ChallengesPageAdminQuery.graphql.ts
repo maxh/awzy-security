@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<2cad61f24a85fd008a5476cea151a1f3>>
+ * @generated SignedSource<<d0945dfa212d2920cdfb5cb2138ca2fa>>
+ * @relayHash 308703ef23df61017e484d9f810810b7
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 9c6eb55479c30816ab3676343c944a6008a3fd704485e0da7ffdf36b4069601c
 
 import { ConcreteRequest } from 'relay-runtime';
 export type ChallengeKind = "APPROVAL" | "BIOMETRIC" | "JUSTIFICATION" | "VERIFICATION" | "%future added value";
@@ -227,12 +230,11 @@ return {
     "selections": (v4/*:: as any*/)
   },
   "params": {
-    "cacheID": "308703ef23df61017e484d9f810810b7",
-    "id": null,
+    "id": "9c6eb55479c30816ab3676343c944a6008a3fd704485e0da7ffdf36b4069601c",
     "metadata": {},
     "name": "ChallengesPageAdminQuery",
     "operationKind": "query",
-    "text": "query ChallengesPageAdminQuery {\n  pending: challenges(status: PENDING) {\n    id\n    principal {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    kinds\n    passed\n    answererId\n    justification\n    createdAt\n  }\n  containments {\n    id\n    principal {\n      type\n      id\n    }\n    reason\n    createdBy {\n      label\n    }\n    createdAt\n    monitor\n  }\n}\n"
+    "text": null
   }
 };
 })();

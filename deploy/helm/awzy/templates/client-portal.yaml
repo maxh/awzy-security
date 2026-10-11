@@ -17,6 +17,7 @@
   (dict "name" "AWZY_CONTEXT_ADDR" "value" (printf "http://awzy-context.%s.svc:8080" $sys))
   (dict "name" "AWZY_PDP_ADDR" "value" (printf "http://awzy-pdp.%s.svc:8080" $sys))
   (dict "name" "AWZY_POLICY_ADDR" "value" (printf "http://awzy-policy.%s.svc:8080" $sys))
+  (dict "name" "AWZY_PORTAL_PERSISTED_QUERIES_ONLY" "value" (ternary "true" "false" (ne $p.persistedQueriesOnly false)))
 -}}
 {{- if $p.publicUrl }}
 {{- $env = append $env (dict "name" "AWZY_PORTAL_PUBLIC_URL" "value" $p.publicUrl) }}

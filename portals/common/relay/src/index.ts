@@ -6,6 +6,7 @@ import {
   RecordSource,
   Store,
   type FetchFunction,
+  type RequestParameters,
   type SubscribeFunction,
 } from "relay-runtime";
 
@@ -17,8 +18,18 @@ export type EnvironmentOptions = {
 };
 
 /**
+ * What's sent for an operation: its persisted ID, which the backend maps to the text it was built
+ * with (ADR 0088), or the text for an operation the compiler didn't persist.
+ */
+function operationBody(operation: RequestParameters) {
+  return operation.id
+    ? { query: "", extensions: { persistedQuery: { version: 1, sha256Hash: operation.id } } }
+    : { query: operation.text ?? "" };
+}
+
+/**
  * Relay environment for a portal backend: queries and mutations over HTTP POST,
- * subscriptions over graphql-ws on the same path.
+ * subscriptions over graphql-ws on the same path, each sent by its persisted ID.
  */
 export function createEnvironment(endpoint = "/graphql", options: EnvironmentOptions = {}): Environment {
   const authorization = (): Record<string, string> => {
@@ -30,7 +41,7 @@ export function createEnvironment(endpoint = "/graphql", options: EnvironmentOpt
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json", ...authorization() },
-      body: JSON.stringify({ query: operation.text, variables }),
+      body: JSON.stringify({ ...operationBody(operation), variables }),
     });
     if (res.status === 401) {
       options.onUnauthorized?.();
@@ -52,7 +63,7 @@ export function createEnvironment(endpoint = "/graphql", options: EnvironmentOpt
   const subscribeFn: SubscribeFunction = (operation, variables) =>
     Observable.create((sink) =>
       ws.subscribe(
-        { operationName: operation.name, query: operation.text ?? "", variables },
+        { operationName: operation.name, ...operationBody(operation), variables },
         {
           next: (value) => sink.next(value as never),
           error: (err) => sink.error(err instanceof Error ? err : new Error(String(err))),

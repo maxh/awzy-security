@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<f32d1eb185b2a8923584a2981c1545ce>>
+ * @generated SignedSource<<926da3e5008047513664743eb3547d68>>
+ * @relayHash 6a01792a739bc4cbc4a49aba31e0c463
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 505c063d9b88b651075d64c94cb109831a4debc696bccb472942276eed377a29
 
 import { ConcreteRequest } from 'relay-runtime';
 export type RemoveServiceAccountInput = {
@@ -76,12 +79,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "6a01792a739bc4cbc4a49aba31e0c463",
-    "id": null,
+    "id": "505c063d9b88b651075d64c94cb109831a4debc696bccb472942276eed377a29",
     "metadata": {},
     "name": "DirectoryPageRemoveMutation",
     "operationKind": "mutation",
-    "text": "mutation DirectoryPageRemoveMutation(\n  $input: RemoveServiceAccountInput!\n) {\n  removeServiceAccount(input: $input) {\n    removedId\n  }\n}\n"
+    "text": null
   }
 };
 })();

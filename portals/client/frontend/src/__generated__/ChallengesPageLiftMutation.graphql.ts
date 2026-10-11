@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<1dddb614ba69111814e99c119d081274>>
+ * @generated SignedSource<<8e86dc8c32c5e2a1c20808653e8b4087>>
+ * @relayHash 5b3c54089a411fef1e0b598b8a6235d9
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 3ad2c92c7de17476f8a259145fc7a962717853c5d7ea7accfd2d03ec7bb24c91
 
 import { ConcreteRequest } from 'relay-runtime';
 export type LiftContainmentInput = {
@@ -98,12 +101,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "5b3c54089a411fef1e0b598b8a6235d9",
-    "id": null,
+    "id": "3ad2c92c7de17476f8a259145fc7a962717853c5d7ea7accfd2d03ec7bb24c91",
     "metadata": {},
     "name": "ChallengesPageLiftMutation",
     "operationKind": "mutation",
-    "text": "mutation ChallengesPageLiftMutation(\n  $input: LiftContainmentInput!\n) {\n  liftContainment(input: $input) {\n    containment {\n      id\n      liftedAt\n    }\n  }\n}\n"
+    "text": null
   }
 };
 })();

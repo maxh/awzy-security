@@ -9,5 +9,9 @@
   ],
   "customScalarTypes": {
     "UtcTimestamp": "string"
+  },
+  "persistConfig": {
+    "file": "./persisted_queries.json",
+    "algorithm": "SHA256"
   }
 }

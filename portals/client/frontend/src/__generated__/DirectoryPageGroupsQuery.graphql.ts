@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<42f8f8f3ad485204d2281fc6aff25ac6>>
+ * @generated SignedSource<<c8435c9d97be20695c194d8c4539e57b>>
+ * @relayHash 3022fb2d2f96d3c2c3416d7f558d76c2
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 54e56aa745cadf5a16077797ef677ea75b0218bdd6964f37b2e053f354fb2372
 
 import { ConcreteRequest } from 'relay-runtime';
 export type DirectoryPageGroupsQuery$variables = Record<PropertyKey, never>;
@@ -90,12 +93,11 @@ return {
     "selections": (v0/*:: as any*/)
   },
   "params": {
-    "cacheID": "3022fb2d2f96d3c2c3416d7f558d76c2",
-    "id": null,
+    "id": "54e56aa745cadf5a16077797ef677ea75b0218bdd6964f37b2e053f354fb2372",
     "metadata": {},
     "name": "DirectoryPageGroupsQuery",
     "operationKind": "query",
-    "text": "query DirectoryPageGroupsQuery {\n  groups {\n    name\n    humans\n    groups\n    parents\n    updatedAt\n  }\n}\n"
+    "text": null
   }
 };
 })();

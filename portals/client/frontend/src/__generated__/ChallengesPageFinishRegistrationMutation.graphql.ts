@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<45f22a9b2dbe130c1e2dde9813de9145>>
+ * @generated SignedSource<<8e4da4b8a26e65999b1a5dc92a9fc7f5>>
+ * @relayHash a0e1e8584d2209ab90c0420626b90645
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 6fd6660a60188fb6976dd075abdb83a99511d79dd6495e6b58c602196c0cd43b
 
 import { ConcreteRequest } from 'relay-runtime';
 export type FinishSecurityKeyRegistrationInput = {
@@ -100,12 +103,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "a0e1e8584d2209ab90c0420626b90645",
-    "id": null,
+    "id": "6fd6660a60188fb6976dd075abdb83a99511d79dd6495e6b58c602196c0cd43b",
     "metadata": {},
     "name": "ChallengesPageFinishRegistrationMutation",
     "operationKind": "mutation",
-    "text": "mutation ChallengesPageFinishRegistrationMutation(\n  $input: FinishSecurityKeyRegistrationInput!\n) {\n  finishSecurityKeyRegistration(input: $input) {\n    securityKey {\n      id\n      name\n    }\n  }\n}\n"
+    "text": null
   }
 };
 })();

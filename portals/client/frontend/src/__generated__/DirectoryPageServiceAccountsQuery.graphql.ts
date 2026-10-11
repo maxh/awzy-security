@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<7cbe83d9bb886af6f4f9b4ce344438fc>>
+ * @generated SignedSource<<6be685219501aef6c335fcb92b7cc671>>
+ * @relayHash 05fac166ef452c6b91c734e6665a80a8
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 543e85608282deda81ecaac4e85ac0f57e83833905b9633aadd11a1b900c5e94
 
 import { ConcreteRequest } from 'relay-runtime';
 export type DirectoryPageServiceAccountsQuery$variables = Record<PropertyKey, never>;
@@ -138,12 +141,11 @@ return {
     "selections": (v0/*:: as any*/)
   },
   "params": {
-    "cacheID": "05fac166ef452c6b91c734e6665a80a8",
-    "id": null,
+    "id": "543e85608282deda81ecaac4e85ac0f57e83833905b9633aadd11a1b900c5e94",
     "metadata": {},
     "name": "DirectoryPageServiceAccountsQuery",
     "operationKind": "query",
-    "text": "query DirectoryPageServiceAccountsQuery {\n  canAdminister: viewerCan(action: ADMINISTER, area: DIRECTORY)\n  serviceAccounts {\n    id\n    owner\n    ai\n    groups\n    description\n    updatedBy {\n      label\n    }\n    updatedAt\n  }\n}\n"
+    "text": null
   }
 };
 })();
