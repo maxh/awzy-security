@@ -153,6 +153,9 @@ reporter:
   tokenSecret: awzy-reporting-token
   corpUrl: https://corp.awzysecurity.com
   intervalSeconds: 60
+  # The Argo CD Application that installs this chart (bootstrap makes it): the heartbeat says
+  # whether the release synced and its health, as closed values. Empty name: not read.
+  releaseApplication: { namespace: awzy-ops, name: awzy }
   replicas: 1
   resources:
     requests: { cpu: 10m, memory: 32Mi }
