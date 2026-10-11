@@ -7,7 +7,8 @@
 #   tools/ci/check-quality-ratchets.sh <ref>        # or with another commit
 #
 # Rust counts look only at non-test code: each file up to its first #[cfg(test)].
-set -euo pipefail
+set -Eeuo pipefail
+trap 'echo "::error::check-quality-ratchets.sh stopped at line $LINENO" >&2' ERR
 cd "$(git rev-parse --show-toplevel)"
 max_lines=800
 
@@ -44,7 +45,11 @@ counts() {
   for k in $metrics; do echo "$k $(metric "$k")"; done
 }
 
-base=$(git merge-base HEAD "${1:-origin/main}")
+against=${1:-origin/main}
+base=$(git merge-base HEAD "$against") || {
+  echo "::error::no merge base with $against; fetch its history (actions/checkout's fetch-depth: 0)" >&2
+  exit 1
+}
 tree=$(mktemp -d)
 trap 'git worktree remove --force "$tree" >/dev/null 2>&1 || true' EXIT
 # Without hooks: a local checkout hook may start Bazel.
