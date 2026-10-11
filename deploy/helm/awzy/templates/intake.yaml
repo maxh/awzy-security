@@ -5,6 +5,7 @@
 {{ include "awzy.service" (dict "root" . "name" "awzy-intake" "namespace" $sys "values" .Values.intake
   "env" (list
     (dict "name" "AWZY_EVENTS_TOPIC" "value" .Values.intake.eventsTopic)
+    (dict "name" "AWZY_INTAKE_HUMAN_ROLES" "value" (join "," (.Values.intake.humanRoles | default list)))
     (dict "name" "AWZY_INTAKE_TOKEN" "valueFrom" (dict "secretKeyRef" (dict "name" .Values.intake.tokenSecret "key" "token")))
     (dict "name" "AWZY_KAFKA_BROKERS" "value" (required "kafka.brokers is required" .Values.kafka.brokers))
   )) }}

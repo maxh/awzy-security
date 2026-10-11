@@ -156,6 +156,9 @@ Audit logs from your apps and cloud, as events.
 - **API (HTTP):** `POST /v1/events` for app events in awzy's own schema, and
   `POST /v1/events/aws-cloudtrail` for CloudTrail log files. Both take your log shippers' token.
 - **Writes:** each event, normalized, to `awzy.events.v1`, acknowledged once Kafka has it.
+- **People in CloudTrail:** a session of an IAM Identity Center role, or of a role named in the
+  chart's `intake.humanRoles`, is recorded as the person its session names, so it counts toward
+  their risk score. The original ARN stays with the event.
 
 ### awzy-reasoner
 
