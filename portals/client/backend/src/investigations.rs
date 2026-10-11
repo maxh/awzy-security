@@ -79,7 +79,8 @@ pub async fn get(context: &ContextClient, qid: &str) -> anyhow::Result<Option<Wi
     struct Body {
         investigation: WireInvestigation,
     }
-    let (status, body) = context.call("GET", &format!("/v1/investigations/{}", encode(qid)), None, None).await?;
+    let (status, body) =
+        context.call("GET", &format!("/v1/investigations/{}", awzy_http::encode(qid)), None, None).await?;
     match status {
         200 => Ok(Some(serde_json::from_slice::<Body>(&body)?.investigation)),
         400 | 404 => Ok(None),
@@ -98,7 +99,7 @@ pub async fn close(
     struct Body {
         investigation: WireInvestigation,
     }
-    let path = format!("/v1/investigations/{}/close", encode(qid));
+    let path = format!("/v1/investigations/{}/close", awzy_http::encode(qid));
     let (status, body) = context
         .call("POST", &path, Some(&actor.to_string()), Some(json!({ "reason": reason })))
         .await
@@ -109,16 +110,6 @@ pub async fn close(
         400 | 404 | 409 => Err(text),
         _ => Err(format!("awzy-context answered {status}: {text}")),
     }
-}
-
-/// Percent-encodes a path segment.
-fn encode(s: &str) -> String {
-    s.bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => (b as char).to_string(),
-            _ => format!("%{b:02X}"),
-        })
-        .collect()
 }
 
 // ---- GraphQL
@@ -378,6 +369,6 @@ mod tests {
         let out = to_json(&wire);
         assert_eq!(out["investigation_qid"], wire.qid);
         assert_eq!(out["evidence"][0]["why"], "the export");
-        assert_eq!(encode("investigation_0199/x"), "investigation_0199%2Fx");
+        assert_eq!(awzy_http::encode("investigation_0199/x"), "investigation_0199%2Fx");
     }
 }

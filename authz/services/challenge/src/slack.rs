@@ -63,7 +63,7 @@ impl Slack {
             bail!("{user_name} isn't an email address, so Slack can't find them");
         }
         let lookup = self
-            .call(axum::http::Method::GET, &format!("users.lookupByEmail?email={}", encode(user_name)), None)
+            .call(axum::http::Method::GET, &format!("users.lookupByEmail?email={}", awzy_http::encode(user_name)), None)
             .await?;
         let user = lookup["user"]["id"].as_str().context("Slack returned no user ID")?.to_string();
         self.post(&user, text).await
@@ -79,16 +79,6 @@ impl Slack {
         self.call(axum::http::Method::POST, "chat.postMessage", Some(body)).await?;
         Ok(())
     }
-}
-
-/// Percent-encodes a query value.
-fn encode(s: &str) -> String {
-    s.bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => (b as char).to_string(),
-            _ => format!("%{b:02X}"),
-        })
-        .collect()
 }
 
 #[cfg(test)]

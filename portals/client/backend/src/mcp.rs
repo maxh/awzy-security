@@ -246,7 +246,7 @@ impl ClientPortalMcp {
     ) -> Result<Json<ResourceOut>, ErrorData> {
         let viewer = self.allow(&parts, PortalAction::View, PortalArea::Directory).await?;
         self.record(&viewer, "get_resource");
-        let path = format!("/v1/resources/{}/entities", urlencode(&p.resource_id));
+        let path = format!("/v1/resources/{}/entities", awzy_http::encode(&p.resource_id));
         let (status, body) = self.context()?.call("GET", &path, None, None).await.map_err(internal)?;
         if status == 404 {
             return Ok(Json(ResourceOut { entities: vec![], assignees: vec![] }));
@@ -510,16 +510,6 @@ pub(crate) fn principal_from_snapshot(snapshot: &serde_json::Value, kind: &str, 
     groups.sort();
     let risk_score = snapshot["risk"][format!("{kind}::{id}")].as_i64();
     PrincipalOut { entity, groups, risk_score }
-}
-
-/// A path segment, percent-encoded.
-fn urlencode(s: &str) -> String {
-    s.bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
-            _ => format!("%{b:02X}"),
-        })
-        .collect()
 }
 
 fn internal(e: anyhow::Error) -> ErrorData {

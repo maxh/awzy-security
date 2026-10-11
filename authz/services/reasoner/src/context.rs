@@ -61,7 +61,7 @@ impl ContextClient {
 
     /// A resource's title and text, or None when awzy-context doesn't have it.
     pub async fn resource(&self, id: &str) -> anyhow::Result<Option<(String, String)>> {
-        match self.send(Method::GET, &format!("/v1/resources/{}", encode(id)), None).await {
+        match self.send(Method::GET, &format!("/v1/resources/{}", awzy_http::encode(id)), None).await {
             Ok(body) => {
                 let r = &body["resource"];
                 Ok(Some((r["name"].as_str().unwrap_or(id).to_string(), r["text"].as_str().unwrap_or("").to_string())))
@@ -82,7 +82,7 @@ impl ContextClient {
         &self,
         since: chrono::DateTime<chrono::Utc>,
     ) -> anyhow::Result<BTreeSet<Principal>> {
-        let path = format!("/v1/investigations?limit=500&since={}", encode(&since.to_rfc3339()));
+        let path = format!("/v1/investigations?limit=500&since={}", awzy_http::encode(&since.to_rfc3339()));
         let body = self.send(Method::GET, &path, None).await?;
         Ok(body["investigations"]
             .as_array()
@@ -96,7 +96,7 @@ impl ContextClient {
 
     /// Tokens spent on investigations since `since`.
     pub async fn investigation_tokens(&self, since: chrono::DateTime<chrono::Utc>) -> anyhow::Result<u64> {
-        let path = format!("/v1/investigations/usage?since={}", encode(&since.to_rfc3339()));
+        let path = format!("/v1/investigations/usage?since={}", awzy_http::encode(&since.to_rfc3339()));
         let usage = &self.send(Method::GET, &path, None).await?["usage"];
         Ok(usage["input_tokens"].as_u64().unwrap_or(0) + usage["output_tokens"].as_u64().unwrap_or(0))
     }
@@ -123,16 +123,6 @@ impl ContextClient {
         }
         Ok(())
     }
-}
-
-/// Percent-encodes a path segment or query value.
-fn encode(s: &str) -> String {
-    s.bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => (b as char).to_string(),
-            _ => format!("%{b:02X}"),
-        })
-        .collect()
 }
 
 /// Every group each principal is in, directly or through the groups it's in.

@@ -72,7 +72,7 @@ async fn call(context: &ContextClient, params: &Value) -> Value {
 }
 
 async fn read_document(context: &ContextClient, id: &str) -> anyhow::Result<String> {
-    let (status, body) = context.get(&format!("/v1/resources/{}", encode(id))).await?;
+    let (status, body) = context.get(&format!("/v1/resources/{}", awzy_http::encode(id))).await?;
     anyhow::ensure!(status != StatusCode::NOT_FOUND, "no document {id}");
     anyhow::ensure!(status.is_success(), "awzy-context returned {status}");
     let r = &body["resource"];
@@ -80,7 +80,7 @@ async fn read_document(context: &ContextClient, id: &str) -> anyhow::Result<Stri
 }
 
 async fn list_folder(context: &ContextClient, id: &str) -> anyhow::Result<String> {
-    let (status, body) = context.get(&format!("/v1/resources?parent={}&limit=200", encode(id))).await?;
+    let (status, body) = context.get(&format!("/v1/resources?parent={}&limit=200", awzy_http::encode(id))).await?;
     anyhow::ensure!(status.is_success(), "awzy-context returned {status}");
     let lines: Vec<String> = body["resources"]
         .as_array()
@@ -100,16 +100,6 @@ async fn list_folder(context: &ContextClient, id: &str) -> anyhow::Result<String
 
 pub(crate) fn tool_error(text: &str) -> Value {
     json!({ "isError": true, "content": [{ "type": "text", "text": text }] })
-}
-
-/// Percent-encodes an ID for a path segment or query value: resource IDs may contain `/`.
-fn encode(id: &str) -> String {
-    id.bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => (b as char).to_string(),
-            _ => format!("%{b:02X}"),
-        })
-        .collect()
 }
 
 #[cfg(test)]

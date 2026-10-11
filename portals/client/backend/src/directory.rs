@@ -218,7 +218,7 @@ impl DirectoryQuery {
         require(ctx, PortalAction::View, PortalArea::Directory).await?;
         let mut path = format!("/v1/directory/humans?limit={}", first.clamp(1, 1000));
         if let Some(s) = search.filter(|s| !s.trim().is_empty()) {
-            path.push_str(&format!("&search={}", urlencode(s.trim())));
+            path.push_str(&format!("&search={}", awzy_http::encode(s.trim())));
         }
         #[derive(Deserialize)]
         struct Wire {
@@ -267,15 +267,6 @@ impl DirectoryQuery {
     }
 }
 
-fn urlencode(s: &str) -> String {
-    s.bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
-            _ => format!("%{b:02X}"),
-        })
-        .collect()
-}
-
 #[derive(InputObject, Serialize)]
 pub struct RegisterServiceAccountInput {
     /// Its ID in tokens: the `sub` of its own tokens, or `act.sub` when acting for a person.
@@ -320,7 +311,7 @@ impl DirectoryMutation {
         let (status, res) = context(ctx)?
             .call(
                 "PUT",
-                &format!("/v1/service-accounts/{}", urlencode(&input.id)),
+                &format!("/v1/service-accounts/{}", awzy_http::encode(&input.id)),
                 Some(&viewer.actor().to_string()),
                 Some(body),
             )
@@ -346,7 +337,7 @@ impl DirectoryMutation {
         let (status, res) = context(ctx)?
             .call(
                 "DELETE",
-                &format!("/v1/service-accounts/{}", urlencode(&input.id)),
+                &format!("/v1/service-accounts/{}", awzy_http::encode(&input.id)),
                 Some(&viewer.actor().to_string()),
                 None,
             )
