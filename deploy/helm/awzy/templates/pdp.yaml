@@ -1,9 +1,14 @@
 {{- $sys := .Values.namespaces.system -}}
+# Applies only bundles and mode changes awzy-policy signed (ADR 0080).
 {{ include "awzy.service" (dict "root" . "name" "awzy-pdp" "namespace" $sys "values" .Values.pdp
   "tokens" (list "awzy-challenge" "awzy-context" "awzy-policy")
   "env" (list
     (dict "name" "AWZY_CHALLENGE_ADDR" "value" (printf "http://awzy-challenge.%s.svc:8080" $sys))
     (dict "name" "AWZY_KAFKA_BROKERS" "value" (required "kafka.brokers is required" .Values.kafka.brokers))
     (dict "name" "AWZY_POLICY_ADDR" "value" (printf "http://awzy-policy.%s.svc:8080" $sys))
+    (dict "name" "AWZY_POLICY_VERIFY_KEY_FILE" "value" "/var/run/secrets/awzy/policy-verify/verify.pem")
     (dict "name" "AWZY_CONTEXT_ADDR" "value" (printf "http://awzy-context.%s.svc:8080" $sys))
-  )) }}
+  )
+  "volumes" (list (dict "name" "policy-verify" "secret" (dict "secretName" (required "policy.verifyKeySecret is required" .Values.policy.verifyKeySecret))))
+  "mounts" (list (dict "name" "policy-verify" "mountPath" "/var/run/secrets/awzy/policy-verify" "readOnly" true))
+) }}

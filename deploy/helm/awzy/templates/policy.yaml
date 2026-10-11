@@ -1,10 +1,23 @@
 {{- $backend := printf "%s/awzy" .Values.namespaces.system -}}
 {{- $portal := printf "%s/awzy" .Values.namespaces.portal -}}
+{{- $glass := .Values.policy.breakGlassKeysSecret -}}
 # Who may call which methods (ADR 0055): the PDP and the portal read bundles and the mode; only
 # the portal drafts, publishes, and switches the mode. Break-glass rollback is signed instead.
-{{ include "awzy.service" (dict "root" . "name" "awzy-policy" "namespace" .Values.namespaces.system "values" .Values.policy
-  "env" (list
+# awzy-policy signs each bundle and mode change, and the PDPs check them (ADR 0080).
+{{- $env := list
     (dict "name" "AWZY_POLICY_READERS" "value" (printf "%s,%s" $backend $portal))
+    (dict "name" "AWZY_POLICY_SIGNING_KEY_FILE" "value" "/var/run/secrets/awzy/policy-signing/signing.pem")
     (dict "name" "AWZY_POLICY_WRITERS" "value" $portal)
     (dict "name" "AWZY_POSTGRES_URL" "valueFrom" (dict "secretKeyRef" (dict "name" "awzy-postgres" "key" "policy_url")))
-  )) }}
+-}}
+{{- $volumes := list
+    (dict "name" "policy-signing" "secret" (dict "secretName" (required "policy.signingKeySecret is required" .Values.policy.signingKeySecret)))
+-}}
+{{- $mounts := list (dict "name" "policy-signing" "mountPath" "/var/run/secrets/awzy/policy-signing" "readOnly" true) -}}
+{{- if $glass }}
+{{- $env = append $env (dict "name" "AWZY_POLICY_BREAK_GLASS_KEYS_FILE" "value" "/var/run/secrets/awzy/break-glass/keys.pem") -}}
+{{- $volumes = append $volumes (dict "name" "break-glass" "secret" (dict "secretName" $glass)) -}}
+{{- $mounts = append $mounts (dict "name" "break-glass" "mountPath" "/var/run/secrets/awzy/break-glass" "readOnly" true) -}}
+{{- end }}
+{{ include "awzy.service" (dict "root" . "name" "awzy-policy" "namespace" .Values.namespaces.system "values" .Values.policy
+  "env" $env "volumes" $volumes "mounts" $mounts) }}

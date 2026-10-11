@@ -286,8 +286,9 @@ AWZY_PDP_ADDR=http://127.0.0.1:8082 AWZY_POLICY_ADDR=http://127.0.0.1:8081 \
 ### Policy bundles
 
 awzy-policy runs against the [local stack](#local-stack). Signed policy bundles are optional
-locally: generate a key pair, then give awzy-policy the private key and the PDP the public key. A
-PDP with a verify key refuses unsigned or altered bundles.
+locally (installs always sign; bootstrap makes the key): generate a key pair, then give
+awzy-policy the private key and the PDP the public key. A PDP with a verify key refuses unsigned
+or altered bundles and enforcement modes, and older ones than it has applied (ADR 0080).
 
 ```sh
 openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt -out signing.pem

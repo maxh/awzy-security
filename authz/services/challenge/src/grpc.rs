@@ -31,7 +31,7 @@ use crate::{
     approvals::{ApprovalError, Approvals},
     feed::{Feed, HEARTBEAT},
     keys::{Assertion, KeyError, SecurityKey, SecurityKeys},
-    store::{Challenge, ChallengeStatus, ChallengeStore, Containment, RequestKey, StoreError},
+    store::{Challenge, ChallengeStatus, ChallengeStore, ChallengedPolicy, Containment, RequestKey, StoreError},
 };
 
 /// Who may call which methods (ADR 0055). Each group's callers come from the chart, as
@@ -149,10 +149,24 @@ impl ChallengeService for Service {
     async fn resolve(&self, req: Request<ResolveRequest>) -> Result<Response<ResolveResponse>, Status> {
         let req = req.into_inner();
         let decision_id = qid::<DecisionId>(&req.decision_qid)?;
-        let required = challenges_from_wire(&req.kinds);
-        if required.is_empty() {
-            return Err(Status::invalid_argument("kinds is required"));
+        let policies: Vec<ChallengedPolicy> = if req.policies.is_empty() {
+            challenges_from_wire(&req.kinds).iter().map(ChallengedPolicy::for_kind).collect()
+        } else {
+            req.policies
+                .iter()
+                .map(|p| {
+                    let kind = challenges_from_wire(&[p.kind]).iter().next();
+                    match kind {
+                        Some(kind) if !p.policy_id.is_empty() => Ok(ChallengedPolicy { id: p.policy_id.clone(), kind }),
+                        _ => Err(Status::invalid_argument("each policy needs its ID and the kind it asks for")),
+                    }
+                })
+                .collect::<Result<_, _>>()?
+        };
+        if policies.is_empty() {
+            return Err(Status::invalid_argument("kinds or policies is required"));
         }
+        let required: awzy_model::Challenges = policies.iter().map(|p| p.kind).collect();
         let request = RequestKey {
             principal: required_ref(req.principal, "principal")?,
             on_behalf_of: req.on_behalf_of.map(Into::into),
@@ -160,7 +174,8 @@ impl ChallengeService for Service {
             resource: required_ref(req.resource, "resource")?,
         };
         let answerer = Some(req.answerer_id.as_str()).filter(|a| !a.is_empty());
-        let r = self.store.resolve(decision_id, &request, required, answerer, req.open).await.map_err(status)?;
+        let r =
+            self.store.resolve_policies(decision_id, &request, &policies, answerer, req.open).await.map_err(status)?;
         if let Some(id) = r.challenge_id {
             tracing::info!(challenge_id = %id, %decision_id, kinds = %required.without(r.passed).joined(), "challenge open");
             // Tell people only about a new challenge, not each retry (ADR 0073).
@@ -175,6 +190,7 @@ impl ChallengeService for Service {
             passed: challenges_to_wire(r.passed),
             challenge_qid: r.challenge_id.map(|id| id.to_string()).unwrap_or_default(),
             rejected: r.rejected,
+            passed_policies: r.passed_policies,
         }))
     }
 

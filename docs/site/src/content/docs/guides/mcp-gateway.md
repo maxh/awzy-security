@@ -40,7 +40,6 @@ at awzy-challenge (for containments during a PDP outage; see below).
     {
       "name": "drive",
       "url": "http://drive-mcp.tools.svc:8080/mcp",
-      "default_sensitivity": "internal",
       "tools": { "search": "internal", "read_document": "internal", "share_document": "confidential" },
       "resource_tools": {
         "read_document": { "argument": "id" },
@@ -58,14 +57,16 @@ at awzy-challenge (for containments during a PDP outage; see below).
   - The signing key comes from `jwks_url` (your IdP's keys, RS256 or ES256) or
     `rs256_public_key_file`.
   - `subject_claim` is the claim that holds the person's ID as your IdP provisions it over SCIM.
-    It's `sub` by default; with Okta or Entra ID it's usually `email` or `preferred_username`,
-    since their `sub` is opaque.
+    It's `sub` by default; with Okta or Entra ID it's usually `email`, since their `sub` is
+    opaque. Prefer a claim your IdP won't let people change: Entra's `preferred_username` can
+    be. Tokens an application gets for itself (client credentials) are identified by `sub`.
   - `jwks_ca_file` trusts a private CA.
 - **`upstreams`:** one per MCP server. Agents reach each at `/mcp/<name>`.
   - `url` is the server's streamable HTTP endpoint.
-  - `tools` gives each tool's sensitivity, and `default_sensitivity` covers the rest. Your policies
-    see it as `resource.sensitivity` on the tool, and the base policies let everyone call
-    `public` and `internal` tools.
+  - `tools` gives each tool's sensitivity, and `default_sensitivity` covers the rest. It's
+    `confidential` unless you set it, so a tool the server adds later isn't open to everyone
+    before you've classified it. Your policies see it as `resource.sensitivity` on the tool, and
+    the base policies let everyone call `public` and `internal` tools.
   - `resource_tools` names the tools that act on one resource: `argument` is the tool argument
     holding the resource's ID in awzy-context, and `action` is `read` (the default) or `write`.
 - **`service_account_registry`:** `awzy-context` checks agents against the service accounts

@@ -135,6 +135,11 @@ message EnforcementSetting {
   google.protobuf.Timestamp changed_at = 4;
   // Who changed it (ADR 0060).
   awzy.authz.v1.Actor changed_by_actor = 5;
+  // ECDSA P-256 signature (DER) over awzy-signing's enforcement_payload, set when awzy-policy has
+  // a signing key (ADR 0080). Empty for a scope never switched, which is in monitor.
+  bytes signature = 6;
+  // The key that signed: `sha256:<fingerprint>`.
+  string signing_key_id = 7;
 }
 
 message GetEnforcementRequest {

@@ -115,13 +115,15 @@ impl PolicyService for Service {
             // Wakes for a new mode too, so the caller reads it straight after (ADR 0077).
             let store = self.0.clone();
             // The install's mode as it was, so a change to it also ends the wait.
-            let mode_then = store.enforcement(crate::store::INSTALL_SCOPE).await.ok().map(|e| e.changed_at);
+            // Times are whole seconds, so the mode and who set it tell apart two changes in one.
+            let setting = |e: crate::store::EnforcementSetting| (e.changed_at, e.mode, e.changed_by);
+            let mode_then = store.enforcement(crate::store::INSTALL_SCOPE).await.ok().map(setting);
             let check = || {
                 let store = store.clone();
+                let mode_then = mode_then.clone();
                 async move {
                     let bundle_moved = !matches!(store.active().await, Ok(Some(b)) if b.version == known);
-                    bundle_moved
-                        || store.enforcement(crate::store::INSTALL_SCOPE).await.ok().map(|e| e.changed_at) != mode_then
+                    bundle_moved || store.enforcement(crate::store::INSTALL_SCOPE).await.ok().map(setting) != mode_then
                 }
             };
             self.0
@@ -287,6 +289,8 @@ fn setting_to_wire(s: EnforcementSetting) -> WireSetting {
         changed_at: s
             .changed_at
             .map(|t| Timestamp { seconds: t.timestamp(), nanos: t.timestamp_subsec_nanos() as i32 }),
+        signature: s.signature.unwrap_or_default(),
+        signing_key_id: s.signing_key_id.unwrap_or_default(),
     }
 }
 

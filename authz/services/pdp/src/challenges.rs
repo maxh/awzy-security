@@ -9,7 +9,7 @@ use awzy_service_auth::{grpc_channel, AuthChannel};
 use std::time::Duration;
 
 use awzy_authz_proto::{
-    challenge::v1::{challenge_service_client::ChallengeServiceClient, ResolveRequest},
+    challenge::v1::{challenge_service_client::ChallengeServiceClient, ChallengedPolicy, ResolveRequest},
     challenges_from_wire, challenges_to_wire,
 };
 use awzy_model::{ChallengeId, Challenges, Check, DecisionId, EntityRef};
@@ -27,6 +27,8 @@ const RESOLVE_TIMEOUT: Duration = Duration::from_secs(1);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Resolution {
     pub passed: Challenges,
+    /// The asking policies a live grant answers, which a decision then sets aside (ADR 0080).
+    pub passed_policies: std::collections::HashSet<String>,
     pub challenge_id: Option<ChallengeId>,
     pub rejected: bool,
 }
@@ -55,6 +57,7 @@ impl ChallengeResolver {
         decision_id: DecisionId,
         req: &Check,
         required: Challenges,
+        asking: &[(String, awzy_model::ChallengeKind)],
         parties: &Parties,
     ) -> anyhow::Result<Resolution> {
         let Some(client) = &self.client else { anyhow::bail!("awzy-challenge isn't configured") };
@@ -70,6 +73,13 @@ impl ChallengeResolver {
                 answerer_id: parties.answerer.clone().unwrap_or_default(),
                 open: true,
                 resource_owner_id: parties.resource_owner.clone().unwrap_or_default(),
+                policies: asking
+                    .iter()
+                    .map(|(id, kind)| ChallengedPolicy {
+                        policy_id: id.clone(),
+                        kind: challenges_to_wire(Challenges::of(*kind))[0],
+                    })
+                    .collect(),
             }),
         )
         .await
@@ -79,7 +89,12 @@ impl ChallengeResolver {
             "" => None,
             id => Some(id.parse()?),
         };
-        Ok(Resolution { passed: challenges_from_wire(&res.passed), challenge_id, rejected: res.rejected })
+        Ok(Resolution {
+            passed: challenges_from_wire(&res.passed),
+            passed_policies: res.passed_policies.into_iter().collect(),
+            challenge_id,
+            rejected: res.rejected,
+        })
     }
 }
 

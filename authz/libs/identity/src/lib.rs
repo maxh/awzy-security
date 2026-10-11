@@ -26,8 +26,9 @@ pub struct TokenConfig {
     #[serde(default)]
     pub jwks_ca_file: Option<String>,
     /// The claim that identifies a person: their Human ID, matched against SCIM `userName` in
-    /// awzy-context (ADR 0031). Default `sub`; with Okta or Entra usually `email` or
-    /// `preferred_username`, since their `sub` is an opaque ID.
+    /// awzy-context (ADR 0031). Default `sub`; with Okta or Entra usually `email`, since their
+    /// `sub` is an opaque ID. Should be one people can't change themselves (Entra's
+    /// `preferred_username` can be). Tokens an application gets for itself keep `sub`.
     #[serde(default)]
     pub subject_claim: Option<String>,
     #[serde(flatten)]
@@ -109,6 +110,8 @@ pub enum IdentityError {
 #[derive(Debug, Deserialize)]
 struct Claims {
     sub: String,
+    /// Seconds; some IdPs write it with a fraction.
+    exp: f64,
     #[serde(default)]
     act: Option<Actor>,
     #[serde(default)]
@@ -138,6 +141,9 @@ pub struct Principal {
     pub name: Option<String>,
     /// Cedar entities for the subject and the person, with their groups and attributes.
     pub entities: Vec<Value>,
+    /// When the token stops being valid, so a long-lived connection signed in with it can end
+    /// then. None for a principal not made from a token.
+    pub expires_at: Option<std::time::SystemTime>,
 }
 
 impl Principal {
@@ -149,6 +155,7 @@ impl Principal {
             human_present: None,
             name,
             entities: vec![entity(entity_type::HUMAN, id, json!({}), groups)],
+            expires_at: None,
         }
     }
 
@@ -218,7 +225,12 @@ impl Verifier {
             }
         };
         let mut claims = claims;
-        if let Some(claim) = &self.subject_claim {
+        // The configured claim names a person. An application's own token has none and keeps its
+        // `sub`, which is how it's registered.
+        let acts_for_itself = claims.act.is_none()
+            && (registry.service_account(&claims.sub).is_some()
+                || (registry.defers_to_pdp() && is_client_credentials(&claims)));
+        if let Some(claim) = self.subject_claim.as_ref().filter(|_| !acts_for_itself) {
             match claims.other.get(claim).and_then(Value::as_str) {
                 Some(subject) => claims.sub = subject.to_string(),
                 None => {
@@ -237,6 +249,8 @@ fn principal_from_claims<R: ServiceAccounts + ?Sized>(
     registry: &R,
 ) -> Result<Principal, IdentityError> {
     let human = |id: &str, groups: &[String]| entity(entity_type::HUMAN, id, json!({}), groups);
+    let expires_at =
+        std::time::Duration::try_from_secs_f64(claims.exp).ok().and_then(|exp| std::time::UNIX_EPOCH.checked_add(exp));
     let service_account = |id: &str| {
         if registry.defers_to_pdp() {
             return Ok(entity(entity_type::SERVICE_ACCOUNT, id, json!({}), &[]));
@@ -254,6 +268,7 @@ fn principal_from_claims<R: ServiceAccounts + ?Sized>(
             human_present: claims.awzy_human_present,
             name: claims.name,
             entities: vec![service_account(&actor.sub)?, human(&claims.sub, &claims.groups)],
+            expires_at,
         },
         None if registry.service_account(&claims.sub).is_some()
             || (registry.defers_to_pdp() && is_client_credentials(&claims)) =>
@@ -264,6 +279,7 @@ fn principal_from_claims<R: ServiceAccounts + ?Sized>(
                 human_present: claims.awzy_human_present,
                 name: claims.name,
                 entities: vec![service_account(&claims.sub)?],
+                expires_at,
             }
         }
         None => Principal {
@@ -272,6 +288,7 @@ fn principal_from_claims<R: ServiceAccounts + ?Sized>(
             human_present: claims.awzy_human_present,
             name: claims.name,
             entities: vec![human(&claims.sub, &claims.groups)],
+            expires_at,
         },
     })
 }
@@ -354,6 +371,7 @@ mod tests {
             ("Human", "alice", awzy_model::Actor::human("alice"))
         );
         assert_eq!(a.name.as_deref(), Some("Alice"));
+        assert!(a.expires_at.unwrap() > std::time::SystemTime::now(), "the token's exp comes along");
         assert_eq!(a.entities[0]["parents"][0]["id"], "security");
 
         let delegated = token(&key, "k1", claims("alice", json!({ "act": { "sub": "sales-genie" } })));
@@ -391,6 +409,17 @@ mod tests {
         assert_eq!(a.subject, EntityRef::new("Human", "alice@acme.com"));
         let no_email = token(&key, "k1", claims("00u1abc", json!({})));
         assert!(matches!(by_email.principal(Some(&bearer(no_email)), &registry).await, Err(IdentityError::Invalid(_))));
+        // An application's own token has no email, and is known by its sub.
+        let registered = token(&key, "k1", claims("sales-genie", json!({})));
+        assert_eq!(
+            by_email.principal(Some(&bearer(registered)), &registry).await.unwrap().subject,
+            EntityRef::new("ServiceAccount", "sales-genie")
+        );
+        let okta_app = token(&key, "k1", claims("0oa9app", json!({ "cid": "0oa9app" })));
+        assert_eq!(
+            by_email.principal(Some(&bearer(okta_app)), &DeferToPdp).await.unwrap().subject,
+            EntityRef::new("ServiceAccount", "0oa9app")
+        );
 
         // With the registry deferred to the PDP: accounts pass through as bare entities, and an
         // application's own token is recognized as a service account, not a person.

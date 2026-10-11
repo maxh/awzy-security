@@ -61,6 +61,11 @@ fn parse(path: &str) -> Option<Target<'_>> {
         return Some(Target::Base);
     }
     let rest = rest.strip_prefix('/')?;
+    // The path goes upstream as it came, so nothing in it may climb out of the repository:
+    // no dot segments, and no percent-encoding to hide one (or a slash) in.
+    if rest.contains('%') || rest.split('/').any(|part| part == "." || part == "..") {
+        return None;
+    }
     let name = ["/manifests/", "/blobs/", "/referrers/"]
         .iter()
         .find_map(|sep| rest.find(sep).map(|i| &rest[..i]))
@@ -148,6 +153,9 @@ mod tests {
         assert_eq!(parse("/v2/awzy/awzy-pdp/referrers/sha256:00"), Some(Target::Repo { name: "awzy/awzy-pdp" }));
         assert_eq!(parse("/v2/other/image/manifests/x"), None);
         assert_eq!(parse("/v2/awzy/../other/manifests/x"), None);
+        assert_eq!(parse("/v2/awzy/x/manifests/../../../other/manifests/y"), None);
+        assert_eq!(parse("/v2/awzy/x/blobs/..%2F..%2Fother/manifests/y"), None);
+        assert_eq!(parse("/v2/awzy/x/manifests/%2e%2e"), None);
         assert_eq!(parse("/v2/awzy/x/blobs/uploads/"), Some(Target::Repo { name: "awzy/x" }), "rejected by method");
         assert_eq!(parse("/v2/_catalog"), None);
     }

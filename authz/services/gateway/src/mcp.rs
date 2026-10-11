@@ -170,6 +170,11 @@ async fn proxy(State(state): State<GatewayState>, Path(upstream): Path<String>, 
             return res;
         }
     };
+    // Streamable HTTP uses only these. Anything else could carry a message the checks below never
+    // see, to an upstream lenient enough to act on it.
+    if ![Method::GET, Method::POST, Method::DELETE].contains(&parts.method) {
+        return plain(StatusCode::METHOD_NOT_ALLOWED, format!("awzy-gateway doesn't forward {}", parts.method));
+    }
     let Ok(body) = axum::body::to_bytes(body, MAX_BODY).await else {
         return plain(StatusCode::PAYLOAD_TOO_LARGE, "request body too large".into());
     };
@@ -184,7 +189,10 @@ async fn proxy(State(state): State<GatewayState>, Path(upstream): Path<String>, 
                     return blocked;
                 }
             }
-            _ => {}
+            Ok(Value::Object(_) | Value::Array(_)) => {}
+            // Fails closed: a body this parser refuses (nesting past its limit, a lone surrogate)
+            // may still parse upstream, as a tools/call that was never checked.
+            _ => return unreadable(),
         }
     }
     forward(&state, &up, parts, body).await
@@ -408,6 +416,14 @@ fn tool_error(id: &Value, text: String, meta: Value) -> Response<Body> {
 
 fn jsonrpc_error(id: &Value, code: i64, message: &str) -> Response<Body> {
     json_response(json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } }))
+}
+
+/// A JSON-RPC parse error, with 400 as streamable HTTP allows, for a body that isn't forwarded.
+fn unreadable() -> Response<Body> {
+    let mut res =
+        jsonrpc_error(&Value::Null, -32700, "awzy-gateway couldn't parse this message, so it wasn't forwarded");
+    *res.status_mut() = StatusCode::BAD_REQUEST;
+    res
 }
 
 fn json_response(v: Value) -> Response<Body> {
@@ -699,6 +715,40 @@ mod tests {
         .unwrap();
         assert_eq!(call(&app, Some(&forged), "read_file").await.0, StatusCode::UNAUTHORIZED);
         assert_eq!(call(&app, Some(&token("bob", Some("rogue-bot"), &[])), "read_file").await.0, StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn a_message_the_gateway_cant_parse_or_a_method_it_doesnt_check_never_reaches_the_upstream() {
+        let seen = Upstream::default();
+        let app = gateway(awzy_model::EnforcementMode::Enforce, start_upstream(seen.clone()).await).await;
+        let bob = token("bob", None, &["engineering"]);
+        let send = |method: Method, body: String| {
+            let app = app.clone();
+            let bob = bob.clone();
+            async move {
+                let req = Request::builder()
+                    .method(method)
+                    .uri("/mcp/drive")
+                    .header("content-type", "application/json")
+                    .header("authorization", format!("Bearer {bob}"))
+                    .body(Body::from(body))
+                    .unwrap();
+                app.oneshot(req).await.unwrap().status()
+            }
+        };
+        // Deeper than serde_json's recursion limit, and a lone surrogate: both parse in other
+        // JSON parsers, as a delete bob may not make.
+        let deep = format!("{}{}", "[".repeat(200), "]".repeat(200));
+        let nested = format!(
+            r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"delete_file","arguments":{{"x":{deep}}}}}}}"#
+        );
+        let surrogate = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"delete_file","arguments":{"x":"\ud800"}}}"#;
+        assert_eq!(send(Method::POST, nested).await, StatusCode::BAD_REQUEST);
+        assert_eq!(send(Method::POST, surrogate.to_string()).await, StatusCode::BAD_REQUEST);
+        assert_eq!(send(Method::POST, "\"tools/call\"".into()).await, StatusCode::BAD_REQUEST);
+        let put = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"delete_file"}}"#;
+        assert_eq!(send(Method::PUT, put.into()).await, StatusCode::METHOD_NOT_ALLOWED);
+        assert!(seen.0.lock().unwrap().is_empty(), "nothing reached the upstream");
     }
 
     #[tokio::test]

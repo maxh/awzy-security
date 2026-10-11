@@ -121,6 +121,7 @@ resource "helm_release" "config" {
         secretRef = local.c.postgres.secret_arn
       }
       kafka      = { brokers = local.c.kafka.bootstrap_brokers }
+      policy     = { breakGlassKeysSecret = var.break_glass_public_keys == null ? "" : "awzy-policy-break-glass" }
       clickhouse = { storageClass = local.c.storage_class.name }
       demoIdp    = { enabled = var.demo_idp }
       demoData   = { enabled = var.demo_data }
@@ -178,5 +179,6 @@ resource "helm_release" "config" {
     kubernetes_secret_v1.clickhouse, kubernetes_secret_v1.reporting_token, kubernetes_secret_v1.scim_token,
     kubernetes_secret_v1.intake_token, kubernetes_secret_v1.drive, kubernetes_secret_v1.jira,
     kubernetes_secret_v1.registry, kubernetes_secret_v1.registry_kyverno, kubernetes_secret_v1.chart_repo,
+    kubernetes_secret_v1.policy_signing, kubernetes_secret_v1.policy_verify, kubernetes_secret_v1.break_glass,
   ]
 }

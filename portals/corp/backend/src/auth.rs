@@ -43,6 +43,8 @@ const COOKIE: &str = "awzy_corp_session";
 const SESSION_LIFETIME: Duration = Duration::from_secs(12 * 3600);
 const MAX_FAILURES: u32 = 5;
 const LOCKOUT: Duration = Duration::from_secs(15 * 60);
+/// Usernames whose attempts are counted at once.
+const MAX_TRACKED: usize = 10_000;
 
 /// One line of the accounts file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -157,22 +159,36 @@ impl Auth {
         .expect("cookie is ASCII")
     }
 
-    fn locked(&self, username: &str) -> bool {
-        let failures = self.0.failures.lock().expect("failures lock");
-        matches!(failures.get(username), Some((n, since)) if *n >= MAX_FAILURES && since.elapsed() < LOCKOUT)
+    /// Counts an attempt for `username` before its password is checked, so parallel guesses
+    /// can't all slip in under the limit. False when the username is locked.
+    fn begin_attempt(&self, username: &str) -> bool {
+        let mut failures = self.0.failures.lock().expect("failures lock");
+        if let Some((n, since)) = failures.get_mut(username) {
+            if since.elapsed() >= LOCKOUT {
+                *n = 0;
+                *since = Instant::now();
+            }
+            if *n >= MAX_FAILURES {
+                return false;
+            }
+            *n += 1;
+            return true;
+        }
+        // Bounded: anyone can try any username. Expired entries go first, then the oldest.
+        if failures.len() >= MAX_TRACKED {
+            failures.retain(|_, (_, since)| since.elapsed() < LOCKOUT);
+            if failures.len() >= MAX_TRACKED {
+                let oldest = failures.iter().min_by_key(|(_, (_, since))| *since).map(|(k, _)| k.clone());
+                failures.remove(&oldest.expect("the map is full"));
+            }
+        }
+        failures.insert(username.to_string(), (1, Instant::now()));
+        true
     }
 
-    fn record(&self, username: &str, ok: bool) {
-        let mut failures = self.0.failures.lock().expect("failures lock");
-        if ok {
-            failures.remove(username);
-            return;
-        }
-        let entry = failures.entry(username.to_string()).or_insert((0, Instant::now()));
-        if entry.1.elapsed() >= LOCKOUT {
-            *entry = (0, Instant::now());
-        }
-        entry.0 += 1;
+    /// Clears a username's count after a successful sign-in.
+    fn succeeded(&self, username: &str) {
+        self.0.failures.lock().expect("failures lock").remove(username);
     }
 }
 
@@ -187,7 +203,7 @@ struct Login {
 }
 
 async fn login(State(auth): State<Auth>, Json(req): Json<Login>) -> Response {
-    if auth.locked(&req.username) {
+    if !auth.begin_attempt(&req.username) {
         return (StatusCode::TOO_MANY_REQUESTS, "Too many failed attempts. Try again in 15 minutes.").into_response();
     }
     let account = auth.0.accounts.get(&req.username).cloned();
@@ -202,11 +218,10 @@ async fn login(State(auth): State<Auth>, Json(req): Json<Login>) -> Response {
     .await
     .unwrap_or(false);
     let Some(account) = account.filter(|_| matches) else {
-        auth.record(&req.username, false);
         tracing::warn!(username = %req.username, "corp portal sign-in failed");
         return (StatusCode::UNAUTHORIZED, "Wrong username or password.").into_response();
     };
-    auth.record(&req.username, true);
+    auth.succeeded(&req.username);
     tracing::info!(username = %account.username, "corp portal sign-in");
     let staff = Staff { username: account.username, name: account.name };
     let cookie = auth.cookie(&auth.issue(&staff), SESSION_LIFETIME.as_secs());
@@ -240,5 +255,34 @@ pub async fn require_staff(State(auth): State<Auth>, mut req: Request, next: Nex
             next.run(req).await
         }
         None => (StatusCode::UNAUTHORIZED, "sign in first").into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn auth() -> Auth {
+        Auth::new(vec![], vec![7; 32], true).unwrap()
+    }
+
+    #[test]
+    fn every_attempt_counts_before_the_password_is_checked() {
+        let auth = auth();
+        // Five started at once, none finished: the sixth is refused anyway.
+        for _ in 0..MAX_FAILURES {
+            assert!(auth.begin_attempt("max"));
+        }
+        assert!(!auth.begin_attempt("max"));
+        assert!(auth.begin_attempt("someone-else"));
+    }
+
+    #[test]
+    fn attempts_on_made_up_usernames_take_bounded_memory() {
+        let auth = auth();
+        for i in 0..MAX_TRACKED + 50 {
+            auth.begin_attempt(&format!("made-up-{i}"));
+        }
+        assert_eq!(auth.0.failures.lock().unwrap().len(), MAX_TRACKED);
     }
 }

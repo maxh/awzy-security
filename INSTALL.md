@@ -111,6 +111,7 @@ Bootstrap takes:
 | `intake` | awzy-intake, for your apps' and audit logs' events: its hostname for sources outside the cluster (null keeps it in-cluster); `null` for none |
 | `drive` | The Google Drive connector: the member user it acts as (a Content manager of each shared drive to cover), an admin to name group shares, and the Google service account's JSON key, with domain-wide delegation for `drive.metadata.readonly` and `admin.directory.group.readonly`; `null` for none |
 | `jira` | The Jira connector: your site's URL, an account that can browse the projects, the projects (default: all), and its API token; `null` for none |
+| `break_glass_public_keys` | The PEM public keys of the admins who may roll back a policy bundle that locks everyone out, without the portal or your IdP; `null` turns break-glass off |
 | `demo_idp`, `demo_data` | **Demo installs only:** the dev IdP and the synthetic company |
 
 ```sh
@@ -128,6 +129,8 @@ It makes these Secrets, none of which leave the cluster:
 | `awzy-clickhouse-reasoner` | data, system | awzy-reasoner's read-only user: decisions and events |
 | `awzy-reporting-token` | system | The heartbeat, when `reporter` is set |
 | `awzy-scim-token` | system | Your IdP's SCIM provisioning |
+| `awzy-policy-signing`, `awzy-policy-verify` | system | The key awzy-policy signs policy bundles and enforcement mode changes with, and its public half, which the PDPs check them against |
+| `awzy-policy-break-glass` | system | The break-glass admins' public keys, when `break_glass_public_keys` is set |
 | `awzy-intake-token` | system | Event sources, when `intake` is set; read it from the `intake` output |
 | `awzy-connectors-drive`, `awzy-connectors-jira` | system | The connectors' credentials, when `drive` or `jira` is set |
 | `awzy-registry`, `awzy-chart-repo` | system, data, portal, Kyverno, ops | Pulling images and the chart |

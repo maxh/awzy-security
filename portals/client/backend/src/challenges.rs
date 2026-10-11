@@ -4,10 +4,16 @@
 //!   approve someone else's request where policy lets them (awzy-challenge asks the PDP).
 //! - Those who may `administer` it see every challenge and contain or lift principals.
 //!
-//! Only a person answers or approves: a service account signed in, or acting for someone, is
-//! refused, so an agent can never pass its own challenge.
+//! Only a person answers: a service account signed in, or acting for someone, is refused, so an
+//! agent can never pass its own challenge. A service account may approve on its own authority
+//! where policy lets it (ADR 0065), never while acting for someone, and never its own request.
 
-use async_graphql::{futures_util::Stream, Context, Enum, InputObject, Object, Result, SimpleObject, Subscription, ID};
+use std::time::{Duration, SystemTime};
+
+use async_graphql::{
+    futures_util::{Stream, StreamExt},
+    Context, Enum, InputObject, Object, Result, SimpleObject, Subscription, ID,
+};
 use awzy_authz_proto::{
     challenge::v1::{
         challenge_service_client::ChallengeServiceClient, Challenge as WireChallenge, ChallengeStatus as WireStatus,
@@ -599,6 +605,16 @@ mod tests {
         assert!(run_err(&schema, &carol, verify.as_str()).await.contains("only bob can answer"));
     }
 
+    #[tokio::test]
+    async fn a_subscription_ends_when_the_token_it_started_with_does() {
+        let mut bob = awzy_identity::Principal::human("bob", None, &[]);
+        bob.expires_at = Some(SystemTime::now() - Duration::from_secs(1));
+        let forever = async_graphql::futures_util::stream::pending::<()>();
+        let stream = while_allowed(Services::default(), Viewer(Arc::new(bob)), PortalAction::View, forever);
+        let sent = tokio::time::timeout(Duration::from_secs(5), stream.collect::<Vec<_>>()).await;
+        assert_eq!(sent.expect("ended at once"), Vec::<()>::new());
+    }
+
     #[test]
     fn only_a_person_answers() {
         let mut agent = awzy_identity::Principal::human("bob", None, &[]);
@@ -626,20 +642,58 @@ impl ChallengeSubscription {
             .is_ok();
         let answerer_id = if every { String::new() } else { answering_human(&viewer)? };
         let stream = client(ctx)?.watch_challenges(WatchChallengesRequest { answerer_id }).await.map_err(grpc)?;
-        Ok(async_graphql::futures_util::StreamExt::filter_map(stream.into_inner(), |m| async move {
+        let stream = StreamExt::filter_map(stream.into_inner(), |m| async move {
             // A heartbeat carries no challenge; a broken stream ends the subscription.
             m.ok()?.challenge.map(Challenge)
-        }))
+        });
+        let action = if every { PortalAction::Administer } else { PortalAction::View };
+        Ok(while_allowed(services.clone(), viewer, action, stream))
     }
 
     /// Every active containment, whenever one is added or lifted. For those who administer
     /// challenges.
     async fn containments_changed(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = Vec<Containment>>> {
-        require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
+        let viewer = require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
         let stream = client(ctx)?.watch_containments(WatchContainmentsRequest {}).await.map_err(grpc)?;
-        Ok(async_graphql::futures_util::StreamExt::filter_map(stream.into_inner(), |m| async move {
+        let stream = StreamExt::filter_map(stream.into_inner(), |m| async move {
             let m = m.ok()?;
             m.changed.then(|| m.active.into_iter().map(Containment).collect())
-        }))
+        });
+        Ok(while_allowed(ctx.data::<Services>()?.clone(), viewer, PortalAction::Administer, stream))
     }
+}
+
+/// How often a live subscription checks that its viewer may still see what it sends.
+const RECHECK: Duration = Duration::from_secs(60);
+
+/// `stream` until the viewer's token expires or they may no longer do `action` on the challenges
+/// area: a subscription is authorized when it starts, and would otherwise outlive both. If the PDP
+/// can't be asked, it ends too; the page subscribes again.
+fn while_allowed<S: Stream + Send + 'static>(
+    services: Services,
+    viewer: Viewer,
+    action: PortalAction,
+    stream: S,
+) -> impl Stream<Item = S::Item> {
+    let ended = async move {
+        let expired = async {
+            match viewer.expires_at {
+                Some(at) => tokio::time::sleep(at.duration_since(SystemTime::now()).unwrap_or_default()).await,
+                None => std::future::pending().await,
+            }
+        };
+        let revoked = async {
+            loop {
+                tokio::time::sleep(RECHECK).await;
+                if authorize(&services, &viewer, Surface::Portal, action, PortalArea::Challenges).await.is_err() {
+                    return;
+                }
+            }
+        };
+        tokio::select! {
+            _ = expired => {}
+            _ = revoked => {}
+        }
+    };
+    StreamExt::take_until(stream, Box::pin(ended))
 }
