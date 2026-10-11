@@ -1045,6 +1045,11 @@ type Query {
 	"""
 	viewerCan(action: PortalAction!, area: PortalArea!): Boolean!
 	"""
+	The areas the viewer may view, so the portal shows only the pages they can open. Asks the
+	PDP about each area at once.
+	"""
+	viewerAreas: [PortalArea!]!
+	"""
 	Refetches any object by its ID.
 	"""
 	node(id: ID!): Node

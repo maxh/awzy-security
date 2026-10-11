@@ -146,6 +146,22 @@ impl MetaQuery {
             Err(e) => Err(e.into()),
         }
     }
+
+    /// The areas the viewer may view, so the portal shows only the pages they can open. Asks the
+    /// PDP about each area at once.
+    async fn viewer_areas(&self, ctx: &Context<'_>) -> Result<Vec<PortalArea>> {
+        let viewer = ctx.data::<Viewer>().map_err(|_| "sign in first")?;
+        let services = ctx.data::<Services>()?;
+        let checks = PortalArea::ALL.iter().map(|&area| async move {
+            match access::authorize(services, viewer, Surface::Portal, PortalAction::View, area).await {
+                Ok(()) => Ok(Some(area)),
+                Err(access::AccessError::Denied { .. } | access::AccessError::Challenged { .. }) => Ok(None),
+                Err(e) => Err(e),
+            }
+        });
+        let results = async_graphql::futures_util::future::join_all(checks).await;
+        Ok(results.into_iter().collect::<Result<Vec<_>, _>>()?.into_iter().flatten().collect())
+    }
 }
 
 #[derive(SimpleObject)]
