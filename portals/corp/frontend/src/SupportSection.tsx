@@ -63,7 +63,7 @@ function Sessions({ installId, fetchKey, onChanged }: { installId: string; fetch
   );
   const sessions = data.node?.supportSessions ?? [];
   const [signIn, signingIn] = useMutation<SupportSectionSignInMutation>(graphql`
-    mutation SupportSectionSignInMutation($supportSessionQid: ID!) {
+    mutation SupportSectionSignInMutation($supportSessionQid: Qid!) {
       signInToSupportSession(supportSessionQid: $supportSessionQid) {
         signInUrl
       }

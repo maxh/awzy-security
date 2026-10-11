@@ -252,7 +252,7 @@ type Mutation {
 	"""
 	Signs the staff member who asked in to an approved session's client portal.
 	"""
-	signInToSupportSession(supportSessionQid: ID!): SupportSignIn!
+	signInToSupportSession(supportSessionQid: Qid!): SupportSignIn!
 }
 
 interface Node {
@@ -360,7 +360,7 @@ enum ReleaseChannel {
 }
 
 input RequestSupportSessionInput {
-	installQid: ID!
+	installQid: Qid!
 	"""
 	Client portal areas, e.g. "decisions".
 	"""
