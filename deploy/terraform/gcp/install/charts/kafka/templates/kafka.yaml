@@ -1,0 +1,44 @@
+# KRaft nodes that are both controller and broker. Every topic's replication follows the node
+# count, and decisions and events are kept seven days, so ClickHouse can replay them (ADR 0006).
+{{- $rf := min (int .Values.replicas) 3 }}
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: {{ .Values.name }}
+  labels:
+    strimzi.io/cluster: {{ .Values.name }}
+spec:
+  replicas: {{ .Values.replicas }}
+  roles: [controller, broker]
+  storage:
+    type: jbod
+    volumes:
+      - id: 0
+        type: persistent-claim
+        size: {{ .Values.storage }}
+        class: {{ .Values.storageClass }}
+        kraftMetadata: shared
+        deleteClaim: false
+  resources: {{- toYaml .Values.resources | nindent 4 }}
+---
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: {{ .Values.name }}
+spec:
+  kafka:
+    listeners:
+      # Inside the cluster only. awzy's services and ClickHouse reach it at
+      # <name>-kafka-bootstrap.<namespace>.svc:9092.
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+    config:
+      log.retention.hours: 168
+      num.partitions: 6
+      default.replication.factor: {{ $rf }}
+      min.insync.replicas: {{ max 1 (sub $rf 1) }}
+      offsets.topic.replication.factor: {{ $rf }}
+      transaction.state.log.replication.factor: {{ $rf }}
+      transaction.state.log.min.isr: {{ max 1 (sub $rf 1) }}

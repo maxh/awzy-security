@@ -1,0 +1,6 @@
+# Set by kafka.tf.
+name: awzy
+replicas: 1
+storage: 20Gi
+storageClass: standard-rwo
+resources: {}
