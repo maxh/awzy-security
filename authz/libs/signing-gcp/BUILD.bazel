@@ -6,5 +6,8 @@ awzy_rust_library(
     name = "signing-gcp",
     crate_name = "awzy_signing_gcp",
     visibility = ["//tools:client_side"],
-    deps = ["//authz/libs/signing"],
+    deps = [
+        "//authz/libs/signing",
+        "//libs/http",
+    ],
 )

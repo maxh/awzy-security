@@ -3,29 +3,22 @@
 //! key ID is the fingerprint of the public key KMS gives, so PDPs verify these exactly as they
 //! verify a PEM key's.
 //!
-//! Plain HTTPS calls to KMS's REST API, with an access token from the GKE metadata server (the
-//! pod's Workload Identity), rather than Google's client libraries: two calls.
+//! Two calls to KMS's REST API through `awzy_http`, with an access token from the GKE metadata
+//! server (the pod's Workload Identity), rather than Google's client libraries.
 
 use std::time::{Duration, Instant};
 
+use awzy_http::{Body, Client};
 use awzy_signing::{key_id_of, PayloadSigner, SigningError};
 use base64::{engine::general_purpose::STANDARD, Engine};
-use bytes::Bytes;
-use http_body_util::{BodyExt, Full};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
 use p256::{ecdsa::VerifyingKey, pkcs8::DecodePublicKey};
-use serde_json::{json, Value};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 
 const METADATA: &str = "http://metadata.google.internal";
 const KMS: &str = "https://cloudkms.googleapis.com";
 const TIMEOUT: Duration = Duration::from_secs(10);
-
-type HttpClient = Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>;
 
 /// Whether `key` names a Cloud KMS key version
 /// (`projects/…/locations/…/keyRings/…/cryptoKeys/…/cryptoKeyVersions/…`), rather than another
@@ -34,8 +27,43 @@ pub fn is_key_name(key: &str) -> bool {
     key.starts_with("projects/") && key.contains("/cryptoKeyVersions/")
 }
 
+/// The metadata server's access token.
+#[derive(Deserialize)]
+struct AccessToken {
+    access_token: String,
+    #[serde(default = "default_lifetime")]
+    expires_in: u64,
+}
+
+fn default_lifetime() -> u64 {
+    300
+}
+
+/// `cryptoKeyVersions.getPublicKey`.
+#[derive(Deserialize)]
+struct PublicKey {
+    pem: String,
+    algorithm: String,
+}
+
+/// `cryptoKeyVersions.asymmetricSign`'s request: the payload's digest, which KMS signs as is.
+#[derive(Serialize, Deserialize)]
+struct SignRequest {
+    digest: Sha256Digest,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Sha256Digest {
+    sha256: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SignResponse {
+    signature: String,
+}
+
 pub struct KmsSigner {
-    http: HttpClient,
+    http: Client,
     metadata: String,
     kms: String,
     key: String,
@@ -55,23 +83,19 @@ impl KmsSigner {
         if !is_key_name(key) {
             return Err(SigningError::Key(format!("{key:?} isn't a Cloud KMS key version")));
         }
-        let _ = rustls::crypto::ring::default_provider().install_default();
-        let https =
-            hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_or_http().enable_http1().build();
         let mut signer = Self {
-            http: Client::builder(TokioExecutor::new()).build(https),
+            http: awzy_http::client(),
             metadata: metadata.trim_end_matches('/').to_string(),
             kms: kms.trim_end_matches('/').to_string(),
             key: key.to_string(),
             key_id: String::new(),
             token: Mutex::new(None),
         };
-        let public = signer.call("GET", &format!("v1/{key}/publicKey"), None).await?;
-        if public["algorithm"] != "EC_SIGN_P256_SHA256" {
-            return Err(SigningError::Key(format!("{key} is {}, not EC_SIGN_P256_SHA256", public["algorithm"])));
+        let public: PublicKey = signer.call(http::Method::GET, &format!("v1/{key}/publicKey"), None).await?;
+        if public.algorithm != "EC_SIGN_P256_SHA256" {
+            return Err(SigningError::Key(format!("{key} is {}, not EC_SIGN_P256_SHA256", public.algorithm)));
         }
-        let pem = public["pem"].as_str().ok_or_else(|| SigningError::Signer(format!("{key} has no public key")))?;
-        signer.key_id = key_id_from_pem(pem)?;
+        signer.key_id = key_id_from_pem(&public.pem)?;
         Ok(signer)
     }
 
@@ -84,45 +108,41 @@ impl KmsSigner {
             }
         }
         let url = format!("{}/computeMetadata/v1/instance/service-accounts/default/token", self.metadata);
-        let req = hyper::Request::get(&url)
-            .header("metadata-flavor", "Google")
-            .body(Full::new(Bytes::new()))
-            .map_err(|e| SigningError::Signer(e.to_string()))?;
-        let body = self.send(req, "the metadata server").await?;
-        let token = body["access_token"]
-            .as_str()
-            .ok_or_else(|| SigningError::Signer("the metadata server gave no access token".into()))?
-            .to_string();
-        let lifetime = Duration::from_secs(body["expires_in"].as_u64().unwrap_or(300).saturating_sub(60));
-        *cached = Some((token.clone(), Instant::now() + lifetime));
-        Ok(token)
+        let res = awzy_http::get(&self.http, &url, &[("metadata-flavor", "Google")], TIMEOUT)
+            .await
+            .map_err(|e| SigningError::Signer(format!("the metadata server: {e}")))?;
+        let token: AccessToken = parse(res, "the metadata server")?;
+        let lifetime = Duration::from_secs(token.expires_in.saturating_sub(60));
+        *cached = Some((token.access_token.clone(), Instant::now() + lifetime));
+        Ok(token.access_token)
     }
 
-    async fn call(&self, method: &str, path: &str, body: Option<Value>) -> Result<Value, SigningError> {
+    async fn call<T: DeserializeOwned>(
+        &self,
+        method: http::Method,
+        path: &str,
+        body: Option<String>,
+    ) -> Result<T, SigningError> {
         let token = self.token().await?;
-        let req = hyper::Request::builder()
+        let req = http::Request::builder()
             .method(method)
             .uri(format!("{}/{path}", self.kms))
             .header("authorization", format!("Bearer {token}"))
             .header("content-type", "application/json")
-            .body(Full::new(Bytes::from(body.map(|b| b.to_string()).unwrap_or_default())))
-            .map_err(|e| SigningError::Signer(e.to_string()))?;
-        self.send(req, "Cloud KMS").await
-    }
-
-    async fn send(&self, req: hyper::Request<Full<Bytes>>, what: &str) -> Result<Value, SigningError> {
-        let res = tokio::time::timeout(TIMEOUT, self.http.request(req))
+            .body(Body::from(body.unwrap_or_default()))
+            .map_err(|e| SigningError::Signer(format!("Cloud KMS: {e}")))?;
+        let res = awzy_http::send(&self.http, req, TIMEOUT)
             .await
-            .map_err(|_| SigningError::Signer(format!("{what} timed out")))?
-            .map_err(|e| SigningError::Signer(format!("{what}: {e}")))?;
-        let status = res.status();
-        let bytes =
-            res.into_body().collect().await.map_err(|e| SigningError::Signer(format!("{what}: {e}")))?.to_bytes();
-        if !status.is_success() {
-            return Err(SigningError::Signer(format!("{what}: {status}: {}", String::from_utf8_lossy(&bytes))));
-        }
-        serde_json::from_slice(&bytes).map_err(|e| SigningError::Signer(format!("{what}: {e}")))
+            .map_err(|e| SigningError::Signer(format!("Cloud KMS: {e}")))?;
+        parse(res, "Cloud KMS")
     }
+}
+
+fn parse<T: DeserializeOwned>(res: awzy_http::Response, what: &str) -> Result<T, SigningError> {
+    if !res.status.is_success() {
+        return Err(SigningError::Signer(format!("{what}: {}: {}", res.status, res.text())));
+    }
+    serde_json::from_slice(&res.body).map_err(|e| SigningError::Signer(format!("{what}: {e}")))
 }
 
 /// The key ID of a KMS key from its public key, as PEM.
@@ -139,13 +159,11 @@ impl PayloadSigner for KmsSigner {
 
     async fn sign_payload(&self, payload: &[u8]) -> Result<Vec<u8>, SigningError> {
         // KMS signs a digest; it hashes nothing itself for EC keys.
-        let digest = STANDARD.encode(Sha256::digest(payload));
-        let signed = self
-            .call("POST", &format!("v1/{}:asymmetricSign", self.key), Some(json!({ "digest": { "sha256": digest } })))
-            .await?;
-        let signature =
-            signed["signature"].as_str().ok_or_else(|| SigningError::Signer("KMS returned no signature".into()))?;
-        STANDARD.decode(signature).map_err(|e| SigningError::Signer(format!("KMS's signature: {e}")))
+        let request = SignRequest { digest: Sha256Digest { sha256: STANDARD.encode(Sha256::digest(payload)) } };
+        let body = serde_json::to_string(&request).map_err(|e| SigningError::Signer(format!("Cloud KMS: {e}")))?;
+        let signed: SignResponse =
+            self.call(http::Method::POST, &format!("v1/{}:asymmetricSign", self.key), Some(body)).await?;
+        STANDARD.decode(signed.signature).map_err(|e| SigningError::Signer(format!("KMS's signature: {e}")))
     }
 }
 
@@ -156,7 +174,12 @@ mod tests {
         Arc,
     };
 
-    use axum::{extract::Path, http::HeaderMap, routing::get, routing::post, Json, Router};
+    use axum::{
+        extract::Path,
+        http::HeaderMap,
+        routing::{get, post},
+        Json, Router,
+    };
     use p256::{
         ecdsa::{
             signature::{hazmat::PrehashSigner, Verifier},
@@ -164,6 +187,7 @@ mod tests {
         },
         pkcs8::{EncodePublicKey, LineEnding},
     };
+    use serde_json::json;
 
     use super::*;
 
@@ -194,12 +218,14 @@ mod tests {
                         Json(json!({ "pem": pem, "algorithm": "EC_SIGN_P256_SHA256" }))
                     }
                 })
-                .merge(post(move |Path(rest): Path<String>, Json(body): Json<Value>| async move {
-                    assert_eq!(rest, format!("{KEY}:asymmetricSign"));
-                    let digest = STANDARD.decode(body["digest"]["sha256"].as_str().unwrap()).unwrap();
-                    let signature: Signature = key.sign_prehash(&digest).unwrap();
-                    Json(json!({ "signature": STANDARD.encode(signature.to_der().as_bytes()) }))
-                })),
+                .merge(post(
+                    move |Path(rest): Path<String>, Json(body): Json<SignRequest>| async move {
+                        assert_eq!(rest, format!("{KEY}:asymmetricSign"));
+                        let digest = STANDARD.decode(body.digest.sha256).unwrap();
+                        let signature: Signature = key.sign_prehash(&digest).unwrap();
+                        Json(SignResponse { signature: STANDARD.encode(signature.to_der().as_bytes()) })
+                    },
+                )),
             );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
