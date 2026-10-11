@@ -7,7 +7,7 @@
 //!
 //! Callers sign in like portal users (crate::access): usually an agent with a token-exchange
 //! token, checked as the service account acting for its person, with `context.client` "mcp".
-//! TODO: record each call with awzy-intake.
+//! Each call is recorded with awzy-intake as the agent's activity (ADR 0084).
 
 use std::sync::Arc;
 
