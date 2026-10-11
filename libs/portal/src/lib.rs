@@ -9,6 +9,15 @@ mod scalars;
 pub use actor::Actor;
 pub use scalars::UtcTimestamp;
 
+/// The deepest query either portal runs. Deep enough for the frontends' Relay queries and
+/// GraphiQL's introspection; a query that nests further (`Actor.onBehalfOf` recurses) is refused
+/// before it runs.
+pub const MAX_QUERY_DEPTH: usize = 16;
+
+/// The most fields one query may ask for, counting each alias. The largest page's query asks for
+/// about a hundred; this stops one request fanning out into thousands of resolver calls.
+pub const MAX_QUERY_COMPLEXITY: usize = 1_000;
+
 use async_graphql::{http::GraphiQLSource, ObjectType, Schema, SubscriptionType};
 use async_graphql_axum::GraphQL;
 use axum::{

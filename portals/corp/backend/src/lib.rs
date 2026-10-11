@@ -65,11 +65,17 @@ pub type CorpPortalSchema = Schema<CorpPortalQuery, CorpPortalMutation, EmptySub
 
 /// The schema without Postgres: for printing the SDL and for tests that don't need it.
 pub fn schema() -> CorpPortalSchema {
-    Schema::build(CorpPortalQuery::default(), CorpPortalMutation::default(), EmptySubscription).finish()
+    schema_builder().finish()
 }
 
 pub fn schema_with(store: FleetStore) -> CorpPortalSchema {
-    Schema::build(CorpPortalQuery::default(), CorpPortalMutation::default(), EmptySubscription).data(store).finish()
+    schema_builder().data(store).finish()
+}
+
+fn schema_builder() -> async_graphql::SchemaBuilder<CorpPortalQuery, CorpPortalMutation, EmptySubscription> {
+    Schema::build(CorpPortalQuery::default(), CorpPortalMutation::default(), EmptySubscription)
+        .limit_depth(awzy_portal::MAX_QUERY_DEPTH)
+        .limit_complexity(awzy_portal::MAX_QUERY_COMPLEXITY)
 }
 
 /// `/graphql` behind sign-in, the sign-in routes under `/auth`, and heartbeat intake at

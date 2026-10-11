@@ -190,6 +190,8 @@ pub fn schema() -> ClientPortalSchema {
 pub fn schema_with(services: Services) -> ClientPortalSchema {
     Schema::build(ClientPortalQuery::default(), ClientPortalMutation::default(), ClientPortalSubscription::default())
         .data(services)
+        .limit_depth(awzy_portal::MAX_QUERY_DEPTH)
+        .limit_complexity(awzy_portal::MAX_QUERY_COMPLEXITY)
         .finish()
 }
 
@@ -307,6 +309,28 @@ mod tests {
         for expected in ["interface Node", "node(id: ID!): Node", "type DecisionConnection", "type PageInfo"] {
             assert!(sdl.contains(expected), "missing {expected:?} in SDL");
         }
+    }
+
+    #[tokio::test]
+    async fn queries_too_deep_or_too_wide_are_refused_before_they_run() {
+        let schema = super::schema();
+        let deep =
+            format!("{{ __schema {{ types {{ {}name{} }} }} }}", "fields { type { ".repeat(10), " } }".repeat(10));
+        let res = schema.execute(deep).await;
+        assert!(res.errors.iter().any(|e| e.message.contains("nested too deep")), "{:?}", res.errors);
+
+        let wide: String = (0..1_500).map(|i| format!("a{i}: apiVersion ")).collect();
+        let res = schema.execute(format!("{{ {wide} }}")).await;
+        assert!(res.errors.iter().any(|e| e.message.contains("too complex")), "{:?}", res.errors);
+
+        // As deep as GraphiQL's introspection goes: a field's argument types, seven `ofType`s down.
+        let introspection = format!(
+            "{{ __schema {{ types {{ fields {{ args {{ type {{ {}name{} }} }} }} }} }} }}",
+            "ofType { ".repeat(7),
+            " }".repeat(7)
+        );
+        let res = schema.execute(introspection).await;
+        assert!(res.errors.is_empty(), "GraphiQL can still introspect: {:?}", res.errors);
     }
 
     #[tokio::test]
