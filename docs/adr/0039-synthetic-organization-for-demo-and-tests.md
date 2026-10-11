@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-09
-- Plan: [docs/demo-plan.md](../demo-plan.md)
+- Plan: [docs/plans/demo-plan.md](../plans/demo-plan.md)
 
 ## Context
 

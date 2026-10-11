@@ -51,4 +51,4 @@ The account needs only to browse the projects in scope. Assignees match people w
 names are emails and Jira shows the account their emails (the Atlassian organization's email
 visibility); a hidden one is counted in `unmapped_assignees`.
 
-Other sources aren't built yet ([platform plan](../../../docs/platform-plan.md#built-so-far)).
+Other sources aren't built yet ([platform plan](../../../docs/plans/platform-plan.md#built-so-far)).

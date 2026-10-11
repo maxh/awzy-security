@@ -1,6 +1,6 @@
 # The build account: where releases are built and published. ECR repositories for
 # every service image and the Helm chart, the cosign signing key, and the role GitHub
-# Actions assumes to push (docs/deployment-plan.md, step 2).
+# Actions assumes to push (docs/plans/deployment-plan.md, step 2).
 
 terraform {
   required_version = ">= 1.10"

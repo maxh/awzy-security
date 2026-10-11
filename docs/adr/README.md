@@ -4,7 +4,7 @@ One file per decision, numbered in the order it was made. Each record has a stat
 behind the decision, the decision itself, and its consequences. Records are not edited after they
 are accepted. To change a decision, add a new record and mark the old one `Superseded by NNNN`.
 
-The [platform plan](../platform-plan.md) describes the system as
+The [platform plan](../plans/platform-plan.md) describes the system as
 a whole. These records keep track of why it looks that way.
 
 There's no index to keep in sync: the file names are the index (`ls docs/adr`), and each record

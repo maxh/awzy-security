@@ -33,5 +33,5 @@ bearer token.
 - Postgres with pgvector
 - Change feed to Kafka topic `attributes.v1`
 
-What's built so far: [platform plan](../../../docs/platform-plan.md#built-so-far). Running it locally:
+What's built so far: [platform plan](../../../docs/plans/platform-plan.md#built-so-far). Running it locally:
 [DEVELOPMENT.md](../../../DEVELOPMENT.md#people-and-groups-from-the-idp-adr-0031).

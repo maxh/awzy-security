@@ -1,6 +1,6 @@
 # deploy/terraform/corp
 
-The vendor side of the deployment (see `docs/deployment-plan.md`): what runs in the
+The vendor side of the deployment (see `docs/plans/deployment-plan.md`): what runs in the
 organization that builds and ships awzy. Applied with OpenTofu (`tofu`, 1.8 or later): the
 backends read variables, which plain Terraform can't.
 

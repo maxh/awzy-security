@@ -1,5 +1,5 @@
 //! awzy-synthetic: Larkspur Capital, the synthetic company awzy's demo, local development,
-//! scenario tests, and scale tests run on (docs/demo-plan.md, ADR 0039).
+//! scenario tests, and scale tests run on (docs/plans/demo-plan.md, ADR 0039).
 //!
 //! Generates the company from a seed ([`org::generate`]) and sends it to awzy-context through
 //! the same paths real data takes ([`push`]): people and groups over SCIM, as Okta or Entra ID

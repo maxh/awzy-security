@@ -127,7 +127,7 @@ module "bootstrap" {
 
   # The demo signs in against the dev IdP (ADR 0032): no real accounts, sample data only.
   demo_idp = true
-  # And the synthetic company (ADR 0039, docs/demo-plan.md) to show it with, working through
+  # And the synthetic company (ADR 0039, docs/plans/demo-plan.md) to show it with, working through
   # awzy-gateway (in-cluster only) so the portal has decisions.
   demo_data     = true
   demo_activity = true

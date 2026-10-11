@@ -18,5 +18,5 @@ a bad one without the IdP, PDP, or portal
 Binaries: `awzy-policy` (the service), `awzy-publish` (publishes the release's base bundle),
 and `awzy-break-glass`.
 
-What's built so far: [platform plan](../../../docs/platform-plan.md#built-so-far). Running it locally:
+What's built so far: [platform plan](../../../docs/plans/platform-plan.md#built-so-far). Running it locally:
 [DEVELOPMENT.md](../../../DEVELOPMENT.md#policy-bundles).

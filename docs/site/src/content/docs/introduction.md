@@ -10,7 +10,7 @@ that now act on their behalf.
 
 :::caution[Early]
 awzy is in active development and not yet generally available. These pages describe what's built
-today; the [platform plan](https://github.com/maxh/awzy-security/blob/main/docs/platform-plan.md)
+today; the [platform plan](https://github.com/maxh/awzy-security/blob/main/docs/plans/platform-plan.md)
 says what's coming.
 :::
 

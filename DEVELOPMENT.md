@@ -491,7 +491,7 @@ gateway's token config).
 ### The synthetic company (ADR 0039)
 
 `awzy-synthetic` provisions Larkspur Capital, the synthetic company in
-[docs/demo-plan.md](docs/demo-plan.md), into awzy-context the way an IdP would: about 200
+[docs/plans/demo-plan.md](docs/plans/demo-plan.md), into awzy-context the way an IdP would: about 200
 people, their teams and departments, contractors, and four AI service accounts (SalesGenie,
 CodeHelper, SupportBot, FinanceSummarizer). `world` then writes its folders, documents,
 repositories, and work items through awzy-context's batch API, and `all` does both. The same

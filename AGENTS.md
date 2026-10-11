@@ -9,8 +9,10 @@ Skills for common tasks (linting, the local stack, a new service, an ADR) are in
 ## What this is
 
 awzy implements Google's "Beyond Zero" authorization: per-action, per-resource decisions for
-humans and AI agents, installed single-tenant in each client's cloud. The plans are
-[docs/platform-plan.md](docs/platform-plan.md) and [docs/deployment-plan.md](docs/deployment-plan.md).
+humans and AI agents, installed single-tenant in each client's cloud. The rules the design
+follows are in [PRINCIPLES.md](PRINCIPLES.md). The plans are in [docs/plans/](docs/plans/):
+[platform](docs/plans/platform-plan.md), [deployment](docs/plans/deployment-plan.md), and
+[demo](docs/plans/demo-plan.md).
 The vocabulary (entities, QIDs, actors, timestamps) is on the docs site's
 [domain model](docs/site/src/content/docs/reference/domain-model.md) page. Decisions are recorded in
 [docs/adr/](docs/adr/README.md). Read the relevant ADR before changing something it covers, and

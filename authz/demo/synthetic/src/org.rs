@@ -1,5 +1,5 @@
 //! Larkspur Capital: the people, groups, and AI service accounts of the synthetic company
-//! (docs/demo-plan.md). Generated from a seed; the same seed and profile always give the same
+//! (docs/plans/demo-plan.md). Generated from a seed; the same seed and profile always give the same
 //! company.
 
 use std::collections::{HashMap, HashSet};

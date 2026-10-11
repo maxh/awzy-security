@@ -1,7 +1,7 @@
 load("//tools:rust.bzl", "awzy_service")
 
 # The synthetic company the demo, local development, scenario tests, and scale tests run on
-# (docs/demo-plan.md, ADR 0039). Demo-only: nothing outside authz/demo may depend on it (ADR 0063). Sends it to awzy-context through the same APIs an IdP and the
+# (docs/plans/demo-plan.md, ADR 0039). Demo-only: nothing outside authz/demo may depend on it (ADR 0063). Sends it to awzy-context through the same APIs an IdP and the
 # connectors use.
 awzy_service(
     name = "synthetic",

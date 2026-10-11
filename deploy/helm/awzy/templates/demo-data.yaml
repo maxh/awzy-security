@@ -1,6 +1,6 @@
 {{- if .Values.demoData.enabled }}
 {{- $sys := .Values.namespaces.system }}
-# DEMO INSTALLS ONLY (ADR 0039). Provisions the synthetic company (docs/demo-plan.md) into
+# DEMO INSTALLS ONLY (ADR 0039). Provisions the synthetic company (docs/plans/demo-plan.md) into
 # awzy-context after each sync: people and groups over SCIM, then AI service accounts, then its
 # resources and work items through the batch API. Safe to run again; existing records are
 # replaced.

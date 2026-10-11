@@ -36,7 +36,7 @@ resource "aws_organizations_organization" "this" {
 }
 
 # Guardrails a cautious client commonly sets, so the install is tested against them
-# (docs/deployment-plan.md, step 3). SCPs don't apply to the management account.
+# (docs/plans/deployment-plan.md, step 3). SCPs don't apply to the management account.
 resource "aws_organizations_policy" "region_lock" {
   name        = "deny-regions-except-${var.region}"
   description = "Deny everything outside ${var.region}, except global services"
