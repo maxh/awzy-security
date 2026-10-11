@@ -22,4 +22,4 @@ Run through these; each one has caught a real mistake.
    local stack skip without it, so say whether you ran them.
 8. **Docs:** public docs never cite ADRs; a decision gets an ADR; nothing deployment-specific
    (see `keep-deployments-out`).
-9. **`tools/ci/check-quality-ratchets.sh`** passes; if you lowered a count, lower its baseline.
+9. **`tools/ci/check-quality-ratchets.sh`** passes: no count is higher than on main.

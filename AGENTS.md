@@ -106,7 +106,7 @@ bazel build --config=lint //...                    # clippy
   `@awzy/ui`, or a type guard; oxlint's `no-unsafe-type-assertion` enforces it.
 - **Quality ratchets:** `tools/ci/check-quality-ratchets.sh` counts what the code-quality pass is
   removing (JSON read by field name, hand-built HTTP and Kubernetes clients, string errors, files
-  over 800 lines) and fails if a count grows; lower its baseline when you shrink one.
+  over 800 lines) and fails if a count is higher than on main.
 - **Tests** sit next to the code in `#[cfg(test)] mod tests` and read as statements of behavior
   (`delegation_never_exceeds_the_person`). TypeScript tests are `*.test.ts` beside the module,
   run by Vitest (`pnpm test`, and each package's `:unit` Bazel target).
