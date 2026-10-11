@@ -105,6 +105,9 @@ module "bootstrap" {
 
   # As the AWS demo: the dev IdP (ADR 0032), and the synthetic company working through awzy-gateway
   # (ADR 0039), so the portal has decisions.
+  # GKE runs its own metrics-server.
+  metrics_server = false
+
   demo_idp      = true
   demo_data     = true
   demo_activity = true
