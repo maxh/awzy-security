@@ -6,14 +6,13 @@ load("@rules_oci//oci:defs.bzl", "oci_image", "oci_image_index", "oci_load", "oc
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
-# TODO(arm64): rustc passes -Wl,--fix-cortex-a53-843419 when linking
-# aarch64-unknown-linux-gnu, and the Zig linker in hermetic_cc_toolchain rejects it.
-# Add "//tools/platforms:linux_arm64" once that is solved (Graviton nodes).
 # Where portal images put the built frontend.
 FRONTEND_DIR = "/usr/share/awzy/portal"
 
+# Every image is built for x86 and for Graviton (#93).
 IMAGE_PLATFORMS = [
     "//tools/platforms:linux_amd64",
+    "//tools/platforms:linux_arm64",
 ]
 
 def awzy_rust_library(name, crate_name, deps = [], test_deps = [], compile_data = [], test_size = "small", visibility = None):

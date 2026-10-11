@@ -14,5 +14,8 @@ platform(
         "@platforms//os:linux",
         "@platforms//cpu:aarch64",
     ],
+    # Bazel links the Rust binaries with the C toolchain's own command line, not rustc's: for
+    # aarch64, rustc adds -Wl,--fix-cortex-a53-843419, which the Zig linker rejects (#93).
+    flags = ["--@rules_rust//rust/settings:experimental_use_cc_common_link=True"],
     visibility = ["//visibility:public"],
 )
