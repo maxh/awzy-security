@@ -47,10 +47,15 @@ counts() {
 }
 
 against=${1:-origin/main}
-base=$(git merge-base HEAD "$against") || {
-  echo "::error::no merge base with $against; fetch its history (actions/checkout's fetch-depth: 0)" >&2
-  exit 1
-}
+# A CI checkout may hold only HEAD's history; fetch main's to find where they meet.
+if ! base=$(git merge-base HEAD "$against" 2>/dev/null); then
+  git fetch --quiet --no-tags origin "+refs/heads/main:refs/remotes/origin/main" || true
+  [ "$(git rev-parse --is-shallow-repository)" = true ] && git fetch --quiet --no-tags --unshallow origin || true
+  base=$(git merge-base HEAD "$against") || {
+    echo "::error::no merge base with $against (shallow: $(git rev-parse --is-shallow-repository))" >&2
+    exit 1
+  }
+fi
 tree=$(mktemp -d)
 trap 'git worktree remove --force "$tree" >/dev/null 2>&1 || true' EXIT
 # Without hooks: a local checkout hook may start Bazel.
