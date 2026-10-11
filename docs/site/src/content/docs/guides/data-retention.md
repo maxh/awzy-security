@@ -38,21 +38,23 @@ what it missed.
 
 ## Backups
 
-**Postgres** is backed up by Aurora: automated backups are kept for 7 days, and you can restore
-the cluster to any point in that window from the RDS console or API. With
+**Postgres** is backed up by your cloud's managed Postgres: the cloud layer keeps automated
+backups for 7 days, and you can restore to any point in that window. With
 `deletion_protection = true` (the default), destroying the install also takes a final snapshot.
+On AWS, that's Aurora, restored from the RDS console or API.
 
-**ClickHouse** isn't backed up yet. Its volume is a persistent EBS disk, so restarts and upgrades
-keep the data, but losing the volume loses the decisions and events older than Kafka's 7 days.
-Backups to the install's bucket are planned.
+**ClickHouse** isn't backed up yet. Its volume is a persistent disk (EBS on AWS), so restarts and
+upgrades keep the data, but losing the volume loses the decisions and events older than Kafka's 7
+days. Backups to the install's bucket are planned.
 
 **Your Terraform state and `deployment.env`** are yours to back up. The example client keeps its
-state in a versioned S3 bucket and its `deployment.env` in its own secret store.
+state in a versioned bucket and its `deployment.env` in its own secret store.
 
 ## Restoring
 
-- **Postgres:** restore the Aurora cluster to a point in time as a new cluster, point the
-  install's Postgres settings at it, and apply the cloud layer and bootstrap. Each service checks
-  at start that the database has every migration its release needs.
+- **Postgres:** restore the database to a point in time as a new cluster (on AWS, an Aurora
+  point-in-time restore), point the install's Postgres settings at it, and apply the cloud layer
+  and bootstrap. Each service checks at start that the database has every migration its release
+  needs.
 - **ClickHouse:** there's no restore yet. If its volume is lost, a new ClickHouse starts empty and
   takes new decisions and events from there.

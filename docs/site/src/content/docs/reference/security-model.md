@@ -28,7 +28,8 @@ description: What awzy can and can't see, and how releases reach your install.
   services carries a short-lived Kubernetes service-account token, checked by the receiver.
 - **Policy is signed.** awzy-policy signs every bundle it publishes, every switch between monitor
   and enforce, and every change to which tools fail open during an outage, with a key in your
-  cloud's KMS. The private key never leaves KMS, and only awzy-policy's own role may sign with it.
+  cloud's key service (KMS on AWS). The private key never leaves it, and only awzy-policy's own
+  workload identity may sign with it.
   PDPs and awzy-gateway apply only what verifies, and never an older version than the one they've
   applied, so someone who can write to awzy-policy's database can't change what's enforced. Every publish, rollback, and mode change is
   recorded with who did it.

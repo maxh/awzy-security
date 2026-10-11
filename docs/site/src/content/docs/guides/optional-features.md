@@ -10,14 +10,18 @@ through awzy.
 Each is a variable in the cluster layer's Terraform (`deploy/terraform/bootstrap`), applied as in
 [Installing awzy](/guides/install/), step 5.
 
-## Awzy Bot and investigations: Claude on Bedrock
+## Awzy Bot and investigations: Claude in your cloud
 
-Both use Claude through Amazon Bedrock in your install's AWS account, with the permissions the
-install's Terraform already gives awzy's workloads.
+Both use Claude through your cloud's own model service, in the install's account, with the
+permissions the cloud layer already gives awzy's workloads. Prompts and answers stay in your
+account. Amazon Bedrock is the only model service so far; Google's Vertex AI and Azure's are
+planned behind the same interface.
 
-First, in the install account's Bedrock console, request access to Anthropic's Claude models in
-the install's region. Some accounts can only reach them through a cross-region inference profile
-(a model ID starting `us.`). If so, set that ID:
+First, enable Anthropic's Claude models in your cloud's model service, in the install's region.
+If the default model ID isn't reachable there, set the one that is with `llm_model`.
+
+**On AWS:** request access to Claude in the install account's Bedrock console. Some accounts can
+only reach Claude through a cross-region inference profile, a model ID starting `us.`:
 
 ```hcl
 llm_model = "us.anthropic.claude-opus-5-5"

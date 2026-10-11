@@ -108,7 +108,7 @@ Policy bundles and enforcement modes.
   - `GetOutageFallback`, `SetOutageFallback`: each MCP tool's tier, and which tiers fail open
     while the PDP is unreachable;
   - `BreakGlassRollback`: a rollback signed with an admin's break-glass key.
-- **Stores:** Postgres `awzy_policy`. Signs with your cloud's KMS key, as its own service account.
+- **Stores:** Postgres `awzy_policy`. Signs with your cloud's key service (KMS on AWS), as its own service account.
 - **Called by:** each PDP, which waits on it for a new bundle or mode, so a publish reaches every PDP as it's made; the client portal; and
   awzy-reasoner, which reads the automated-containments mode; and awzy-gateway, which reads the
   outage fallback.
@@ -156,12 +156,14 @@ Challenges, containments, security keys, and notifications.
 
 Audit logs from your apps and cloud, as events.
 
-- **API (HTTP):** `POST /v1/events` for app events in awzy's own schema, and
-  `POST /v1/events/aws-cloudtrail` for CloudTrail log files. Both take your log shippers' token.
+- **API (HTTP):** `POST /v1/events` for app events in awzy's own schema, and one endpoint per
+  cloud audit log format (`POST /v1/events/aws-cloudtrail` for AWS CloudTrail so far). All take
+  your log shippers' token.
 - **Writes:** each event, normalized, to `awzy.events.v1`, acknowledged once Kafka has it.
-- **People in CloudTrail:** a session of an IAM Identity Center role, or of a role named in the
-  chart's `intake.humanRoles`, is recorded as the person its session names, so it counts toward
-  their risk score. The original ARN stays with the event.
+- **People in cloud audit logs:** a cloud role session that names a person is recorded as that
+  person, so it counts toward their risk score. On AWS, that's a session of an IAM Identity Center
+  role, or of a role named in the chart's `intake.humanRoles`; the original ARN stays with the
+  event.
 
 ### awzy-reasoner
 
