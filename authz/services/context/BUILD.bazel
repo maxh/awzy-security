@@ -10,6 +10,7 @@ awzy_service(
     deps = [
         "//authz/libs/classify",
         "//authz/libs/service-auth",
+        "//libs/migrations",
         "//libs/model",
         "//libs/server",
         "//libs/store",

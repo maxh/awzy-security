@@ -10,7 +10,7 @@ async fn main() -> anyhow::Result<()> {
     let pool = PgPoolOptions::new().max_connections(6).connect(&url).await?;
     let mut store = awzy_policy::PolicyStore::new(pool);
     // `awzy-policy migrate`: the release Job (ADR 0083).
-    if awzy_store::migrations::requested() {
+    if awzy_migrations::requested() {
         store.migrate().await?;
         tracing::info!("migrations applied");
         return Ok(());

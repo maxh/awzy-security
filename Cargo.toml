@@ -5,6 +5,7 @@ members = [
     "libs/heartbeat",
     "libs/portal",
     "libs/llm",
+    "libs/migrations",
     "libs/model",
     "libs/server",
     "libs/store",
@@ -103,6 +104,7 @@ awzy-registry = { path = "portals/corp/registry" }
 awzy-activity = { path = "authz/libs/activity" }
 awzy-authz-proto = { path = "authz/libs/proto" }
 awzy-llm = { path = "libs/llm" }
+awzy-migrations = { path = "libs/migrations" }
 awzy-identity = { path = "authz/libs/identity" }
 awzy-intake = { path = "authz/services/intake" }
 awzy-model = { path = "libs/model" }

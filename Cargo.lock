@@ -686,11 +686,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "awzy-authz-proto",
+ "awzy-migrations",
  "awzy-model",
  "awzy-pdp",
  "awzy-server",
  "awzy-service-auth",
- "awzy-store",
  "awzy-telemetry",
  "axum",
  "base64 0.22.1",
@@ -813,6 +813,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "awzy-classify",
+ "awzy-migrations",
  "awzy-model",
  "awzy-server",
  "awzy-service-auth",
@@ -840,6 +841,7 @@ dependencies = [
  "async-graphql",
  "async-graphql-axum",
  "awzy-heartbeat",
+ "awzy-migrations",
  "awzy-model",
  "awzy-portal",
  "awzy-registry",
@@ -1009,6 +1011,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "awzy-migrations"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "awzy-model"
 version = "0.1.0"
 dependencies = [
@@ -1055,6 +1066,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "awzy-authz-proto",
+ "awzy-migrations",
  "awzy-model",
  "awzy-pdp",
  "awzy-server",
@@ -1119,6 +1131,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "argon2",
+ "awzy-migrations",
  "awzy-model",
  "awzy-server",
  "awzy-telemetry",

@@ -147,7 +147,7 @@ impl PolicyStore {
     /// At startup: apply the migrations, or with `AWZY_POSTGRES_MIGRATE=check` (an install, whose
     /// release Job applied them) only check they're applied (ADR 0083).
     pub async fn migrate_on_start(&self) -> anyhow::Result<()> {
-        awzy_store::migrations::on_start(&migrator(), &self.pool).await
+        awzy_migrations::on_start(&migrator(), &self.pool).await
     }
 
     /// Validates the bundle (strict Cedar validation) and stores it as a draft.

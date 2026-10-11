@@ -8,6 +8,7 @@ awzy_service(
     compile_data = glob(["migrations/*.sql"]),
     deps = [
         "//libs/heartbeat",
+        "//libs/migrations",
         "//libs/model",
         "//libs/server",
         "//libs/telemetry",
