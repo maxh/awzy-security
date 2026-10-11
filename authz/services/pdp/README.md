@@ -12,7 +12,7 @@ Valkey joins as a shared tier when scale requires it (see
 [Entity data for Cedar](../../../docs/platform-plan.md#entity-data-for-cedar)). With each resource
 comes who is assigned to work on it, which each check sees as `context.assigned`
 ([ADR 0046](../../../docs/adr/0046-work-assignment-as-context-assigned.md)). Serves
-gRPC, an AuthZEN-style HTTP API, and Envoy `ext_authz` once Envoy is used as a PEP.
+gRPC, an AuthZEN-style HTTP API, and Envoy `ext_authz` once Envoy is used as an enforcement point.
 
 - Stateless and horizontally scaled
 - Emits every decision to Kafka

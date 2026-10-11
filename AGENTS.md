@@ -74,7 +74,8 @@ bazel build --config=lint //...                    # clippy
   `person` or `people` in a name; prose can say "the person" (ADR 0074).
 - **Principals:** who a check is about (a `Human` or a `ServiceAccount`) is a *principal*, as
   Cedar calls it, in names and prose alike. Not "accessor", the Beyond Zero paper's word, and not
-  "subject" (ADR 0079).
+  "subject" (ADR 0079). A check is `awzy_model::Check`; software that asks one is an
+  *enforcement point*, not a "PEP". `tools/ci/check-names.sh` holds these in CI.
 - **Who did something** is an `Actor` (an entity and the person it acted for), never a string:
   `awzy_model::Actor`, `awzy.authz.v1.Actor` in protobuf, the `Actor` type in GraphQL (ADR 0060).
 - **Names** are specific and easy to grep (`ClientPortalSchema`, `CorpPortalQuery`, not `Query`).
@@ -95,7 +96,7 @@ bazel build --config=lint //...                    # clippy
   are sorted alphabetically (ADR 0053).
 - **Nothing deployment-specific** goes in this public repository, or in commit messages or PR
   and issue text: no account IDs, resource IDs, support case numbers, sign-in portal URLs, real
-  install QIDs, people's emails, or customer names. Use placeholders and configuration, and keep
+  install QIDs, people's emails, or client names. Use placeholders and configuration, and keep
   the real values in `deployment.env`, CI variables, or Secrets Manager. See the
   `keep-deployments-out` skill.
 - **Commits:** `<area>: <what changed>` as the subject, then a body of short bullets on what and

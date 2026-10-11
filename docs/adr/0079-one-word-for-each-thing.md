@@ -20,8 +20,7 @@ still had several names elsewhere:
 - One question to the PDP was a *check* in the docs and in protobuf (`CheckRequest`), but an
   `AccessRequest` in the code.
 - The software that asks it was an *enforcement point* in most places and a *PEP* in a few.
-- One copy of awzy was an *install*, but sometimes a *deployment*, a word that also means a
-  Kubernetes Deployment and a CI deploy.
+- One copy of awzy was an *install*, but sometimes a *deployment*.
 - A configuration name still said `PEOPLE` (`AWZY_CHALLENGE_PEOPLE`), and the values of
   `sensitivity` were called tiers without anything saying so.
 
@@ -39,7 +38,9 @@ No client runs awzy yet, so nothing outside this repository depends on any of th
 - **Check.** One question to the PDP is a *check*: `awzy_model::Check`, as protobuf's
   `CheckRequest` already says.
 - **Enforcement point**, never *PEP*, outside the platform plan's one definition of the term.
-- **Install** for one copy of awzy; *deployment* only for a Kubernetes Deployment or a deploy.
+- **Install** for one copy of awzy in a client's cloud. *Deployment* keeps its other meanings: a
+  Kubernetes Deployment, a deploy, and one environment awzy deploys to, an install or the vendor
+  side (`deployment.env`, `tools/deployment-env`), which no other word covers.
 - **Configuration** names say what the callers do: `AWZY_CHALLENGE_ANSWERERS`, not
   `AWZY_CHALLENGE_PEOPLE`.
 - **Sensitivity tier**: the four values of `sensitivity`. Names that hold one say `tier`

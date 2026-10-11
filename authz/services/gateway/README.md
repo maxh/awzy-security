@@ -1,10 +1,10 @@
 # awzy-gateway · enforcement
 
-A policy enforcement point (PEP) for traffic the client doesn't want to instrument by hand. Part
+A policy enforcement point for traffic the client doesn't want to instrument by hand. Part
 of [awzy-authz](../../README.md).
 
 A reverse proxy for HTTP APIs and an MCP proxy that sees agent tool calls and carries service
-account, on-behalf-of person, and task annotations. The MCP proxy is the first PEP
+account, on-behalf-of person, and task annotations. The MCP proxy is the first enforcement point
 ([ADR 0019](../../../docs/adr/0019-mcp-proxy-is-the-first-pep.md)).
 
 - Calls awzy-pdp per request: `call` on the tool, and for tools that act on one resource, `read`

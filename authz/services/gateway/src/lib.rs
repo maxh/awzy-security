@@ -1,4 +1,4 @@
-//! awzy-gateway: a policy enforcement point (PEP).
+//! awzy-gateway: a policy enforcement point.
 //!
 //! Today: an MCP proxy. Agents connect to `/mcp/{upstream}`; the gateway validates their token,
 //! asks awzy-pdp about every `tools/call`, and forwards everything else unchanged. Next: a

@@ -1,4 +1,4 @@
-# Awzy Deployment Plan
+# awzy deployment plan
 
 How the first real deployment is laid out: two separate AWS organizations, one for awzy and one standing in for a client. The example client is installed exactly the way a real client would be, and it is where scale and performance tests run.
 
@@ -157,7 +157,7 @@ Everything is in `awzy-example-install`, the same place a real client would look
 | Signal | Source | Stored in | Viewed in |
 | --- | --- | --- | --- |
 | Server-side latency, throughput, errors | OpenTelemetry metrics from every awzy service (PDP decision histograms, cache hit rates, snapshot size, feed heartbeats) | Amazon Managed Service for Prometheus | Amazon Managed Grafana |
-| Client-side latency | k6 load generator, measuring what a PEP actually waits for | Same Prometheus workspace, through remote write | Same dashboards, next to the server-side numbers |
+| Client-side latency | k6 load generator, measuring what an enforcement point actually waits for | Same Prometheus workspace, through remote write | Same dashboards, next to the server-side numbers |
 | Traces | OpenTelemetry traces, sampled, plus every request slower than the p99 target | AWS X-Ray | Grafana, linked from the latency panels |
 | Managed data services | Aurora, MSK, and ElastiCache metrics | CloudWatch | Grafana, through its CloudWatch data source |
 | ClickHouse | ClickHouse's Prometheus endpoint and `system` tables | Prometheus | Grafana |
@@ -167,7 +167,7 @@ Dashboards and alert rules live in the repository as code, so every install, inc
 
 ### Load generator
 
-- **k6**, which speaks gRPC and HTTP, running as Kubernetes Jobs in the install's VPC. That is the network position of a real PEP, so the measured latency includes the real network hop.
+- **k6**, which speaks gRPC and HTTP, running as Kubernetes Jobs in the install's VPC. That is the network position of a real enforcement point, so the measured latency includes the real network hop.
 - It runs on its own `loadgen` node pool, scaled to zero between tests, so it never takes capacity from the PDP.
 - Each run writes a summary to an S3 bucket in the install account. A short write-up of the results goes into `docs/perf/` in the repository. That is safe because all the data is synthetic.
 
@@ -186,7 +186,7 @@ Dashboards and alert rules live in the repository as code, so every install, inc
 | Containment propagation | Time from writing a containment to the first deny on every PDP pod, under load | Within the proposed 2 s, or the target is revised |
 | Attribute freshness | Time from an attribute change to every PDP snapshot | Within the proposed 60 s, or the target is revised |
 | Ingest | Decisions and events per second through Kafka into ClickHouse | 1,500 decisions/s and 3,000 events/s with consumer lag under 60 s |
-| Failure drills | ElastiCache failover, PDP pod loss, ClickHouse down then replay from Kafka, PDP unreachable from the PEP | Decisions continue as designed, no decision records are lost, and no allow is replayed for a contained principal |
+| Failure drills | ElastiCache failover, PDP pod loss, ClickHouse down then replay from Kafka, PDP unreachable from the enforcement point | Decisions continue as designed, no decision records are lost, and no allow is replayed for a contained principal |
 | Upgrade under load | `helm upgrade` to the next release, and a node drain, during steady-state load ([ADR 0072](adr/0072-deploys-are-zero-downtime.md)) | Zero failed checks and zero failed tool calls |
 
 > **Target load (proposed):** 1,500 checks/s sustained and 5,000/s bursts, sized for 10,000 employees and 500 agents. The reasoning and the full list of targets are in the [demo plan](demo-plan.md#scale-and-performance); revise them with a design partner's numbers.

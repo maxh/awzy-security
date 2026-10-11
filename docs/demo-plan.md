@@ -1,6 +1,6 @@
-# Awzy Demo Plan
+# awzy demo plan
 
-How awzy is shown and tested without customer data: a synthetic company, generated from a
+How awzy is shown and tested without client data: a synthetic company, generated from a
 seed, that flows into awzy through the same paths a real client's data does, with the attacker
 scenarios from the Beyond Zero paper ([beyond-zero.pdf](beyond-zero.pdf)) built in. The decision
 is [ADR 0039](adr/0039-synthetic-organization-for-demo-and-tests.md); where the demo runs is in
