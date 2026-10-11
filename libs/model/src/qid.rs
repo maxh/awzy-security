@@ -116,6 +116,12 @@ qid!(
     InvestigationId,
     "investigation"
 );
+qid!(
+    /// One support session (ADR 0095): awzy staff asked for it in the corp portal, which minted
+    /// the ID, and a client admin decides it in the client portal.
+    SupportSessionId,
+    "support_session"
+);
 
 #[cfg(test)]
 mod tests {

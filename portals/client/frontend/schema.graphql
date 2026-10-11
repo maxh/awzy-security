@@ -678,6 +678,14 @@ type Mutation {
 	Closes an investigation once a person has reviewed it. It stays, with who closed it and why.
 	"""
 	closeInvestigation(input: CloseInvestigationInput!): CloseInvestigationPayload!
+	"""
+	Approves or rejects a support session.
+	"""
+	decideSupportSession(input: DecideSupportSessionInput!): DecideSupportSessionPayload!
+	"""
+	Ends an approved support session now.
+	"""
+	endSupportSession(id: ID!): SupportSession!
 }
 
 interface Node {
@@ -1012,6 +1020,14 @@ type Query {
 	enforcement area, to review before sending it to awzy support.
 	"""
 	diagnosticsBundle: String!
+	"""
+	Support sessions awzy staff asked for, newest first. For those who may view enforcement.
+	"""
+	supportSessions: [SupportSession!]!
+	"""
+	Null unless the viewer is awzy staff in a support session.
+	"""
+	viewerSupport: ViewerSupport
 }
 
 input RegisterServiceAccountInput {
@@ -1234,4 +1250,48 @@ schema {
 	query: Query
 	mutation: Mutation
 	subscription: ClientPortalSubscription
+}
+
+input DecideSupportSessionInput {
+	id: ID!
+	approve: Boolean!
+	areas: [String!]! = []
+	minutes: Int! = 0
+}
+
+type DecideSupportSessionPayload {
+	supportSession: SupportSession
+	challengeQid: ID
+}
+
+type SupportSession {
+	id: ID!
+	status: SupportSessionStatus!
+	requestedBy: String!
+	areas: [String!]!
+	reason: String!
+	durationMinutes: Int!
+	requestedAt: UtcTimestamp
+	approvedAreas: [String!]!
+	expiresAt: UtcTimestamp
+	decidedBy: Actor
+	decidedAt: UtcTimestamp
+	endedBy: Actor
+	endedAt: UtcTimestamp
+	actionCount: Int!
+}
+
+enum SupportSessionStatus {
+	REQUESTED
+	APPROVED
+	REJECTED
+	ENDED
+	EXPIRED
+}
+
+type ViewerSupport {
+	sessionId: ID!
+	staff: String!
+	areas: [String!]!
+	expiresAt: UtcTimestamp!
 }

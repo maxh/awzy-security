@@ -71,6 +71,22 @@ permit (
 @challenge("verification")
 forbid (principal, action == Action::"switch_enforcement", resource);
 
+// Support sessions (ADR 0095): an awzy staff member views the portal areas a client admin approved,
+// and nothing else, until the session ends. The client portal names those areas, from the approved
+// session, only on that staff member's checks, so these never touch anyone else.
+@id("support-views-approved-areas")
+permit (principal, action == Action::"view", resource is PortalArea)
+when { context has support_areas && context.support_areas.contains(resource) };
+
+@id("support-views-no-other-area")
+forbid (principal, action == Action::"view", resource is PortalArea)
+when { context has support_areas && !context.support_areas.contains(resource) };
+
+@id("support-only-views")
+forbid (principal, action, resource)
+when { context has support_areas }
+unless { action == Action::"view" };
+
 // Everyone answers the challenges sent to them in the client portal. Seeing every challenge and
 // containing principals is `administer`, the security team's above.
 @id("humans-answer-their-challenges")

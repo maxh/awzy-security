@@ -86,6 +86,9 @@ pub struct Pdp {
     knows_mcp_client: bool,
     /// Whether the schema declares `context.automation_score` (ADR 0085). Same reason.
     knows_automation: bool,
+    /// Whether the schema declares `context.support_areas` (ADR 0095). Without it the key is
+    /// dropped, so a support session's checks match no policy and are denied.
+    knows_support_areas: bool,
 }
 
 /// The PDP every request reads. Policy sync swaps in a new one without blocking readers.
@@ -142,6 +145,9 @@ impl Pdp {
         let knows_mcp_client = Context::from_json_value(probe, Some((&schema, &call))).is_ok();
         let probe = serde_json::json!({ "risk_score": 0, "human_present": true, "automation_score": 0 });
         let knows_automation = Context::from_json_value(probe, Some((&schema, &read))).is_ok();
+        let view = EntityUid::from_type_name_and_id(EntityTypeName::from_str("Action")?, EntityId::new("view"));
+        let probe = serde_json::json!({ "risk_score": 0, "human_present": true, "support_areas": [] });
+        let knows_support_areas = Context::from_json_value(probe, Some((&schema, &view))).is_ok();
         Ok(Self {
             schema,
             policies,
@@ -150,6 +156,7 @@ impl Pdp {
             unknown_resource_attrs,
             knows_assigned,
             knows_mcp_client,
+            knows_support_areas,
             knows_automation,
         })
     }
@@ -233,6 +240,9 @@ impl Pdp {
         let mut context = req.context.clone();
         if !self.knows_mcp_client {
             context.remove("mcp_client");
+        }
+        if !self.knows_support_areas {
+            context.remove("support_areas");
         }
         // Each check replaces this with its own principal's score when awzy-reasoner has one
         // (ADR 0056); an enforcement point's value only stands for principals it has never scored.
@@ -821,6 +831,40 @@ mod tests {
         assert_eq!(pdp.decide(&switch(read("bob", "", 10)), &fixtures(&pdp)).unwrap().verdict, Verdict::Deny);
         let agent = switch(sa_read("ops-bot", Some("alice"), "", 10));
         assert_eq!(pdp.decide(&agent, &fixtures(&pdp)).unwrap().verdict, Verdict::Deny, "even acting for alice");
+    }
+
+    /// A support session's check (ADR 0095): what the client portal sends for an awzy staff member
+    /// whose session approved only the Decisions page.
+    fn support(action: &str, area: &str) -> Check {
+        let mut req = Check {
+            action: action.into(),
+            resource: EntityRef::new("PortalArea", area),
+            ..read("awzy-support:max", "", 10)
+        };
+        req.context
+            .insert("support_areas".into(), json!([{ "__entity": { "type": "PortalArea", "id": "decisions" } }]));
+        req
+    }
+
+    #[test]
+    fn a_support_session_views_only_the_areas_approved_and_changes_nothing() {
+        let pdp = Pdp::with_defaults().unwrap();
+        let verdict = |c: Check| pdp.decide(&c, &fixtures(&pdp)).unwrap().verdict;
+        assert_eq!(verdict(support("view", "decisions")), Verdict::Allow);
+        assert_eq!(verdict(support("view", "challenges")), Verdict::Deny, "not even what every person may view");
+        assert_eq!(verdict(support("administer", "decisions")), Verdict::Deny);
+        assert_eq!(verdict(support("switch_enforcement", "enforcement")), Verdict::Deny);
+    }
+
+    #[test]
+    fn a_bundle_from_before_support_sessions_denies_them() {
+        let older = DEFAULT_SCHEMA.replace("  support_areas?: Set<PortalArea>,\n", "");
+        assert_ne!(older, DEFAULT_SCHEMA);
+        let start = DEFAULT_POLICIES.find("// Support sessions (ADR 0095)").unwrap();
+        let end = DEFAULT_POLICIES.find("// Everyone answers the challenges").unwrap();
+        let without = format!("{}{}", &DEFAULT_POLICIES[..start], &DEFAULT_POLICIES[end..]);
+        let pdp = Pdp::new(&older, &without).unwrap();
+        assert_eq!(pdp.decide(&support("view", "decisions"), &fixtures(&pdp)).unwrap().verdict, Verdict::Deny);
     }
 
     #[test]

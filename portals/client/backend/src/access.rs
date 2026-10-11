@@ -31,9 +31,10 @@ use serde_json::json;
 
 use crate::Services;
 
-/// The signed-in caller of one request.
+/// The signed-in caller of one request, and, for awzy staff in a support session, what it allows
+/// (ADR 0095).
 #[derive(Clone, Debug)]
-pub struct Viewer(pub Arc<Principal>);
+pub struct Viewer(pub Arc<Principal>, pub Option<Arc<crate::support::SupportGrant>>);
 
 impl std::ops::Deref for Viewer {
     type Target = Principal;
@@ -135,6 +136,26 @@ pub async fn authorize_action(
     action: &'static str,
     area: PortalArea,
 ) -> Result<(), AccessError> {
+    let mut context = json!({ "client": match surface {
+        Surface::Portal => "portal",
+        Surface::Mcp => "mcp",
+        Surface::AwzyBot => "awzy-bot",
+    } });
+    // A support session (ADR 0095): only view, only the approved areas. The PDP's base policies
+    // say the same from `support_areas`; this holds even under a bundle that predates them.
+    if let Some(grant) = &viewer.1 {
+        if !grant.allows(action, area) {
+            return Err(AccessError::Denied {
+                actor: viewer.actor().label(),
+                action,
+                area: area.as_str(),
+                decision: "not in the support session the client approved".into(),
+            });
+        }
+        let areas: Vec<_> =
+            grant.areas.iter().map(|a| json!({ "__entity": { "type": entity_type::PORTAL_AREA, "id": a } })).collect();
+        context["support_areas"] = json!(areas);
+    }
     let mut pdp = services.pdp.clone().ok_or(AccessError::NotConfigured)?;
     let wire = |r: &awzy_model::EntityRef| WireRef { r#type: r.kind.clone(), id: r.id.clone() };
     let mut entities: Vec<_> = viewer.entities.iter().map(entity_from_json).collect();
@@ -142,16 +163,11 @@ pub async fn authorize_action(
         "uid": { "type": entity_type::PORTAL_AREA, "id": area.as_str() },
         "attrs": { "sensitivity": "confidential" },
     })));
-    let client = match surface {
-        Surface::Portal => "portal",
-        Surface::Mcp => "mcp",
-        Surface::AwzyBot => "awzy-bot",
-    };
     let req = CheckRequest {
         principal: Some(wire(&viewer.subject)),
         action: action.into(),
         resource: Some(WireRef { r#type: entity_type::PORTAL_AREA.into(), id: area.as_str().into() }),
-        context: Some(json_to_struct(json!({ "client": client }).as_object().expect("object").clone())),
+        context: Some(json_to_struct(context.as_object().expect("object").clone())),
         on_behalf_of: viewer.on_behalf_of.as_ref().map(wire),
         entities,
         human_present: viewer.human_present,
@@ -208,6 +224,8 @@ struct AuthInner {
     /// Where on the portal these tokens are for: "" for the portal itself, "/mcp" for its MCP
     /// endpoint, which takes tokens of its own (ADR 0081).
     resource_path: &'static str,
+    /// The corp portal's support tokens (ADR 0095), on the portal itself and never on MCP.
+    support: Option<crate::support::SupportSignIn>,
 }
 
 impl Auth {
@@ -225,6 +243,7 @@ impl Auth {
             client_id,
             public_url,
             resource_path: "",
+            support: None,
         })))
     }
 
@@ -286,6 +305,12 @@ impl Auth {
         Ok(auth)
     }
 
+    /// Also signs in awzy staff in an approved support session (ADR 0095). Call before sharing.
+    pub fn with_support(mut self, support: Option<crate::support::SupportSignIn>) -> Self {
+        Arc::get_mut(&mut self.0).expect("not shared yet").support = support;
+        self
+    }
+
     /// Where clients find how to sign in for these tokens (RFC 9728).
     fn metadata_url(&self) -> Option<String> {
         self.0.public_url.as_ref().map(|u| {
@@ -311,7 +336,17 @@ impl Auth {
     pub async fn viewer(&self, authorization: Option<&str>) -> Result<Viewer, String> {
         let registry: &dyn awzy_identity::ServiceAccounts =
             if self.0.defer_registry { &awzy_identity::DeferToPdp } else { &self.0.service_accounts };
-        self.0.verifier.principal(authorization, registry).await.map(|a| Viewer(Arc::new(a))).map_err(|e| e.to_string())
+        if let (Some(support), Some(token)) = (&self.0.support, authorization.and_then(|a| a.strip_prefix("Bearer "))) {
+            if crate::support::SupportSignIn::claims_it(token) {
+                return support.viewer(token).await;
+            }
+        }
+        self.0
+            .verifier
+            .principal(authorization, registry)
+            .await
+            .map(|a| Viewer(Arc::new(a), None))
+            .map_err(|e| e.to_string())
     }
 }
 

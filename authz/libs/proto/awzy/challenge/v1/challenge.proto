@@ -54,6 +54,17 @@ service ChallengeService {
   // Passing a verification challenge with a security key.
   rpc BeginVerification(BeginVerificationRequest) returns (BeginVerificationResponse);
   rpc FinishVerification(FinishVerificationRequest) returns (FinishVerificationResponse);
+
+  // Support sessions (ADR 0095). awzy staff ask in the corp portal, and awzy-reporter brings the
+  // requests in from the heartbeat's answer; the reply is each one's state, which the next
+  // heartbeat carries back.
+  rpc RecordSupportRequests(RecordSupportRequestsRequest) returns (RecordSupportRequestsResponse);
+  // For the client portal: the sessions, an admin's decision, ending one, and what's done in one.
+  rpc ListSupportSessions(ListSupportSessionsRequest) returns (ListSupportSessionsResponse);
+  rpc GetSupportSession(GetSupportSessionRequest) returns (GetSupportSessionResponse);
+  rpc DecideSupportSession(DecideSupportSessionRequest) returns (DecideSupportSessionResponse);
+  rpc EndSupportSession(EndSupportSessionRequest) returns (EndSupportSessionResponse);
+  rpc RecordSupportAction(RecordSupportActionRequest) returns (RecordSupportActionResponse);
 }
 
 enum ChallengeStatus {
@@ -421,3 +432,101 @@ message FinishVerificationRequest {
 message FinishVerificationResponse {
   Challenge challenge = 1;
 }
+
+enum SupportSessionStatus {
+  SUPPORT_SESSION_STATUS_UNSPECIFIED = 0;
+  // Waiting for an admin.
+  SUPPORT_SESSION_STATUS_REQUESTED = 1;
+  // The staff member may view the approved areas until `expires_at`.
+  SUPPORT_SESSION_STATUS_APPROVED = 2;
+  SUPPORT_SESSION_STATUS_REJECTED = 3;
+  // An admin ended it early.
+  SUPPORT_SESSION_STATUS_ENDED = 4;
+  // It reached `expires_at`.
+  SUPPORT_SESSION_STATUS_EXPIRED = 5;
+}
+
+// What awzy staff asked for, as the corp portal sent it.
+message SupportRequest {
+  // QID: support_session_<uuid>, minted by the corp portal.
+  string qid = 1;
+  // The staff member, as the corp portal names them.
+  string requested_by = 2;
+  // Portal areas, e.g. "decisions", "policies".
+  repeated string areas = 3;
+  string reason = 4;
+  uint32 duration_minutes = 5;
+  google.protobuf.Timestamp requested_at = 6;
+}
+
+message SupportSession {
+  SupportRequest request = 1;
+  SupportSessionStatus status = 2;
+  // What the admin approved: the areas, at most those asked for, and until when.
+  repeated string approved_areas = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  awzy.authz.v1.Actor decided_by_actor = 5;
+  google.protobuf.Timestamp decided_at = 6;
+  awzy.authz.v1.Actor ended_by_actor = 7;
+  google.protobuf.Timestamp ended_at = 8;
+  // How many operations the staff member has made in it.
+  uint32 action_count = 9;
+}
+
+message RecordSupportRequestsRequest {
+  // New requests are stored; ones already here are left as they are.
+  repeated SupportRequest requests = 1;
+}
+
+message RecordSupportRequestsResponse {
+  // Every session that isn't over yet or ended in the last day, for the heartbeat.
+  repeated SupportSession sessions = 1;
+}
+
+message ListSupportSessionsRequest {
+  // Newest first. Defaults to 50.
+  int32 limit = 1;
+}
+
+message ListSupportSessionsResponse {
+  repeated SupportSession sessions = 1;
+}
+
+message GetSupportSessionRequest {
+  string qid = 1;
+}
+
+message GetSupportSessionResponse {
+  SupportSession session = 1;
+}
+
+message DecideSupportSessionRequest {
+  string qid = 1;
+  bool approve = 2;
+  // With `approve`: the areas, a subset of those asked for, and for how long, at most what was
+  // asked for.
+  repeated string areas = 3;
+  uint32 minutes = 4;
+  awzy.authz.v1.Actor decided_by_actor = 5;
+}
+
+message DecideSupportSessionResponse {
+  SupportSession session = 1;
+}
+
+message EndSupportSessionRequest {
+  string qid = 1;
+  awzy.authz.v1.Actor ended_by_actor = 2;
+}
+
+message EndSupportSessionResponse {
+  SupportSession session = 1;
+}
+
+message RecordSupportActionRequest {
+  string qid = 1;
+  // The GraphQL operation's name, e.g. "DecisionsPageQuery".
+  string operation = 2;
+}
+
+message RecordSupportActionResponse {}

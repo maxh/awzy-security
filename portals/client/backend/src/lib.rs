@@ -22,6 +22,7 @@ mod outage;
 mod policies;
 mod security_keys;
 mod status;
+pub mod support;
 
 use access::{Auth, PortalAction, PortalArea, Surface, Viewer};
 use async_graphql::{
@@ -171,6 +172,7 @@ pub struct ClientPortalQuery(
     investigations::InvestigationQuery,
     status::StatusQuery,
     outage::OutageQuery,
+    support::SupportQuery,
     diagnostics::DiagnosticsQuery,
 );
 
@@ -180,6 +182,7 @@ pub struct ClientPortalMutation(
     policies::PolicyMutation,
     enforcement::EnforcementMutation,
     outage::OutageMutation,
+    support::SupportMutation,
     directory::DirectoryMutation,
     awzy_bot::AwzyBotMutation,
     challenges::ChallengeMutation,
@@ -209,6 +212,8 @@ fn schema_builder(
         .data(services)
         .limit_depth(awzy_portal::MAX_QUERY_DEPTH)
         .limit_complexity(awzy_portal::MAX_QUERY_COMPLEXITY)
+        // Each operation a support session runs is recorded (ADR 0095).
+        .extension(support::SupportAudit)
 }
 
 /// GraphQL at `/graphql` and MCP at `/mcp`, each behind sign-in with its own tokens (`auth` and
@@ -304,7 +309,7 @@ pub(crate) mod testing {
     }
 
     pub(crate) fn human(id: &str, group: &str) -> Viewer {
-        Viewer(Arc::new(awzy_identity::Principal::human(id, None, &[group.to_string()])))
+        Viewer(Arc::new(awzy_identity::Principal::human(id, None, &[group.to_string()])), None)
     }
 
     /// Runs `query` as `viewer`; panics on GraphQL errors.

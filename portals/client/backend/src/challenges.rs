@@ -675,7 +675,7 @@ mod tests {
         let mut bob = awzy_identity::Principal::human("bob", None, &[]);
         bob.expires_at = Some(SystemTime::now() - Duration::from_secs(1));
         let forever = async_graphql::futures_util::stream::pending::<()>();
-        let stream = while_allowed(Services::default(), Viewer(Arc::new(bob)), PortalAction::View, forever);
+        let stream = while_allowed(Services::default(), Viewer(Arc::new(bob), None), PortalAction::View, forever);
         let sent = tokio::time::timeout(Duration::from_secs(5), stream.collect::<Vec<_>>()).await;
         assert_eq!(sent.expect("ended at once"), Vec::<()>::new());
     }
@@ -685,7 +685,7 @@ mod tests {
         let mut agent = awzy_identity::Principal::human("bob", None, &[]);
         agent.subject = awzy_model::EntityRef::new("ServiceAccount", "sales-genie");
         agent.on_behalf_of = Some(awzy_model::EntityRef::new("Human", "bob"));
-        let err = answering_human(&Viewer(Arc::new(agent))).unwrap_err();
+        let err = answering_human(&Viewer(Arc::new(agent), None)).unwrap_err();
         assert!(err.message.contains("sales-genie for bob can't answer challenges"), "{}", err.message);
         assert_eq!(answering_human(&crate::testing::human("bob", "engineering")).unwrap(), "bob");
     }

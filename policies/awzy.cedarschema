@@ -79,6 +79,9 @@ type RequestContext = {
   // request (the human asking, the person an agent acts for, or an unattended account's owner).
   // A service account never approves for its own owner (ADR 0065).
   approving_for?: Human,
+  // Set by the client portal for an awzy staff member in a support session (ADR 0095): the portal
+  // areas a client admin approved. Present only on that staff member's checks.
+  support_areas?: Set<PortalArea>,
 };
 
 action read, write appliesTo {

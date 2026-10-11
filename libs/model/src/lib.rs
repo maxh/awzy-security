@@ -10,7 +10,7 @@ pub use actor::{actor_type, Actor};
 pub use fallback::{FallbackError, OutageFallback, ALWAYS_FAIL_CLOSED, TIERS, UNCLASSIFIED_TIER};
 pub use qid::{
     CeremonyId, ChallengeId, ContainmentId, DecisionId, EventId, InstallId, InvestigationId, PolicyBundleId, QidError,
-    SecurityKeyId,
+    SecurityKeyId, SupportSessionId,
 };
 
 use chrono::{DateTime, Utc};

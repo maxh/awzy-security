@@ -14,6 +14,7 @@ pub mod keys;
 pub mod notify;
 pub mod slack;
 mod store;
+pub mod support;
 pub mod webauthn;
 
 pub use feed::{Feed, HEARTBEAT};

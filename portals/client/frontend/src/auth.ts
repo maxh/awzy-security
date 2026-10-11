@@ -1,10 +1,18 @@
-import { UserManager, WebStorageStateStore, type User } from "oidc-client-ts";
+import { UserManager, WebStorageStateStore } from "oidc-client-ts";
 
 /** Where the IdP sends the browser back after sign-in. A frontend route, not an API route. */
 const CALLBACK_PATH = "/auth/callback";
 
+/**
+ * Where awzy staff land with a support session's token (ADR 0095), as `#token=<token>`. The corp
+ * portal links here.
+ */
+const SUPPORT_PATH = "/support/sign-in";
+const SUPPORT_TOKEN = "awzy-support-token";
+
 export type Session = {
-  user: User;
+  /** Who is signed in, for the sidebar. */
+  profile: { sub: string; name?: string; email?: string };
   /** The access token for the portal backend, or null once it has expired. */
   token: () => string | null;
   /** Starts sign-in again, e.g. when the backend rejects an expired token. */
@@ -18,6 +26,8 @@ export type Session = {
  * is sent to the IdP and the promise never resolves.
  */
 export async function signIn(): Promise<Session> {
+  const support = supportSession();
+  if (support) return support;
   const config = (await (await fetch("/auth/config")).json()) as { issuer: string; clientId: string };
   const manager = new UserManager({
     authority: config.issuer,
@@ -47,7 +57,7 @@ export async function signIn(): Promise<Session> {
     return new Promise(() => {});
   }
   return {
-    user,
+    profile: user.profile,
     token: () => (user.expired ? null : user.access_token),
     signInAgain,
     signOut: async () => {
@@ -59,5 +69,36 @@ export async function signIn(): Promise<Session> {
         signInAgain();
       }
     },
+  };
+}
+
+/**
+ * An awzy staff member in a support session (ADR 0095): the corp portal's token, kept for this
+ * tab only. The backend decides what it may see; the client's IdP isn't involved.
+ */
+function supportSession(): Session | null {
+  if (window.location.pathname === SUPPORT_PATH) {
+    const token = new URLSearchParams(window.location.hash.slice(1)).get("token");
+    if (token) window.sessionStorage.setItem(SUPPORT_TOKEN, token);
+    window.history.replaceState(null, "", "/");
+  }
+  const token = window.sessionStorage.getItem(SUPPORT_TOKEN);
+  if (!token) return null;
+  let claims: { sub?: string; exp?: number } = {};
+  try {
+    claims = JSON.parse(atob((token.split(".")[1] ?? "").replace(/-/g, "+").replace(/_/g, "/"))) as typeof claims;
+  } catch {
+    // Not a token: the backend refuses it and the page says so.
+  }
+  const end = () => {
+    window.sessionStorage.removeItem(SUPPORT_TOKEN);
+    window.location.assign("/");
+  };
+  return {
+    profile: { sub: claims.sub ?? "awzy support", name: `${claims.sub ?? "awzy"} (awzy support)` },
+    token: () => ((claims.exp ?? 0) * 1000 > Date.now() ? token : null),
+    // The session ended or expired: there's nothing to sign in to again.
+    signInAgain: end,
+    signOut: async () => end(),
   };
 }

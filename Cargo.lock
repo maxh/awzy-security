@@ -771,6 +771,7 @@ dependencies = [
  "anyhow",
  "async-graphql",
  "async-graphql-axum",
+ "async-trait",
  "awzy-activity",
  "awzy-authz-proto",
  "awzy-challenge",

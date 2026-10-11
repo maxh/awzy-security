@@ -9,7 +9,7 @@ export const SessionContext = createContext<Session | null>(null);
 export function Account() {
   const session = useContext(SessionContext);
   if (!session) return null;
-  const profile = session.user.profile;
+  const profile = session.profile;
   const name = profile.name ?? profile.sub;
   return (
     <ShellAccount

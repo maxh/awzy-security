@@ -4,6 +4,7 @@ import {
   IconFileCode,
   IconHandStop,
   IconHeartbeat,
+  IconLifebuoy,
   IconListCheck,
   IconSearch,
   IconShieldCheck,
@@ -25,6 +26,7 @@ import { EnforcementPage } from "./EnforcementPage";
 import { InvestigationsPage } from "./InvestigationsPage";
 import { PoliciesPage } from "./PoliciesPage";
 import { StatusPage } from "./StatusPage";
+import { SupportBanner, SupportPage } from "./SupportPage";
 import { Account } from "./session";
 
 function Nav() {
@@ -74,6 +76,12 @@ function Nav() {
         active={pathname.startsWith("/status")}
         renderRoot={(props) => <Link to="/status" {...props} />}
       />
+      <ShellNavLink
+        label="Support"
+        icon={<IconLifebuoy {...icon} />}
+        active={pathname.startsWith("/support")}
+        renderRoot={(props) => <Link to="/support" {...props} />}
+      />
     </>
   );
 }
@@ -83,6 +91,7 @@ function Root() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
     <PortalShell product="Client portal" audience="client" nav={<Nav />} account={<Account />}>
+      <SupportBanner />
       <PageErrorBoundary key={pathname}>
         <Outlet />
       </PageErrorBoundary>
@@ -142,6 +151,12 @@ const statusRoute = createRoute({
   component: StatusPage,
 });
 
+const supportRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/support",
+  component: SupportPage,
+});
+
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
     indexRoute,
@@ -152,6 +167,7 @@ export const router = createRouter({
     challengesRoute,
     investigationsRoute,
     statusRoute,
+    supportRoute,
   ]),
 });
 
