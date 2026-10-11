@@ -24,6 +24,25 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "data" {
   }
 }
 
+# ClickHouse's backups expire after backup_retention_days (ADR 0104). A week's incrementals depend
+# on its full backup, so every restore point is kept for at least that many days less a week.
+resource "aws_s3_bucket_lifecycle_configuration" "data" {
+  bucket = aws_s3_bucket.data.id
+  rule {
+    id     = "clickhouse-backups"
+    status = "Enabled"
+    filter {
+      prefix = "clickhouse/backups/"
+    }
+    expiration {
+      days = var.backup_retention_days
+    }
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+}
+
 resource "aws_s3_bucket_public_access_block" "data" {
   bucket                  = aws_s3_bucket.data.id
   block_public_acls       = true

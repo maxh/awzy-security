@@ -1,8 +1,9 @@
 {{- if .Values.clickhouse.enabled }}
 {{- $ch := .Values.clickhouse }}
 # One ClickHouse replica (small profile) run by the Altinity operator, which bootstrap installs.
-# Losing it loses nothing: it replays from Kafka (ADR 0006). The operator exposes it as the
-# Service clickhouse-awzy.
+# Losing it loses nothing older than its last backup, or newer than Kafka's 7 days (ADR 0006):
+# deploy/runbooks/clickhouse-restore.sh restores the backup and refills the rest from Kafka (ADR
+# 0104). The operator exposes it as the Service clickhouse-awzy.
 apiVersion: clickhouse.altinity.com/v1
 kind: ClickHouseInstallation
 metadata:

@@ -43,9 +43,12 @@ backups for 7 days, and you can restore to any point in that window. With
 `deletion_protection = true` (the default), destroying the install also takes a final snapshot.
 On AWS, that's Aurora, restored from the RDS console or API.
 
-**ClickHouse** isn't backed up yet. Its volume is a persistent disk (EBS on AWS), so restarts and
-upgrades keep the data, but losing the volume loses the decisions and events older than Kafka's 7
-days. Backups to the install's bucket are planned.
+**ClickHouse** backs up decisions and events to the install's bucket every day at 03:17 UTC, with
+ClickHouse's own `BACKUP` and its own workload identity, so no credentials are stored. The first
+backup of each week (ISO weeks, UTC) is full; the rest that week hold only what changed since it.
+The bucket expires them after `backup_retention_days` (35 by default, a cloud layer setting), so
+you can always restore from at least the last four weeks. The `awzy-clickhouse-backup` CronJob in
+`awzy-data` runs them; `kubectl -n awzy-data get jobs` shows the recent runs.
 
 **Your Terraform state and `deployment.env`** are yours to back up. The example client keeps its
 state in a versioned bucket and its `deployment.env` in its own secret store.
@@ -56,5 +59,16 @@ state in a versioned bucket and its `deployment.env` in its own secret store.
   point-in-time restore), point the install's Postgres settings at it, and apply the cloud layer
   and bootstrap. Each service checks at start that the database has every migration its release
   needs.
-- **ClickHouse:** there's no restore yet. If its volume is lost, a new ClickHouse starts empty and
-  takes new decisions and events from there.
+- **ClickHouse:** run
+  [`deploy/runbooks/clickhouse-restore.sh`](https://github.com/maxh/awzy-security/blob/main/deploy/runbooks/clickhouse-restore.sh)
+  from a checkout of the repository, with kubectl access to the install.
+  - `--yes` restores the newest backup into the live tables, then rewinds ClickHouse's Kafka
+    consumers to 10 minutes before it, so Kafka refills everything since. Nothing is lost that
+    Kafka still holds, and nothing appears twice. Use it when ClickHouse has lost its data.
+  - `--drill` does the same into a database of its own, with consumers of its own, checks that
+    every live row came back exactly once, and removes it. The live install isn't touched; run
+    it to practise.
+  - Kafka keeps 7 days, so a backup older than that leaves a gap between it and the oldest
+    message Kafka still has.
+  - Rows you deleted from ClickHouse after the backup come back if Kafka still holds them, since
+    Kafka refills what it has.

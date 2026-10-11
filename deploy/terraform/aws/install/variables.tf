@@ -42,3 +42,13 @@ variable "deletion_protection" {
   type        = bool
   default     = true
 }
+
+variable "backup_retention_days" {
+  description = "How long ClickHouse's backups are kept in the data bucket (ADR 0104); a restore point is always available from the last backup_retention_days minus 7 days"
+  type        = number
+  default     = 35
+  validation {
+    condition     = var.backup_retention_days >= 14
+    error_message = "backup_retention_days must be at least 14, so a week's incrementals outlive their full backup by a week."
+  }
+}

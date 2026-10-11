@@ -142,7 +142,11 @@ resource "helm_release" "config" {
         breakGlassKeysSecret = var.break_glass_public_keys == null ? "" : "awzy-policy-break-glass"
         signingKmsKey        = local.c.policy_signing.kms_key
       }
-      clickhouse = { storageClass = local.c.storage_class.name, retentionDays = var.clickhouse_retention_days }
+      clickhouse = {
+        storageClass  = local.c.storage_class.name
+        retentionDays = var.clickhouse_retention_days
+        backup        = { url = local.c.object_store.url == "" ? "" : "${local.c.object_store.url}/clickhouse/backups" }
+      }
       tracing = var.tracing == null ? { otlpEndpoint = "", sampleRatio = 1 } : {
         otlpEndpoint = var.tracing.otlp_endpoint
         sampleRatio  = var.tracing.sample_ratio
