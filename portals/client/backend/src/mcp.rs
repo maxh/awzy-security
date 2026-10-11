@@ -204,6 +204,24 @@ pub struct PrincipalActivityOut {
 
 #[derive(Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
+pub struct RequestLiftParams {
+    /// The containment's QID, `containment_<uuid>`.
+    pub containment_qid: String,
+    /// Why it should be lifted, for the person who decides.
+    pub reason: String,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct RequestLiftOut {
+    /// The containment's principal, still contained.
+    pub principal: String,
+    /// What happens next.
+    pub next_step: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
 pub struct DryRunPolicyParams {
     /// A draft bundle's QID, `policy_bundle_<uuid>`, as `propose_policy` returned it.
     pub draft_qid: String,
@@ -585,6 +603,42 @@ impl ClientPortalMcp {
             .await
             .map_err(internal)?;
         Ok(Json(PrincipalActivityOut { activity: serde_json::to_value(a).map_err(|e| internal(e.into()))? }))
+    }
+
+    #[tool(
+        name = "request_containment_lift",
+        description = "Ask for a containment to be lifted, with a reason. This lifts nothing: the security team is told, and a person decides in the client portal."
+    )]
+    async fn request_containment_lift(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(p): Parameters<RequestLiftParams>,
+    ) -> Result<Json<RequestLiftOut>, ErrorData> {
+        let viewer = self.allow(&parts, PortalAction::View, PortalArea::Challenges).await?;
+        self.record(&viewer, "request_containment_lift");
+        let mut client =
+            self.services.challenge.clone().ok_or_else(|| {
+                ErrorData::internal_error("awzy-challenge is not configured (AWZY_CHALLENGE_ADDR)", None)
+            })?;
+        let req = awzy_authz_proto::challenge::v1::RequestLiftRequest {
+            containment_qid: p.containment_qid,
+            requested_by_actor: Some(viewer.actor().into()),
+            reason: p.reason,
+        };
+        let res =
+            client.request_lift(req).await.map_err(|s| ErrorData::invalid_request(s.message().to_string(), None))?;
+        let principal = res
+            .into_inner()
+            .containment
+            .and_then(|c| c.principal)
+            .map(|r| format!("{}::{}", r.r#type, r.id))
+            .unwrap_or_default();
+        Ok(Json(RequestLiftOut {
+            principal,
+            next_step: "Nothing is lifted yet. The security team has been told, and decides on the client portal's \
+                        Challenges page."
+                .into(),
+        }))
     }
 
     #[tool(
@@ -1138,6 +1192,7 @@ mod tests {
                 "list_policy_bundles",
                 "principal_activity",
                 "propose_policy",
+                "request_containment_lift",
                 "search_decisions"
             ]
         );

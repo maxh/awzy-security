@@ -124,6 +124,25 @@ impl ChallengeStore {
         self.record("break_glass", &Recipient::Security, details).await
     }
 
+    /// Someone asked for a containment to be lifted: the security team decides.
+    pub async fn notify_lift_requested(
+        &self,
+        c: &Containment,
+        requested_by: &str,
+        reason: &str,
+    ) -> Result<(), StoreError> {
+        if !self.notify {
+            return Ok(());
+        }
+        let details = json!({
+            "containment_qid": c.id.to_string(),
+            "principal": label(&c.principal),
+            "requested_by": requested_by,
+            "reason": reason,
+        });
+        self.record("lift_requested", &Recipient::Security, &details).await
+    }
+
     /// A containment, applied or only recorded: the security team, never the contained person.
     pub async fn notify_contained(&self, c: &Containment) -> Result<(), StoreError> {
         if !self.notify {
@@ -184,6 +203,12 @@ pub fn render(kind: &str, details: &Value, portal_url: &str) -> String {
                 format!("{} is contained by {}. Review it: {link}", s("principal"), s("created_by"))
             }
         }
+        "lift_requested" => format!(
+            "{} asks to lift the containment of {}: \"{}\". Lift it, or leave it, on the Challenges page: {portal}/challenges",
+            s("requested_by"),
+            s("principal"),
+            s("reason")
+        ),
         "break_glass" => format!(
             "Break-glass: key {} rolled policy back to version {} (now active as version {}), outside the \
              portal and your IdP. Reason given: \"{}\". Review it: {portal}/policies",
@@ -302,6 +327,18 @@ mod tests {
         assert!(text.starts_with("Break-glass: key sha256:0123456789abcdef rolled policy back to version 4"), "{text}");
         assert!(text.contains("now active as version 6") && text.contains("\"forbid-all locked us out\""), "{text}");
         assert!(text.ends_with("https://p/policies"), "{text}");
+    }
+
+    #[test]
+    fn a_lift_request_says_who_asks_and_why() {
+        let details = json!({ "containment_qid": "containment_1", "principal": "Human::nora",
+            "requested_by": "ServiceAccount::ops-bot for Human::alice", "reason": "reviewed: a false positive" });
+        let text = render("lift_requested", &details, "https://p");
+        assert!(
+            text.starts_with("ServiceAccount::ops-bot for Human::alice asks to lift the containment of Human::nora"),
+            "{text}"
+        );
+        assert!(text.contains("\"reviewed: a false positive\"") && text.ends_with("https://p/challenges"), "{text}");
     }
 
     #[test]

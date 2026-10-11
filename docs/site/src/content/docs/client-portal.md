@@ -123,6 +123,7 @@ it acts for; with the person's own token, as the person.
 | `check_access` | Would this principal be allowed this action on this resource now? Decided like a check, but nothing is logged and no challenge is opened |
 | `dry_run_policy` | Replay recent requests under a draft and list every verdict it would change |
 | `propose_policy` | Save a draft, for a person to publish in the portal |
+| `request_containment_lift` | Ask for a containment to be lifted, with a reason, for the security team to decide |
 | `get_principal` | A person or service account as the PDPs see it: attributes, every group above it, and its risk score |
 | `get_resource` | A resource as the PDPs see it: sensitivity, owner, sharing, the folders above it, and who is assigned to work on it |
 | `principal_activity` | What one principal did recently: decisions by verdict and action, resources touched, agents that acted for it, and events |
@@ -130,8 +131,8 @@ it acts for; with the person's own token, as the person.
 | `list_investigations` | Investigations, by status |
 | `get_investigation` | One investigation, with its evidence and what the checks changed |
 
-All but `propose_policy` only read, and it only drafts. Nothing through MCP publishes policy,
-switches modes, or contains anyone.
+All but two only read: `propose_policy` only drafts, and `request_containment_lift` only asks.
+Nothing through MCP publishes policy, switches modes, contains anyone, or lifts a containment.
 
 The MCP endpoint takes tokens for its own audience (`awzy-mcp` unless your install sets another),
 and the portal's GraphQL API doesn't accept them, so a token handed to an agent for MCP can't
