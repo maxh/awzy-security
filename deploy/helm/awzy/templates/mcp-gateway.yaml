@@ -26,6 +26,9 @@
   "outage" (dict "cached_allow_ttl_secs" (int $g.outage.cachedAllowTtlSecs)) -}}
 {{- /* Where agents reach it, for the OAuth metadata MCP clients sign in with (ADR 0081). */ -}}
 {{- with $g.hostname }}{{- $_ := set $config "public_url" (printf "https://%s" .) }}{{- end }}
+{{- /* The client portal, so a challenged call links to the challenge to answer. */ -}}
+{{- $portal := $p.publicUrl | default (ternary (printf "https://%s" $p.hostname) "" (ne $p.hostname "")) -}}
+{{- with $portal }}{{- $_ := set $config "portal_url" . }}{{- end }}
 # awzy-gateway: the MCP proxy agents call instead of each MCP server, checking every tool call
 # with awzy-pdp (ADR 0019) and following awzy-challenge's containment feed for outages (ADR 0030).
 # Service accounts come from awzy-context (ADR 0033). Each tool's tier, and which tiers fail open
