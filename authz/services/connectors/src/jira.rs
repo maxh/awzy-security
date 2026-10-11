@@ -14,6 +14,7 @@ use anyhow::{bail, Context};
 use awzy_server::metrics::{Counter, LastSuccess, Source};
 use axum::http::{Method, StatusCode};
 use base64::Engine;
+use serde::{de::DeserializeOwned, Deserialize};
 use serde_json::{json, Value};
 
 use crate::{
@@ -45,24 +46,34 @@ pub struct JiraConfig {
     pub watchers: bool,
 }
 
+/// The settings the client portal keeps for Jira (ADR 0104).
+#[derive(Deserialize)]
+struct JiraSettings {
+    #[serde(default)]
+    url: String,
+    #[serde(default)]
+    user: String,
+    #[serde(default)]
+    projects: Vec<String>,
+    #[serde(default)]
+    watchers: bool,
+    interval_secs: Option<u64>,
+}
+
 impl JiraConfig {
     /// From the settings the client portal set (ADR 0104), `url`, `user`, and optionally
     /// `projects`, `watchers`, and `interval_secs`, and the API token from the secrets manager.
     pub fn from_settings(s: &serde_json::Value, token: &str) -> anyhow::Result<Self> {
-        let text = |k: &str| s[k].as_str().map(str::trim).filter(|v| !v.is_empty()).map(str::to_string);
-        let base_url = text("url").context("Jira's settings have no url")?;
+        let s = JiraSettings::deserialize(s).context("Jira's settings")?;
+        let text = |v: &str| Some(v.trim().to_string()).filter(|v| !v.is_empty());
+        let base_url = text(&s.url).context("Jira's settings have no url")?;
         Ok(Self {
             base_url: base_url.trim_end_matches('/').to_string(),
-            user: text("user").context("Jira's settings have no user")?,
+            user: text(&s.user).context("Jira's settings have no user")?,
             token: token.trim().to_string(),
-            projects: s["projects"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|p| p.as_str().map(str::trim).filter(|p| !p.is_empty()).map(str::to_string))
-                .collect(),
-            interval: Duration::from_secs(s["interval_secs"].as_u64().unwrap_or(300)),
-            watchers: s["watchers"].as_bool().unwrap_or(false),
+            projects: s.projects.iter().filter_map(|p| text(p)).collect(),
+            interval: Duration::from_secs(s.interval_secs.unwrap_or(300)),
+            watchers: s.watchers,
         })
     }
 
@@ -73,6 +84,102 @@ impl JiraConfig {
         }
         let keys: Vec<String> = self.projects.iter().map(|p| format!("\"{}\"", p.replace('"', ""))).collect();
         format!("project in ({}) AND ", keys.join(", "))
+    }
+}
+
+/// Jira Cloud's REST API v3, as much of it as the connector reads (#221).
+pub mod api {
+    use serde::{Deserialize, Serialize};
+    use serde_json::Value;
+
+    /// The body of `POST /rest/api/3/search/jql`.
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct SearchRequest<'a> {
+        pub jql: &'a str,
+        pub fields: &'a [&'a str],
+        pub max_results: u32,
+        /// Left out for the first page: Jira refuses a null.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub next_page_token: Option<String>,
+    }
+
+    #[derive(Deserialize, Default)]
+    pub struct Issue {
+        #[serde(default)]
+        pub id: String,
+        #[serde(default)]
+        pub key: String,
+        #[serde(default)]
+        pub fields: IssueFields,
+    }
+
+    #[derive(Deserialize, Default)]
+    pub struct IssueFields {
+        pub summary: Option<String>,
+        pub status: Option<Status>,
+        pub assignee: Option<User>,
+        pub issuetype: Option<Named>,
+        pub project: Option<Project>,
+        /// Atlassian Document Format, walked for links rather than read field by field.
+        #[serde(default)]
+        pub description: Value,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Status {
+        pub status_category: Option<StatusCategory>,
+    }
+
+    #[derive(Deserialize)]
+    pub struct StatusCategory {
+        pub key: String,
+    }
+
+    /// Someone on an issue. Jira leaves `emailAddress` out when their profile hides it.
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct User {
+        pub email_address: Option<String>,
+    }
+
+    #[derive(Deserialize)]
+    pub struct Named {
+        pub name: Option<String>,
+    }
+
+    #[derive(Deserialize)]
+    pub struct Project {
+        pub key: Option<String>,
+    }
+
+    /// A page of `POST /rest/api/3/search/jql`.
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct SearchPage {
+        #[serde(default)]
+        pub issues: Vec<Issue>,
+        pub next_page_token: Option<String>,
+        pub is_last: Option<bool>,
+    }
+
+    /// One of `GET /rest/api/3/issue/{id}/remotelink`.
+    #[derive(Deserialize)]
+    pub struct RemoteLink {
+        pub object: Option<RemoteObject>,
+    }
+
+    #[derive(Deserialize)]
+    pub struct RemoteObject {
+        pub url: Option<String>,
+    }
+
+    /// `GET /rest/api/3/issue/{id}/watchers`.
+    #[derive(Deserialize)]
+    pub struct Watchers {
+        #[serde(default)]
+        pub watchers: Vec<User>,
     }
 }
 
@@ -125,15 +232,14 @@ pub fn description_urls(adf: &Value) -> Vec<String> {
 /// An issue as a work item. `links` is every URL it cites: its description's and its remote links'.
 /// `watchers`: the issue's watchers, counted as working on it beside its assignee (an empty slice
 /// when that setting is off). Anyone whose email Jira hides is counted, not guessed.
-pub fn work_item(issue: &Value, links: &[String], watchers: &[Value]) -> Value {
-    let fields = &issue["fields"];
-    let key = issue["key"].as_str().unwrap_or_default();
-    let done = fields["status"]["statusCategory"]["key"].as_str() == Some("done");
-    let humans: Vec<&Value> = std::iter::once(&fields["assignee"]).filter(|a| a.is_object()).chain(watchers).collect();
+pub fn work_item(issue: &api::Issue, links: &[String], watchers: &[api::User]) -> Value {
+    let fields = &issue.fields;
+    let key = issue.key.as_str();
+    let done = fields.status.as_ref().and_then(|s| s.status_category.as_ref()).is_some_and(|c| c.key == "done");
     let mut emails = BTreeSet::new();
     let mut unmapped = 0u64;
-    for human in humans {
-        match human["emailAddress"].as_str().filter(|e| !e.is_empty()) {
+    for human in fields.assignee.iter().chain(watchers) {
+        match human.email_address.as_deref().filter(|e| !e.is_empty()) {
             Some(email) => {
                 emails.insert(email.to_lowercase());
             }
@@ -144,17 +250,17 @@ pub fn work_item(issue: &Value, links: &[String], watchers: &[Value]) -> Value {
         links.iter().filter_map(|u| drive_file_id(u)).map(|id| drive::resource_id(&id)).collect();
     let other_links = links.iter().filter(|u| drive_file_id(u).is_none()).count();
     json!({
-        "id": format!("jira:{}", issue["id"].as_str().unwrap_or_default()),
+        "id": format!("jira:{}", issue.id),
         "source": SOURCE,
         "kind": "ticket",
-        "title": format!("{key}: {}", fields["summary"].as_str().unwrap_or_default()),
+        "title": format!("{key}: {}", fields.summary.as_deref().unwrap_or_default()),
         "state": if done { "closed" } else { "open" },
         "assignees": emails,
         "resources": resources,
         "attributes": {
             "key": key,
-            "issue_type": fields["issuetype"]["name"],
-            "project": fields["project"]["key"],
+            "issue_type": fields.issuetype.as_ref().and_then(|t| t.name.as_deref()),
+            "project": fields.project.as_ref().and_then(|p| p.key.as_deref()),
             "unmapped_assignees": unmapped,
             "other_links": other_links,
         },
@@ -220,7 +326,7 @@ impl JiraSync {
         }
     }
 
-    async fn call(&self, method: Method, path: &str, body: Option<&Value>) -> anyhow::Result<Value> {
+    async fn call<T: DeserializeOwned>(&self, method: Method, path: &str, body: Option<&Value>) -> anyhow::Result<T> {
         let url = format!("{}{path}", self.cfg.base_url);
         let basic = base64::engine::general_purpose::STANDARD.encode(format!("{}:{}", self.cfg.user, self.cfg.token));
         let headers = [("authorization", format!("Basic {basic}")), ("accept", "application/json".to_string())];
@@ -228,7 +334,8 @@ impl JiraSync {
             let body = body.map_or(Body::None, Body::Json);
             let (status, res) = self.http.send(method.clone(), &url, &headers, body).await?;
             if status.is_success() {
-                return Ok(res);
+                let what = path.split('?').next().unwrap_or(path);
+                return T::deserialize(res).with_context(|| format!("Jira's answer for {what}"));
             }
             match wait {
                 Some(wait) if status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error() => {
@@ -241,43 +348,41 @@ impl JiraSync {
     }
 
     /// Every issue matching `jql`, page by page.
-    async fn search(&self, jql: &str) -> anyhow::Result<Vec<Value>> {
+    async fn search(&self, jql: &str) -> anyhow::Result<Vec<api::Issue>> {
         let mut issues = Vec::new();
         let mut page: Option<String> = None;
         loop {
-            let mut body = json!({ "jql": jql, "fields": FIELDS, "maxResults": 100 });
-            if let Some(token) = &page {
-                body["nextPageToken"] = json!(token);
-            }
-            let mut res = self.call(Method::POST, "/rest/api/3/search/jql", Some(&body)).await?;
-            if let Some(list) = res["issues"].as_array_mut() {
-                issues.append(list);
-            }
-            match res["nextPageToken"].as_str() {
-                Some(next) if res["isLast"].as_bool() != Some(true) => page = Some(next.to_string()),
+            let req = api::SearchRequest { jql, fields: &FIELDS, max_results: 100, next_page_token: page.take() };
+            let body = serde_json::to_value(req)?;
+            let res: api::SearchPage = self.call(Method::POST, "/rest/api/3/search/jql", Some(&body)).await?;
+            issues.extend(res.issues);
+            match res.next_page_token {
+                Some(next) if res.is_last != Some(true) => page = Some(next),
                 _ => return Ok(issues),
             }
         }
     }
 
     /// The issue as a work item, with the links in its description and its remote links.
-    async fn item(&self, issue: &Value) -> anyhow::Result<Value> {
-        let mut links = description_urls(&issue["fields"]["description"]);
-        let id = issue["id"].as_str().context("an issue without an id")?;
-        let remote = self.call(Method::GET, &format!("/rest/api/3/issue/{}/remotelink", encode(id)), None).await?;
-        links.extend(
-            remote.as_array().into_iter().flatten().filter_map(|l| l["object"]["url"].as_str().map(str::to_string)),
-        );
+    async fn item(&self, issue: &api::Issue) -> anyhow::Result<Value> {
+        let mut links = description_urls(&issue.fields.description);
+        if issue.id.is_empty() {
+            bail!("an issue without an id");
+        }
+        let id = encode(&issue.id);
+        let remote: Vec<api::RemoteLink> =
+            self.call(Method::GET, &format!("/rest/api/3/issue/{id}/remotelink"), None).await?;
+        links.extend(remote.into_iter().filter_map(|l| l.object?.url));
         let watchers = if self.cfg.watchers {
-            let res = self.call(Method::GET, &format!("/rest/api/3/issue/{}/watchers", encode(id)), None).await?;
-            res["watchers"].as_array().cloned().unwrap_or_default()
+            let res: api::Watchers = self.call(Method::GET, &format!("/rest/api/3/issue/{id}/watchers"), None).await?;
+            res.watchers
         } else {
             vec![]
         };
         Ok(work_item(issue, &links, &watchers))
     }
 
-    async fn write(&self, issues: &[Value]) -> anyhow::Result<usize> {
+    async fn write(&self, issues: &[api::Issue]) -> anyhow::Result<usize> {
         let mut items = Vec::with_capacity(issues.len());
         for issue in issues {
             items.push(self.item(issue).await?);
@@ -293,7 +398,7 @@ impl JiraSync {
         let issues = self.search(&format!("{}statusCategory != Done ORDER BY id", self.cfg.scope())).await?;
         let mut summary = Summary { written: self.write(&issues).await?, deleted: 0 };
         let seen: BTreeSet<String> =
-            issues.iter().filter_map(|i| i["id"].as_str()).map(|id| format!("jira:{id}")).collect();
+            issues.iter().filter(|i| !i.id.is_empty()).map(|i| format!("jira:{}", i.id)).collect();
         for gone in self.context.work_item_ids(SOURCE).await?.difference(&seen) {
             self.context.delete_work_item(gone).await?;
             DELETED.inc();
@@ -366,11 +471,13 @@ mod tests {
             "summary": "Rollout", "status": { "statusCategory": { "key": "indeterminate" } },
             "assignee": { "accountId": "a", "emailAddress": "Priya@larkspur.example" },
             "issuetype": { "name": "Task" }, "project": { "key": "ENG" } } });
-        let watchers = [
-            json!({ "accountId": "a", "emailAddress": "priya@larkspur.example" }),
-            json!({ "accountId": "b", "emailAddress": "sam@larkspur.example" }),
-            json!({ "accountId": "c" }),
-        ];
+        let issue: api::Issue = serde_json::from_value(issue).unwrap();
+        let watchers: Vec<api::User> = serde_json::from_value(json!([
+            { "accountId": "a", "emailAddress": "priya@larkspur.example" },
+            { "accountId": "b", "emailAddress": "sam@larkspur.example" },
+            { "accountId": "c" },
+        ]))
+        .unwrap();
         let w = work_item(&issue, &[], &watchers);
         assert_eq!(w["assignees"], json!(["priya@larkspur.example", "sam@larkspur.example"]));
         assert_eq!(w["attributes"]["unmapped_assignees"].as_u64(), Some(1), "the hidden email is counted");
@@ -382,6 +489,7 @@ mod tests {
         let issue = json!({ "id": "10001", "key": "FIN-7", "fields": {
             "summary": "Q3 audit", "status": { "statusCategory": { "key": "done" } },
             "assignee": { "accountId": "abc" }, "issuetype": { "name": "Task" }, "project": { "key": "FIN" } } });
+        let issue: api::Issue = serde_json::from_value(issue).unwrap();
         let w = work_item(
             &issue,
             &["https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOp/edit".into(), "https://x.example".into()],
