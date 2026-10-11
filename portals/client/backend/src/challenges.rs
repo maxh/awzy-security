@@ -7,12 +7,12 @@
 //! Only a person answers or approves: a service account signed in, or acting for someone, is
 //! refused, so an agent can never pass its own challenge.
 
-use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject, ID};
+use async_graphql::{futures_util::Stream, Context, Enum, InputObject, Object, Result, SimpleObject, Subscription, ID};
 use awzy_authz_proto::{
     challenge::v1::{
         challenge_service_client::ChallengeServiceClient, Challenge as WireChallenge, ChallengeStatus as WireStatus,
         ContainRequest, Containment as WireContainment, DecideRequest, GetChallengeRequest, JustifyRequest,
-        LiftRequest, ListChallengesRequest, ListContainmentsRequest,
+        LiftRequest, ListChallengesRequest, ListContainmentsRequest, WatchChallengesRequest, WatchContainmentsRequest,
     },
     challenges_from_wire,
     prost_types::Timestamp,
@@ -22,7 +22,7 @@ use awzy_portal::{Actor, UtcTimestamp};
 use chrono::DateTime;
 
 use crate::{
-    access::{require, PortalAction, PortalArea, Viewer},
+    access::{authorize, require, PortalAction, PortalArea, Surface, Viewer},
     decisions::EntityRef,
     Services,
 };
@@ -604,5 +604,39 @@ mod tests {
         let err = answering_human(&Viewer(Arc::new(agent))).unwrap_err();
         assert!(err.message.contains("sales-genie for bob can't answer challenges"), "{}", err.message);
         assert_eq!(answering_human(&crate::testing::human("bob", "engineering")).unwrap(), "bob");
+    }
+}
+
+/// Live updates for the Challenges page, from awzy-challenge's streams.
+#[derive(Default)]
+pub struct ChallengeSubscription;
+
+#[Subscription]
+impl ChallengeSubscription {
+    /// Challenges as they're opened or change: the signed-in person's own, or every one for those
+    /// who administer challenges.
+    async fn challenge_updated(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = Challenge>> {
+        let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
+        let services = ctx.data::<Services>()?;
+        let every = authorize(services, &viewer, Surface::Portal, PortalAction::Administer, PortalArea::Challenges)
+            .await
+            .is_ok();
+        let answerer_id = if every { String::new() } else { answering_human(&viewer)? };
+        let stream = client(ctx)?.watch_challenges(WatchChallengesRequest { answerer_id }).await.map_err(grpc)?;
+        Ok(async_graphql::futures_util::StreamExt::filter_map(stream.into_inner(), |m| async move {
+            // A heartbeat carries no challenge; a broken stream ends the subscription.
+            m.ok()?.challenge.map(Challenge)
+        }))
+    }
+
+    /// Every active containment, whenever one is added or lifted. For those who administer
+    /// challenges.
+    async fn containments_changed(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = Vec<Containment>>> {
+        require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
+        let stream = client(ctx)?.watch_containments(WatchContainmentsRequest {}).await.map_err(grpc)?;
+        Ok(async_graphql::futures_util::StreamExt::filter_map(stream.into_inner(), |m| async move {
+            let m = m.ok()?;
+            m.changed.then(|| m.active.into_iter().map(Containment).collect())
+        }))
     }
 }

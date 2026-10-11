@@ -22,17 +22,18 @@ mod security_keys;
 
 use access::{Auth, PortalAction, PortalArea, Surface, Viewer};
 use async_graphql::{
-    http::GraphiQLSource, Context, EmptySubscription, MergedObject, Object, Result, Schema, SimpleObject,
+    http::{GraphiQLSource, ALL_WEBSOCKET_PROTOCOLS},
+    Context, MergedObject, MergedSubscription, Object, Result, Schema, SimpleObject,
 };
-use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
+use async_graphql_axum::{GraphQLProtocol, GraphQLRequest, GraphQLResponse, GraphQLWebSocket};
 use awzy_authz_proto::{
     authz::v1::authorizer_client::AuthorizerClient, policy::v1::policy_service_client::PolicyServiceClient,
 };
 use awzy_service_auth::{grpc_channel, AuthChannel};
 use axum::{
-    extract::State,
+    extract::{State, WebSocketUpgrade},
     middleware,
-    response::Html,
+    response::{Html, IntoResponse},
     routing::{get, post},
     Extension, Router,
 };
@@ -175,7 +176,11 @@ pub struct ClientPortalMutation(
     investigations::InvestigationMutation,
 );
 
-pub type ClientPortalSchema = Schema<ClientPortalQuery, ClientPortalMutation, EmptySubscription>;
+/// Live updates: the Challenges page's challenges and containments.
+#[derive(MergedSubscription, Default)]
+pub struct ClientPortalSubscription(challenges::ChallengeSubscription);
+
+pub type ClientPortalSchema = Schema<ClientPortalQuery, ClientPortalMutation, ClientPortalSubscription>;
 
 /// The schema without backends: for printing the SDL and for tests that don't need them.
 pub fn schema() -> ClientPortalSchema {
@@ -183,7 +188,7 @@ pub fn schema() -> ClientPortalSchema {
 }
 
 pub fn schema_with(services: Services) -> ClientPortalSchema {
-    Schema::build(ClientPortalQuery::default(), ClientPortalMutation::default(), EmptySubscription)
+    Schema::build(ClientPortalQuery::default(), ClientPortalMutation::default(), ClientPortalSubscription::default())
         .data(services)
         .finish()
 }
@@ -193,12 +198,40 @@ pub fn schema_with(services: Services) -> ClientPortalSchema {
 /// accepts; empty means loopback only (see AWZY_MCP_ALLOWED_HOSTS in main).
 pub fn router(services: Services, auth: Auth, mcp_allowed_hosts: Vec<String>) -> Router {
     let signed_in = middleware::from_fn_with_state(auth.clone(), access::require_viewer);
-    let graphql = get(|| async { Html(GraphiQLSource::build().endpoint("/graphql").finish()) })
-        .merge(post(graphql).layer(signed_in.clone()).with_state(schema_with(services.clone())));
+    let schema = schema_with(services.clone());
+    // GET: subscriptions over a WebSocket (graphql-ws), or GraphiQL in a browser.
+    let graphql = get(graphql_get)
+        .with_state((schema.clone(), auth.clone()))
+        .merge(post(graphql).layer(signed_in.clone()).with_state(schema));
     Router::new()
         .route("/graphql", graphql)
         .merge(mcp::router(services, mcp_allowed_hosts).layer(signed_in))
         .merge(access::routes(auth))
+}
+
+/// A WebSocket for subscriptions, signed in by the bearer token in its first message
+/// (`connectionParams.authorization`), since a browser can't set headers on one. Anything else
+/// gets GraphiQL.
+async fn graphql_get(
+    State((schema, auth)): State<(ClientPortalSchema, Auth)>,
+    protocol: Result<GraphQLProtocol, axum::http::StatusCode>,
+    upgrade: Result<WebSocketUpgrade, axum::extract::ws::rejection::WebSocketUpgradeRejection>,
+) -> axum::response::Response {
+    let (Ok(protocol), Ok(upgrade)) = (protocol, upgrade) else {
+        return Html(GraphiQLSource::build().endpoint("/graphql").subscription_endpoint("/graphql").finish())
+            .into_response();
+    };
+    upgrade.protocols(ALL_WEBSOCKET_PROTOCOLS).on_upgrade(move |socket| {
+        GraphQLWebSocket::new(socket, schema, protocol)
+            .on_connection_init(move |params| async move {
+                let authorization = params["authorization"].as_str();
+                let viewer = auth.viewer(authorization).await.map_err(async_graphql::Error::new)?;
+                let mut data = async_graphql::Data::default();
+                data.insert(viewer);
+                Ok(data)
+            })
+            .serve()
+    })
 }
 
 async fn graphql(

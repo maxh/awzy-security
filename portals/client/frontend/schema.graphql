@@ -185,6 +185,22 @@ type CitedEvidence {
 	why: String!
 }
 
+"""
+Live updates: the Challenges page's challenges and containments.
+"""
+type ClientPortalSubscription {
+	"""
+	Challenges as they're opened or change: the signed-in person's own, or every one for those
+	who administer challenges.
+	"""
+	challengeUpdated: Challenge!
+	"""
+	Every active containment, whenever one is added or lifted. For those who administer
+	challenges.
+	"""
+	containmentsChanged: [Containment!]!
+}
+
 input CloseInvestigationInput {
 	investigationQid: ID!
 	"""
@@ -1065,4 +1081,5 @@ directive @skip(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
 schema {
 	query: Query
 	mutation: Mutation
+	subscription: ClientPortalSubscription
 }

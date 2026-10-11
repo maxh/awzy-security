@@ -14,7 +14,8 @@ use awzy_authz_proto::{
         LiftRequest, LiftResponse, ListChallengesRequest, ListChallengesResponse, ListContainmentsRequest,
         ListContainmentsResponse, ListSecurityKeysRequest, ListSecurityKeysResponse, RemoveSecurityKeyRequest,
         RemoveSecurityKeyResponse, ResetSecurityKeyRequest, ResetSecurityKeyResponse, ResolveRequest, ResolveResponse,
-        SecurityKey as WireKey, WatchContainmentsRequest, WatchContainmentsResponse,
+        SecurityKey as WireKey, WatchChallengesRequest, WatchChallengesResponse, WatchContainmentsRequest,
+        WatchContainmentsResponse,
     },
     challenges_from_wire, challenges_to_wire,
     prost_types::Timestamp,
@@ -88,8 +89,10 @@ impl Access {
             methods.iter().map(|m| (method(m), Rule::Allow(allowed.clone()))).collect()
         };
         let mut rules = group(&["Resolve"], &self.pdps);
-        // Following containments: the PDPs, and the gateways for their outage fallback.
-        rules.extend(group(&["WatchContainments"], &either(&self.pdps, &self.gateways)));
+        // Following containments: the PDPs, the gateways for their outage fallback, and the client
+        // portal for its live Challenges page.
+        rules.extend(group(&["WatchContainments"], &either(&either(&self.pdps, &self.gateways), &self.containers)));
+        rules.extend(group(&["WatchChallenges"], &either(&self.humans, &self.containers)));
         // Listing containments: a PDP whose feed is stale, and the portal showing them to admins.
         rules.extend(group(&["ListContainments"], &either(&self.pdps, &self.containers)));
         rules.extend(group(&["GetChallenge", "Justify", "Decide"], &self.humans));
@@ -136,6 +139,10 @@ struct Service {
 }
 
 type FeedStream = Pin<Box<dyn Stream<Item = Result<WatchContainmentsResponse, Status>> + Send>>;
+type ChallengeStream = Pin<Box<dyn Stream<Item = Result<WatchChallengesResponse, Status>> + Send>>;
+
+/// How often `WatchChallenges` says it's alive when no challenge changes.
+const CHALLENGE_HEARTBEAT: std::time::Duration = std::time::Duration::from_secs(15);
 
 #[tonic::async_trait]
 impl ChallengeService for Service {
@@ -379,6 +386,43 @@ impl ChallengeService for Service {
         let c = self.keys()?.finish_verification(&human, &a).await.map_err(key_status)?;
         tracing::info!(challenge_id = %c.id, human = %human, status = c.status.as_str(), "challenge verified with a security key");
         Ok(Response::new(FinishVerificationResponse { challenge: Some(challenge_to_wire(c)) }))
+    }
+
+    type WatchChallengesStream = ChallengeStream;
+
+    async fn watch_challenges(
+        &self,
+        req: Request<WatchChallengesRequest>,
+    ) -> Result<Response<Self::WatchChallengesStream>, Status> {
+        let answerer = Some(req.into_inner().answerer_id).filter(|a| !a.is_empty());
+        let mut rx = self.feed.challenges();
+        let store = self.store.clone();
+        let (tx, out) = tokio::sync::mpsc::channel(16);
+        tokio::spawn(async move {
+            loop {
+                let next = tokio::select! {
+                    id = rx.recv() => id,
+                    _ = tokio::time::sleep(CHALLENGE_HEARTBEAT) => {
+                        if tx.send(Ok(WatchChallengesResponse { challenge: None })).await.is_err() { return }
+                        continue;
+                    }
+                };
+                let id = match next {
+                    Ok(id) => id,
+                    // Fell behind: the watcher's next list catches it up.
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+                };
+                let Ok(c) = store.get(id).await else { continue };
+                if answerer.as_ref().is_some_and(|a| c.answerer_id.as_ref() != Some(a)) {
+                    continue;
+                }
+                if tx.send(Ok(WatchChallengesResponse { challenge: Some(challenge_to_wire(c)) })).await.is_err() {
+                    return; // the watcher went away
+                }
+            }
+        });
+        Ok(Response::new(Box::pin(ReceiverStream::new(out))))
     }
 
     type WatchContainmentsStream = FeedStream;
@@ -714,6 +758,26 @@ mod tests {
         assert_eq!((retry.verdict, retry.challenge_id), (Verdict::Allow, None));
         assert_eq!(retry.policies, ["anyone-reads"]);
         assert!(matches!(check(&state, "bob", "board-deck").await.verdict, Verdict::Challenge { .. }), "alice's only");
+    }
+
+    #[tokio::test]
+    async fn a_watcher_sees_its_challenges_as_they_open_and_no_one_elses() {
+        let Some(store) = test_store(Lifetimes::default()).await else { return };
+        let (endpoint, client) = serve(store).await;
+        let state = pdp(&endpoint).await;
+        let watch = |answerer: &str| {
+            let mut client = client.clone();
+            let req = WatchChallengesRequest { answerer_id: answerer.into() };
+            async move { client.watch_challenges(req).await.unwrap().into_inner() }
+        };
+        let (mut bobs, mut erins) = (watch("bob").await, watch("erin").await);
+
+        let id = check(&state, "bob", "payroll").await.challenge_id.unwrap().to_string();
+        let seen =
+            tokio::time::timeout(Duration::from_secs(5), bobs.message()).await.expect("streamed").unwrap().unwrap();
+        assert_eq!(seen.challenge.unwrap().qid, id);
+        let quiet = tokio::time::timeout(Duration::from_millis(500), erins.message()).await;
+        assert!(quiet.is_err(), "erin's watch doesn't see bob's challenge");
     }
 
     #[tokio::test]
