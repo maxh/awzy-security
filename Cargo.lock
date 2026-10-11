@@ -338,6 +338,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-sdk-kms"
+version = "1.123.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bbe8833a7ad3b970f2a6a856939c9cb171942dcdfd2ab65f2db3a8baaf73cc1"
+dependencies = [
+ "arc-swap",
+ "aws-credential-types",
+ "aws-runtime",
+ "aws-smithy-async",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-observability",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-schema",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "fastrand",
+ "http",
+ "regex-lite",
+ "tracing",
+]
+
+[[package]]
 name = "aws-sdk-sso"
 version = "1.114.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1089,6 +1114,7 @@ dependencies = [
  "awzy-server",
  "awzy-service-auth",
  "awzy-signing",
+ "awzy-signing-aws",
  "awzy-store",
  "awzy-telemetry",
  "axum",
@@ -1236,9 +1262,23 @@ dependencies = [
 name = "awzy-signing"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "p256",
  "sha2 0.10.9",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "awzy-signing-aws"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "aws-config",
+ "aws-sdk-kms",
+ "aws-smithy-http-client",
+ "awzy-signing",
+ "p256",
+ "tokio",
 ]
 
 [[package]]

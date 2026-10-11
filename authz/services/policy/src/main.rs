@@ -15,15 +15,24 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("migrations applied");
         return Ok(());
     }
-    match std::env::var("AWZY_POLICY_SIGNING_KEY_FILE") {
-        Ok(path) => {
-            let pem = std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?;
-            let signer = awzy_signing::BundleSigner::from_pem(&pem)?;
-            tracing::info!(key_id = signer.key_id(), "signing published bundles");
+    // An install signs with its KMS key, which never leaves KMS (ADR 0092); run locally, with a
+    // PEM key, or not at all.
+    match (std::env::var("AWZY_POLICY_SIGNING_KMS_KEY"), std::env::var("AWZY_POLICY_SIGNING_KEY_FILE")) {
+        (Ok(key), _) => {
+            let signer = awzy_signing_aws::KmsSigner::connect(&key).await?;
+            tracing::info!(key_id = awzy_signing::PayloadSigner::key_id(&signer), kms_key = %key, "signing with KMS");
             store = store.with_signer(signer);
         }
-        // TODO: a KMS-backed signer per cloud.
-        Err(_) => tracing::warn!("AWZY_POLICY_SIGNING_KEY_FILE is not set; published bundles are unsigned"),
+        (Err(_), Ok(path)) => {
+            let pem = std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?;
+            let signer = awzy_signing::BundleSigner::from_pem(&pem)?;
+            tracing::info!(key_id = signer.key_id(), "signing with a PEM key");
+            store = store.with_signer(signer);
+        }
+        (Err(_), Err(_)) => tracing::warn!(
+            "neither AWZY_POLICY_SIGNING_KMS_KEY nor AWZY_POLICY_SIGNING_KEY_FILE is set; bundles, modes, and the \
+             outage fallback are unsigned"
+        ),
     }
     store.migrate_on_start().await?;
     let break_glass = match std::env::var("AWZY_POLICY_BREAK_GLASS_KEYS_FILE") {

@@ -1,6 +1,6 @@
 # 0021. Policy bundles are signed at publish; PDPs verify before loading
 
-- Status: Accepted
+- Status: Accepted; amended by [0092](0092-awzy-policy-signs-with-the-installs-kms-key.md) (signs with the install's KMS key)
 - Date: 2026-10-09
 
 ## Context

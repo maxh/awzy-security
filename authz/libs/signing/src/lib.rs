@@ -24,8 +24,10 @@
 //! The same keys sign break-glass requests (see [`break_glass_payload`]), which admins enrolled
 //! at install time send with the `awzy-break-glass` tool.
 //!
-//! Keys are PEM files for now (PKCS#8 private key, SPKI public key). TODO: a KMS-backed signer
-//! per cloud, behind the same `sign` call.
+//! An install signs with its cloud's KMS, so the private key never leaves it (ADR 0092): a
+//! [`PayloadSigner`] like `awzy_signing_aws::KmsSigner`. [`BundleSigner`] signs with a PEM key,
+//! for local runs and tests. Either way the signature is DER and the key ID is the public key's
+//! fingerprint ([`key_id_of`]), so verifiers can't tell them apart.
 
 use p256::{
     ecdsa::{
@@ -46,6 +48,8 @@ pub enum SigningError {
     UnknownKey(String),
     #[error("signature doesn't verify: the content changed after signing, or another key signed it")]
     BadSignature,
+    #[error("signing failed: {0}")]
+    Signer(String),
 }
 
 /// The bytes that get signed.
@@ -75,8 +79,19 @@ pub fn fallback_payload(version: i64, changed_by: &str, changed_at_unix: i64, co
     format!("awzy.fallback.v1\n{version}\n{changed_by}\n{changed_at_unix}\n{content}\n").into_bytes()
 }
 
-/// `sha256:<first 16 hex>` of the public key's DER encoding.
-fn key_id(key: &VerifyingKey) -> Result<String, SigningError> {
+/// Signs payloads: a PEM key ([`BundleSigner`]) or a cloud KMS key.
+#[async_trait::async_trait]
+pub trait PayloadSigner: Send + Sync {
+    /// `sha256:<fingerprint>` of the public key, as [`key_id_of`] computes it.
+    fn key_id(&self) -> &str;
+
+    /// A DER-encoded ECDSA P-256 signature over `payload`, hashed with SHA-256.
+    async fn sign_payload(&self, payload: &[u8]) -> Result<Vec<u8>, SigningError>;
+}
+
+/// `sha256:<first 16 hex>` of the public key's DER encoding: the key ID that travels with each
+/// signature.
+pub fn key_id_of(key: &VerifyingKey) -> Result<String, SigningError> {
     let der = key.to_public_key_der().map_err(|e| SigningError::Key(e.to_string()))?;
     Ok(format!("sha256:{}", &format!("{:x}", Sha256::digest(der.as_bytes()))[..16]))
 }
@@ -95,7 +110,7 @@ impl BundleSigner {
     }
 
     pub fn from_key(key: SigningKey) -> Result<Self, SigningError> {
-        let key_id = key_id(key.verifying_key())?;
+        let key_id = key_id_of(key.verifying_key())?;
         Ok(Self { key, key_id })
     }
 
@@ -112,6 +127,17 @@ impl BundleSigner {
     pub fn sign_payload(&self, payload: &[u8]) -> Vec<u8> {
         let sig: Signature = self.key.sign(payload);
         sig.to_der().as_bytes().to_vec()
+    }
+}
+
+#[async_trait::async_trait]
+impl PayloadSigner for BundleSigner {
+    fn key_id(&self) -> &str {
+        &self.key_id
+    }
+
+    async fn sign_payload(&self, payload: &[u8]) -> Result<Vec<u8>, SigningError> {
+        Ok(BundleSigner::sign_payload(self, payload))
     }
 }
 
@@ -149,7 +175,7 @@ impl BundleVerifier {
     }
 
     pub fn from_keys(keys: impl IntoIterator<Item = VerifyingKey>) -> Result<Self, SigningError> {
-        Ok(Self { keys: keys.into_iter().map(|k| Ok((key_id(&k)?, k))).collect::<Result<_, SigningError>>()? })
+        Ok(Self { keys: keys.into_iter().map(|k| Ok((key_id_of(&k)?, k))).collect::<Result<_, SigningError>>()? })
     }
 
     pub fn verify(

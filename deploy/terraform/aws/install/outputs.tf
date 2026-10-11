@@ -28,6 +28,11 @@ output "install_contract" {
       bucket = aws_s3_bucket.data.id
     }
     kms_key_id = aws_kms_key.install.arn
+    # awzy-policy signs with the key; the PDPs and gateways trust the public key (ADR 0092).
+    policy_signing = {
+      kms_key        = aws_kms_key.policy_signing.arn
+      public_key_pem = data.aws_kms_public_key.policy_signing.public_key_pem
+    }
     # Pod Identity binds roles to these service accounts; no annotations needed.
     workload_identity = {
       for k, w in local.workloads : "${w.namespace}/${w.service_account}" => aws_iam_role.workload[k].arn

@@ -62,10 +62,12 @@ pdp:
 
 policy:
   replicas: 2
-  # awzy-policy signs every bundle it publishes and every enforcement mode change with the key in
-  # this secret (`signing.pem`, PKCS#8), and the PDPs apply only what verifies against the public
-  # key in the other (`verify.pem`) (ADR 0080). Bootstrap makes both.
-  signingKeySecret: awzy-policy-signing
+  # awzy-policy signs every bundle, enforcement mode change, and outage fallback with this KMS key
+  # (its ARN), which only awzy-policy's account may use; the private key never leaves KMS (ADR
+  # 0092). The PDPs and gateways apply only what verifies against a public key in the other secret
+  # (`verify.pem`: one or more PEM keys, so a new key can be trusted before it signs). Bootstrap
+  # sets both from install_contract.
+  signingKmsKey: ""
   verifyKeySecret: awzy-policy-verify
   # The public keys of the admins enrolled for break-glass rollback (`keys.pem`, one or more PEM
   # keys). Empty turns break-glass off.

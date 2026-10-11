@@ -60,7 +60,7 @@ async fn main() -> anyhow::Result<()> {
             let verifier = match std::env::var("AWZY_POLICY_VERIFY_KEY_FILE") {
                 Ok(path) => {
                     let pem = std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?;
-                    Some(Arc::new(awzy_signing::BundleVerifier::from_pem(&pem)?))
+                    Some(Arc::new(awzy_signing::BundleVerifier::from_pem_bundle(&pem)?))
                 }
                 Err(_) => {
                     tracing::warn!("AWZY_POLICY_VERIFY_KEY_FILE is not set; outage fallback settings aren't verified");

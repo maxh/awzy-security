@@ -23,10 +23,11 @@ description: What awzy can and can't see, and how releases reach your install.
   [optional features](/guides/optional-features/).
 - **Services authenticate to each other.** Inside the install, every call between awzy's
   services carries a short-lived Kubernetes service-account token, checked by the receiver.
-- **Policy is signed.** awzy-policy signs every bundle it publishes and every switch between
-  monitor and enforce, with a key the install generates. PDPs apply only what verifies, and never
-  an older bundle or mode change than the one they've applied, so someone who can write to
-  awzy-policy's database can't change what's enforced. Every publish, rollback, and mode change is
+- **Policy is signed.** awzy-policy signs every bundle it publishes, every switch between monitor
+  and enforce, and every change to which tools fail open during an outage, with a key in your
+  cloud's KMS. The private key never leaves KMS, and only awzy-policy's own role may sign with it.
+  PDPs and awzy-gateway apply only what verifies, and never an older version than the one they've
+  applied, so someone who can write to awzy-policy's database can't change what's enforced. Every publish, rollback, and mode change is
   recorded with who did it.
 - **awzy knows an agent only by its token.** An agent with its own identity, through a token
   exchange, is checked as itself and as its person, and can't answer their challenges. An agent

@@ -105,10 +105,13 @@ Policy bundles and enforcement modes.
     they're stored and signed when they're published;
   - `GetEnforcement`, `SetEnforcement`, `ListEnforcementChanges`: the install's mode, and the mode
     for automated containments;
+  - `GetOutageFallback`, `SetOutageFallback`: each MCP tool's tier, and which tiers fail open
+    while the PDP is unreachable;
   - `BreakGlassRollback`: a rollback signed with an admin's break-glass key.
-- **Stores:** Postgres `awzy_policy`.
+- **Stores:** Postgres `awzy_policy`. Signs with your cloud's KMS key, as its own service account.
 - **Called by:** each PDP, which waits on it for a new bundle or mode, so a publish reaches every PDP as it's made; the client portal; and
-  awzy-reasoner, which reads the automated-containments mode.
+  awzy-reasoner, which reads the automated-containments mode; and awzy-gateway, which reads the
+  outage fallback.
 
 ### awzy-context
 

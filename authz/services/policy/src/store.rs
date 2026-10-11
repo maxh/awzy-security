@@ -114,6 +114,9 @@ pub enum StoreError {
     UnknownScope(String),
     #[error("invalid outage fallback: {0}")]
     InvalidFallback(#[from] FallbackError),
+    /// Signing failed, as when KMS can't be reached; nothing was stored.
+    #[error("couldn't sign: {0}")]
+    Signing(#[from] awzy_signing::SigningError),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -132,7 +135,8 @@ pub struct OutageFallbackSetting {
 
 pub struct PolicyStore {
     pool: PgPool,
-    signer: Option<awzy_signing::BundleSigner>,
+    /// A KMS key in an install (ADR 0092), a PEM key run locally.
+    signer: Option<Arc<dyn awzy_signing::PayloadSigner>>,
     /// Moves when a bundle is published or the enforcement mode changes (ADR 0077).
     changed: Arc<Changes>,
 }
@@ -152,8 +156,8 @@ impl PolicyStore {
         &self.changed
     }
 
-    pub fn with_signer(mut self, signer: awzy_signing::BundleSigner) -> Self {
-        self.signer = Some(signer);
+    pub fn with_signer(mut self, signer: impl awzy_signing::PayloadSigner + 'static) -> Self {
+        self.signer = Some(Arc::new(signer));
         self
     }
 
@@ -227,7 +231,9 @@ impl PolicyStore {
         .await?;
         let mut bundle = bundle_from_row(&row)?;
         if let Some(signer) = &self.signer {
-            let signature = signer.sign(&bundle.id.to_string(), bundle.version, &bundle.schema, &bundle.policies);
+            let payload =
+                awzy_signing::payload(&bundle.id.to_string(), bundle.version, &bundle.schema, &bundle.policies);
+            let signature = signer.sign_payload(&payload).await?;
             sqlx::query("UPDATE policy_bundles SET signature = $2, signing_key_id = $3 WHERE id = $1")
                 .bind(id.uuid())
                 .bind(&signature)
@@ -371,7 +377,7 @@ impl PolicyStore {
         if let Some(signer) = &self.signer {
             let at = setting.changed_at.expect("a stored change has a time").timestamp();
             let signature =
-                signer.sign_payload(&awzy_signing::enforcement_payload(scope, mode.as_str(), changed_by, at));
+                signer.sign_payload(&awzy_signing::enforcement_payload(scope, mode.as_str(), changed_by, at)).await?;
             sqlx::query("UPDATE enforcement_mode_changes SET signature = $2, signing_key_id = $3 WHERE id = $1")
                 .bind(id)
                 .bind(&signature)
@@ -437,7 +443,7 @@ impl PolicyStore {
             Some(signer) => {
                 let payload =
                     awzy_signing::fallback_payload(version, changed_by, changed_at.timestamp(), &fallback.content());
-                (Some(signer.sign_payload(&payload)), Some(signer.key_id().to_string()))
+                (Some(signer.sign_payload(&payload).await?), Some(signer.key_id().to_string()))
             }
             None => (None, None),
         };
