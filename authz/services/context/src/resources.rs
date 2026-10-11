@@ -344,6 +344,8 @@ async fn upsert_work_item(tx: &mut Transaction<'_, Postgres>, w: &WorkItemInput)
 /// Filters for listing resources, all optional. Pages are ordered by ID; `after` continues one.
 #[derive(Debug, Default, Deserialize)]
 pub struct ResourceFilter {
+    /// Matches the resource's ID or name, ignoring case: the client portal's search.
+    pub q: Option<String>,
     pub source: Option<String>,
     pub kind: Option<String>,
     pub owner: Option<String>,
@@ -477,6 +479,7 @@ impl ContextStore {
              WHERE ($1::text IS NULL OR source = $1) AND ($2::text IS NULL OR kind = $2)
                AND ($3::text IS NULL OR owner = $3) AND ($4::text IS NULL OR parent = $4)
                AND id > $5
+               AND ($7::text IS NULL OR id ILIKE $7 OR name ILIKE $7)
              ORDER BY id LIMIT $6"
         ))
         .bind(&f.source)
@@ -485,6 +488,7 @@ impl ContextStore {
         .bind(&f.parent)
         .bind(f.after.as_deref().unwrap_or(""))
         .bind(f.limit.unwrap_or(100).clamp(1, MAX_PAGE))
+        .bind(f.q.as_deref().map(str::trim).filter(|q| !q.is_empty()).map(|q| format!("%{}%", like_escape(q))))
         .fetch_all(self.pool())
         .await?;
         rows.iter().map(resource_from_row).collect()
@@ -802,6 +806,11 @@ pub fn write_router(store: ContextStore) -> Router {
         .with_state(store)
 }
 
+/// `q` with LIKE's wildcards taken literally.
+fn like_escape(q: &str) -> String {
+    q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
+}
+
 /// Both, unguarded: for tests.
 #[cfg(test)]
 pub fn router(store: ContextStore) -> Router {
@@ -1008,6 +1017,11 @@ mod tests {
         assert_eq!(store.resources(&in_folder).await.unwrap().len(), 2);
         let page = ResourceFilter { limit: Some(1), after: Some("synthetic:doc:1".into()), ..Default::default() };
         assert_eq!(store.resources(&page).await.unwrap()[0].id, "synthetic:doc:2");
+        // Search matches the ID or name, ignoring case, and takes % and _ literally.
+        let search = |q: &str| ResourceFilter { q: Some(q.into()), ..Default::default() };
+        let found: Vec<String> = store.resources(&search("DOC:2")).await.unwrap().into_iter().map(|r| r.id).collect();
+        assert_eq!(found, ["synthetic:doc:2"]);
+        assert!(store.resources(&search("%")).await.unwrap().is_empty());
 
         // A batch with one bad item writes nothing.
         let mut bad = doc("synthetic:doc:3");

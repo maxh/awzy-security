@@ -16,6 +16,7 @@ pub mod directory;
 mod dry_run;
 mod enforcement;
 mod investigations;
+mod lookup;
 mod mcp;
 mod node;
 mod outage;
@@ -173,6 +174,7 @@ pub struct ClientPortalQuery(
     status::StatusQuery,
     outage::OutageQuery,
     support::SupportQuery,
+    lookup::LookupQuery,
     diagnostics::DiagnosticsQuery,
 );
 

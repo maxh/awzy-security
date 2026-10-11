@@ -927,6 +927,18 @@ input PublishPolicyBundleInput {
 	acceptLockout: Boolean! = false
 }
 
+type PrincipalDetail {
+	known: Boolean!
+	attributes: String
+	groups: [String!]!
+	riskScore: Int
+}
+
+enum PrincipalType {
+	HUMAN
+	SERVICE_ACCOUNT
+}
+
 type PublishPolicyBundlePayload {
 	"""
 	The bundle, now active. Null when publishing waits for `acceptLockout`.
@@ -1054,6 +1066,20 @@ type Query {
 	enforcement area, to review before sending it to awzy support.
 	"""
 	diagnosticsBundle: String!
+	"""
+	A person or service account as the PDPs see it: attributes, groups (nested ones
+	included), and risk. For those who may view the directory.
+	"""
+	principal(type: PrincipalType!, id: String!): PrincipalDetail!
+	"""
+	Resources whose ID or name contains `query`, ignoring case. At most 50.
+	"""
+	searchResources(query: String!): [ResourceSummary!]!
+	"""
+	One resource: its tiers and the classifier's reason, owner, sharing, the folders above it,
+	and who is assigned to work that links it. Null when awzy-context doesn't know it.
+	"""
+	resource(id: String!): ResourceDetail
 }
 
 input RegisterServiceAccountInput {
@@ -1092,6 +1118,36 @@ type RemoveServiceAccountPayload {
 
 input ResetSecurityKeyInput {
 	securityKeyQid: ID!
+}
+
+type ResourceClassification {
+	sensitivity: String
+	by: String
+	reason: String!
+}
+
+type ResourceDetail {
+	id: String!
+	name: String!
+	kind: String!
+	source: String!
+	owner: String
+	sensitivity: String
+	classification: ResourceClassification
+	sharing: String!
+	labels: [String!]!
+	url: String
+	folders: [String!]!
+	assignees: [String!]!
+}
+
+type ResourceSummary {
+	id: String!
+	name: String!
+	kind: String!
+	source: String!
+	owner: String
+	sensitivity: String
 }
 
 type SecurityKey {
