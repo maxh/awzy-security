@@ -130,11 +130,11 @@ pub fn work_item(issue: &Value, links: &[String], watchers: &[Value]) -> Value {
     let fields = &issue["fields"];
     let key = issue["key"].as_str().unwrap_or_default();
     let done = fields["status"]["statusCategory"]["key"].as_str() == Some("done");
-    let people: Vec<&Value> = std::iter::once(&fields["assignee"]).filter(|a| a.is_object()).chain(watchers).collect();
+    let humans: Vec<&Value> = std::iter::once(&fields["assignee"]).filter(|a| a.is_object()).chain(watchers).collect();
     let mut emails = BTreeSet::new();
     let mut unmapped = 0u64;
-    for person in people {
-        match person["emailAddress"].as_str().filter(|e| !e.is_empty()) {
+    for human in humans {
+        match human["emailAddress"].as_str().filter(|e| !e.is_empty()) {
             Some(email) => {
                 emails.insert(email.to_lowercase());
             }
