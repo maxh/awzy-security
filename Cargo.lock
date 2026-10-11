@@ -1171,6 +1171,7 @@ dependencies = [
  "awzy-service-auth",
  "awzy-signing",
  "awzy-signing-aws",
+ "awzy-signing-gcp",
  "awzy-store",
  "awzy-telemetry",
  "axum",
@@ -1348,6 +1349,26 @@ dependencies = [
  "aws-smithy-http-client",
  "awzy-signing",
  "p256",
+ "tokio",
+]
+
+[[package]]
+name = "awzy-signing-gcp"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "awzy-signing",
+ "axum",
+ "base64 0.22.1",
+ "bytes",
+ "http-body-util",
+ "hyper",
+ "hyper-rustls",
+ "hyper-util",
+ "p256",
+ "rustls",
+ "serde_json",
+ "sha2 0.10.9",
  "tokio",
 ]
 

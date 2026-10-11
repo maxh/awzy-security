@@ -1,5 +1,5 @@
 {
-  "checksum": "44140a7714c50ef8d88cd647facd493f6445a18797198a635d57635e964592d5",
+  "checksum": "efde559416ee94da9c21f9913a4e592608e2ec1b3d9c3529c66a4c6f6bf67c9e",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -5201,6 +5201,82 @@
         {
           "Library": {
             "crate_name": "awzy_signing_aws",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
+    "awzy-signing-gcp 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "base64 0.22.1",
+            "target": "base64"
+          },
+          {
+            "id": "bytes 1.12.1",
+            "target": "bytes"
+          },
+          {
+            "id": "http-body-util 0.1.5",
+            "target": "http_body_util"
+          },
+          {
+            "id": "hyper 1.12.0",
+            "target": "hyper"
+          },
+          {
+            "id": "hyper-rustls 0.27.10",
+            "target": "hyper_rustls"
+          },
+          {
+            "id": "hyper-util 0.1.21",
+            "target": "hyper_util"
+          },
+          {
+            "id": "p256 0.13.2",
+            "target": "p256"
+          },
+          {
+            "id": "rustls 0.23.45",
+            "target": "rustls"
+          },
+          {
+            "id": "serde_json 1.0.151",
+            "target": "serde_json"
+          },
+          {
+            "id": "sha2 0.10.9",
+            "target": "sha2"
+          },
+          {
+            "id": "tokio 1.53.2",
+            "target": "tokio"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "axum 0.8.9",
+            "target": "axum"
+          }
+        ],
+        "edition": "2021",
+        "proc_macro_deps": [
+          {
+            "id": "async-trait 0.1.92",
+            "target": "async_trait"
+          }
+        ]
+      },
+      "library_target_name": "awzy_signing_gcp",
+      "license": "UNLICENSED",
+      "name": "awzy-signing-gcp",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "awzy_signing_gcp",
             "crate_root": "src/lib.rs"
           }
         }
@@ -28070,6 +28146,7 @@
     "awzy-service-auth 0.1.0": "authz/libs/service-auth",
     "awzy-signing 0.1.0": "authz/libs/signing",
     "awzy-signing-aws 0.1.0": "authz/libs/signing-aws",
+    "awzy-signing-gcp 0.1.0": "authz/libs/signing-gcp",
     "awzy-store 0.1.0": "libs/store",
     "awzy-synthetic 0.1.0": "authz/demo/synthetic",
     "awzy-telemetry 0.1.0": "libs/telemetry"
