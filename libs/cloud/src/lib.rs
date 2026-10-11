@@ -35,6 +35,13 @@ pub trait KeyManager: Send + Sync {
     fn decrypt(&self, ciphertext: &[u8]) -> impl std::future::Future<Output = anyhow_like::Result<Vec<u8>>> + Send;
 }
 
+/// Writes secrets in the cloud's secrets manager and never reads them back: the client portal
+/// setting a connector's credential (ADR 0104).
+pub trait SecretWriter: Send + Sync {
+    /// Replaces the value of `secret`, by its ARN or name.
+    fn put(&self, secret: &str, value: &str) -> impl std::future::Future<Output = anyhow_like::Result<()>> + Send;
+}
+
 /// Boxed error alias so adapters can return any SDK error without this crate depending on them.
 pub mod anyhow_like {
     pub type Error = Box<dyn std::error::Error + Send + Sync>;

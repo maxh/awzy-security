@@ -1,0 +1,10 @@
+load("//tools:rust.bzl", "awzy_rust_library")
+
+# The client portal's secret writer in an AWS install (ADR 0104). Apart from awzy-cloud, so only
+# the portal links the Secrets Manager SDK.
+awzy_rust_library(
+    name = "secrets-aws",
+    crate_name = "awzy_secrets_aws",
+    visibility = ["//tools:client_side"],
+    deps = ["//libs/cloud"],
+)

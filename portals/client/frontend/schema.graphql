@@ -261,11 +261,64 @@ type Connector {
 }
 
 """
+A connector as configured in the portal.
+"""
+type ConnectorConfig {
+	name: ConnectorName!
+	enabled: Boolean!
+	"""
+	Drive: `subject`, `admin_subject`, `domain`. Jira: `url`, `user`, `projects`, `watchers`.
+	Either: `interval_secs`.
+	"""
+	settings: JSONObject!
+	"""
+	When its credential was last set here; null if never. The credential itself is never
+	shown.
+	"""
+	credentialSetAt: UtcTimestamp
+	updatedBy: String!
+	updatedAt: UtcTimestamp!
+}
+
+enum ConnectorName {
+	"""
+	Google Drive's shared drives (ADR 0069).
+	"""
+	DRIVE
+	"""
+	Jira's issues (ADR 0070).
+	"""
+	JIRA
+}
+
+"""
 One of a connector's settings, for display.
 """
 type ConnectorSetting {
 	name: String!
 	value: String!
+}
+
+input ConfigureConnectorInput {
+	name: ConnectorName!
+	enabled: Boolean! = true
+	settings: JSONObject!
+	"""
+	A new credential: Drive's service account key (its JSON), or Jira's API token. Omit it to
+	keep the one already set.
+	"""
+	credential: String
+}
+
+type ConfigureConnectorPayload {
+	"""
+	The connector as saved; null when a challenge must be passed first.
+	"""
+	connector: ConnectorConfig
+	"""
+	The challenge to pass, then save again.
+	"""
+	challengeQid: Qid
 }
 
 input ContainPrincipalInput {
@@ -786,6 +839,13 @@ type Mutation {
 	enforcement area.
 	"""
 	startRepair(kind: RepairKind!): RepairRun!
+	"""
+	Configures a connector, and sets its credential if one is given. awzy-connectors picks the
+	change up within a minute or so. For those who may administer the enforcement area; policy
+	can ask for a security key first, as the base policies do: then nothing is saved, and the
+	payload names the challenge to pass before saving again.
+	"""
+	configureConnector(input: ConfigureConnectorInput!): ConfigureConnectorPayload!
 }
 
 interface Node {
@@ -1155,6 +1215,15 @@ type Query {
 	enforcement area.
 	"""
 	connectors: [Connector!]!
+	"""
+	The connectors configured in the portal. For those who may view the enforcement area.
+	"""
+	connectorConfigs: [ConnectorConfig!]!
+	"""
+	Whether this install can keep connector credentials (its cloud's secrets manager is set
+	up), so the portal can say why it can't.
+	"""
+	connectorCredentialsSupported: Boolean!
 	"""
 	What awzy-gateway does while the PDP is unreachable: each tool's tier, and which tiers
 	fail open.

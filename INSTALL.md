@@ -153,7 +153,7 @@ It makes these Secrets, none of which leave the cluster:
 | `awzy-policy-verify` | system | The public half of the cloud key awzy-policy signs policy bundles, enforcement mode changes, and the outage fallback with, which the PDPs and awzy-gateway check them against. The private half never leaves your cloud's key service (KMS on AWS), and only awzy-policy's workload identity may sign with it |
 | `awzy-policy-break-glass` | system | The break-glass admins' public keys, when `break_glass_public_keys` is set |
 | `awzy-intake-token` | system | Event sources, when `intake` is set; read it from the `intake` output |
-| `awzy-connectors-drive`, `awzy-connectors-jira` | system | The connectors' credentials, when `drive` or `jira` is set |
+| `awzy-connectors-drive`, `awzy-connectors-jira` | system | The connectors' credentials, synced from the cloud's secrets manager once set in the client portal |
 | `awzy-registry`, `awzy-chart-repo` | system, data, portal, Kyverno, ops | Pulling images and the chart |
 
 Postgres credentials stay in your cloud's secret store, and External Secrets reads them with its

@@ -7,8 +7,16 @@ Sources: IdP (Okta, Entra ID, Google Workspace), HR (Workday), work tracking (Ji
 hosts, data catalogs, Google Drive or SharePoint metadata. One crate per connector behind a
 shared trait.
 
-- Runs as Kubernetes CronJobs plus webhooks
-- Writes raw records to object storage and normalized entities to awzy-context
+- One long-running process; a supervisor reads each connector's settings from awzy-context (as
+  the client portal sets them) and its credential from a mounted file every minute, and starts,
+  restarts, or stops the connector to match (ADR 0104)
+- Writes normalized entities to awzy-context
+
+| Variable | |
+| --- | --- |
+| `AWZY_CONNECTORS_DRIVE_KEY_FILE` | Where Drive's credential is mounted. Default `/etc/awzy/drive/key.json` |
+| `AWZY_CONNECTORS_JIRA_TOKEN_FILE` | Where Jira's credential is mounted. Default `/etc/awzy/jira/token` |
+| `AWZY_CONTEXT_URL` | awzy-context, for settings and writes |
 
 ## Google Drive (ADR 0069)
 
@@ -16,14 +24,10 @@ Shared drives' files, folders, and sharing, as resources from source `google_dri
 `gdrive:<Drive ID>`. Read-only metadata: no content. A full crawl on start, then each drive's
 change feed every interval; resources that left Drive are deleted.
 
-| Variable | |
-| --- | --- |
-| `AWZY_CONNECTORS_DRIVE_ADMIN_SUBJECT` | An admin, to name group shares as SCIM does. Optional |
-| `AWZY_CONNECTORS_DRIVE_DOMAIN` | The client's domain. Default: the subject's |
-| `AWZY_CONNECTORS_DRIVE_INTERVAL_SECS` | Between change rounds. Default 300 |
-| `AWZY_CONNECTORS_DRIVE_KEY_FILE` | The Google service account's JSON key |
-| `AWZY_CONNECTORS_DRIVE_SUBJECT` | The member user it acts as. Setting it turns Drive on |
-| `AWZY_CONTEXT_URL` | awzy-context, for writes |
+Settings (`/v1/connector-settings/drive` in awzy-context): `subject`, the member user it acts as;
+`admin_subject`, an admin to name group shares as SCIM does (optional); `domain`, the client's
+domain (default: the subject's); `interval_secs` (default 300). Credential: the Google service
+account's JSON key.
 
 In Google: a service account with domain-wide delegation for
 `https://www.googleapis.com/auth/drive.metadata.readonly` and
@@ -39,14 +43,10 @@ resources it needs, so `context.assigned` works with Drive. Done issues are `clo
 of open issues on start and daily, which deletes what it no longer sees; between them, issues
 updated since the last round.
 
-| Variable | |
-| --- | --- |
-| `AWZY_CONNECTORS_JIRA_INTERVAL_SECS` | Between rounds. Default 300 |
-| `AWZY_CONNECTORS_JIRA_PROJECTS` | Project keys, comma-separated. Default: every project the account can browse |
-| `AWZY_CONNECTORS_JIRA_TOKEN_FILE` | The account's Atlassian API token |
-| `AWZY_CONNECTORS_JIRA_URL` | `https://<site>.atlassian.net`. Setting it turns Jira on |
-| `AWZY_CONNECTORS_JIRA_USER` | The account's email |
-| `AWZY_CONNECTORS_JIRA_WATCHERS` | `true` counts an issue's watchers as working on it, like its assignee. One more Jira call per issue. Default off |
+Settings (`/v1/connector-settings/jira`): `url`, `https://<site>.atlassian.net`; `user`, the
+account's email; `projects`, project keys (default: every project it can browse); `watchers`,
+whether an issue's watchers count as working on it, at one more Jira call per issue (default
+off); `interval_secs` (default 300). Credential: the account's Atlassian API token.
 
 The account needs only to browse the projects in scope. Assignees match people when SCIM user
 names are emails and Jira shows the account their emails (the Atlassian organization's email
