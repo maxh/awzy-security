@@ -1,9 +1,14 @@
-//! Persisted queries (ADR 0088): each frontend sends the ID the Relay compiler gave its operation,
-//! the SHA-256 of its text, and the backend runs the text it was built with. With `only`, as the
+//! Persisted queries (ADR 0088, 0090): each frontend sends the ID the Relay compiler gave its
+//! operation, the SHA-256 of its text, and the backend runs the text from the built frontend it
+//! serves, which carries them as `persisted_queries.json`. With `only`, as the
 //! client portal in a client's install, it runs nothing else, so a signed-in user can't send it
 //! queries of their own.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use async_graphql::{
     extensions::{Extension, ExtensionContext, ExtensionFactory, NextPrepareRequest},
@@ -23,6 +28,24 @@ impl PersistedQueries {
     /// of them is refused; without, as when run locally or for GraphiQL, it runs too.
     pub fn new(json: &str, only: bool) -> Result<Self, serde_json::Error> {
         Ok(Self { queries: Arc::new(serde_json::from_str(json)?), only })
+    }
+
+    /// From the built frontend in `dir` (`AWZY_PORTAL_STATIC_DIR`), which carries its queries as
+    /// `persisted_queries.json`. Without one, as when run locally against the Vite dev server,
+    /// which sends query text, there are none; then `only` would refuse everything, so it's an
+    /// error.
+    pub fn from_frontend(dir: Option<&Path>, only: bool) -> Result<Self, PersistedQueriesError> {
+        let Some(dir) = dir else {
+            return if only { Err(PersistedQueriesError::NoFrontend) } else { Ok(Self::none()) };
+        };
+        let path = dir.join("persisted_queries.json");
+        let json = std::fs::read_to_string(&path).map_err(|e| PersistedQueriesError::Read(path.clone(), e))?;
+        Self::new(&json, only).map_err(|e| PersistedQueriesError::Parse(path, e))
+    }
+
+    /// No persisted queries, and query text runs: for tests.
+    pub fn none() -> Self {
+        Self { queries: Arc::default(), only: false }
     }
 
     fn resolve(&self, mut request: Request) -> ServerResult<Request> {
@@ -47,6 +70,16 @@ impl PersistedQueries {
         }
         Ok(request)
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum PersistedQueriesError {
+    #[error("running only persisted queries needs the built frontend that carries them (AWZY_PORTAL_STATIC_DIR)")]
+    NoFrontend,
+    #[error("reading {0}: {1}")]
+    Read(PathBuf, std::io::Error),
+    #[error("parsing {0}: {1}")]
+    Parse(PathBuf, serde_json::Error),
 }
 
 impl ExtensionFactory for PersistedQueries {
@@ -123,5 +156,20 @@ mod tests {
     async fn run_locally_it_also_takes_query_text() {
         let res = schema(false).execute("{ secret }").await;
         assert!(res.errors.is_empty(), "{:?}", res.errors);
+    }
+
+    #[test]
+    fn the_queries_come_from_the_built_frontend() {
+        let dir = std::env::temp_dir().join(format!("awzy-persisted-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let id = format!("{:x}", Sha256::digest(HELLO.as_bytes()));
+        std::fs::write(dir.join("persisted_queries.json"), serde_json::json!({ id.clone(): HELLO }).to_string())
+            .unwrap();
+        let loaded = PersistedQueries::from_frontend(Some(&dir), true).unwrap();
+        assert_eq!(loaded.queries.get(&id).map(String::as_str), Some(HELLO));
+        // Run locally, without a built frontend, there are none, so enforcing them is refused.
+        assert!(PersistedQueries::from_frontend(None, false).unwrap().queries.is_empty());
+        assert!(matches!(PersistedQueries::from_frontend(None, true), Err(PersistedQueriesError::NoFrontend)));
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

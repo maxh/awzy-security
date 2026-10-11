@@ -12,7 +12,11 @@ import { router } from "./router";
 import { SessionContext } from "./session";
 
 void signIn().then((session) => {
-  const environment = createEnvironment("/graphql", { token: session.token, onUnauthorized: session.signInAgain });
+  const environment = createEnvironment("/graphql", {
+    token: session.token,
+    onUnauthorized: session.signInAgain,
+    sendQueryText: import.meta.env.DEV,
+  });
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <SessionContext.Provider value={session}>

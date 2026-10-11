@@ -211,26 +211,20 @@ fn schema_builder(
         .limit_complexity(awzy_portal::MAX_QUERY_COMPLEXITY)
 }
 
-/// The frontend's queries by ID, from the Relay compiler (ADR 0088).
-const PERSISTED_QUERIES: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../frontend/persisted_queries.json"));
-
 /// GraphQL at `/graphql` and MCP at `/mcp`, each behind sign-in with its own tokens (`auth` and
 /// `mcp_auth`, ADR 0081), plus the unauthenticated sign-in discovery routes. `mcp_allowed_hosts`
 /// are the Host headers the MCP endpoint accepts; empty means loopback only (see
-/// AWZY_MCP_ALLOWED_HOSTS in main). With `persisted_only`, GraphQL runs only the frontend's own
-/// queries (ADR 0088).
+/// AWZY_MCP_ALLOWED_HOSTS in main). GraphQL resolves the frontend's queries by ID from
+/// `persisted`, and with its `only`, runs nothing else (ADR 0088, 0090).
 pub fn router(
     services: Services,
     auth: Auth,
     mcp_auth: Auth,
     mcp_allowed_hosts: Vec<String>,
-    persisted_only: bool,
+    persisted: awzy_portal::PersistedQueries,
 ) -> Router {
     let signed_in = middleware::from_fn_with_state(auth.clone(), access::require_viewer);
     let mcp_signed_in = middleware::from_fn_with_state(mcp_auth.clone(), access::require_viewer);
-    let persisted = awzy_portal::PersistedQueries::new(PERSISTED_QUERIES, persisted_only)
-        .expect("persisted_queries.json is the Relay compiler's");
     let schema = schema_builder(services.clone()).extension(persisted).finish();
     // GET: subscriptions over a WebSocket (graphql-ws), or GraphiQL in a browser.
     let graphql = get(graphql_get)
@@ -333,16 +327,6 @@ pub(crate) mod testing {
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn the_frontends_queries_are_embedded_and_parse() {
-        let queries: std::collections::HashMap<String, String> =
-            serde_json::from_str(super::PERSISTED_QUERIES).unwrap();
-        assert!(!queries.is_empty());
-        for text in queries.values() {
-            async_graphql::parser::parse_query(text).unwrap();
-        }
-    }
-
     #[tokio::test]
     async fn api_version_query() {
         let res = super::schema().execute("{ apiVersion }").await;

@@ -1,6 +1,6 @@
 # 0088. The client portal runs only its own pages' queries
 
-- Status: Accepted
+- Status: Accepted; amended by [0090](0090-relay-output-is-generated-not-committed.md) (the persisted queries ship with the built frontend)
 - Date: 2026-10-11
 
 ## Context

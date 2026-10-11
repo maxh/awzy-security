@@ -4,7 +4,8 @@
   "packageManager": "pnpm@9.15.9",
   "scripts": {
     "prepare": "sh tools/git-setup || true",
-    "lint": "oxlint --type-aware --deny-warnings portals",
+    "relay": "pnpm --filter './portals/*/frontend' relay",
+    "lint": "pnpm relay && oxlint --type-aware --deny-warnings portals",
     "format": "oxfmt 'portals/**/*.{ts,tsx,js,mjs}'",
     "format:check": "oxfmt --check 'portals/**/*.{ts,tsx,js,mjs}'"
   },

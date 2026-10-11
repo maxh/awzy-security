@@ -1094,7 +1094,7 @@ mod tests {
         let portal = Some("https://portal.test".to_string());
         let auth = access::Auth::new(token_config("awzy"), agents(), "portal".into(), portal.clone()).unwrap();
         let mcp = access::Auth::new_for_mcp(token_config("awzy-mcp"), agents(), "portal".into(), portal).unwrap();
-        crate::router(services().await, auth, mcp, vec![], false)
+        crate::router(services().await, auth, mcp, vec![], awzy_portal::PersistedQueries::none())
     }
 
     fn bearer(claims: Value) -> String {

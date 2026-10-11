@@ -14,9 +14,9 @@ npm_package(
     visibility = ["//visibility:public"],
 )
 
-# Each frontend's relay_test (ADR 0088).
+# Each frontend's `relay` target (ADR 0090).
 copy_to_bin(
-    name = "validate",
-    srcs = ["validate.mjs"],
+    name = "generate",
+    srcs = ["generate.mjs"],
     visibility = ["//portals:__subpackages__"],
 )

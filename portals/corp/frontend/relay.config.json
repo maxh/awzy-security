@@ -12,6 +12,7 @@
   },
   "persistConfig": {
     "file": "./persisted_queries.json",
-    "algorithm": "SHA256"
+    "algorithm": "SHA256",
+    "include_query_text": true
   }
 }

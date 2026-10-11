@@ -4,8 +4,6 @@ awzy_service(
     name = "backend",
     crate_name = "awzy_client_portal",
     binary_name = "awzy-client-portal",
-    # Embedded by include_str!.
-    compile_data = ["//portals/client/frontend:persisted_queries.json"],
     extra_binaries = ["print_schema"],
     frontend = "//portals/client/frontend:build",
     test_deps = [

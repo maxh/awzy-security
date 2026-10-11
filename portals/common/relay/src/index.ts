@@ -15,14 +15,19 @@ export type EnvironmentOptions = {
   token?: () => string | null;
   /** Called when the backend rejects the token, e.g. because it expired. */
   onUnauthorized?: () => void;
+  /**
+   * Send each operation's text instead of its persisted ID: for the Vite dev server, whose
+   * queries a backend doesn't have (ADR 0090).
+   */
+  sendQueryText?: boolean;
 };
 
 /**
- * What's sent for an operation: its persisted ID, which the backend maps to the text it was built
- * with (ADR 0088), or the text for an operation the compiler didn't persist.
+ * What's sent for an operation: its persisted ID, which the backend maps to the text the built
+ * frontend it serves sends (ADR 0088, 0090), or its text.
  */
-function operationBody(operation: RequestParameters) {
-  return operation.id
+function operationBody(operation: RequestParameters, sendQueryText: boolean) {
+  return operation.id && !sendQueryText
     ? { query: "", extensions: { persistedQuery: { version: 1, sha256Hash: operation.id } } }
     : { query: operation.text ?? "" };
 }
@@ -32,6 +37,7 @@ function operationBody(operation: RequestParameters) {
  * subscriptions over graphql-ws on the same path, each sent by its persisted ID.
  */
 export function createEnvironment(endpoint = "/graphql", options: EnvironmentOptions = {}): Environment {
+  const sendQueryText = options.sendQueryText ?? false;
   const authorization = (): Record<string, string> => {
     const token = options.token?.();
     return token ? { authorization: `Bearer ${token}` } : {};
@@ -41,7 +47,7 @@ export function createEnvironment(endpoint = "/graphql", options: EnvironmentOpt
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json", ...authorization() },
-      body: JSON.stringify({ ...operationBody(operation), variables }),
+      body: JSON.stringify({ ...operationBody(operation, sendQueryText), variables }),
     });
     if (res.status === 401) {
       options.onUnauthorized?.();
@@ -63,7 +69,7 @@ export function createEnvironment(endpoint = "/graphql", options: EnvironmentOpt
   const subscribeFn: SubscribeFunction = (operation, variables) =>
     Observable.create((sink) =>
       ws.subscribe(
-        { operationName: operation.name, ...operationBody(operation), variables },
+        { operationName: operation.name, ...operationBody(operation, sendQueryText), variables },
         {
           next: (value) => sink.next(value as never),
           error: (err) => sink.error(err instanceof Error ? err : new Error(String(err))),

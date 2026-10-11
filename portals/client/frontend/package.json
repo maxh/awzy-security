@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "relay": "relay-compiler",
+    "dev": "pnpm relay && vite",
+    "build": "pnpm relay && vite build",
+    "relay": "node ../../common/relay/generate.mjs",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json"
   },
   "dependencies": {
