@@ -1,6 +1,7 @@
 //! Load test for a running PDP: `bazel run //authz/services/pdp:pdp_loadtest -- http://127.0.0.1:8082 32 20`
 //! (endpoint, concurrent clients, seconds). Sends a mix of checks over gRPC, a third of them
-//! delegated (two Cedar evaluations), and prints throughput and latency percentiles.
+//! delegated (two Cedar evaluations), and prints throughput and latency percentiles. Each client
+//! has its own connection.
 //!
 //! Entities are sent inline, as enforcement points do until awzy-context exists.
 //!
@@ -71,17 +72,21 @@ async fn main() -> anyhow::Result<()> {
     let clients: usize = args.get(2).map(|s| s.parse()).transpose()?.unwrap_or(16);
     let seconds: u64 = args.get(3).map(|s| s.parse()).transpose()?.unwrap_or(10);
 
-    let channel = tonic::transport::Channel::from_shared(endpoint.clone())?.connect().await?;
-    let client = AuthorizerClient::new(awzy_service_auth::grpc_channel(channel, "awzy-pdp"));
-    // Warm up connections and the PDP.
-    for i in 0..200 {
+    // One connection per client, as separate enforcement points have: a Service spreads
+    // connections across PDP pods, not requests, so one shared connection would load one pod.
+    let mut connections = Vec::new();
+    for _ in 0..clients {
+        let channel = tonic::transport::Channel::from_shared(endpoint.clone())?.connect().await?;
+        connections.push(AuthorizerClient::new(awzy_service_auth::grpc_channel(channel, "awzy-pdp")));
+    }
+    // Warm up the connections and the PDPs.
+    for (i, client) in (0..200).zip(connections.iter().cycle()) {
         client.clone().check(request(i)).await?;
     }
 
     let deadline = Instant::now() + Duration::from_secs(seconds);
     let mut workers = Vec::new();
-    for w in 0..clients {
-        let client = client.clone();
+    for (w, client) in connections.into_iter().enumerate() {
         workers.push(tokio::spawn(async move {
             let mut latencies = Vec::new();
             let mut errors = 0usize;

@@ -69,9 +69,19 @@ pub async fn serve(service: &'static str, app: Router) -> anyhow::Result<()> {
 /// On SIGTERM it drains (ADR 0072): `/readyz` fails at once, it keeps serving for
 /// `AWZY_SHUTDOWN_DELAY_SECS` (default 0) while Kubernetes stops routing to it, then it finishes
 /// in-flight requests and closes HTTP/2 and gRPC connections with GOAWAY.
+///
+/// With `AWZY_MAX_CONNECTION_AGE_SECS` set, it also closes each connection the same way once it's
+/// that old (give or take a tenth). A Service spreads connections across pods, not requests, and
+/// a gRPC client keeps one connection for hours; reconnecting lets its requests reach pods added
+/// since, such as an autoscaler's.
 pub async fn serve_with_readiness(service: &'static str, app: Router, ready: Readiness) -> anyhow::Result<()> {
     let addr: SocketAddr = std::env::var("AWZY_LISTEN_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string()).parse()?;
     let delay = std::env::var("AWZY_SHUTDOWN_DELAY_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let max_age = std::env::var("AWZY_MAX_CONNECTION_AGE_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .filter(|&secs: &u64| secs > 0)
+        .map(Duration::from_secs);
     let listener = TcpListener::bind(addr).await?;
     tracing::info!(service, %addr, "listening");
     let stopping = Arc::new(AtomicBool::new(false));
@@ -87,8 +97,88 @@ pub async fn serve_with_readiness(service: &'static str, app: Router, ready: Rea
         }
         tracing::info!("finishing in-flight requests");
     };
-    axum::serve(listener, app).with_graceful_shutdown(drained).await?;
+    serve_connections(listener, app, drained, max_age).await;
     Ok(())
+}
+
+/// Serves each connection on `listener` until `drained` completes, then closes them all
+/// gracefully and waits for their requests to finish. With `max_age`, a connection older than
+/// about that is closed gracefully too.
+async fn serve_connections(
+    listener: TcpListener,
+    app: Router,
+    drained: impl std::future::Future<Output = ()>,
+    max_age: Option<Duration>,
+) {
+    use hyper_util::{
+        rt::{TokioExecutor, TokioIo},
+        server::conn::auto::Builder,
+        service::TowerToHyperService,
+    };
+    let (stop, stopping) = tokio::sync::watch::channel(());
+    let mut connections = tokio::task::JoinSet::new();
+    tokio::pin!(drained);
+    loop {
+        let stream = tokio::select! {
+            accepted = listener.accept() => match accepted {
+                Ok((stream, _)) => stream,
+                Err(error) => {
+                    tracing::warn!(%error, "couldn't accept a connection");
+                    continue;
+                }
+            },
+            Some(_) = connections.join_next(), if !connections.is_empty() => continue,
+            () = &mut drained => break,
+        };
+        let service = TowerToHyperService::new(app.clone());
+        let mut stopping = stopping.clone();
+        let age = max_age.map(jittered);
+        connections.spawn(async move {
+            let builder = Builder::new(TokioExecutor::new());
+            let connection = builder.serve_connection_with_upgrades(TokioIo::new(stream), service);
+            tokio::pin!(connection);
+            let aged = async {
+                match age {
+                    Some(age) => tokio::time::sleep(age).await,
+                    None => std::future::pending().await,
+                }
+            };
+            tokio::pin!(aged);
+            let mut closing = false;
+            loop {
+                tokio::select! {
+                    result = connection.as_mut() => {
+                        if let Err(error) = result {
+                            tracing::debug!(%error, "connection ended with an error");
+                        }
+                        break;
+                    }
+                    () = &mut aged, if !closing => {
+                        connection.as_mut().graceful_shutdown();
+                        closing = true;
+                    }
+                    _ = stopping.changed(), if !closing => {
+                        connection.as_mut().graceful_shutdown();
+                        closing = true;
+                    }
+                }
+            }
+        });
+    }
+    drop(stop);
+    while connections.join_next().await.is_some() {}
+}
+
+/// `age`, moved by up to a tenth either way, so connections opened together don't all close
+/// together.
+fn jittered(age: Duration) -> Duration {
+    let tenth = age / 10;
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().subsec_nanos();
+    let spread = tenth.as_nanos() as u64 * 2;
+    if spread == 0 {
+        return age;
+    }
+    age - tenth + Duration::from_nanos(nanos as u64 % spread)
 }
 
 /// Each request in a span that continues the caller's trace, when it sent one (ADR 0097): an
@@ -157,6 +247,44 @@ mod tests {
         };
         assert_eq!(status("/readyz").await, 503);
         assert_eq!(status("/work").await, 200, "requests already routed to it still succeed");
+    }
+
+    #[test]
+    fn connection_ages_vary_by_at_most_a_tenth() {
+        let age = Duration::from_secs(60);
+        for _ in 0..100 {
+            let j = jittered(age);
+            assert!(j >= Duration::from_secs(54) && j < Duration::from_secs(66), "{j:?}");
+        }
+        assert_eq!(jittered(Duration::ZERO), Duration::ZERO);
+    }
+
+    #[tokio::test]
+    async fn an_old_connection_closes_after_its_request_finishes() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let app = Router::new().route(
+            "/slow",
+            get(|| async {
+                tokio::time::sleep(Duration::from_millis(300)).await;
+                "done"
+            }),
+        );
+        tokio::spawn(serve_connections(listener, app, std::future::pending(), Some(Duration::from_millis(100))));
+
+        let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+        stream.write_all(b"GET /slow HTTP/1.1\r\nhost: awzy\r\n\r\n").await.unwrap();
+        // The connection passes its age mid-request: the request still finishes, and then the
+        // server closes the connection instead of keeping it alive.
+        let mut response = Vec::new();
+        tokio::time::timeout(Duration::from_secs(5), stream.read_to_end(&mut response))
+            .await
+            .expect("the server closes the connection")
+            .unwrap();
+        let response = String::from_utf8(response).unwrap();
+        assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+        assert!(response.ends_with("done"), "{response}");
     }
 
     #[tokio::test]
