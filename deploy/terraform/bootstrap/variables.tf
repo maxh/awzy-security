@@ -120,11 +120,12 @@ variable "drive" {
 }
 
 variable "jira" {
-  description = "The Jira connector (ADR 0070): the site URL, the account's email, the projects in scope (default: all it can browse), and its API token. Null leaves it off"
+  description = "The Jira connector (ADR 0070): the site URL, the account's email, the projects in scope (default: all it can browse), whether watchers count as working on an issue (default: no), and its API token. Null leaves it off"
   type = object({
     url      = string
     user     = string
     projects = optional(list(string), [])
+    watchers = optional(bool, false)
     token    = string
   })
   default   = null

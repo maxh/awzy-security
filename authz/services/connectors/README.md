@@ -46,6 +46,7 @@ updated since the last round.
 | `AWZY_CONNECTORS_JIRA_TOKEN_FILE` | The account's Atlassian API token |
 | `AWZY_CONNECTORS_JIRA_URL` | `https://<site>.atlassian.net`. Setting it turns Jira on |
 | `AWZY_CONNECTORS_JIRA_USER` | The account's email |
+| `AWZY_CONNECTORS_JIRA_WATCHERS` | `true` counts an issue's watchers as working on it, like its assignee. One more Jira call per issue. Default off |
 
 The account needs only to browse the projects in scope. Assignees match people when SCIM user
 names are emails and Jira shows the account their emails (the Atlassian organization's email

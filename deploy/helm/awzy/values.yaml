@@ -238,6 +238,7 @@ connectors:
     projects: [] # default: every project the account can browse
     tokenSecret: awzy-connectors-jira
     intervalSeconds: 300
+    watchers: false # count an issue's watchers as working on it; a Jira call per issue
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { memory: 256Mi }

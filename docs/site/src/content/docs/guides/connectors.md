@@ -59,6 +59,7 @@ IdP's user names are email addresses.
 | `url` | `https://<your-site>.atlassian.net` |
 | `user` | The account's email |
 | `projects` | Project keys to cover. Default: every project the account can browse |
+| `watchers` | `true` counts an issue's watchers as working on it, like its assignee. It costs one more Jira call per issue. Default: `false` |
 | `token` | The account's API token |
 
 The connector reads open issues when it starts and again daily, and issues updated since its last
