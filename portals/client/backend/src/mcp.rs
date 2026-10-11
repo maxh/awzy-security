@@ -186,6 +186,24 @@ pub struct ResourceOut {
 
 #[derive(Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
+pub struct PrincipalActivityParams {
+    /// `Human` or `ServiceAccount`.
+    pub principal_type: String,
+    /// The principal's ID, e.g. "alice" or "sales-genie".
+    pub principal_id: String,
+    /// How many hours back to look. Defaults to 24, at most 168 (a week).
+    pub hours: Option<u32>,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct PrincipalActivityOut {
+    /// Decisions by verdict and action, resources touched, agents that acted for it, and events.
+    pub activity: serde_json::Value,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
 pub struct DryRunPolicyParams {
     /// A draft bundle's QID, `policy_bundle_<uuid>`, as `propose_policy` returned it.
     pub draft_qid: String,
@@ -548,6 +566,25 @@ impl ClientPortalMcp {
             entities: found["entities"].as_array().cloned().unwrap_or_default(),
             assignees: strings(&found["assignees"]),
         }))
+    }
+
+    #[tool(
+        name = "principal_activity",
+        description = "What one person or service account did recently: its decisions by verdict and action, how many resources it touched, which agents acted for it, and its events from apps and audit logs. The last 24 hours by default, at most a week. Read-only."
+    )]
+    async fn principal_activity(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(p): Parameters<PrincipalActivityParams>,
+    ) -> Result<Json<PrincipalActivityOut>, ErrorData> {
+        let viewer = self.allow(&parts, PortalAction::View, PortalArea::Decisions).await?;
+        self.record(&viewer, "principal_activity");
+        let hours = i64::from(p.hours.unwrap_or(24).clamp(1, 168));
+        let since = Utc::now() - chrono::Duration::hours(hours);
+        let a = decisions::principal_activity(self.clickhouse()?, &p.principal_type, &p.principal_id, since)
+            .await
+            .map_err(internal)?;
+        Ok(Json(PrincipalActivityOut { activity: serde_json::to_value(a).map_err(|e| internal(e.into()))? }))
     }
 
     #[tool(
@@ -1099,6 +1136,7 @@ mod tests {
                 "get_resource",
                 "list_investigations",
                 "list_policy_bundles",
+                "principal_activity",
                 "propose_policy",
                 "search_decisions"
             ]
