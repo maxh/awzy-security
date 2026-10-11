@@ -53,7 +53,7 @@ fn request(i: usize) -> CheckRequest {
         principal: Some(principal),
         action: "read".into(),
         resource: Some(r("Resource", res_id)),
-        context: Some(json_to_struct(json!({ "client": "loadtest" }).as_object().unwrap().clone())),
+        context: Some(json_to_struct(serde_json::Map::from_iter([("client".to_string(), json!("loadtest"))]))),
         on_behalf_of,
         entities,
         human_present: Some(true),
@@ -123,6 +123,6 @@ async fn main() -> anyhow::Result<()> {
     for (label, p) in [("p50", 0.50), ("p95", 0.95), ("p99", 0.99), ("p99.9", 0.999)] {
         println!("{label:8} {:.2} ms", percentile(&all, p).as_secs_f64() * 1000.0);
     }
-    println!("max      {:.2} ms", all.last().unwrap().as_secs_f64() * 1000.0);
+    println!("max      {:.2} ms", all.last().copied().unwrap_or_default().as_secs_f64() * 1000.0);
     Ok(())
 }

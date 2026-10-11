@@ -1,4 +1,4 @@
-import { Section, StatusBadge } from "@awzy/ui";
+import { isOneOf, Section, StatusBadge } from "@awzy/ui";
 import { Alert, Button, Chip, Group, Modal, NumberInput, Select, Stack, Table, Text, TextInput } from "@mantine/core";
 import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
@@ -24,6 +24,8 @@ const ENTITLEMENTS: { value: Entitlement; label: string }[] = [
   { value: "DRIVE", label: "Google Drive" },
   { value: "JIRA", label: "Jira" },
 ];
+
+const ENTITLEMENT_NAMES: readonly Entitlement[] = ENTITLEMENTS.map((e) => e.value);
 
 const label = (list: { value: string; label: string }[], v: string) => list.find((x) => x.value === v)?.label ?? v;
 
@@ -150,7 +152,7 @@ function EditLicense({ client, current, onClose }: { client: string; current: Cu
           plan,
           humans,
           expiresAt: ends ? `${ends}T00:00:00Z` : null,
-          entitlements: entitlements as Entitlement[],
+          entitlements: entitlements.filter((e) => isOneOf(ENTITLEMENT_NAMES, e)),
         },
       },
       // The license isn't a Node, so the page loads its query again to show it.

@@ -1,4 +1,4 @@
-import { EmptyState, PageHeader, PageLoader, Section, StatusBadge, type Tone } from "@awzy/ui";
+import { EmptyState, messageOf, PageHeader, PageLoader, Section, StatusBadge, type Tone } from "@awzy/ui";
 import { Alert, Button, Checkbox, Group, Modal, NumberInput, Stack, Table, Text } from "@mantine/core";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { IconLifebuoy } from "@tabler/icons-react";
@@ -105,7 +105,7 @@ function Sessions({ queryRef, onChanged }: { queryRef: PreloadedQuery<SupportPag
       });
       onChanged();
     } catch (e) {
-      setError((e as Error).message);
+      setError(messageOf(e));
     }
   };
   const stop = async (s: Session) => {
@@ -113,7 +113,7 @@ function Sessions({ queryRef, onChanged }: { queryRef: PreloadedQuery<SupportPag
       await mutate<SupportPageEndMutation>(environment, end, { supportSessionQid: s.id });
       onChanged();
     } catch (e) {
-      setError((e as Error).message);
+      setError(messageOf(e));
     }
   };
 

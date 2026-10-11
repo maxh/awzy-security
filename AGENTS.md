@@ -96,7 +96,11 @@ bazel build --config=lint //...                    # clippy
   `awzy_model::Actor`, `awzy.authz.v1.Actor` in protobuf, the `Actor` type in GraphQL (ADR 0060).
 - **Names** are specific and easy to grep (`ClientPortalSchema`, `CorpPortalQuery`, not `Query`).
   The products are "portals", never "consoles".
-- **Rust errors:** `thiserror` types in libraries, `anyhow` in binaries and at the edges.
+- **Rust errors:** `thiserror` types in libraries, `anyhow` in binaries and at the edges. No bare
+  `unwrap()` or other panic outside tests; an `expect` says why it can't fail. The lint config
+  enforces it (`.bazelrc`, `clippy.toml`).
+- **TypeScript narrowing:** never `as`. Narrow with `isOneOf`, `oneOf`, or `isRecord` from
+  `@awzy/ui`, or a type guard; oxlint's `no-unsafe-type-assertion` enforces it.
 - **Tests** sit next to the code in `#[cfg(test)] mod tests` and read as statements of behavior
   (`delegation_never_exceeds_the_person`).
 - **Comments and docs** explain why, briefly, in plain sentences. Match the comment density of the

@@ -1,4 +1,4 @@
-import { EmptyState, PageHeader, PageLoader, Section } from "@awzy/ui";
+import { EmptyState, oneOf, PageHeader, PageLoader, Section } from "@awzy/ui";
 import { Button, Drawer, Group, Select, Table, Text, TextInput } from "@mantine/core";
 import { IconListSearch, IconSearch } from "@tabler/icons-react";
 import { type FormEvent, Suspense, useState } from "react";
@@ -11,6 +11,9 @@ import { Entity, Time, VerdictBadge } from "./format";
 
 type Verdict = NonNullable<DecisionFilter["verdict"]>;
 type Mode = NonNullable<DecisionFilter["mode"]>;
+
+const VERDICTS: readonly Verdict[] = ["ALLOW", "DENY", "CHALLENGE"];
+const MODES: readonly Mode[] = ["MONITOR", "ENFORCE"];
 
 export function DecisionsPage() {
   const [filter, setFilter] = useState<DecisionFilter>({});
@@ -56,8 +59,8 @@ function Filters({ onApply }: { onApply: (f: DecisionFilter) => void }) {
     onApply({
       principalId: principalId.trim() || null,
       resourceId: resourceId.trim() || null,
-      verdict: (verdict as Verdict | null) ?? null,
-      mode: (mode as Mode | null) ?? null,
+      verdict: oneOf(VERDICTS, verdict),
+      mode: oneOf(MODES, mode),
     });
   };
 

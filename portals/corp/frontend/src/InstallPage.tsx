@@ -1,4 +1,4 @@
-import { EmptyState, PageHeader, PageLoader, Section, Stat, StatusBadge } from "@awzy/ui";
+import { EmptyState, oneOf, PageHeader, PageLoader, Section, Stat, StatusBadge } from "@awzy/ui";
 import { Alert, Button, Group, Modal, Select, SimpleGrid, Stack, Table, Text, TextInput } from "@mantine/core";
 import { IconArchive, IconBox, IconHistory, IconPin } from "@tabler/icons-react";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
@@ -6,9 +6,9 @@ import { Suspense, useState } from "react";
 import { graphql, type PreloadedQuery, useMutation, usePreloadedQuery } from "react-relay";
 
 import type { InstallPageQuery } from "./__generated__/InstallPageQuery.graphql";
-import type { InstallPageReleaseMutation, ReleaseChannel } from "./__generated__/InstallPageReleaseMutation.graphql";
+import type { InstallPageReleaseMutation } from "./__generated__/InstallPageReleaseMutation.graphql";
 import type { InstallPageRetireMutation } from "./__generated__/InstallPageRetireMutation.graphql";
-import { ago, CHANNELS, channelLabel, formatTime, healthOf, shortDigest } from "./format";
+import { ago, CHANNEL_NAMES, channelLabel, CHANNELS, formatTime, healthOf, shortDigest } from "./format";
 import { InstallCharts } from "./InstallCharts";
 import { LicenseSection } from "./LicenseSection";
 import { SupportSection } from "./SupportSection";
@@ -257,7 +257,7 @@ function ReleaseButton({
       variables: {
         input: {
           installQid: id,
-          channel: (channel ?? "FAST") as ReleaseChannel,
+          channel: oneOf(CHANNEL_NAMES, channel) ?? "FAST",
           pinnedVersion: channel === "PINNED" ? pinned.trim() : null,
         },
       },

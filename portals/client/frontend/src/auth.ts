@@ -1,3 +1,4 @@
+import { isRecord } from "@awzy/ui";
 import { UserManager, WebStorageStateStore } from "oidc-client-ts";
 
 /** Where the IdP sends the browser back after sign-in. A frontend route, not an API route. */
@@ -25,10 +26,18 @@ export type Session = {
  * says which IdP at /auth/config. Resolves once there is a signed-in user; otherwise the browser
  * is sent to the IdP and the promise never resolves.
  */
+/** The portal's `/auth/config`, checked: which IdP signs people in. */
+function authConfig(v: unknown): { issuer: string; clientId: string } {
+  if (isRecord(v) && typeof v.issuer === "string" && typeof v.clientId === "string") {
+    return { issuer: v.issuer, clientId: v.clientId };
+  }
+  throw new Error("The portal's sign-in settings (/auth/config) aren't what this page expects.");
+}
+
 export async function signIn(): Promise<Session> {
   const support = supportSession();
   if (support) return support;
-  const config = (await (await fetch("/auth/config")).json()) as { issuer: string; clientId: string };
+  const config = authConfig(await (await fetch("/auth/config")).json());
   const manager = new UserManager({
     authority: config.issuer,
     // The deployed IdP client only allows the portal's own redirect URI. Running this frontend
@@ -47,7 +56,8 @@ export async function signIn(): Promise<Session> {
 
   if (window.location.pathname === CALLBACK_PATH) {
     const user = await manager.signinRedirectCallback();
-    const returnTo = (user.state as { returnTo?: string } | undefined)?.returnTo ?? "/";
+    const state: unknown = user.state;
+    const returnTo = isRecord(state) && typeof state.returnTo === "string" ? state.returnTo : "/";
     window.history.replaceState(null, "", returnTo.startsWith("/") ? returnTo : "/");
   }
 
@@ -86,7 +96,13 @@ function supportSession(): Session | null {
   if (!token) return null;
   let claims: { sub?: string; exp?: number } = {};
   try {
-    claims = JSON.parse(atob((token.split(".")[1] ?? "").replace(/-/g, "+").replace(/_/g, "/"))) as typeof claims;
+    const parsed: unknown = JSON.parse(atob((token.split(".")[1] ?? "").replace(/-/g, "+").replace(/_/g, "/")));
+    if (isRecord(parsed)) {
+      claims = {
+        sub: typeof parsed.sub === "string" ? parsed.sub : undefined,
+        exp: typeof parsed.exp === "number" ? parsed.exp : undefined,
+      };
+    }
   } catch {
     // Not a token: the backend refuses it and the page says so.
   }

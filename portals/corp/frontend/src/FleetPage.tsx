@@ -1,4 +1,4 @@
-import { EmptyState, PageHeader, PageLoader, Section, StatusBadge } from "@awzy/ui";
+import { EmptyState, oneOf, PageHeader, PageLoader, Section, StatusBadge } from "@awzy/ui";
 import {
   Alert,
   Anchor,
@@ -19,8 +19,8 @@ import { type FormEvent, Suspense, useState } from "react";
 import { graphql, type PreloadedQuery, useMutation, usePreloadedQuery } from "react-relay";
 
 import type { FleetPageQuery } from "./__generated__/FleetPageQuery.graphql";
-import type { FleetPageRegisterMutation, ReleaseChannel } from "./__generated__/FleetPageRegisterMutation.graphql";
-import { ago, CHANNELS, channelLabel, formatTime, healthOf } from "./format";
+import type { FleetPageRegisterMutation } from "./__generated__/FleetPageRegisterMutation.graphql";
+import { ago, CHANNEL_NAMES, channelLabel, CHANNELS, formatTime, healthOf } from "./format";
 import { McpTokenButton } from "./McpTokenButton";
 
 /** Every registered install, with its health and what it last reported (ADR 0026). */
@@ -242,7 +242,7 @@ function RegisterInstall({
           environment: environment.trim(),
           cloud: cloud ?? "aws",
           region: region.trim(),
-          channel: (channel ?? "FAST") as ReleaseChannel,
+          channel: oneOf(CHANNEL_NAMES, channel) ?? "FAST",
           pinnedVersion: channel === "PINNED" ? pinned.trim() : null,
         },
       },

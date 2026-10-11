@@ -34,16 +34,17 @@ export async function createCredential(
   optionsJson: string,
 ): Promise<{ clientDataJson: string; attestationObject: string }> {
   const o = JSON.parse(optionsJson);
-  const credential = (await navigator.credentials.create({
+  const credential = await navigator.credentials.create({
     publicKey: {
       ...o,
       challenge: fromBase64url(o.challenge),
       user: { ...o.user, id: fromBase64url(o.user.id) },
       excludeCredentials: descriptors(o.excludeCredentials),
     },
-  })) as PublicKeyCredential | null;
-  if (!credential) throw new Error("No security key was registered.");
-  const response = credential.response as AuthenticatorAttestationResponse;
+  });
+  if (!(credential instanceof PublicKeyCredential)) throw new Error("No security key was registered.");
+  const response = credential.response;
+  if (!(response instanceof AuthenticatorAttestationResponse)) throw new Error("The key didn't register.");
   return {
     clientDataJson: toBase64url(response.clientDataJSON),
     attestationObject: toBase64url(response.attestationObject),
@@ -62,11 +63,12 @@ export async function getAssertion(
   signature: string;
 }> {
   const o = JSON.parse(optionsJson);
-  const credential = (await navigator.credentials.get({
+  const credential = await navigator.credentials.get({
     publicKey: { ...o, challenge: fromBase64url(o.challenge), allowCredentials: descriptors(o.allowCredentials) },
-  })) as PublicKeyCredential | null;
-  if (!credential) throw new Error("No security key answered.");
-  const response = credential.response as AuthenticatorAssertionResponse;
+  });
+  if (!(credential instanceof PublicKeyCredential)) throw new Error("No security key answered.");
+  const response = credential.response;
+  if (!(response instanceof AuthenticatorAssertionResponse)) throw new Error("The key didn't sign.");
   return {
     ceremonyQid,
     credentialId: toBase64url(credential.rawId),

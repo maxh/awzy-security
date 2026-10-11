@@ -16,7 +16,11 @@ build --@rules_rust//rust/settings:rustfmt.toml=//:rustfmt.toml
 build:lint --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
 build:lint --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
 build:lint --output_groups=+clippy_checks,+rustfmt_checks
-build:lint --@rules_rust//rust/settings:clippy_flags=-Dwarnings
+# On top of clippy's defaults: no unsafe code, no bare unwrap or other panics outside tests (an
+# expect says why it can't fail), and nothing left behind from debugging (#225). clippy.toml lets
+# tests unwrap and panic.
+build:lint --@rules_rust//rust/settings:clippy_flags=-Dwarnings,-Funsafe_code,-Dclippy::unwrap_used,-Dclippy::panic,-Dclippy::exit,-Dclippy::todo,-Dclippy::unimplemented,-Dclippy::dbg_macro,-Dclippy::mem_forget
+build:lint --@rules_rust//rust/settings:clippy.toml=//:clippy.toml
 
 # Integration tests against the local stack (deploy/local/compose.yaml):
 #   bazel test --config=local-stack //...
