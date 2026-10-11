@@ -102,7 +102,7 @@ impl ContextClient {
         if status != StatusCode::CONFLICT {
             bail!("creating {kind} {key}: {status}: {body}");
         }
-        let filter = encode(&format!("{attr} eq \"{key}\""));
+        let filter = awzy_http::encode(&format!("{attr} eq \"{key}\""));
         let (status, list) = self.send(Method::GET, &format!("/scim/v2/{kind}?filter={filter}"), None, true).await?;
         let id = match list["Resources"].get(0) {
             Some(existing) if status.is_success() => id_of(existing)?,
@@ -208,16 +208,6 @@ impl ContextClient {
 
 fn id_of(resource: &Value) -> anyhow::Result<String> {
     resource["id"].as_str().map(str::to_string).with_context(|| format!("no id in {resource}"))
-}
-
-/// Percent-encodes a SCIM filter for a query string.
-fn encode(s: &str) -> String {
-    s.bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => (b as char).to_string(),
-            _ => format!("%{b:02X}"),
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -377,6 +367,6 @@ mod tests {
 
     #[test]
     fn filters_are_encoded() {
-        assert_eq!(encode("userName eq \"a@b.example\""), "userName%20eq%20%22a%40b.example%22");
+        assert_eq!(awzy_http::encode("userName eq \"a@b.example\""), "userName%20eq%20%22a%40b.example%22");
     }
 }

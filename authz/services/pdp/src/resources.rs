@@ -242,7 +242,7 @@ impl Resources {
     }
 
     async fn fetch(&self, endpoint: &str, id: &str) -> anyhow::Result<Option<Arc<Loaded>>> {
-        let url = format!("{endpoint}/v1/resources/{}/entities", encode(id));
+        let url = format!("{endpoint}/v1/resources/{}/entities", awzy_http::encode(id));
         let req = crate::principals::context_get(&url, &self.tokens)?;
         let res = tokio::time::timeout(TIMEOUT, self.client.request(req)).await??;
         match res.status().as_u16() {
@@ -276,16 +276,6 @@ impl Resources {
         }
         cache.insert(id.to_string(), Cached { at: Instant::now(), entities });
     }
-}
-
-/// Percent-encodes an ID as one path segment: resource IDs may contain `/`.
-fn encode(id: &str) -> String {
-    id.bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => (b as char).to_string(),
-            _ => format!("%{b:02X}"),
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -406,6 +396,6 @@ mod tests {
 
     #[test]
     fn ids_are_one_path_segment() {
-        assert_eq!(encode("synthetic:folder:sales/accounts"), "synthetic%3Afolder%3Asales%2Faccounts");
+        assert_eq!(awzy_http::encode("synthetic:folder:sales/accounts"), "synthetic%3Afolder%3Asales%2Faccounts");
     }
 }
