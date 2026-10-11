@@ -54,6 +54,7 @@ export default defineConfig({
         {
           label: "Reference",
           items: [
+            "reference/configuration",
             "reference/services",
             "reference/decision-api",
             "reference/domain-model",
