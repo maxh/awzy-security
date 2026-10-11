@@ -127,7 +127,7 @@ resource "helm_release" "config" {
         breakGlassKeysSecret = var.break_glass_public_keys == null ? "" : "awzy-policy-break-glass"
         signingKmsKey        = local.c.policy_signing.kms_key
       }
-      clickhouse = { storageClass = local.c.storage_class.name }
+      clickhouse = { storageClass = local.c.storage_class.name, retentionDays = var.clickhouse_retention_days }
       demoIdp    = { enabled = var.demo_idp }
       demoData   = { enabled = var.demo_data, activity = { enabled = var.demo_activity } }
       reporter   = var.reporter == null ? { enabled = false, installId = "" } : { enabled = true, installId = nonsensitive(var.reporter.install_id) }

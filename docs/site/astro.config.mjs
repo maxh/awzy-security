@@ -49,6 +49,7 @@ export default defineConfig({
             "guides/connectors",
             "guides/optional-features",
             "guides/break-glass",
+            "guides/data-retention",
           ],
         },
         {
