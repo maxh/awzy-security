@@ -8,6 +8,7 @@
 //! Both need a signed-in viewer, and every operation is checked with awzy-pdp (see [`access`]).
 
 pub mod access;
+mod audit;
 pub mod awzy_bot;
 mod challenges;
 mod decisions;
@@ -214,6 +215,8 @@ fn schema_builder(
         .limit_complexity(awzy_portal::MAX_QUERY_COMPLEXITY)
         // Each operation a support session runs is recorded (ADR 0095).
         .extension(support::SupportAudit)
+        // Every mutation, recorded as the viewer's activity.
+        .extension(audit::MutationAudit)
 }
 
 /// GraphQL at `/graphql` and MCP at `/mcp`, each behind sign-in with its own tokens (`auth` and
