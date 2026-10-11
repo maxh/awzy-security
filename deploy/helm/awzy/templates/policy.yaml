@@ -5,6 +5,7 @@
 # the portal drafts, publishes, and switches the mode. Break-glass rollback is signed instead.
 # awzy-policy signs each bundle and mode change, and the PDPs check them (ADR 0080).
 {{- $env := list
+    (dict "name" "AWZY_CHALLENGE_ADDR" "value" (printf "http://awzy-challenge.%s.svc:8080" .Values.namespaces.system))
     (dict "name" "AWZY_POLICY_READERS" "value" (printf "%s,%s" $backend $portal))
     (dict "name" "AWZY_POLICY_SIGNING_KEY_FILE" "value" "/var/run/secrets/awzy/policy-signing/signing.pem")
     (dict "name" "AWZY_POLICY_WRITERS" "value" $portal)
@@ -21,4 +22,5 @@
 {{- $mounts = append $mounts (dict "name" "break-glass" "mountPath" "/var/run/secrets/awzy/break-glass" "readOnly" true) -}}
 {{- end }}
 {{ include "awzy.service" (dict "root" . "name" "awzy-policy" "namespace" .Values.namespaces.system "values" .Values.policy
+  "tokens" (list "awzy-challenge")
   "env" $env "volumes" $volumes "mounts" $mounts) }}

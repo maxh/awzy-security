@@ -62,7 +62,7 @@ investigation recommends is only recorded.
 
 People get a direct message when something waits for them: a reason or a security key to give,
 or an approval to make. Requesters hear when their request is decided. Your security team's
-channel hears about approvals and containments. Messages link into the client portal, and never
+channel hears about approvals, containments, and every break-glass rollback. Messages link into the client portal, and never
 include document contents or the evidence behind a containment.
 
 1. **Create a Slack app** in your workspace (api.slack.com/apps). Give its bot token the

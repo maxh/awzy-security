@@ -13,9 +13,9 @@ use awzy_authz_proto::{
         FinishVerificationResponse, GetChallengeRequest, GetChallengeResponse, JustifyRequest, JustifyResponse,
         LiftRequest, LiftResponse, ListChallengesRequest, ListChallengesResponse, ListContainmentsRequest,
         ListContainmentsResponse, ListSecurityKeysRequest, ListSecurityKeysResponse, RemoveSecurityKeyRequest,
-        RemoveSecurityKeyResponse, ResetSecurityKeyRequest, ResetSecurityKeyResponse, ResolveRequest, ResolveResponse,
-        SecurityKey as WireKey, WatchChallengesRequest, WatchChallengesResponse, WatchContainmentsRequest,
-        WatchContainmentsResponse,
+        RemoveSecurityKeyResponse, ReportBreakGlassRequest, ReportBreakGlassResponse, ResetSecurityKeyRequest,
+        ResetSecurityKeyResponse, ResolveRequest, ResolveResponse, SecurityKey as WireKey, WatchChallengesRequest,
+        WatchChallengesResponse, WatchContainmentsRequest, WatchContainmentsResponse,
     },
     challenges_from_wire, challenges_to_wire,
     prost_types::Timestamp,
@@ -48,6 +48,8 @@ pub struct Access {
     /// Following containments, so an outage never replays an allow for a contained principal:
     /// the MCP gateways (ADR 0030).
     gateways: Allowed,
+    /// Reporting break-glass rollbacks: awzy-policy.
+    policies: Allowed,
 }
 
 /// Callers either group allows.
@@ -59,8 +61,8 @@ fn either(a: &Allowed, b: &Allowed) -> Allowed {
 }
 
 impl Access {
-    /// From `AWZY_CHALLENGE_ANSWERERS`, `AWZY_CHALLENGE_CONTAINERS`, `AWZY_CHALLENGE_GATEWAYS`, and
-    /// `AWZY_CHALLENGE_PDPS`.
+    /// From `AWZY_CHALLENGE_ANSWERERS`, `AWZY_CHALLENGE_CONTAINERS`, `AWZY_CHALLENGE_GATEWAYS`,
+    /// `AWZY_CHALLENGE_PDPS`, and `AWZY_CHALLENGE_POLICY`.
     pub fn from_env() -> anyhow::Result<Self> {
         Ok(Self {
             verifier: Arc::new(awzy_service_auth::Verifier::from_env("awzy-challenge")?),
@@ -68,6 +70,7 @@ impl Access {
             answerers: Allowed::from_env("AWZY_CHALLENGE_ANSWERERS"),
             containers: Allowed::from_env("AWZY_CHALLENGE_CONTAINERS"),
             gateways: Allowed::from_env("AWZY_CHALLENGE_GATEWAYS"),
+            policies: Allowed::from_env("AWZY_CHALLENGE_POLICY"),
         })
     }
 
@@ -80,6 +83,7 @@ impl Access {
             answerers: nobody(),
             containers: nobody(),
             gateways: nobody(),
+            policies: nobody(),
         }
     }
 
@@ -113,6 +117,7 @@ impl Access {
             &self.answerers,
         ));
         rules.extend(group(&["Contain", "Lift"], &self.containers));
+        rules.extend(group(&["ReportBreakGlass"], &self.policies));
         PathGuard::new(self.verifier.clone(), rules)
     }
 }
@@ -255,6 +260,22 @@ impl ChallengeService for Service {
             tracing::warn!(challenge_id = %c.id, error = %e, "couldn't record who to tell about a decision");
         }
         Ok(Response::new(DecideResponse { challenge: Some(challenge_to_wire(c)) }))
+    }
+
+    async fn report_break_glass(
+        &self,
+        req: Request<ReportBreakGlassRequest>,
+    ) -> Result<Response<ReportBreakGlassResponse>, Status> {
+        let req = req.into_inner();
+        let details = serde_json::json!({
+            "key_id": req.key_id,
+            "reason": req.reason,
+            "restored_version": req.restored_version,
+            "policy_bundle_qid": req.policy_bundle_qid,
+            "version": req.version,
+        });
+        self.store.notify_break_glass(&details).await.map_err(status)?;
+        Ok(Response::new(ReportBreakGlassResponse {}))
     }
 
     async fn contain(&self, req: Request<ContainRequest>) -> Result<Response<ContainResponse>, Status> {
