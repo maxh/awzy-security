@@ -195,13 +195,31 @@ the cluster on it.
   no `heartbeat not delivered`.
 - **The portal:** `https://<hostname>` signs you in through your IdP.
 
+## 8. Monitoring (optional)
+
+Every awzy service serves Prometheus metrics. On AWS, two more modules watch them for you:
+
+- [`deploy/terraform/aws/monitoring`](deploy/terraform/aws/monitoring): Amazon Managed Service for
+  Prometheus, fed by its managed scraper (nothing more runs in your cluster), with awzy's alert
+  rules routed to an SNS topic and the `alert_emails` you give it; and an Amazon Managed Grafana
+  workspace, signed in to through your IAM Identity Center, that reads Prometheus and CloudWatch
+  (Aurora, MSK, ElastiCache). Pass it the cloud layer's `monitoring` output.
+- [`deploy/terraform/grafana`](deploy/terraform/grafana): awzy's dashboards and data sources, in
+  that workspace or any Grafana of yours. Apply it after the first, with the `grafana` output.
+
+You can use your own monitoring instead: scrape each awzy pod's `/metrics` (port `http`), and load
+[`deploy/observability`](deploy/observability)'s alert rules and dashboards into it.
+
 ## Operating an install
 
 - **Upgrades** follow the release channel the install was registered with: Argo CD moves to the
   version the channel names within minutes of awzy moving it. `fast` gets every release as it's
   published; a release reaches `stable` after it has run on `fast` for at least a day and awzy
   promotes it. A pinned install stays on its version. Setting `chart_version`
-  to an exact version and applying bootstrap again holds any install there. If a sync failed (a hook
+  to an exact version and applying bootstrap again holds any install there, and setting an earlier
+  one rolls it back. Apply bootstrap from the same awzy commit as the chart: a release can change
+  what bootstrap makes for it (the policy signing key moved to KMS this way). Upgrades and
+  rollbacks were tested on the example install under load (the deployment plan's step 4). If a sync failed (a hook
   Job that kept failing, say), Argo CD keeps retrying that revision after you move on; stop it
   with `kubectl -n awzy-ops patch application awzy --type merge -p
   '{"status":{"operationState":{"phase":"Terminating"}}}'` and the next sync takes the new one.

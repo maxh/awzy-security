@@ -24,6 +24,43 @@ ${body}`,
 );
 console.log("synced INSTALL.md");
 
+// The configuration reference: every bootstrap variable, from deploy/terraform/bootstrap, so the
+// page can't drift from the module. ADR citations in descriptions are dropped (see below).
+{
+  const tf = readFileSync(new URL("../../../deploy/terraform/bootstrap/variables.tf", import.meta.url), "utf8");
+  const rows = [];
+  for (const [, name, block] of tf.matchAll(/^variable "([^"]+)" \{\n([\s\S]*?)^\}/gm)) {
+    const description = (block.match(/^  description\s*=\s*"((?:[^"\\]|\\.)*)"/m)?.[1] ?? "")
+      .replace(/\\"/g, '"')
+      .replace(/ ?\((?:ADRs? [0-9]{4}(?:, [0-9]{4})*(?:; [^)]*)?)\)/g, "")
+      .replace(/\bADRs? [0-9]{4}\b,? ?/g, "")
+      .replace(/\|/g, "\\|")
+      .replace(/</g, "&lt;");
+    const required = !/^  default\s*=/m.test(block);
+    rows.push(`| \`${name}\` | ${required ? "Yes" : ""} | ${description} |`);
+  }
+  writeFileSync(
+    new URL("../src/content/docs/reference/configuration.md", import.meta.url),
+    `---
+title: Configuration
+description: Every setting an install takes, from bootstrap, the Terraform you apply in your cluster.
+editUrl: ${repo.replace("/blob/", "/edit/")}deploy/terraform/bootstrap/variables.tf
+---
+
+An install is configured through bootstrap's variables
+([deploy/terraform/bootstrap](${repo}deploy/terraform/bootstrap/variables.tf)), which you set in
+your own Terraform, as [the example client](${repo}deploy/terraform/examples/example-client/bootstrap/main.tf)
+does. Bootstrap turns them into the chart's values and the cluster's Secrets; you don't set chart
+values directly. The [install guide](/guides/install/) says where each comes from.
+
+| Variable | Required | What it's for |
+| --- | --- | --- |
+${rows.join("\n")}
+`,
+  );
+  console.log(`generated the configuration reference (${rows.length} variables)`);
+}
+
 // The public docs describe the product, not how it was decided: no architecture decision records
 // (ADRs), which are for people working on awzy. Fails the build if one is cited.
 const docs = new URL("../src/content/docs/", import.meta.url);

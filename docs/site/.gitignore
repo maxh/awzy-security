@@ -3,3 +3,4 @@ dist/
 .astro/
 # Generated from the repository's INSTALL.md by scripts/sync.mjs.
 src/content/docs/guides/install.md
+src/content/docs/reference/configuration.md
