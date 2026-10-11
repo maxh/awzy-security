@@ -4,12 +4,20 @@ use anyhow::Context;
 async fn main() -> anyhow::Result<()> {
     awzy_telemetry::init("awzy-corp-portal");
     let url = std::env::var("AWZY_POSTGRES_URL").context("AWZY_POSTGRES_URL is not set")?;
+    // `awzy-corp-portal migrate`: the one-off task deploy-corp.sh runs before the services roll
+    // (ADR 0087). It migrates the registry proxy's schema too, which shares this database.
+    if std::env::args().nth(1).as_deref() == Some("migrate") {
+        let pool = sqlx::postgres::PgPoolOptions::new().max_connections(1).connect(&url).await?;
+        awzy_corp_portal::fleet::FleetStore::new(pool).migrate().await?;
+        awzy_registry::tokens::TokenStore::migrate(&url, "registry").await?;
+        tracing::info!("migrations applied");
+        return Ok(());
+    }
     let pool = sqlx::postgres::PgPoolOptions::new().max_connections(5).connect(&url).await?;
     // The registry proxy's pull tokens live in its own schema of this database (ADR 0028).
     let pull_tokens = awzy_registry::tokens::TokenStore::connect(&url, "registry").await?;
     let store = awzy_corp_portal::fleet::FleetStore::new(pool).with_pull_tokens(pull_tokens);
-    // TODO: run migrations from a release Job instead of at startup.
-    store.migrate().await?;
+    store.migrate_on_start().await?;
     // Fleet alerts to Slack (ADR 0043).
     let slack = std::env::var("AWZY_CORP_PORTAL_ALERTS_SLACK_WEBHOOK_URL")
         .ok()

@@ -8,6 +8,7 @@ awzy_service(
     # Embedded by sqlx::migrate!.
     compile_data = glob(["migrations/*.sql"]),
     deps = [
+        "//libs/migrations",
         "//libs/model",
         "//libs/server",
         "//libs/telemetry",

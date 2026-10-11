@@ -10,7 +10,7 @@ async fn main() -> anyhow::Result<()> {
     let url = std::env::var("AWZY_POSTGRES_URL").context("AWZY_POSTGRES_URL is not set")?;
     let pool = PgPoolOptions::new().max_connections(5).connect(&url).await?;
     // `awzy-challenge migrate`: the release Job (ADR 0083).
-    if awzy_store::migrations::requested() {
+    if awzy_migrations::requested() {
         ChallengeStore::new(pool, Lifetimes::default()).migrate().await?;
         tracing::info!("migrations applied");
         return Ok(());

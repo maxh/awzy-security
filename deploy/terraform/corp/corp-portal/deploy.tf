@@ -46,6 +46,20 @@ data "aws_iam_policy_document" "ci_deploy" {
       "arn:aws:ecs:${var.region}:${var.build_account_id}:service/${aws_ecs_cluster.corp.name}/awzy-registry",
     ]
   }
+  # The migrate task (ADR 0087): the corp portal's new revision, run once before the services roll.
+  statement {
+    actions   = ["ecs:RunTask"]
+    resources = ["arn:aws:ecs:${var.region}:${var.build_account_id}:task-definition/${local.name}:*"]
+    condition {
+      test     = "ArnEquals"
+      variable = "ecs:cluster"
+      values   = [aws_ecs_cluster.corp.arn]
+    }
+  }
+  statement {
+    actions   = ["ecs:DescribeTasks"]
+    resources = ["arn:aws:ecs:${var.region}:${var.build_account_id}:task/${aws_ecs_cluster.corp.name}/*"]
+  }
   # Which revision to deploy from (deploy-templates.tf).
   statement {
     actions   = ["ssm:GetParameter"]

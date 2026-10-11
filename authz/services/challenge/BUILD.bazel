@@ -10,9 +10,9 @@ awzy_service(
     deps = [
         "//authz/libs/proto",
         "//authz/libs/service-auth",
+        "//libs/migrations",
         "//libs/model",
         "//libs/server",
-        "//libs/store",
         "//libs/telemetry",
     ],
     test_deps = ["//authz/services/pdp"],

@@ -3,10 +3,12 @@
 # (deploy/terraform/corp/corp-portal). Runs in CI after publish-images.sh, as awzy-ci-deploy.
 #
 # For each service: copy its task definition template (the revision Terraform registered, named
-# in SSM by deploy-templates.tf) with the image set, register it, point the service at it, then
-# wait for the service to settle. So Terraform's changes to a task definition reach the service
-# with the next deploy. ECS's deployment circuit
-# breaker rolls a failing deploy back; that shows up here as the old revision still running.
+# in SSM by deploy-templates.tf) with the image set and register it, so Terraform's changes to a
+# task definition reach the service with the next deploy. Then run the corp portal's new revision
+# once as `awzy-corp-portal migrate` (ADR 0087): a failed migration stops the deploy here, before
+# any service changes. Then point each service at its new revision and wait for it to settle.
+# ECS's deployment circuit breaker rolls a failing deploy back; that shows up here as the old
+# revision still running.
 #
 # CI runs for commits on main finish in any order, so a commit older than the one deployed is
 # skipped rather than deployed over it. That needs the full history (fetch-depth: 0).
@@ -61,9 +63,29 @@ for k in ["taskDefinitionArn", "revision", "status", "requiresAttributes", "comp
 json.dump(td, open("/tmp/td.json", "w"))
 PY
   new=$(aws ecs register-task-definition --cli-input-json file:///tmp/td.json --query 'taskDefinition.taskDefinitionArn' --output text)
-  aws ecs update-service --cluster "$CLUSTER" --service "$service" --task-definition "$new" --query 'service.serviceName' --output text > /dev/null
-  echo "$service: $current -> $new (from ${template##*/})"
+  echo "$service: registered $new (from ${template##*/}; running $current)"
   wanted[$service]=$new
+done
+
+# The migrate task, on the corp portal service's own network so it reaches the database.
+echo "migrating"
+network=$(aws ecs describe-services --cluster "$CLUSTER" --services awzy-corp-portal \
+  --query 'services[0].networkConfiguration' --output json)
+task=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "${wanted[awzy-corp-portal]}" --launch-type FARGATE \
+  --network-configuration "$network" --started-by deploy-corp-migrate \
+  --overrides '{"containerOverrides":[{"name":"corp-portal","command":["migrate"]}]}' \
+  --query 'tasks[0].taskArn' --output text)
+aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$task"
+read -r code reason < <(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task" --output text \
+  --query "tasks[0].[containers[?name=='corp-portal'].exitCode | [0], stoppedReason]")
+if [ "$code" != 0 ]; then
+  echo "::error::The migrate task ${task##*/} failed (exit $code: $reason); nothing was deployed. Its logs are in CloudWatch." >&2
+  exit 1
+fi
+
+for service in "${!wanted[@]}"; do
+  aws ecs update-service --cluster "$CLUSTER" --service "$service" --task-definition "${wanted[$service]}" \
+    --query 'service.serviceName' --output text > /dev/null
 done
 
 echo "waiting for the services to settle"

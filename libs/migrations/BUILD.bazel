@@ -1,0 +1,7 @@
+load("//tools:rust.bzl", "awzy_rust_library")
+
+# Shared by both sides: it holds no data, only the rule for when Postgres migrations run.
+awzy_rust_library(
+    name = "migrations",
+    crate_name = "awzy_migrations",
+)

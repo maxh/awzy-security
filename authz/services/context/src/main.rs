@@ -5,7 +5,7 @@ async fn main() -> anyhow::Result<()> {
     awzy_telemetry::init("awzy-context");
     let url = std::env::var("AWZY_POSTGRES_URL").context("AWZY_POSTGRES_URL is not set")?;
     // `awzy-context migrate`: the release Job (ADR 0083).
-    if awzy_store::migrations::requested() {
+    if awzy_migrations::requested() {
         let pool = sqlx::postgres::PgPoolOptions::new().max_connections(1).connect(&url).await?;
         awzy_context::store::ContextStore::new(pool).migrate().await?;
         tracing::info!("migrations applied");
