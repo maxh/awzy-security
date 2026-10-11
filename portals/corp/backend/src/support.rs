@@ -138,6 +138,15 @@ impl FleetStore {
         Ok(rows.iter().map(session_from_row).collect::<Result<_, _>>()?)
     }
 
+    /// Every install's sessions, newest first: the corp portal's Support page.
+    pub async fn recent_support_sessions(&self, limit: i64) -> Result<Vec<Session>, SupportError> {
+        let rows = sqlx::query(&format!("SELECT {COLUMNS} FROM support_sessions ORDER BY requested_at DESC LIMIT $1"))
+            .bind(limit)
+            .fetch_all(self.pool())
+            .await?;
+        Ok(rows.iter().map(session_from_row).collect::<Result<_, _>>()?)
+    }
+
     pub async fn support_session(&self, id: SupportSessionId) -> Result<Session, SupportError> {
         let row = sqlx::query(&format!("SELECT {COLUMNS} FROM support_sessions WHERE id = $1"))
             .bind(id.uuid())
@@ -329,6 +338,25 @@ impl SupportSession {
     /// Whether the install has the request yet.
     async fn delivered(&self) -> bool {
         self.0.reported_at.is_some()
+    }
+
+    /// The install it's for; None once the install is retired.
+    async fn install(&self, ctx: &Context<'_>) -> Result<Option<crate::installs::Install>> {
+        Ok(store(ctx)?.get(self.0.install).await?.map(crate::installs::Install))
+    }
+}
+
+/// The most sessions the Support page lists.
+const RECENT: i64 = 200;
+
+#[derive(Default)]
+pub struct SupportQuery;
+
+#[Object]
+impl SupportQuery {
+    /// Every install's support sessions, newest first, up to 200.
+    async fn support_sessions(&self, ctx: &Context<'_>) -> Result<Vec<SupportSession>> {
+        Ok(store(ctx)?.recent_support_sessions(RECENT).await?.into_iter().map(SupportSession).collect())
     }
 }
 

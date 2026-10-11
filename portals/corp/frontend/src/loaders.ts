@@ -8,7 +8,10 @@ import type { InstallPageQuery } from "./__generated__/InstallPageQuery.graphql"
 import InstallPageQueryNode from "./__generated__/InstallPageQuery.graphql";
 import type { ReleasesPageQuery } from "./__generated__/ReleasesPageQuery.graphql";
 import ReleasesPageQueryNode from "./__generated__/ReleasesPageQuery.graphql";
+import type { SupportPageQuery } from "./__generated__/SupportPageQuery.graphql";
+import SupportPageQueryNode from "./__generated__/SupportPageQuery.graphql";
 
 export const loadFleetPage = routeQuery<FleetPageQuery>(FleetPageQueryNode);
 export const loadInstallPage = routeQuery<InstallPageQuery>(InstallPageQueryNode);
 export const loadReleasesPage = routeQuery<ReleasesPageQuery>(ReleasesPageQueryNode);
+export const loadSupportPage = routeQuery<SupportPageQuery>(SupportPageQueryNode);

@@ -1,5 +1,5 @@
 import { PageErrorBoundary, PortalShell, ShellNavLink } from "@awzy/ui";
-import { IconPackage, IconServer2 } from "@tabler/icons-react";
+import { IconLifebuoy, IconPackage, IconServer2 } from "@tabler/icons-react";
 import {
   createRootRouteWithContext,
   createRoute,
@@ -13,7 +13,7 @@ import {
 
 import type { RelayRouterContext } from "@awzy/relay/routes";
 
-import { loadFleetPage, loadInstallPage, loadReleasesPage } from "./loaders";
+import { loadFleetPage, loadInstallPage, loadReleasesPage, loadSupportPage } from "./loaders";
 import { Account } from "./session";
 
 function Nav() {
@@ -31,6 +31,12 @@ function Nav() {
         icon={<IconPackage size={18} stroke={1.6} />}
         active={pathname.startsWith("/releases")}
         renderRoot={(props) => <Link to="/releases" {...props} />}
+      />
+      <ShellNavLink
+        label="Support"
+        icon={<IconLifebuoy size={18} stroke={1.6} />}
+        active={pathname.startsWith("/support")}
+        renderRoot={(props) => <Link to="/support" {...props} />}
       />
     </>
   );
@@ -78,10 +84,17 @@ const releasesRoute = createRoute({
   component: lazyRouteComponent(() => import("./ReleasesPage"), "ReleasesPage"),
 });
 
+const supportRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/support",
+  loader: ({ context }) => loadSupportPage(context.environment, {}),
+  component: lazyRouteComponent(() => import("./SupportPage"), "SupportPage"),
+});
+
 export const router = createRouter({
   // Hovering over a link starts the page's code and its query (ADR 0099).
   defaultPreload: "intent",
-  routeTree: rootRoute.addChildren([indexRoute, installsRoute, installRoute, releasesRoute]),
+  routeTree: rootRoute.addChildren([indexRoute, installsRoute, installRoute, releasesRoute, supportRoute]),
   // Set where the router is rendered, from the signed-in environment.
   context: { environment: undefined! },
 });

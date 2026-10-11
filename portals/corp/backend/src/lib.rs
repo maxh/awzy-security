@@ -59,7 +59,7 @@ impl Staff {
 
 #[derive(MergedObject, Default)]
 #[graphql(name = "Query")]
-pub struct CorpPortalQuery(MetaQuery, installs::FleetQuery);
+pub struct CorpPortalQuery(MetaQuery, installs::FleetQuery, support::SupportQuery);
 
 #[derive(MergedObject, Default)]
 #[graphql(name = "Mutation")]
