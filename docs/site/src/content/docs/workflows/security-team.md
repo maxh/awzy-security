@@ -22,8 +22,9 @@ investigations reach.
 4. **Fix the data.** A document marked more sensitive than it is, or shared too widely, is fixed in
    its own system. awzy picks the change up through its connectors.
 5. **Enforce.** When the would-deny rate is low and the ones left are the ones you'd want blocked,
-   switch the install to enforce on the Enforcement page. Switch back the same way if something
-   goes wrong; decisions keep being recorded either way.
+   switch the install to enforce on the Enforcement page, touching your security key to confirm
+   (add one on the Challenges page first). Switch back the same way if something goes wrong;
+   decisions keep being recorded either way.
 
 Leave **automated containments** in monitor for longer, and switch them separately, once the
 "would contain" records you've reviewed are ones you'd have made yourself. See

@@ -31,8 +31,9 @@ attributes include what it inherits from the folders above it, and every attribu
 optional in the schema may be missing, so test it with `has` first.
 
 **Actions** are `read` and `write` on a `Resource`, `call` on an `McpTool`, `view` and
-`administer` on a `PortalArea`, and `approve` for approving someone else's challenged request,
-by a person or an agent you name in a policy.
+`administer` on a `PortalArea`, `switch_enforcement` for switching an enforcement mode (asked
+besides `administer` on `enforcement`, so policy can challenge the switch itself), and `approve`
+for approving someone else's challenged request, by a person or an agent you name in a policy.
 
 ### Sensitivity
 

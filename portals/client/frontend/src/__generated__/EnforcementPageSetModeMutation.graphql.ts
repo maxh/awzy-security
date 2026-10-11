@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<453a85cd80bac798146e0b3f9253d03e>>
+ * @generated SignedSource<<02aa00951524189bce89d352a121a8a0>>
  * @lightSyntaxTransform
  */
 
@@ -19,13 +19,14 @@ export type EnforcementPageSetModeMutation$variables = {
 };
 export type EnforcementPageSetModeMutation$data = {
   readonly setEnforcementMode: {
+    readonly challengeQid: string | null | undefined;
     readonly enforcement: {
       readonly changedAt: string | null | undefined;
       readonly changedBy: {
         readonly label: string;
       } | null | undefined;
       readonly mode: EnforcementMode;
-    };
+    } | null | undefined;
   };
 };
 export type EnforcementPageSetModeMutation = {
@@ -98,6 +99,13 @@ v1 = [
           }
         ],
         "storageKey": null
+      },
+      {
+        "alias": null,
+        "args": null,
+        "kind": "ScalarField",
+        "name": "challengeQid",
+        "storageKey": null
       }
     ],
     "storageKey": null
@@ -121,16 +129,16 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "22f375ef409f1b5cb3dc03070c108045",
+    "cacheID": "10c289993e13974506f6fde744eb10c6",
     "id": null,
     "metadata": {},
     "name": "EnforcementPageSetModeMutation",
     "operationKind": "mutation",
-    "text": "mutation EnforcementPageSetModeMutation(\n  $input: SetEnforcementModeInput!\n) {\n  setEnforcementMode(input: $input) {\n    enforcement {\n      mode\n      changedBy {\n        label\n      }\n      changedAt\n    }\n  }\n}\n"
+    "text": "mutation EnforcementPageSetModeMutation(\n  $input: SetEnforcementModeInput!\n) {\n  setEnforcementMode(input: $input) {\n    enforcement {\n      mode\n      changedBy {\n        label\n      }\n      changedAt\n    }\n    challengeQid\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "32a41175a2fa34eeba4e14c164a3007f";
+(node as any).hash = "426a5b6bc923fbaa72e9775a52f0008e";
 
 export default node;

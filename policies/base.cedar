@@ -57,6 +57,20 @@ permit (
   resource is PortalArea
 );
 
+// Switching between monitor and enforce changes what awzy blocks for everyone. The security team's
+// people switch it, each time with a touch of their security key, so neither a stolen session nor
+// an agent working with someone's credentials can.
+@id("security-team-switches-enforcement")
+permit (
+  principal is Human in Group::"security",
+  action == Action::"switch_enforcement",
+  resource == PortalArea::"enforcement"
+);
+
+@id("enforcement-switches-need-a-key")
+@challenge("verification")
+forbid (principal, action == Action::"switch_enforcement", resource);
+
 // Everyone answers the challenges sent to them in the client portal. Seeing every challenge and
 // containing principals is `administer`, the security team's above.
 @id("humans-answer-their-challenges")

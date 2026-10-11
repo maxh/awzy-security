@@ -10,7 +10,8 @@ them. Both are checked, and the stricter verdict wins, so an agent never gets mo
 them could. See [People, agents, and delegation](/concepts/principals-and-delegation/).
 
 **Action.** What a principal wants to do: `read` and `write` on a resource, `call` on an MCP tool,
-`view` and `administer` on a portal area, and `approve` on someone else's challenged request.
+`view` and `administer` on a portal area, `switch_enforcement` to switch between monitor and
+enforce, and `approve` on someone else's challenged request.
 
 **Actor.** Who did something that awzy records, such as publishing a bundle or lifting a
 containment: an entity, and the person it acted for, if any. See the

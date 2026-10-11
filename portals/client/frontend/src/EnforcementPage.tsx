@@ -2,11 +2,69 @@ import { EmptyState, PageHeader, PageLoader, Section, Stat, StatusBadge } from "
 import { Alert, Button, Group, Modal, SimpleGrid, Stack, Table, Text } from "@mantine/core";
 import { IconHistory, IconShieldCheck } from "@tabler/icons-react";
 import { Suspense, useState } from "react";
-import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
+import { commitMutation, graphql, useLazyLoadQuery, useRelayEnvironment } from "react-relay";
+import type { Environment, GraphQLTaggedNode, MutationParameters } from "relay-runtime";
 
+import type { EnforcementPageBeginVerificationMutation } from "./__generated__/EnforcementPageBeginVerificationMutation.graphql";
+import type { EnforcementPageFinishVerificationMutation } from "./__generated__/EnforcementPageFinishVerificationMutation.graphql";
 import type { EnforcementPageQuery } from "./__generated__/EnforcementPageQuery.graphql";
 import type { EnforcementPageSetModeMutation } from "./__generated__/EnforcementPageSetModeMutation.graphql";
 import { Entity, formatTime, Time } from "./format";
+import { getAssertion, webAuthnMessage } from "./webauthn";
+
+const setMode = graphql`
+  mutation EnforcementPageSetModeMutation($input: SetEnforcementModeInput!) {
+    setEnforcementMode(input: $input) {
+      enforcement {
+        mode
+        changedBy {
+          label
+        }
+        changedAt
+      }
+      challengeQid
+    }
+  }
+`;
+
+const beginVerification = graphql`
+  mutation EnforcementPageBeginVerificationMutation($input: BeginChallengeVerificationInput!) {
+    beginChallengeVerification(input: $input) {
+      ceremonyQid
+      optionsJson
+    }
+  }
+`;
+
+const finishVerification = graphql`
+  mutation EnforcementPageFinishVerificationMutation($input: FinishChallengeVerificationInput!) {
+    finishChallengeVerification(input: $input) {
+      challenge {
+        id
+        status
+      }
+    }
+  }
+`;
+
+function mutate<T extends MutationParameters>(
+  environment: Environment,
+  mutation: GraphQLTaggedNode,
+  variables: T["variables"],
+): Promise<T["response"]> {
+  return new Promise((resolve, reject) =>
+    commitMutation<T>(environment, {
+      mutation,
+      variables,
+      onCompleted: (response, errors) => {
+        const first = errors?.[0];
+        if (first) reject(new Error(first.message));
+        else resolve(response);
+      },
+      onError: reject,
+    }),
+  );
+}
 
 /**
  * Monitor or enforce for the whole install (ADR 0007), and what enforcing would change; and the
@@ -89,19 +147,8 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
     {},
     { fetchKey, fetchPolicy: "store-and-network" },
   );
-  const [commit, isSaving] = useMutation<EnforcementPageSetModeMutation>(graphql`
-    mutation EnforcementPageSetModeMutation($input: SetEnforcementModeInput!) {
-      setEnforcementMode(input: $input) {
-        enforcement {
-          mode
-          changedBy {
-            label
-          }
-          changedAt
-        }
-      }
-    }
-  `);
+  const environment = useRelayEnvironment();
+  const [isSaving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [confirmingContainments, setConfirmingContainments] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,18 +157,37 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
   const enforcing = current.mode === "ENFORCE";
   const target = enforcing ? "MONITOR" : "ENFORCE";
   const containing = containments.mode === "ENFORCE";
-  const switchScope = (scope: "INSTALL" | "AUTOMATED_CONTAINMENTS", mode: "MONITOR" | "ENFORCE") =>
-    commit({
-      variables: { input: { mode, scope } },
-      onCompleted: () => {
-        setConfirming(false);
-        setConfirmingContainments(false);
-        setError(null);
-        onChanged();
-      },
-      onError: (e) => setError(e.message),
-    });
-  const switchMode = () => switchScope("INSTALL", target);
+  // Switching asks for the admin's security key (the base policies): the first try returns the
+  // challenge, a touch of the key passes it, and the second try switches.
+  const switchScope = async (scope: "INSTALL" | "AUTOMATED_CONTAINMENTS", mode: "MONITOR" | "ENFORCE") => {
+    setSaving(true);
+    try {
+      const input = { input: { mode, scope } };
+      let { setEnforcementMode: res } = await mutate<EnforcementPageSetModeMutation>(environment, setMode, input);
+      if (res.challengeQid) {
+        const { beginChallengeVerification: v } = await mutate<EnforcementPageBeginVerificationMutation>(
+          environment,
+          beginVerification,
+          { input: { challengeQid: res.challengeQid } },
+        );
+        const assertion = await getAssertion(v.ceremonyQid, v.optionsJson);
+        await mutate<EnforcementPageFinishVerificationMutation>(environment, finishVerification, {
+          input: { assertion },
+        });
+        ({ setEnforcementMode: res } = await mutate<EnforcementPageSetModeMutation>(environment, setMode, input));
+      }
+      if (!res.enforcement) throw new Error("awzy still asks for a challenge before switching; try again.");
+      setConfirming(false);
+      setConfirmingContainments(false);
+      setError(null);
+      onChanged();
+    } catch (e) {
+      setError(webAuthnMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const switchMode = () => void switchScope("INSTALL", target);
 
   return (
     <Stack gap="lg">
@@ -195,6 +261,9 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
               ? "awzy-reasoner will only record whom it would contain. Containments already in force stay until someone lifts them."
               : "From its next run, awzy-reasoner's containments take effect: a contained person, and every agent acting for them, is denied until someone lifts it."}
           </Text>
+          <Text size="sm" c="dimmed">
+            You&apos;ll touch your security key to confirm. Add one on the Challenges page first if you haven&apos;t.
+          </Text>
           {error && (
             <Alert color="red" title="Not switched">
               {error}
@@ -207,7 +276,7 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
             <Button
               color={containing ? "blue" : "red"}
               loading={isSaving}
-              onClick={() => switchScope("AUTOMATED_CONTAINMENTS", containing ? "MONITOR" : "ENFORCE")}
+              onClick={() => void switchScope("AUTOMATED_CONTAINMENTS", containing ? "MONITOR" : "ENFORCE")}
             >
               {containing ? "Switch to monitor" : "Enforce"}
             </Button>
@@ -290,10 +359,13 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
           <Text size="sm">
             {enforcing
               ? "Enforcement points will allow every request again and stop sending challenges. Decisions are still recorded."
-              : `Enforcement points will start applying verdicts within about 10 seconds. At the last 24 hours' rate, ${percent(
+              : `Enforcement points will start applying verdicts within seconds. At the last 24 hours' rate, ${percent(
                   s.wouldDeny,
                   s.monitored,
                 )} of requests would be denied and ${percent(s.wouldChallenge, s.monitored)} challenged.`}
+          </Text>
+          <Text size="sm" c="dimmed">
+            You&apos;ll touch your security key to confirm. Add one on the Challenges page first if you haven&apos;t.
           </Text>
           {error && (
             <Alert color="red" title="Not switched">

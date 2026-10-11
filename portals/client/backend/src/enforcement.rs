@@ -1,7 +1,7 @@
 //! Enforcement modes (ADR 0007): the install's mode and automated containments' (ADR 0066), their
 //! history, the would-deny rates that tell an admin whether it's safe to enforce, and the switch.
 
-use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject};
+use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject, ID};
 use awzy_authz_proto::{
     authz::v1::EnforcementMode as WireMode,
     policy::v1::{EnforcementSetting, GetEnforcementRequest, ListEnforcementChangesRequest, SetEnforcementRequest},
@@ -11,7 +11,7 @@ use awzy_portal::{Actor, UtcTimestamp};
 use chrono::DateTime;
 
 use crate::{
-    access::{require, PortalAction::*, PortalArea},
+    access::{self, require, PortalAction::*, PortalArea, Surface},
     clickhouse, decisions, policy_client, PolicyClient,
 };
 
@@ -196,7 +196,11 @@ pub struct SetEnforcementModeInput {
 
 #[derive(SimpleObject)]
 pub struct SetEnforcementModePayload {
-    pub enforcement: Setting,
+    /// The scope's setting once switched. Null while a challenge stands in the way.
+    pub enforcement: Option<Setting>,
+    /// The security-key challenge to pass first, when the switch needs one: answer it, then switch
+    /// again within its grant.
+    pub challenge_qid: Option<ID>,
 }
 
 #[derive(Default)]
@@ -204,16 +208,33 @@ pub struct EnforcementMutation;
 
 #[Object]
 impl EnforcementMutation {
-    /// Switches a scope between MONITOR and ENFORCE. PDPs pick up the install's within about 10
-    /// seconds; awzy-reasoner reads automated containments' on its next run.
-    /// TODO: require a security-key challenge for the switch to ENFORCE (awzy-challenge).
+    /// Switches a scope between MONITOR and ENFORCE. Every PDP picks up the install's as it's made;
+    /// awzy-reasoner reads automated containments' on its next run. Policy can ask for a security
+    /// key first, as the base policies do (`switch_enforcement`): then nothing is switched, and the
+    /// payload names the challenge to pass before switching again.
     async fn set_enforcement_mode(
         &self,
         ctx: &Context<'_>,
         input: SetEnforcementModeInput,
     ) -> Result<SetEnforcementModePayload> {
         let viewer = require(ctx, Administer, PortalArea::Enforcement).await?;
+        let services = ctx.data::<crate::Services>()?;
+        let switch = "switch_enforcement";
+        match access::authorize_action(services, &viewer, Surface::Portal, switch, PortalArea::Enforcement).await {
+            Ok(()) => {}
+            Err(access::AccessError::Challenged { challenge_qid: Some(qid), .. }) => {
+                return Ok(SetEnforcementModePayload { enforcement: None, challenge_qid: Some(ID(qid)) })
+            }
+            Err(access::AccessError::Challenged { challenges, decision, .. }) => {
+                return Err(format!(
+                    "switching enforcement needs a {challenges} challenge, and none could be opened: is \
+                     awzy-challenge reachable? (decision {decision})"
+                )
+                .into())
+            }
+            Err(e) => return Err(e.into()),
+        }
         let setting = set(policy_client(ctx)?, input.scope, input.mode.into(), &viewer.actor()).await?;
-        Ok(SetEnforcementModePayload { enforcement: Setting(setting) })
+        Ok(SetEnforcementModePayload { enforcement: Some(Setting(setting)), challenge_qid: None })
     }
 }

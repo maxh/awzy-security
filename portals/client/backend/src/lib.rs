@@ -261,11 +261,19 @@ pub(crate) mod testing {
 
     /// The same PDP's address, for other services under test that call it.
     pub(crate) async fn pdp_endpoint() -> String {
+        pdp_endpoint_with(awzy_pdp::Pdp::with_defaults().unwrap()).await
+    }
+
+    /// A PDP like [`pdp`], under `policies` with the default schema.
+    pub(crate) async fn pdp_with(policies: &str) -> AuthorizerClient<AuthChannel> {
+        let endpoint = pdp_endpoint_with(awzy_pdp::Pdp::new(awzy_pdp::DEFAULT_SCHEMA, policies).unwrap()).await;
+        let channel = Channel::from_shared(endpoint).unwrap().connect().await.unwrap();
+        AuthorizerClient::new(grpc_channel(channel, "awzy-pdp"))
+    }
+
+    async fn pdp_endpoint_with(pdp: awzy_pdp::Pdp) -> String {
         let enforcement = Arc::new(awzy_pdp::Enforcement::fixed(awzy_model::EnforcementMode::Monitor));
-        let app = awzy_pdp::router(
-            awzy_pdp::AppState::new(awzy_pdp::shared(awzy_pdp::Pdp::with_defaults().unwrap()))
-                .with_enforcement(enforcement),
-        );
+        let app = awzy_pdp::router(awzy_pdp::AppState::new(awzy_pdp::shared(pdp)).with_enforcement(enforcement));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });

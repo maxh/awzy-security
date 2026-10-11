@@ -11,8 +11,9 @@ Enforcement page shows how many requests would have been denied or challenged ov
 and the most recent ones.
 
 When the numbers look right, an admin switches the install to **enforce**. Every PDP picks the
-change up as soon as it's made, usually within a second. Switching back is one click, and every switch is
-recorded with who made it.
+change up as soon as it's made, usually within a second. Switching either way takes a touch of the
+admin's security key under the base policies, so a stolen session or an agent working with their
+credentials can't turn enforcement off, or on. Every switch is recorded with who made it.
 
 Before publishing a policy change, a **dry run** replays the last week's requests under the
 current policies and the draft, with today's people and resources, and lists every verdict that
