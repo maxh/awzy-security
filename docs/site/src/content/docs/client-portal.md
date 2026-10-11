@@ -120,6 +120,8 @@ it acts for; with the person's own token, as the person.
 | `explain_decision` | One decision, with the source of the policies behind it |
 | `get_active_policy_bundle` | The policies and schema the PDPs enforce |
 | `list_policy_bundles` | Recent bundles, with their status |
+| `check_access` | Would this principal be allowed this action on this resource now? Decided like a check, but nothing is logged and no challenge is opened |
+| `dry_run_policy` | Replay recent requests under a draft and list every verdict it would change |
 | `propose_policy` | Save a draft, for a person to publish in the portal |
 | `get_enforcement` | The mode, and the last 24 hours' would-deny and would-challenge counts |
 | `list_investigations` | Investigations, by status |

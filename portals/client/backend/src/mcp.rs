@@ -102,6 +102,66 @@ pub struct ExplainDecisionParams {
     pub decision_qid: String,
 }
 
+#[derive(Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct CheckAccessParams {
+    /// `Human` or `ServiceAccount`.
+    pub principal_type: String,
+    /// The principal's ID, as your IdP or the service-account registry names it, e.g. "alice".
+    pub principal_id: String,
+    /// The action, e.g. "read", "write", "call", "view", "administer".
+    pub action: String,
+    /// `Resource`, `McpTool`, or `PortalArea`.
+    pub resource_type: String,
+    /// The resource's ID, e.g. a document's ID, "drive/delete_file", or "policies".
+    pub resource_id: String,
+    /// For a service account acting for a person: that person's ID.
+    pub on_behalf_of_id: Option<String>,
+    /// Whether a person is there to answer a challenge. Defaults as a real check does: yes for a
+    /// person, no for a service account.
+    pub human_present: Option<bool>,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct CheckOut {
+    /// allow, deny, or challenge.
+    pub verdict: String,
+    /// For a challenge: every kind that must be passed.
+    pub challenges: Vec<String>,
+    /// The policies that produced it.
+    pub policies: Vec<String>,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct CheckAccessOut {
+    /// The verdict, the stricter of the principal's and the person's when it acts for one.
+    pub verdict: String,
+    pub challenges: Vec<String>,
+    pub policies: Vec<String>,
+    /// The second check, as the person a service account acts for.
+    pub on_behalf_of: Option<CheckOut>,
+    /// What this is and isn't.
+    pub note: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct DryRunPolicyParams {
+    /// A draft bundle's QID, `policy_bundle_<uuid>`, as `propose_policy` returned it.
+    pub draft_qid: String,
+    /// How many days of recent requests to replay. Defaults to 7, at most 30.
+    pub days: Option<u32>,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct DryRunOut {
+    /// What would change: the verdicts that differ under the draft, how often, and examples.
+    pub dry_run: serde_json::Value,
+}
+
 #[derive(Deserialize, JsonSchema, Default)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct ListPolicyBundlesParams {
@@ -354,6 +414,68 @@ impl ClientPortalMcp {
     }
 
     #[tool(
+        name = "check_access",
+        description = "What-if: would this principal be allowed this action on this resource now, under the active policies, with the people, groups, risk, and resources awzy knows today? Decides like a PDP but records nothing and opens no challenge. Read-only."
+    )]
+    async fn check_access(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(p): Parameters<CheckAccessParams>,
+    ) -> Result<Json<CheckAccessOut>, ErrorData> {
+        self.allow(&parts, PortalAction::View, PortalArea::Policies).await?;
+        let pdp = match policies::active(self.policy()?).await.map_err(internal)? {
+            Some(b) => awzy_pdp::Pdp::new(&b.schema, &b.policies).map_err(internal)?,
+            None => awzy_pdp::Pdp::with_defaults().map_err(internal)?,
+        };
+        let check = awzy_model::Check {
+            principal: awzy_model::EntityRef::new(&p.principal_type, &p.principal_id),
+            action: p.action,
+            resource: awzy_model::EntityRef::new(&p.resource_type, &p.resource_id),
+            context: serde_json::Map::new(),
+            on_behalf_of: p.on_behalf_of_id.map(|h| awzy_model::EntityRef::new(awzy_model::entity_type::HUMAN, h)),
+            human_present: p.human_present,
+            always_enforced: true,
+        };
+        let replayer = crate::dry_run::replayer(&self.services).await.map_err(internal)?;
+        let d = replayer.decide(&pdp, &check, serde_json::json!([])).await.map_err(internal)?;
+        let out = |v: awzy_model::Verdict, policies: Vec<String>| CheckOut {
+            verdict: v.as_str().to_string(),
+            challenges: match v {
+                awzy_model::Verdict::Challenge { challenges } => {
+                    challenges.iter().map(|k| k.as_str().to_string()).collect()
+                }
+                _ => vec![],
+            },
+            policies,
+        };
+        let own = out(d.verdict, d.policies);
+        Ok(Json(CheckAccessOut {
+            verdict: own.verdict,
+            challenges: own.challenges,
+            policies: own.policies,
+            on_behalf_of: d.on_behalf_of.map(|o| out(o.verdict, o.policies)),
+            note: "A what-if under the active bundle: nothing was logged, and no challenge was opened. A real check \
+                   also sees what its enforcement point sends, and the install's mode decides whether it's applied."
+                .into(),
+        }))
+    }
+
+    #[tool(
+        name = "dry_run_policy",
+        description = "Replay recent requests under the active policies and a draft (from propose_policy), with today's people and resources, and report every verdict the draft would change, most frequent first. Read-only."
+    )]
+    async fn dry_run_policy(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(p): Parameters<DryRunPolicyParams>,
+    ) -> Result<Json<DryRunOut>, ErrorData> {
+        self.allow(&parts, PortalAction::View, PortalArea::Policies).await?;
+        self.allow(&parts, PortalAction::View, PortalArea::Decisions).await?;
+        let run = crate::dry_run::run(&self.services, &p.draft_qid, p.days).await.map_err(internal)?;
+        Ok(Json(DryRunOut { dry_run: crate::dry_run::to_json(&run) }))
+    }
+
+    #[tool(
         name = "get_active_policy_bundle",
         description = "The Cedar policies and schema the PDPs currently enforce."
     )]
@@ -593,6 +715,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn check_access_decides_without_recording_or_challenging() {
+        let server = server().await;
+        let ask = |principal_type: &str, principal_id: &str, on_behalf_of_id: Option<&str>| CheckAccessParams {
+            principal_type: principal_type.into(),
+            principal_id: principal_id.into(),
+            action: "view".into(),
+            resource_type: "PortalArea".into(),
+            resource_id: "challenges".into(),
+            on_behalf_of_id: on_behalf_of_id.map(Into::into),
+            human_present: None,
+        };
+        let Json(bob) = server.check_access(alice(), Parameters(ask("Human", "bob", None))).await.unwrap();
+        assert_eq!((bob.verdict.as_str(), bob.policies), ("allow", vec!["humans-answer-their-challenges".to_string()]));
+        let Json(agent) =
+            server.check_access(alice(), Parameters(ask("ServiceAccount", "sales-genie", Some("bob")))).await.unwrap();
+        assert_eq!(agent.verdict, "deny", "no policy lets an agent view challenges");
+        assert_eq!(agent.on_behalf_of.unwrap().verdict, "allow", "bob could");
+
+        // Only those who may view policies may ask.
+        let bob = signed_in(testing::human("bob", "engineering"));
+        let Err(err) = server.check_access(bob, Parameters(ask("Human", "bob", None))).await else {
+            panic!("bob may not view policies")
+        };
+        assert!(err.message.contains("may not view policies"), "{}", err.message);
+    }
+
+    #[tokio::test]
     async fn propose_policy_only_creates_drafts() {
         let mcp = server().await;
         assert!(mcp.get_active_policy_bundle(alice()).await.unwrap().0.bundle.is_none());
@@ -783,6 +932,8 @@ mod tests {
         assert_eq!(
             names,
             [
+                "check_access",
+                "dry_run_policy",
                 "explain_decision",
                 "get_active_policy_bundle",
                 "get_enforcement",
