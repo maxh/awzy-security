@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pushes one release's images to <registry>/awzy/<binary>:<tag>, signs each digest with cosign
-# (ADR 0053), and attaches each one's SBOM (syft, from the OCI layout Bazel built) as a signed
+# (ADR 0053), and attaches each one's SBOM (syft, from the pushed image) as a signed
 # attestation (ADR 0093). Run by .github/workflows/ci.yml on pushes to main, after AWS credentials for
 # the publish role are in the environment.
 #
@@ -96,8 +96,12 @@ push_and_sign() {
   if cosign verify-attestation --type spdxjson --key "$pubkey" --insecure-ignore-tlog "$ref" >/dev/null 2>&1; then
     echo "already has its SBOM"
   else
-    syft scan -q --platform linux/amd64 "oci-dir:$4" -o "spdx-json=$scripts/$1.spdx.json" &&
-      cosign attest --yes --tlog-upload=false --key "$key" --type spdxjson --predicate "$scripts/$1.spdx.json" "$ref"
+    # From the pushed image, so the SBOM describes exactly what was signed. Bazel's local layout
+    # failed here for every image, with -q hiding why.
+    syft scan --platform linux/amd64 "registry:$ref" -o "spdx-json=$scripts/$1.spdx.json" ||
+      { echo "syft failed"; return 1; }
+    cosign attest --yes --tlog-upload=false --key "$key" --type spdxjson --predicate "$scripts/$1.spdx.json" "$ref" ||
+      { echo "cosign attest failed"; return 1; }
   fi
 }
 export -f push_and_sign
