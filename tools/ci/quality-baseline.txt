@@ -2,7 +2,7 @@
 hyper_clients 0
 json_field_index 239
 kube_clients 2
-large_file_excess_lines 2736
-large_files 10
+large_file_excess_lines 2266
+large_files 9
 string_results 11
 stringified_errors 4
