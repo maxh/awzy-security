@@ -25,6 +25,9 @@ resource "helm_release" "kyverno" {
   repository       = "https://kyverno.github.io/kyverno/"
   chart            = "kyverno"
   version          = var.versions.kyverno
+  # Verifying an image loads its SBOM attestation into the policy's context, and a third-party
+  # image's SBOM can pass Kyverno's 2 MiB default (ClickHouse's is 3.6 MB), which refuses the pod.
+  values = [yamlencode({ config = { maxContextSize = "16Mi" } })]
 }
 
 resource "helm_release" "external_secrets" {
