@@ -1,5 +1,5 @@
 #!/bin/sh
-# Re-pins crate_universe's lockfiles (Cargo.lock, MODULE.bazel.lock) after tools/git-merge-lockfile
+# Re-pins crate_universe's lockfiles (Cargo.lock, cargo-bazel-lock.json, MODULE.bazel.lock) after tools/git-merge-lockfile
 # resolved a conflict in them, so the branch builds without a hand merge. Loads BUILD files only;
 # nothing is built.
 #
@@ -17,7 +17,7 @@ cd "$(git rev-parse --show-toplevel)"
 bazel=$(command -v bazel || command -v bazelisk || true)
 if [ -z "$bazel" ]; then
   echo "repin: a lockfile conflict was resolved, but bazel isn't on PATH to re-pin. Run:" >&2
-  echo "  CARGO_BAZEL_REPIN=1 bazel query //... && bazel query //... && git commit -m 'Re-pin crates' Cargo.lock MODULE.bazel.lock" >&2
+  echo "  CARGO_BAZEL_REPIN=1 bazel query //... && bazel query //... && git commit -m 'Re-pin crates' Cargo.lock cargo-bazel-lock.json MODULE.bazel.lock" >&2
   exit 0
 fi
 echo "repin: re-pinning crates after a lockfile conflict..." >&2
@@ -27,20 +27,20 @@ CARGO_BAZEL_REPIN=1 "$bazel" query --noshow_progress --ui_event_filters=-info,-w
 "$bazel" query --noshow_progress --ui_event_filters=-info,-warning //... >/dev/null
 
 if [ "${1:-}" = "--stage" ]; then
-  git add Cargo.lock MODULE.bazel.lock
+  git add Cargo.lock cargo-bazel-lock.json MODULE.bazel.lock
   rm -f "$marker"
   echo "repin: added the re-pinned lockfiles to this commit." >&2
   exit 0
 fi
 
-if git diff --quiet -- Cargo.lock MODULE.bazel.lock && git diff --cached --quiet -- Cargo.lock MODULE.bazel.lock; then
+if git diff --quiet -- Cargo.lock cargo-bazel-lock.json MODULE.bazel.lock && git diff --cached --quiet -- Cargo.lock cargo-bazel-lock.json MODULE.bazel.lock; then
   rm -f "$marker"
   echo "repin: the lockfiles were already current." >&2
   exit 0
 fi
 # A whole commit of what's staged, not a partial one (`git commit -- <paths>`), which git
 # refuses in some merge states.
-git add Cargo.lock MODULE.bazel.lock
+git add Cargo.lock cargo-bazel-lock.json MODULE.bazel.lock
 if AWZY_REPINNED=1 git commit -q -m "Re-pin crates after merging lockfiles"; then
   rm -f "$marker"
   echo "repin: committed the re-pinned lockfiles." >&2

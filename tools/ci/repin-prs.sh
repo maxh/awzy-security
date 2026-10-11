@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Keeps open pull requests mergeable when the only thing in the way is crate_universe's lockfiles
-# (Cargo.lock, MODULE.bazel.lock). MODULE.bazel.lock records a hash of every Cargo.toml, so any
-# two PRs that touch a crate's dependencies conflict there, however unrelated they are.
+# (Cargo.lock, cargo-bazel-lock.json, MODULE.bazel.lock). cargo-bazel-lock.json records a checksum
+# of every Cargo.toml, so any two PRs that touch a crate's dependencies conflict there, however
+# unrelated they are.
 #
 # For each open PR from this repository that conflicts with main: merge main in with the lockfile
 # merge driver (tools/git-merge-lockfile). If that was the only conflict, re-pin, commit, push to
@@ -44,7 +45,7 @@ while read -r number branch; do
       CARGO_BAZEL_REPIN=1 bazel query --noshow_progress --ui_event_filters=-info,-warning //... >/dev/null
       # Again without it, so MODULE.bazel.lock doesn't record CARGO_BAZEL_REPIN=1.
       bazel query --noshow_progress --ui_event_filters=-info,-warning //... >/dev/null
-      git add Cargo.lock MODULE.bazel.lock
+      git add Cargo.lock cargo-bazel-lock.json MODULE.bazel.lock
       git diff --cached --quiet || git commit -q -m "Re-pin crates after merging main"
     fi
     git push -q origin "HEAD:$branch"

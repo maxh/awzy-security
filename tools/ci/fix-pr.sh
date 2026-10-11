@@ -22,13 +22,13 @@ touches() { grep -qE "$1" <<<"$changed"; }
 fixed=()
 paths=() # what the fixes may change; only these are committed
 
-if touches '(^|/)Cargo\.toml$|^Cargo\.lock$|^MODULE\.bazel$'; then
+if touches '(^|/)Cargo\.toml$|^Cargo\.lock$|^cargo-bazel-lock\.json$|^MODULE\.bazel$'; then
   echo "::group::Re-pin crates"
   CARGO_BAZEL_REPIN=1 bazel query --noshow_progress --ui_event_filters=-info,-warning //... >/dev/null
   # Again without it, so MODULE.bazel.lock doesn't record CARGO_BAZEL_REPIN=1.
   bazel query --noshow_progress --ui_event_filters=-info,-warning //... >/dev/null
-  git diff --quiet -- Cargo.lock MODULE.bazel.lock || fixed+=("re-pin crates")
-  paths+=(Cargo.lock MODULE.bazel.lock)
+  git diff --quiet -- Cargo.lock cargo-bazel-lock.json MODULE.bazel.lock || fixed+=("re-pin crates")
+  paths+=(Cargo.lock cargo-bazel-lock.json MODULE.bazel.lock)
   echo "::endgroup::"
 fi
 

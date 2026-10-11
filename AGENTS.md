@@ -47,8 +47,9 @@ bazel build --config=lint //...                    # clippy
 - Rust dependencies are declared once in the root `Cargo.toml` `[workspace.dependencies]` and
   used with `x.workspace = true`. After changing a dependency or adding a crate, run
   `CARGO_BAZEL_REPIN=1 bazel query //... && bazel query //...` to update `Cargo.lock` and
-  `MODULE.bazel.lock` without a build (the second run clears the variable, which
-  `MODULE.bazel.lock` records), and commit both. CI fails on a stale `MODULE.bazel.lock`.
+  `cargo-bazel-lock.json` without a build (the second run checks the result without the
+  variable), and commit both. CI fails on a stale lockfile. The `fix-prs` workflow re-pins a PR
+  that changes a `Cargo.toml`, so none of this needs Bazel locally.
 - First-party Rust deps go in the `deps` of the package's `BUILD.bazel` (`awzy_service` /
   `awzy_rust_library` in `tools/rust.bzl`) as well as its `Cargo.toml`.
 - pnpm runs with `hoist=false`: every TypeScript package declares every dependency it imports.

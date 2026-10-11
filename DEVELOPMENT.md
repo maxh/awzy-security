@@ -124,14 +124,17 @@ frontend (`AWZY_PORTAL_STATIC_DIR`) next to `/graphql`, and the portal image shi
 
 - Rust crates: declare them once in the root `Cargo.toml` `[workspace.dependencies]`, then
   `CARGO_BAZEL_REPIN=1 bazel query //... && bazel query //...` to update `Cargo.lock` and
-  `MODULE.bazel.lock` without building anything. The second run is without the variable:
-  `MODULE.bazel.lock` records it, and CI (`--lockfile_mode=error`) fails on a lockfile committed
-  with it set, or on any other stale lockfile.
+  `cargo-bazel-lock.json` without building anything; the second run checks them without the
+  variable. CI fails on a stale `cargo-bazel-lock.json` (crate_universe's own check) or
+  `MODULE.bazel.lock` (`--lockfile_mode=error`). On a pull request, `fix-prs` re-pins for you.
+  `MODULE.bazel.lock` holds only the Bazel modules and their extensions; crate_universe keeps
+  its resolution in `cargo-bazel-lock.json`, so a `Cargo.toml` change no longer touches it.
 - TypeScript packages: after changing a `package.json`, `pnpm install --lockfile-only` (or
   `bazel run -- @pnpm//:pnpm --dir "$PWD" install --lockfile-only` without pnpm installed)
   updates `pnpm-lock.yaml`; CI's `pnpm install --frozen-lockfile` fails on a stale one.
-- Lockfile conflicts: `MODULE.bazel.lock` records a hash of every `Cargo.toml`, so any two
-  branches that change a crate's dependencies conflict there. Nobody merges them by hand:
+- Lockfile conflicts: `cargo-bazel-lock.json` records a checksum of every `Cargo.toml`, so any
+  two branches that change a crate's dependencies conflict on that line. Nobody merges them by
+  hand:
   - Locally, the merge driver keeps one side and the hooks re-pin and commit after a rebase or
     merge. If it stopped on another conflict, the commit that resolves it re-pins and includes
     the lockfiles (`tools/git-hooks`, installed by `pnpm install`).

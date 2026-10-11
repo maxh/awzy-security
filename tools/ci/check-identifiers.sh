@@ -14,7 +14,7 @@ prefilter='[0-9]{12}|ssoins-|awsapps\.com|install_[0-9a-f]{8}-|@awzysecurity\.co
 uuid='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 allow=$(grep -vE '^\s*(#|$)' tools/ci/identifier-allowlist.txt | paste -sd'|' -)
 # Generated or binary-ish files whose long numbers are hashes and coordinates, not identifiers.
-skip=(':!*.lock' ':!*pnpm-lock.yaml' ':!*.svg' ':!*.png' ':!*/__generated__/*' ':!tools/ci/identifier-allowlist.txt')
+skip=(':!*.lock' ':!cargo-bazel-lock.json' ':!*pnpm-lock.yaml' ':!*.svg' ':!*.png' ':!*/__generated__/*' ':!tools/ci/identifier-allowlist.txt')
 
 # The identifiers in one line. Account IDs are standalone 12-digit tokens, looked for after
 # removing UUIDs, whose last group is 12 digits too. No \b: GNU and BSD grep disagree on it.
