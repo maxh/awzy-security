@@ -10,6 +10,9 @@ rust-project.json
 .terraform/
 *.tfstate
 *.tfstate.*
+# Saved plans hold a copy of the state, with every account ID and ARN in it.
+*.plan
+*.tfplan
 /.dev-certs/
 
 # Per-deployment Terraform inputs (account IDs, buckets, emails): see deployment.env.example.

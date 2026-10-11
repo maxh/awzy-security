@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Fails when something that identifies a real deployment, account, or person is in the
 # repository (keep-deployments-out skill): AWS account IDs and ARNs, sign-in portal URLs, real
-# install QIDs, awzy email addresses. Placeholders are in identifier-allowlist.txt.
+# install QIDs, awzy email addresses. Placeholders are in identifier-allowlist.txt. Binary files,
+# which it can't search, fail unless they're a kind it allows (binary_allowed).
 #
 #   tools/ci/check-identifiers.sh            # every tracked file
 #   tools/ci/check-identifiers.sh --staged   # lines staged for commit (the pre-commit hook)
@@ -36,6 +37,34 @@ findings() {
   done
   return $status
 }
+
+# Binary files can't be searched (git grep skips them), so only these kinds may be committed: a
+# saved Terraform plan, a zip of state with every account ID in it, got in that way (#166).
+binary_allowed='\.(png|jpe?g|gif|ico|webp|woff2?)$|^docs/beyond-zero\.pdf$'
+
+# The binary files among `git ls-files`/staged paths on stdin ("path" per line).
+unreadable() {
+  local path
+  while read -r path; do
+    if [ -n "$path" ] && ! echo "$path" | grep -qE "$binary_allowed"; then echo "$path"; fi
+  done
+}
+
+case "${1:-}" in
+  --staged)
+    # numstat prints "-<TAB>-" for a binary file.
+    binaries=$(git diff --cached --numstat --diff-filter=ACMR | awk -F'\t' '$1=="-" && $2=="-" {print $3}' | unreadable) ;;
+  "")
+    # Regular files (not symlinks) that git grep -I doesn't treat as text, and aren't empty.
+    binaries=$(comm -23 <(git ls-files -s | awk '$1 != "120000" {print $4}' | sort) <(git grep -I -l '' | sort) |
+      while read -r f; do if [ -s "$f" ]; then echo "$f"; fi; done | unreadable) ;;
+  *) binaries="" ;;
+esac
+if [ -n "$binaries" ]; then
+  printf '%s\n' "$binaries" | sed 's/$/: a binary file, which this check can'"'"'t search for identifiers/' >&2
+  echo "Commit text instead, or, for an image or font, a kind tools/ci/check-identifiers.sh allows (binary_allowed)." >&2
+  exit 1
+fi
 
 case "${1:-}" in
   --staged)
