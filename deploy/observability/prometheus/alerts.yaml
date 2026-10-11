@@ -71,6 +71,14 @@ groups:
         annotations:
           summary: "A PDP last synced principals {{ $value | humanizeDuration }} ago (target: attribute changes within 60 s)"
 
+      - alert: AwzyPdpResourceFeedStale
+        expr: awzy_pdp_resource_feed_age_seconds > 60
+        for: 2m
+        labels: { severity: ticket }
+        annotations:
+          summary: "A PDP hasn't heard awzy-context's resource change log for {{ $value | humanizeDuration }}"
+          description: "Cached resources fall back to expiring after 30 s until it recovers."
+
       - alert: AwzyPdpServingStaleResources
         expr: sum(rate(awzy_pdp_resource_lookups_total{served="stale"}[5m])) > 0
         for: 5m

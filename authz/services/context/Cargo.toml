@@ -14,6 +14,7 @@ awzy-classify.workspace = true
 awzy-model.workspace = true
 awzy-service-auth.workspace = true
 awzy-server.workspace = true
+awzy-store.workspace = true
 awzy-telemetry.workspace = true
 chrono.workspace = true
 serde.workspace = true

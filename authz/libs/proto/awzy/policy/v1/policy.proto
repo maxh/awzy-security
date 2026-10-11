@@ -92,6 +92,10 @@ message PublishResponse {
 message GetActiveRequest {
   // The version the caller enforces now; 0 if none.
   int64 known_version = 1;
+  // When the active bundle is `known_version`, wait up to this many seconds (at most 25) for a
+  // new one or a change of enforcement mode before answering `unchanged` (ADR 0077). 0 answers
+  // at once.
+  uint32 wait_seconds = 2;
 }
 
 message GetActiveResponse {

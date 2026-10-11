@@ -8,10 +8,12 @@ async fn main() -> anyhow::Result<()> {
     // the IdP's provisioning settings too.
     let scim_token = std::env::var("AWZY_SCIM_TOKEN").context("AWZY_SCIM_TOKEN is not set")?;
     anyhow::ensure!(scim_token.len() >= 32, "AWZY_SCIM_TOKEN must be at least 32 characters");
-    let pool = sqlx::postgres::PgPoolOptions::new().max_connections(5).connect(&url).await?;
+    let pool = sqlx::postgres::PgPoolOptions::new().max_connections(8).connect(&url).await?;
     let store = awzy_context::store::ContextStore::new(pool);
     // TODO: run migrations from a release Job instead of at startup.
     store.migrate().await?;
+    // Wakes PDPs waiting for principals or resources to change (ADR 0077).
+    tokio::spawn(store.clone().follow_changes());
     // Places new and changed resources in a sensitivity tier (ADR 0047).
     tokio::spawn(awzy_context::classify::run(store.clone(), std::time::Duration::from_secs(5)));
     // Who may call what (ADR 0055); SCIM keeps the IdP's token.

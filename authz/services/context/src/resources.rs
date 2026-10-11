@@ -673,6 +673,36 @@ async fn get_resource_entities(State(store): State<ContextStore>, Path(id): Path
     }
 }
 
+/// `after`: the cursor from the last answer; absent on a caller's first call, which gets the
+/// cursor to start from. `wait`: seconds to wait for a change before answering empty (ADR 0077).
+#[derive(Debug, Default, Deserialize)]
+pub struct ChangesParams {
+    pub after: Option<i64>,
+    pub wait: Option<u64>,
+}
+
+/// The most changes one answer carries; a caller with more to read asks again at once.
+const MAX_CHANGES: i64 = 10_000;
+
+/// Which resources' entities may have changed since `after`, so a PDP drops them from its cache.
+/// `reset` means the log no longer reaches back that far: drop everything.
+async fn resource_changes(State(store): State<ContextStore>, Query(p): Query<ChangesParams>) -> Response {
+    let read = |store: ContextStore| async move { store.resource_changes(p.after, MAX_CHANGES).await };
+    // Taken before reading, so a change committed in between still wakes the wait.
+    let seen = store.resources_changed().current();
+    let mut answer = read(store.clone()).await;
+    if let Ok((_, ids, false)) = &answer {
+        if ids.is_empty() && p.after.is_some() && p.wait.unwrap_or(0) > 0 {
+            store.resources_changed().wait_after(seen, awzy_store::changes::wait_for(p.wait)).await;
+            answer = read(store.clone()).await;
+        }
+    }
+    match answer {
+        Ok((cursor, ids, reset)) => Json(json!({ "cursor": cursor, "ids": ids, "reset": reset })).into_response(),
+        Err(e) => internal(e),
+    }
+}
+
 async fn list_resources(State(store): State<ContextStore>, Query(f): Query<ResourceFilter>) -> Response {
     match store.resources(&f).await {
         Ok(list) => Json(json!({ "resources": list })).into_response(),
@@ -746,6 +776,7 @@ async fn delete_work_item(State(store): State<ContextStore>, Path(id): Path<Stri
 pub fn read_router(store: ContextStore) -> Router {
     Router::new()
         .route("/v1/resources", get(list_resources))
+        .route("/v1/resources/changes", get(resource_changes))
         .route("/v1/resources/{id}", get(get_resource))
         .route("/v1/resources/{id}/entity", get(get_resource_entity))
         .route("/v1/resources/{id}/entities", get(get_resource_entities))
@@ -904,6 +935,36 @@ mod tests {
         let public = resource("public", None, vec![share("anyone", "", "reader"), share("group", "x", "reader")]);
         assert_eq!(entity(&public)["attrs"]["shared_with_everyone"], true);
         assert!(entity(&public)["attrs"].get("owner").is_none(), "no owner, no attribute");
+    }
+
+    #[tokio::test]
+    async fn the_change_log_names_every_resource_whose_entity_may_have_changed() {
+        let Some(store) = test_store().await else { return };
+        let (start, ids, reset) = store.resource_changes(None, 100).await.unwrap();
+        assert!(ids.is_empty() && !reset, "a first call only gets the cursor");
+
+        store.put_resources(&[doc("synthetic:doc:1")]).await.unwrap();
+        let (cursor, ids, _) = store.resource_changes(Some(start), 100).await.unwrap();
+        assert_eq!(ids, ["synthetic:doc:1"]);
+
+        // Work changes the assignees of what it links, before and after.
+        let work = WorkItemInput {
+            id: "synthetic:ticket:1".into(),
+            source: "synthetic".into(),
+            kind: "ticket".into(),
+            title: "Q3 close".into(),
+            state: "open".into(),
+            assignees: vec!["sam".into()],
+            resources: vec!["synthetic:doc:2".into()],
+            attributes: Value::Null,
+        };
+        store.put_work_items(&[work]).await.unwrap();
+        assert!(store.delete_resource("synthetic:doc:1").await.unwrap());
+        let (_, ids, reset) = store.resource_changes(Some(cursor), 100).await.unwrap();
+        assert_eq!((ids, reset), (vec!["synthetic:doc:1".to_string(), "synthetic:doc:2".to_string()], false));
+
+        let (_, _, reset) = store.resource_changes(Some(start - 1_000_000), 100).await.unwrap();
+        assert!(reset || start < 1_000_000, "a cursor the log no longer reaches resets");
     }
 
     #[tokio::test]

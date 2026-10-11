@@ -287,7 +287,7 @@ async fn main() -> anyhow::Result<()> {
     scim.membership(&group, &user, false).await?;
 
     let original = policy
-        .get_active(GetActiveRequest { known_version: 0 })
+        .get_active(GetActiveRequest { known_version: 0, wait_seconds: 0 })
         .await?
         .into_inner()
         .bundle

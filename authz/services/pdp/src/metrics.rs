@@ -92,6 +92,8 @@ pub static RESOURCE_STALE_SERVED: Counter = Counter::new();
 /// were last synced. A sync that finds nothing new still counts: the PDP is as fresh as it can be.
 pub static POLICY_SYNC: LazyLock<LastSuccess> = LazyLock::new(LastSuccess::default);
 pub static PRINCIPALS_SYNC: LazyLock<LastSuccess> = LazyLock::new(LastSuccess::default);
+/// awzy-context's resource change log, which drops changed resources from the cache (ADR 0077).
+pub static RESOURCE_FEED: LazyLock<LastSuccess> = LazyLock::new(LastSuccess::default);
 
 fn render_freshness(out: &mut String) {
     out.push_str("# HELP awzy_pdp_cedar_evaluation_seconds Time inside Cedar for one evaluation.\n");
@@ -106,6 +108,7 @@ fn render_freshness(out: &mut String) {
     }
     POLICY_SYNC.render(out, "awzy_pdp_policy_sync", "syncing the bundle and enforcement mode from awzy-policy");
     PRINCIPALS_SYNC.render(out, "awzy_pdp_principals_sync", "syncing principals from awzy-context");
+    RESOURCE_FEED.render(out, "awzy_pdp_resource_feed", "awzy-context's resource change log");
 }
 
 #[cfg(test)]

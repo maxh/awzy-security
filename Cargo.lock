@@ -797,6 +797,7 @@ dependencies = [
  "awzy-model",
  "awzy-server",
  "awzy-service-auth",
+ "awzy-store",
  "awzy-telemetry",
  "axum",
  "chrono",
@@ -1039,6 +1040,7 @@ dependencies = [
  "awzy-server",
  "awzy-service-auth",
  "awzy-signing",
+ "awzy-store",
  "awzy-telemetry",
  "axum",
  "chrono",
@@ -1189,6 +1191,9 @@ name = "awzy-store"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "sqlx",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

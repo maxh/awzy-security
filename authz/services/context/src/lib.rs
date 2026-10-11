@@ -35,6 +35,9 @@ struct SnapshotParams {
     /// The version the PDP already has.
     #[serde(default)]
     known: Option<i64>,
+    /// Seconds to wait for a newer one before answering unchanged (ADR 0077); at most 25.
+    #[serde(default)]
+    wait: Option<u64>,
 }
 
 /// People and groups as Cedar entities, unless the caller already has this version.
@@ -47,7 +50,13 @@ async fn principals(
         tracing::error!(error = %e, "principals snapshot failed");
         StatusCode::SERVICE_UNAVAILABLE
     };
-    let current = store.version().await.map_err(fail)?;
+    // Taken before reading, so a change committed in between still wakes the wait.
+    let seen = store.principals_changed().current();
+    let mut current = store.version().await.map_err(fail)?;
+    if p.known == Some(current) && p.wait.unwrap_or(0) > 0 {
+        store.principals_changed().wait_after(seen, awzy_store::changes::wait_for(p.wait)).await;
+        current = store.version().await.map_err(fail)?;
+    }
     if p.known == Some(current) {
         return Ok(Json(json!({ "version": current, "unchanged": true })));
     }

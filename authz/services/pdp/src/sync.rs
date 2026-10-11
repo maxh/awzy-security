@@ -28,8 +28,15 @@ pub async fn sync_policies(
 ) {
     let mut client = None;
     loop {
-        match sync_once(&pdp, &enforcement, verifier.as_deref(), &endpoint, &mut client).await {
-            Ok(_) => crate::metrics::POLICY_SYNC.succeeded(),
+        // Wait in awzy-policy for a new bundle or mode once there is one to compare (ADR 0077).
+        let wait = if pdp.load().version() > 0 { WAIT_SECS } else { 0 };
+        match sync_waiting(&pdp, &enforcement, verifier.as_deref(), &endpoint, &mut client, wait).await {
+            Ok(_) => {
+                crate::metrics::POLICY_SYNC.succeeded();
+                if wait > 0 {
+                    continue;
+                }
+            }
             Err(error) => {
                 crate::metrics::POLICY_SYNC.failed();
                 tracing::warn!(%error, %endpoint, "policy sync failed; keeping the current bundle");
@@ -40,13 +47,28 @@ pub async fn sync_policies(
     }
 }
 
-/// One check. Returns true when a new bundle was loaded.
+/// How long awzy-policy holds a request when nothing has changed.
+const WAIT_SECS: u32 = 25;
+
+/// One check, answered at once. Returns true when a new bundle was loaded.
 pub async fn sync_once(
     pdp: &SharedPdp,
     enforcement: &Enforcement,
     verifier: Option<&BundleVerifier>,
     endpoint: &str,
     client: &mut Option<PolicyServiceClient<AuthChannel>>,
+) -> anyhow::Result<bool> {
+    sync_waiting(pdp, enforcement, verifier, endpoint, client, 0).await
+}
+
+/// One check, which awzy-policy holds up to `wait_seconds` for a new bundle or mode.
+pub async fn sync_waiting(
+    pdp: &SharedPdp,
+    enforcement: &Enforcement,
+    verifier: Option<&BundleVerifier>,
+    endpoint: &str,
+    client: &mut Option<PolicyServiceClient<AuthChannel>>,
+    wait_seconds: u32,
 ) -> anyhow::Result<bool> {
     if client.is_none() {
         // With this PDP's service token for awzy-policy (ADR 0055).
@@ -56,7 +78,7 @@ pub async fn sync_once(
     let client = client.as_mut().expect("connected above");
 
     let known_version = pdp.load().version();
-    let res = client.get_active(GetActiveRequest { known_version }).await?.into_inner();
+    let res = client.get_active(GetActiveRequest { known_version, wait_seconds }).await?.into_inner();
     let loaded = match res.bundle.filter(|_| !res.unchanged) {
         Some(bundle) => {
             if let Some(verifier) = verifier {
