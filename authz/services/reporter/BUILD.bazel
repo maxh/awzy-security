@@ -9,6 +9,8 @@ awzy_service(
     visibility = ["//tools:client_side"],
     deps = [
         "//authz/libs/kafka",
+        "//authz/libs/proto",
+        "//authz/libs/service-auth",
         "//libs/heartbeat",
         "//libs/model",
         "//libs/server",
