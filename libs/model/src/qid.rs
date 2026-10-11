@@ -199,4 +199,41 @@ mod tests {
         assert_eq!(json, format!("\"{id}\""));
         assert_eq!(serde_json::from_str::<PolicyBundleId>(&json).unwrap(), id);
     }
+
+    mod properties {
+        use proptest::prelude::*;
+
+        use super::*;
+
+        fn any_uuid() -> impl Strategy<Value = Uuid> {
+            any::<u128>().prop_map(Uuid::from_u128)
+        }
+
+        proptest! {
+            /// Every entity's QIDs say which entity they're of, so no prefix can be mistaken for
+            /// another's (`policy` would collide with `policy_bundle`).
+            #[test]
+            fn every_qid_names_its_own_entity(i in 0..QidEntity::ALL.len(), uuid in any_uuid()) {
+                let entity = QidEntity::ALL[i];
+                prop_assert_eq!(QidEntity::of(&format!("{entity}_{uuid}")), Some(entity));
+            }
+
+            #[test]
+            fn a_typed_qid_round_trips(uuid in any_uuid()) {
+                let id = SecurityKeyId::from_uuid(uuid);
+                prop_assert_eq!(id.to_string().parse::<SecurityKeyId>().ok(), Some(id));
+                prop_assert!(id.to_string().parse::<ChallengeId>().is_err());
+            }
+
+            /// Whatever arrives, parsing answers rather than panicking, and what it accepts
+            /// prints as a QID that parses back to the same ID.
+            #[test]
+            fn parsing_anything_is_total(s in ".*") {
+                if let Ok(id) = s.parse::<DecisionId>() {
+                    prop_assert_eq!(id.to_string().parse::<DecisionId>().ok(), Some(id));
+                }
+                let _ = QidEntity::of(&s);
+            }
+        }
+    }
 }

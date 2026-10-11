@@ -17,3 +17,6 @@ tonic-prost.workspace = true
 [build-dependencies]
 protox.workspace = true
 tonic-prost-build.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

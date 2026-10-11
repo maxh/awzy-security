@@ -558,4 +558,32 @@ mod tests {
         assert_eq!(as_bool(&json!("False")), Some(false));
         assert_eq!(as_bool(&json!("True")), Some(true));
     }
+
+    mod properties {
+        use proptest::prelude::*;
+
+        use super::*;
+
+        proptest! {
+            /// Any value an IdP filters on, quotes escaped as SCIM does, comes back as sent,
+            /// whatever the attribute's and operator's case.
+            #[test]
+            fn an_eq_filter_returns_its_value(value in "[^\\\\]*", upper in any::<bool>()) {
+                let (attr, op) = if upper { ("USERNAME", "EQ") } else { ("userName", "eq") };
+                let filter = format!(r#"{attr} {op} "{}""#, value.replace('"', "\\\""));
+                prop_assert_eq!(eq_filter(&Some(filter), "userName").ok(), Some(Some(value)));
+            }
+
+            #[test]
+            fn a_member_filter_returns_its_id(id in any::<u128>().prop_map(Uuid::from_u128)) {
+                prop_assert_eq!(member_filter(&format!(r#"members[value eq "{id}"]"#)), Some(id));
+            }
+
+            #[test]
+            fn filters_never_panic(s in ".*") {
+                let _ = eq_filter(&Some(s.clone()), "userName");
+                let _ = member_filter(&s);
+            }
+        }
+    }
 }
