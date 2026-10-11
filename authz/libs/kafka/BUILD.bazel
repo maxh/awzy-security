@@ -1,0 +1,8 @@
+load("//tools:rust.bzl", "awzy_rust_library")
+
+# How awzy's services reach Kafka: the brokers, over TLS in installs.
+awzy_rust_library(
+    name = "kafka",
+    crate_name = "awzy_kafka",
+    visibility = ["//tools:client_side"],
+)

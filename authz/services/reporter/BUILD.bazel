@@ -8,6 +8,7 @@ awzy_service(
     binary_name = "awzy-reporter",
     visibility = ["//tools:client_side"],
     deps = [
+        "//authz/libs/kafka",
         "//libs/heartbeat",
         "//libs/model",
         "//libs/server",

@@ -13,7 +13,6 @@ use rskafka::{
     client::{
         error::{Error as KafkaError, ProtocolError},
         partition::{Compression, PartitionClient, UnknownTopicHandling},
-        ClientBuilder,
     },
     record::Record,
 };
@@ -28,8 +27,8 @@ pub struct EventLog {
 
 impl EventLog {
     /// Connects and creates the topic if it does not exist.
-    pub async fn connect_kafka(brokers: Vec<String>, topic: &str) -> anyhow::Result<Self> {
-        let client = ClientBuilder::new(brokers).build().await?;
+    pub async fn connect_kafka(brokers: &awzy_kafka::Brokers, topic: &str) -> anyhow::Result<Self> {
+        let client = brokers.connect().await?;
         let expected = match client.controller_client()?.create_topic(topic, TOPIC_PARTITIONS, 1, 5_000).await {
             Ok(()) => {
                 tracing::info!(topic, "created events topic");
@@ -138,14 +137,14 @@ pub(crate) mod tests {
             eprintln!("skipping: AWZY_TEST_KAFKA_BROKERS is not set");
             return;
         };
-        let brokers: Vec<String> = brokers.split(',').map(str::to_string).collect();
+        let brokers = awzy_kafka::Brokers::plaintext(&brokers);
         let topic = format!("test.events.{}", uuid::Uuid::now_v7().simple());
-        let log = EventLog::connect_kafka(brokers.clone(), &topic).await.unwrap();
+        let log = EventLog::connect_kafka(&brokers, &topic).await.unwrap();
         let events: Vec<EventRecord> = (0..3).map(|_| event("alice")).collect();
         log.send(&events).await.unwrap();
 
         // Acknowledged means readable: no waiting needed.
-        let client = ClientBuilder::new(brokers).build().await.unwrap();
+        let client = brokers.connect().await.unwrap();
         let partition = partition_for(&event("alice"), TOPIC_PARTITIONS as usize) as i32;
         let reader = client.partition_client(topic, partition, UnknownTopicHandling::Retry).await.unwrap();
         let (records, _) = reader.fetch_records(0, 1..1_000_000, 1_000).await.unwrap();
