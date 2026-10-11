@@ -4,9 +4,10 @@
 #
 #   git config core.hooksPath tools/git-hooks
 #
-# Checks the staged content, not the working tree. Clippy and type-aware oxlint need a full
-# build or type information, so they're left to CI (`bazel build --config=lint //...`,
-# `pnpm lint`).
+# Checks the staged content, not the working tree. It never starts Bazel: without a rustfmt to
+# hand it leaves Rust formatting to the fix-prs workflow, which formats a pull request's files
+# (tools/ci/fix-pr.sh). Clippy and type-aware oxlint need a full build or type information, so
+# they're left to CI (`bazel build --config=lint //...`, `pnpm lint`).
 set -eu
 
 root=$(git rev-parse --show-toplevel)
@@ -32,29 +33,28 @@ fi
 # ---- Rust: rustfmt (rustfmt.toml)
 
 rust_files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs')
-if [ -n "$rust_files" ]; then
-  if command -v rustfmt >/dev/null 2>&1; then
-    rustfmt=rustfmt
-  else
-    bazel=$(command -v bazel || command -v bazelisk || true)
-    if [ -z "$bazel" ]; then
-      echo "pre-commit: neither rustfmt nor bazel is on PATH, so Rust formatting can't be checked." >&2
-      echo "Install bazelisk (see DEVELOPMENT.md), or commit with --no-verify." >&2
-      exit 1
-    fi
-    # A script that runs this worktree's toolchain rustfmt without going through Bazel each
-    # time. Rebuilt when the toolchain may have changed or the script stops working.
-    rustfmt="$(cd "$(git rev-parse --git-dir)" && pwd)/awzy-rustfmt.sh"
-    if [ ! -x "$rustfmt" ] || [ MODULE.bazel.lock -nt "$rustfmt" ] || ! "$rustfmt" --version >/dev/null 2>&1; then
-      "$bazel" run --noshow_progress --ui_event_filters=-info \
-        --script_path="$rustfmt" @rules_rust//tools/upstream_wrapper:rustfmt >&2
-    fi
+# rustfmt from PATH, or the script `tools/fmt` leaves that runs the toolchain's rustfmt without
+# Bazel. Neither: fix-prs formats them on the pull request.
+rustfmt=""
+if [ -z "$rust_files" ]; then
+  :
+elif command -v rustfmt >/dev/null 2>&1; then
+  rustfmt=rustfmt
+else
+  script="$(cd "$(git rev-parse --git-dir)" && pwd)/awzy-rustfmt.sh"
+  if [ -x "$script" ] && "$script" --version >/dev/null 2>&1; then
+    rustfmt=$script
   fi
+fi
+if [ -n "$rust_files" ] && [ -z "$rustfmt" ]; then
+  echo "pre-commit: no rustfmt to hand, so Rust formatting isn't checked here; the fix-prs" >&2
+  echo "workflow formats it on the pull request (or run tools/fmt)." >&2
+elif [ -n "$rust_files" ]; then
   # rustfmt --check exits 0 for stdin even when it prints a diff, so compare its output.
   for f in $rust_files; do
     git show ":$f" >"$staged/.rustfmt-input"
     if ! "$rustfmt" --emit stdout --config-path rustfmt.toml <"$staged/.rustfmt-input" 2>/dev/null | cmp -s - "$staged/.rustfmt-input"; then
-      failed="$failed  $f (rustfmt; tools/fmt formats it)
+      failed="$failed  $f (rustfmt; tools/fmt formats it, or fix-prs on the pull request)
 "
     fi
   done

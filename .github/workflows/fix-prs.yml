@@ -1,33 +1,38 @@
-name: schema-prs
+name: fix-prs
 
-# Keeps each pull request's generated GraphQL schemas and Relay artifacts in step with its
-# resolvers and queries (tools/ci/regen-schemas.sh), so a resolver change needs no local Bazel.
+# Makes each pull request's mechanical fixes and pushes them to its branch
+# (tools/ci/fix-pr.sh): re-pinned lockfiles, regenerated GraphQL schemas and Relay artifacts,
+# and rustfmt and oxfmt on the files it changed. So none of them needs Bazel locally.
 # Pull requests from forks are skipped: the workflow token can't push to them.
+# The paths are what tools/ci/fix-pr.sh can fix, so a docs-only PR doesn't set up Bazel.
 on:
   pull_request:
     paths:
+      - "**/*.rs"
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - "MODULE.bazel"
       - "libs/model/**"
       - "libs/portal/**"
-      - "portals/*/backend/**"
-      - "portals/*/frontend/schema.graphql"
-      - "portals/*/frontend/src/**"
+      - "portals/**"
 
-# One run per branch; a newer push replaces a run still waiting.
+# One run per branch; a newer push replaces a run still going.
 concurrency:
-  group: schema-prs-${{ github.head_ref }}
+  group: fix-prs-${{ github.head_ref }}
   cancel-in-progress: true
 
 jobs:
-  regen:
+  fix:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
-      contents: write # push the regenerated files to the PR's branch
+      contents: write # push the fixes to the PR's branch
       actions: write # start the PR's CI, which the workflow token's push doesn't
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
+          fetch-depth: 0 # the merge base with main says what the PR changed
       - uses: ./.github/actions/setup-bazel
         with:
           buildbuddy-api-key: ${{ secrets.AWZY_CORP_BUILDBUDDY_API_KEY }}
@@ -35,7 +40,7 @@ jobs:
         with:
           node-version: 24
       - run: corepack enable
-      - run: tools/ci/regen-schemas.sh
+      - run: tools/ci/fix-pr.sh
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ github.head_ref }}

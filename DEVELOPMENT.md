@@ -43,9 +43,16 @@ A clone that already has one can share it: `cp ../other-clone/.bazelrc.user .`. 
 
 The pre-commit hook refuses a commit whose staged Rust or TypeScript isn't formatted, or whose
 TypeScript fails oxlint's quick rules. It checks the staged content, not the working tree, and
-uses rustfmt from Bazel's toolchain if none is installed. Clippy and type-aware oxlint need a
-full build, so they're left to CI. `tools/fmt` fixes what the hook complains about; skip it once
-with `git commit --no-verify`.
+never starts Bazel: it uses `rustfmt` from PATH, or the copy `tools/fmt` leaves, and otherwise
+skips Rust formatting, which the `fix-prs` workflow does on the pull request. Clippy and
+type-aware oxlint need a full build, so they're left to CI. `tools/fmt` fixes what the hook
+complains about; skip it once with `git commit --no-verify`.
+
+On a pull request, the `fix-prs` workflow (`tools/ci/fix-pr.sh`) makes the mechanical fixes and
+pushes them to the branch as one commit, then starts CI again: it re-pins the lockfiles when a
+`Cargo.toml` or `MODULE.bazel` changed, regenerates the GraphQL schemas and Relay artifacts,
+and runs rustfmt and oxfmt on the files the PR changed. Pull before pushing again. Lint findings
+aren't fixed for you; CI reports them.
 
 If the hook stops a commit:
 
@@ -642,8 +649,8 @@ cd portals/client/frontend && pnpm relay && pnpm dev # https://localhost:5173 (w
 ```
 
 `bazel test` fails if `schema.graphql` or the committed Relay artifacts are stale. On a pull
-request you needn't regenerate them: the `schema-prs` workflow (`tools/ci/regen-schemas.sh`) does,
-pushes them to the branch, and starts CI again.
+request you needn't regenerate them: the `fix-prs` workflow (`tools/ci/fix-pr.sh`) does, pushes
+them to the branch, and starts CI again.
 
 `//portals/client/e2e:signin_test` signs in to the client portal in headless Chrome through the dev
 IdP (code + PKCE), switches users, and checks what the backend sees. It uses the machine's Chrome

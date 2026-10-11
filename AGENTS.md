@@ -50,10 +50,13 @@ bazel build --config=lint //...                    # clippy
 - First-party Rust deps go in the `deps` of the package's `BUILD.bazel` (`awzy_service` /
   `awzy_rust_library` in `tools/rust.bzl`) as well as its `Cargo.toml`.
 - pnpm runs with `hoist=false`: every TypeScript package declares every dependency it imports.
-- GraphQL schemas are generated from the Rust backends. On a pull request, the `schema-prs`
-  workflow regenerates `schema.graphql` and the Relay `__generated__` files and pushes them to the
-  branch, so don't hand-edit them. Locally it's `bazel run
-  //portals/<client|corp>/frontend:update_schema`, then `pnpm relay` in that frontend.
+- GraphQL schemas are generated from the Rust backends. Locally it's `bazel run
+  //portals/<client|corp>/frontend:update_schema`, then `pnpm relay` in that frontend; don't
+  hand-edit them.
+- On a pull request, the `fix-prs` workflow pushes the mechanical fixes to the branch: re-pinned
+  lockfiles, regenerated schemas and Relay `__generated__` files, and rustfmt and oxfmt on the
+  changed files. So none of them needs Bazel locally, and the pre-commit hook never starts it.
+  Pull before pushing again.
 
 ## Conventions
 
