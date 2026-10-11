@@ -3,6 +3,7 @@ import {
   IconAddressBook,
   IconFileCode,
   IconHandStop,
+  IconHeartbeat,
   IconListCheck,
   IconSearch,
   IconShieldCheck,
@@ -23,6 +24,7 @@ import { DirectoryPage } from "./DirectoryPage";
 import { EnforcementPage } from "./EnforcementPage";
 import { InvestigationsPage } from "./InvestigationsPage";
 import { PoliciesPage } from "./PoliciesPage";
+import { StatusPage } from "./StatusPage";
 import { Account } from "./session";
 
 function Nav() {
@@ -65,6 +67,12 @@ function Nav() {
         icon={<IconSearch {...icon} />}
         active={pathname.startsWith("/investigations")}
         renderRoot={(props) => <Link to="/investigations" {...props} />}
+      />
+      <ShellNavLink
+        label="Status"
+        icon={<IconHeartbeat {...icon} />}
+        active={pathname.startsWith("/status")}
+        renderRoot={(props) => <Link to="/status" {...props} />}
       />
     </>
   );
@@ -128,6 +136,12 @@ const investigationsRoute = createRoute({
   component: InvestigationsPage,
 });
 
+const statusRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/status",
+  component: StatusPage,
+});
+
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
     indexRoute,
@@ -137,6 +151,7 @@ export const router = createRouter({
     directoryRoute,
     challengesRoute,
     investigationsRoute,
+    statusRoute,
   ]),
 });
 

@@ -213,6 +213,26 @@ type CloseInvestigationPayload {
 	investigation: Investigation!
 }
 
+type ComponentStatus {
+	name: String!
+	"""
+	It answered that it's ready to serve.
+	"""
+	ready: Boolean!
+	"""
+	The release it runs, when it said.
+	"""
+	version: String
+	"""
+	What's wrong, when it isn't ready: unreachable, not ready yet, or not configured.
+	"""
+	detail: String
+	"""
+	What to check when it isn't ready.
+	"""
+	runbookUrl: String!
+}
+
 input ContainPrincipalInput {
 	principal: EntityRefInput!
 	reason: String!
@@ -953,6 +973,11 @@ type Query {
 	One investigation by its QID.
 	"""
 	investigation(id: ID!): Investigation
+	"""
+	Whether each of awzy's services the portal uses is ready, and the release it runs. For
+	those who may view the enforcement area.
+	"""
+	installStatus: [ComponentStatus!]!
 }
 
 input RegisterServiceAccountInput {
