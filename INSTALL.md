@@ -1,8 +1,10 @@
 # Installing awzy
 
-How to install awzy in your own cloud account. Developing awzy is in
-[DEVELOPMENT.md](DEVELOPMENT.md); why an install looks the way it does is in
+How to install awzy in your own cloud account.
+<!-- repo-only: left out of docs.awzysecurity.com, which shows this file as its install guide -->
+Developing awzy is in [DEVELOPMENT.md](DEVELOPMENT.md); why an install looks the way it does is in
 [docs/plans/deployment-plan.md](docs/plans/deployment-plan.md).
+<!-- /repo-only -->
 
 > **Tested on 2026-10-11** by the example client's install
 > ([deploy/terraform/examples/example-client](deploy/terraform/examples/example-client/README.md)),
@@ -193,17 +195,29 @@ the cluster on it.
   An image from awzy's registry without the signature is refused too
   (`signed-by-awzy-release-key: … no signatures found`); the example install checked that with a
   test tag pushed unsigned, then deleted.
-- **A decision:** port-forward the PDP and ask it something (the request shape is in
-  [DEVELOPMENT.md](DEVELOPMENT.md#pdp)). The PDP takes only callers with a Kubernetes
-  service-account token for its audience, so make one for the backend's account:
+- **A decision:** port-forward the PDP and ask it something, here the
+  [decision API](https://docs.awzysecurity.com/reference/decision-api/)'s example. The PDP takes
+  only callers with a Kubernetes service-account token for its audience, so make one for the
+  backend's account:
   ```sh
   kubectl -n awzy-system port-forward svc/awzy-pdp 8080:8080 &
   token=$(kubectl -n awzy-system create token awzy --audience awzy-pdp --duration 10m)
   curl -s localhost:8080/v1/access/evaluation -H "authorization: Bearer $token" \
-    -H 'content-type: application/json' -d '{…}'
+    -H 'content-type: application/json' -d '{
+    "principal": {"type": "ServiceAccount", "id": "sales-genie"},
+    "on_behalf_of": {"type": "Human", "id": "bob"},
+    "action": "read",
+    "resource": {"type": "Resource", "id": "design-doc"},
+    "context": {"risk_score": 90},
+    "entities": [
+      {"uid": {"type": "Human", "id": "bob"}, "attrs": {}, "parents": [{"type": "Group", "id": "engineering"}]},
+      {"uid": {"type": "ServiceAccount", "id": "sales-genie"}, "parents": [{"type": "Group", "id": "engineering"}],
+       "attrs": {"owner": {"__entity": {"type": "Human", "id": "bob"}}, "ai": true}},
+      {"uid": {"type": "Resource", "id": "design-doc"}, "attrs": {"sensitivity": "internal"}, "parents": []}
+    ]}'
   ```
   The answer has a `decision_…` QID, a verdict, and `"mode":"monitor"`. The verdict can differ
-  from DEVELOPMENT.md's example: once your directory is in awzy-context, the PDP uses what it
+  from the decision API's example: once your directory is in awzy-context, the PDP uses what it
   knows about a principal over the request's inline entities. Every install starts in `monitor`
   mode: decisions are made and recorded, and nothing is blocked until an admin switches a scope
   to enforce.
