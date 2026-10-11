@@ -48,6 +48,10 @@ type DeployedService {
 }
 
 type Install implements Node {
+	"""
+	Support sessions asked for on this install, newest first (ADR 0095).
+	"""
+	supportSessions: [SupportSession!]!
 	id: ID!
 	client: String!
 	"""
@@ -91,10 +95,6 @@ type Install implements Node {
 	The staff member who retired it.
 	"""
 	retiredBy: Actor
-	"""
-	Support sessions asked for on this install, newest first (ADR 0095).
-	"""
-	supportSessions: [SupportSession!]!
 }
 
 type InstallConnection {
@@ -234,7 +234,14 @@ type Mutation {
 	fleet views, and its client and environment can be registered again.
 	"""
 	retireInstall(input: RetireInstallInput!): RetireInstallPayload!
+	"""
+	Asks an install's admins for a support session. It reaches the install with its next
+	heartbeat; they approve or reject it in their client portal.
+	"""
 	requestSupportSession(input: RequestSupportSessionInput!): SupportSession!
+	"""
+	Signs the staff member who asked in to an approved session's client portal.
+	"""
 	signInToSupportSession(id: ID!): SupportSignIn!
 }
 
@@ -342,6 +349,20 @@ enum ReleaseChannel {
 	PINNED
 }
 
+input RequestSupportSessionInput {
+	installId: ID!
+	"""
+	Client portal areas, e.g. "decisions".
+	"""
+	areas: [String!]!
+	reason: String!
+	durationMinutes: Int!
+	"""
+	The client portal's URL, e.g. https://portal.example.com.
+	"""
+	portalUrl: String!
+}
+
 input RetireInstallInput {
 	installQid: ID!
 }
@@ -353,6 +374,41 @@ type RetireInstallPayload {
 type Staff {
 	username: String!
 	name: String!
+}
+
+type SupportSession {
+	id: ID!
+	status: SupportSessionStatus!
+	requestedBy: String!
+	areas: [String!]!
+	reason: String!
+	durationMinutes: Int!
+	portalUrl: String!
+	requestedAt: UtcTimestamp!
+	expiresAt: UtcTimestamp
+	"""
+	Whether the install has the request yet.
+	"""
+	delivered: Boolean!
+}
+
+enum SupportSessionStatus {
+	"""
+	Asked for; the install hasn't decided, or hasn't got it yet.
+	"""
+	REQUESTED
+	APPROVED
+	REJECTED
+	ENDED
+	EXPIRED
+}
+
+type SupportSignIn {
+	"""
+	Opens the client portal signed in to the session. Holds the token: don't share it.
+	"""
+	signInUrl: String!
+	expiresAt: UtcTimestamp!
 }
 
 scalar UtcTimestamp
@@ -373,38 +429,4 @@ directive @skip(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
 schema {
 	query: Query
 	mutation: Mutation
-}
-
-input RequestSupportSessionInput {
-	installId: ID!
-	areas: [String!]!
-	reason: String!
-	durationMinutes: Int!
-	portalUrl: String!
-}
-
-type SupportSession {
-	id: ID!
-	status: SupportSessionStatus!
-	requestedBy: String!
-	areas: [String!]!
-	reason: String!
-	durationMinutes: Int!
-	portalUrl: String!
-	requestedAt: UtcTimestamp!
-	expiresAt: UtcTimestamp
-	delivered: Boolean!
-}
-
-enum SupportSessionStatus {
-	REQUESTED
-	APPROVED
-	REJECTED
-	ENDED
-	EXPIRED
-}
-
-type SupportSignIn {
-	signInUrl: String!
-	expiresAt: UtcTimestamp!
 }
