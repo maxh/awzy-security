@@ -230,7 +230,7 @@ networkPolicies:
   gatewayNamespace: envoy-gateway-system
 
 # DEMO INSTALLS ONLY (ADR 0039): provisions Larkspur Capital, the synthetic company in
-# docs/demo-plan.md, into awzy-context after each sync. Sample data only.
+# docs/plans/demo-plan.md, into awzy-context after each sync. Sample data only.
 demoData:
   enabled: false
   profile: demo # demo (~200 people) or scale (~10,000)

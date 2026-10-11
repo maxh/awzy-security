@@ -2,7 +2,7 @@
 
 How to install awzy in your own cloud account. Developing awzy is in
 [DEVELOPMENT.md](DEVELOPMENT.md); why an install looks the way it does is in
-[docs/deployment-plan.md](docs/deployment-plan.md).
+[docs/plans/deployment-plan.md](docs/plans/deployment-plan.md).
 
 > **Untested as written.** This runbook was written from the Terraform and the chart before the
 > first full install. It will be corrected during the example client's first install

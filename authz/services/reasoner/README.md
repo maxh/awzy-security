@@ -10,7 +10,7 @@ world model. Writes risk attributes and can request containments.
 - Scales with KEDA on Kafka lag
 - Every automated containment is recorded with its evidence
 - Treats all event content as untrusted input; see
-  [Securing awzy itself](../../../docs/platform-plan.md#securing-awzy-itself)
+  [Securing awzy itself](../../../docs/plans/platform-plan.md#securing-awzy-itself)
 
 ## Built so far: risk scores (ADR 0056)
 

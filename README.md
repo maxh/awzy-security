@@ -8,9 +8,10 @@ agents, deployed single-tenant inside each client's cloud (AWS, Google Cloud, or
 Read more:
 
 - [docs.awzysecurity.com](https://docs.awzysecurity.com): the public documentation, built from [`docs/site`](docs/site)
-- [Platform plan](docs/platform-plan.md): the architecture, and what's built so far
-- [Deployment plan](docs/deployment-plan.md): how installs reach a client's cloud
-- [Demo plan](docs/demo-plan.md): the synthetic company the demo and tests run on
+- [Principles](PRINCIPLES.md): the rules the design follows, and the decisions behind them
+- [Platform plan](docs/plans/platform-plan.md): the architecture, and what's built so far
+- [Deployment plan](docs/plans/deployment-plan.md): how installs reach a client's cloud
+- [Demo plan](docs/plans/demo-plan.md): the synthetic company the demo and tests run on
 - [Decision records](docs/adr/): one file per architecture decision
 - [Beyond Zero](docs/beyond-zero.pdf), the paper awzy implements (Valente and Zalewski, ACM 2026, CC BY 4.0)
 

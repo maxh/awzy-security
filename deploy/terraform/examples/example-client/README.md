@@ -1,6 +1,6 @@
 # examples/example-client
 
-Stands in for a client's own infrastructure code (see `docs/deployment-plan.md`). Runs in the
+Stands in for a client's own infrastructure code (see `docs/plans/deployment-plan.md`). Runs in the
 example client's own organization and never references the vendor's accounts or state.
 
 | Module | What |

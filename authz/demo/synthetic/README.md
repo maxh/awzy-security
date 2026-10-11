@@ -1,6 +1,6 @@
 # awzy-synthetic · the demo's synthetic company
 
-Generates Larkspur Capital, the synthetic company in the [demo plan](../../../docs/demo-plan.md)
+Generates Larkspur Capital, the synthetic company in the [demo plan](../../../docs/plans/demo-plan.md)
 ([ADR 0039](../../../docs/adr/0039-synthetic-organization-for-demo-and-tests.md)), and sends it to
 [awzy-context](../../services/context/README.md) the way a client's IdP would. Part of
 [awzy-authz](../../README.md).

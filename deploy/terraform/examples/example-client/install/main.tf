@@ -1,6 +1,6 @@
 # The example client's install of awzy, in its install account. Calls the same
 # aws/install module a real client runs. Costs roughly $250+/month while it exists, so destroy
-# it between test runs (docs/deployment-plan.md, cost control).
+# it between test runs (docs/plans/deployment-plan.md, cost control).
 
 terraform {
   required_version = ">= 1.10"

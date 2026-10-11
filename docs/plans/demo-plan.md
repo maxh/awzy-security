@@ -2,14 +2,14 @@
 
 How awzy is shown and tested without client data: a synthetic company, generated from a
 seed, that flows into awzy through the same paths a real client's data does, with the attacker
-scenarios from the Beyond Zero paper ([beyond-zero.pdf](beyond-zero.pdf)) built in. The decision
-is [ADR 0039](adr/0039-synthetic-organization-for-demo-and-tests.md); where the demo runs is in
-the [deployment plan](deployment-plan.md) and [ADR 0027](adr/0027-demo-and-corp-hostnames.md).
+scenarios from the Beyond Zero paper ([beyond-zero.pdf](../beyond-zero.pdf)) built in. The decision
+is [ADR 0039](../adr/0039-synthetic-organization-for-demo-and-tests.md); where the demo runs is in
+the [deployment plan](deployment-plan.md) and [ADR 0027](../adr/0027-demo-and-corp-hostnames.md).
 
 ## What the demo shows
 
 At `https://demo.awzysecurity.com`, signed in through the demo IdP
-([ADR 0032](adr/0032-dev-idp-for-the-demo-install.md)) as a security admin of the synthetic
+([ADR 0032](../adr/0032-dev-idp-for-the-demo-install.md)) as a security admin of the synthetic
 company:
 
 1. **The directory**: people, teams, contractors, and AI service accounts, provisioned over SCIM.
@@ -51,7 +51,7 @@ benchmarks are reproducible.
 - **SupportBot**: answers customer questions from support articles.
 - **FinanceSummarizer**: an unattended agent with an owner and no human present.
 
-Each is registered in awzy-context with an owner ([ADR 0033](adr/0033-service-account-registry-in-awzy-context.md)).
+Each is registered in awzy-context with an owner ([ADR 0033](../adr/0033-service-account-registry-in-awzy-context.md)).
 
 ### Resources
 
@@ -183,11 +183,11 @@ Each step is usable on its own and shows up in the demo:
 7. **Scenarios with reasoning**: the peer outlier, the foolish administrator, and the rogue
    agent's containment, once awzy-reasoner exists. The foolish administrator runs end to end: awzy-reasoner
    scores his basic questions as elevated risk, and his high-risk operations on `larkspur-admin`
-   ask for his security key ([ADR 0064](adr/0064-unfamiliar-territory-raises-risk-and-high-risk-operations-need-a-key.md)).
+   ask for his security key ([ADR 0064](../adr/0064-unfamiliar-territory-raises-risk-and-high-risk-operations-need-a-key.md)).
    So does the peer outlier: Riley's morning of sixty finance documents scores past 80 against his
-   own days and his team's ([ADR 0056](adr/0056-awzy-scores-principals-risk-and-the-pdp-uses-it.md)), and
+   own days and his team's ([ADR 0056](../adr/0056-awzy-scores-principals-risk-and-the-pdp-uses-it.md)), and
    what he opens next asks for his security key. And the rogue agent ends as the paper's does: Nora's
    morning outside her accounts raises her risk, the plan's owner rejects SalesGenie's request,
    she exports her accounts, and awzy-reasoner contains her, which stops SalesGenie too
-   ([ADR 0066](adr/0066-the-reasoner-contains-people-automatically-in-its-own-mode.md)). Every
+   ([ADR 0066](../adr/0066-the-reasoner-contains-people-automatically-in-its-own-mode.md)). Every
    scenario now runs end to end.

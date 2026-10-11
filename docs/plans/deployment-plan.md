@@ -60,7 +60,7 @@ Everything that crosses between the two organizations is listed here. Anything n
 
 ## Terraform layout
 
-This extends `deploy/terraform/` from the [platform plan](platform-plan.md#getting-into-a-client-account) with a `corp/` tree for the awzy side. A client runs two layers ([ADR 0015](adr/0015-cloud-agnostic-install.md)): `aws/` creates the AWS infrastructure and outputs `install_contract`, and the cloud-agnostic `bootstrap/` installs Argo CD on top of it. The example client is just one caller of both.
+This extends `deploy/terraform/` from the [platform plan](platform-plan.md#getting-into-a-client-account) with a `corp/` tree for the awzy side. A client runs two layers ([ADR 0015](../adr/0015-cloud-agnostic-install.md)): `aws/` creates the AWS infrastructure and outputs `install_contract`, and the cloud-agnostic `bootstrap/` installs Argo CD on top of it. The example client is just one caller of both.
 
 ```
 deploy/terraform/
@@ -86,14 +86,14 @@ The rule that keeps the test honest: `aws/` and `bootstrap/` may take awzy's reg
 ## Steps
 
 These are the plan and its progress. The commands for an install are in
-[INSTALL.md](../INSTALL.md).
+[INSTALL.md](../../INSTALL.md).
 
 ### 1. Create the two accounts
 
 *You, once per account*
 
-1. Before signing up, in Cloudflare: turn on Email Routing for the domain and forward one `aws-<account>@` alias per account to your inbox ([ADR 0018](adr/0018-awzysecurity-domain-and-dns.md)).
-1. Sign up at aws.amazon.com with those addresses as root emails, one per account. Each account needs a payment card. Use "Sign up for AWS (advanced)" if offered. If the account lands in the new projects experience, upgrade to the paid plan and activate advanced features in https://settings.aws.com (Projects, Explore advanced features); without that, Organizations and IAM Identity Center are unavailable ([ADR 0023](adr/0023-aws-organization-as-built.md)).
+1. Before signing up, in Cloudflare: turn on Email Routing for the domain and forward one `aws-<account>@` alias per account to your inbox ([ADR 0018](../adr/0018-awzysecurity-domain-and-dns.md)).
+1. Sign up at aws.amazon.com with those addresses as root emails, one per account. Each account needs a payment card. Use "Sign up for AWS (advanced)" if offered. If the account lands in the new projects experience, upgrade to the paid plan and activate advanced features in https://settings.aws.com (Projects, Explore advanced features); without that, Organizations and IAM Identity Center are unavailable ([ADR 0023](../adr/0023-aws-organization-as-built.md)).
 1. Turn on MFA for the root user, and don't create root access keys.
 1. Open the management account's console from AWS Settings, then in Claude Code run `! aws login --profile awzy-corp --region us-east-2` (and `--profile awzy-example-client`), choosing the management account session.
 1. Create a monthly AWS Budget with email alerts. Activation removes the spend limit, so do this first.
@@ -187,7 +187,7 @@ Dashboards and alert rules live in the repository as code, so every install, inc
 | Attribute freshness | Time from an attribute change to every PDP snapshot | Within the proposed 60 s, or the target is revised |
 | Ingest | Decisions and events per second through Kafka into ClickHouse | 1,500 decisions/s and 3,000 events/s with consumer lag under 60 s |
 | Failure drills | ElastiCache failover, PDP pod loss, ClickHouse down then replay from Kafka, PDP unreachable from the enforcement point | Decisions continue as designed, no decision records are lost, and no allow is replayed for a contained principal |
-| Upgrade under load | `helm upgrade` to the next release, and a node drain, during steady-state load ([ADR 0072](adr/0072-deploys-are-zero-downtime.md)) | Zero failed checks and zero failed tool calls |
+| Upgrade under load | `helm upgrade` to the next release, and a node drain, during steady-state load ([ADR 0072](../adr/0072-deploys-are-zero-downtime.md)) | Zero failed checks and zero failed tool calls |
 
 > **Target load (proposed):** 1,500 checks/s sustained and 5,000/s bursts, sized for 10,000 employees and 500 agents. The reasoning and the full list of targets are in the [demo plan](demo-plan.md#scale-and-performance); revise them with a design partner's numbers.
 

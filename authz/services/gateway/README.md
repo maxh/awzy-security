@@ -20,5 +20,5 @@ account, on-behalf-of person, and task annotations. The MCP proxy is the first e
   contained before the outage: it follows awzy-challenge's containment feed
   (`AWZY_CHALLENGE_ADDR`) and forgets a contained principal's allows as soon as the list names them
 
-What's built so far: [platform plan](../../../docs/platform-plan.md#built-so-far). Running it locally:
+What's built so far: [platform plan](../../../docs/plans/platform-plan.md#built-so-far). Running it locally:
 [DEVELOPMENT.md](../../../DEVELOPMENT.md#mcp-gateway-first-enforcement-point).

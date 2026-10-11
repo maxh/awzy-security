@@ -55,8 +55,8 @@ Never on a real install. Bazel refuses a dependency on these from anywhere else.
 | [service-auth](libs/service-auth/README.md) | Services in an install proving who is calling, with Kubernetes service-account tokens |
 | [signing](libs/signing/README.md) | Signing and verifying policy bundles |
 
-How these fit together for one decision: [Decision path](../docs/platform-plan.md#decision-path).
+How these fit together for one decision: [Decision path](../docs/plans/platform-plan.md#decision-path).
 Which component of the Beyond Zero paper each service implements:
-[Beyond Zero mapping](../docs/platform-plan.md#beyond-zero-mapping). What's built so far:
-[Built so far](../docs/platform-plan.md#built-so-far). Building and running them:
+[Beyond Zero mapping](../docs/plans/platform-plan.md#beyond-zero-mapping). What's built so far:
+[Built so far](../docs/plans/platform-plan.md#built-so-far). Building and running them:
 [DEVELOPMENT.md](../DEVELOPMENT.md).

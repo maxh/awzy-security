@@ -26,7 +26,7 @@ organization would hide every cross-boundary problem.
 - Terraform lives in `deploy/terraform/corp/` (vendor accounts) and `deploy/terraform/aws/`
   (the client module), with `examples/example-client` instantiating the client module.
 
-Deployment plan: [../deployment-plan.md](../deployment-plan.md)
+Deployment plan: [../plans/deployment-plan.md](../plans/deployment-plan.md)
 
 ## Consequences
 
