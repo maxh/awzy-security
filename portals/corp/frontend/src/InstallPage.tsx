@@ -1,4 +1,3 @@
-import { routeQuery } from "@awzy/relay/routes";
 import { EmptyState, PageHeader, PageLoader, Section, Stat, StatusBadge } from "@awzy/ui";
 import { Alert, Button, Group, Modal, Select, SimpleGrid, Stack, Table, Text, TextInput } from "@mantine/core";
 import { IconArchive, IconBox, IconHistory, IconPin } from "@tabler/icons-react";
@@ -8,14 +7,10 @@ import { graphql, type PreloadedQuery, useMutation, usePreloadedQuery } from "re
 
 import type { InstallPageQuery } from "./__generated__/InstallPageQuery.graphql";
 import type { InstallPageReleaseMutation, ReleaseChannel } from "./__generated__/InstallPageReleaseMutation.graphql";
-import InstallPageQueryNode from "./__generated__/InstallPageQuery.graphql";
 import type { InstallPageRetireMutation } from "./__generated__/InstallPageRetireMutation.graphql";
 import { ago, CHANNELS, channelLabel, formatTime, healthOf, shortDigest } from "./format";
 import { InstallCharts } from "./InstallCharts";
 import { SupportSection } from "./SupportSection";
-
-/** Started by the route's loader as navigation begins (ADR 0099). */
-export const loadInstallPage = routeQuery<InstallPageQuery>(InstallPageQueryNode);
 
 /** One install: the deployed units inside it, its numbers, and its upgrade history. */
 const route = getRouteApi("/installs/$installId");

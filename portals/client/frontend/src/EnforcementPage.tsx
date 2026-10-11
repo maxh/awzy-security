@@ -1,4 +1,3 @@
-import { routeQuery } from "@awzy/relay/routes";
 import { EmptyState, PageHeader, PageLoader, Section, Stat, StatusBadge } from "@awzy/ui";
 import { Alert, Button, Group, Modal, SimpleGrid, Stack, Table, Text } from "@mantine/core";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
@@ -7,15 +6,11 @@ import { Suspense, useState } from "react";
 import { graphql, type PreloadedQuery, usePreloadedQuery, useRelayEnvironment } from "react-relay";
 
 import type { EnforcementPageQuery } from "./__generated__/EnforcementPageQuery.graphql";
-import EnforcementPageQueryNode from "./__generated__/EnforcementPageQuery.graphql";
 import type { EnforcementPageSetModeMutation } from "./__generated__/EnforcementPageSetModeMutation.graphql";
 import { Entity, formatTime, Time } from "./format";
 import { OutageFallbackSection } from "./OutageFallbackSection";
 import { mutate, passChallenge } from "./securityKeyChallenge";
 import { webAuthnMessage } from "./webauthn";
-
-/** Started by the route's loader as navigation begins (ADR 0099). */
-export const loadEnforcementPage = routeQuery<EnforcementPageQuery>(EnforcementPageQueryNode);
 
 const setMode = graphql`
   mutation EnforcementPageSetModeMutation($input: SetEnforcementModeInput!) {

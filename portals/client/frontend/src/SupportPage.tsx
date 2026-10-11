@@ -1,4 +1,3 @@
-import { routeQuery } from "@awzy/relay/routes";
 import { EmptyState, PageHeader, PageLoader, Section, StatusBadge, type Tone } from "@awzy/ui";
 import { Alert, Button, Checkbox, Group, Modal, NumberInput, Stack, Table, Text } from "@mantine/core";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
@@ -10,13 +9,9 @@ import type { SupportPageBannerQuery } from "./__generated__/SupportPageBannerQu
 import type { SupportPageDecideMutation } from "./__generated__/SupportPageDecideMutation.graphql";
 import type { SupportPageEndMutation } from "./__generated__/SupportPageEndMutation.graphql";
 import type { SupportPageQuery, SupportSessionStatus } from "./__generated__/SupportPageQuery.graphql";
-import SupportPageQueryNode from "./__generated__/SupportPageQuery.graphql";
 import { formatTime } from "./format";
 import { mutate, passChallenge } from "./securityKeyChallenge";
 import { webAuthnMessage } from "./webauthn";
-
-/** Started by the route's loader as navigation begins (ADR 0099). */
-export const loadSupportPage = routeQuery<SupportPageQuery>(SupportPageQueryNode, "network-only");
 
 const decide = graphql`
   mutation SupportPageDecideMutation($input: DecideSupportSessionInput!) {

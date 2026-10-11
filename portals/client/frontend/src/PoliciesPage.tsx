@@ -1,4 +1,3 @@
-import { routeQuery } from "@awzy/relay/routes";
 import { PageHeader, PageLoader, Section, StatusBadge, type Tone } from "@awzy/ui";
 import { Alert, Button, Drawer, Group, Modal, Stack, Table, Text, Textarea } from "@mantine/core";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
@@ -12,11 +11,7 @@ import type { PoliciesPageCreateDraftMutation } from "./__generated__/PoliciesPa
 import type { PoliciesPagePublishMutation } from "./__generated__/PoliciesPagePublishMutation.graphql";
 import type { PoliciesPageAwzyBotQuery } from "./__generated__/PoliciesPageAwzyBotQuery.graphql";
 import type { PoliciesPageQuery } from "./__generated__/PoliciesPageQuery.graphql";
-import PoliciesPageQueryNode from "./__generated__/PoliciesPageQuery.graphql";
 import { formatTime } from "./format";
-
-/** Started by the route's loader as navigation begins (ADR 0099). */
-export const loadPoliciesPage = routeQuery<PoliciesPageQuery>(PoliciesPageQueryNode);
 
 const STATUS: Record<string, { label: string; tone: Tone }> = {
   ACTIVE: { label: "Active", tone: "success" },

@@ -1,4 +1,3 @@
-import { routeQuery } from "@awzy/relay/routes";
 import { PageHeader } from "@awzy/ui";
 import {
   Alert,
@@ -38,7 +37,6 @@ import type { ChallengesPageDecideMutation } from "./__generated__/ChallengesPag
 import type { ChallengesPageJustifyMutation } from "./__generated__/ChallengesPageJustifyMutation.graphql";
 import type { ChallengesPageLiftMutation } from "./__generated__/ChallengesPageLiftMutation.graphql";
 import type { ChallengesPageQuery } from "./__generated__/ChallengesPageQuery.graphql";
-import ChallengesPageQueryNode from "./__generated__/ChallengesPageQuery.graphql";
 import type { ChallengesPageBeginKeyChangeMutation } from "./__generated__/ChallengesPageBeginKeyChangeMutation.graphql";
 import type { ChallengesPageBeginRegistrationMutation } from "./__generated__/ChallengesPageBeginRegistrationMutation.graphql";
 import type { ChallengesPageChallengeUpdatedSubscription } from "./__generated__/ChallengesPageChallengeUpdatedSubscription.graphql";
@@ -51,9 +49,6 @@ import type { ChallengesPageRemoveKeyMutation } from "./__generated__/Challenges
 import type { ChallengesPageResetKeyMutation } from "./__generated__/ChallengesPageResetKeyMutation.graphql";
 import { entityLabel, formatTime } from "./format";
 import { createCredential, getAssertion, webAuthnAvailable, webAuthnMessage } from "./webauthn";
-
-/** Started by the route's loader as navigation begins (ADR 0099). */
-export const loadChallengesPage = routeQuery<ChallengesPageQuery>(ChallengesPageQueryNode);
 
 /** The challenge a notification linked to (`/challenges?challenge=<qid>`), highlighted. Read as
  * the page renders, since signing in restores the link only after the app loads. */

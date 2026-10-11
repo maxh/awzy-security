@@ -1,4 +1,3 @@
-import { routeQuery } from "@awzy/relay/routes";
 import { EmptyState, PageHeader, PageLoader, Section, StatusBadge, type Tone } from "@awzy/ui";
 import { Anchor, Group, Table, Text } from "@mantine/core";
 import { IconPackage } from "@tabler/icons-react";
@@ -7,11 +6,7 @@ import { Suspense } from "react";
 import { graphql, type PreloadedQuery, usePreloadedQuery } from "react-relay";
 
 import type { ReleasesPageQuery } from "./__generated__/ReleasesPageQuery.graphql";
-import ReleasesPageQueryNode from "./__generated__/ReleasesPageQuery.graphql";
 import { channelLabel, formatTime, healthOf } from "./format";
-
-/** Started by the route's loader as navigation begins (ADR 0099). */
-export const loadReleasesPage = routeQuery<ReleasesPageQuery>(ReleasesPageQueryNode);
 
 /** What each release channel names, and which chart versions are running where: the rollout view. */
 const route = getRouteApi("/releases");

@@ -1,4 +1,3 @@
-import { routeQuery } from "@awzy/relay/routes";
 import { PageHeader, PageLoader, Stat, StatusBadge } from "@awzy/ui";
 import {
   Alert,
@@ -25,11 +24,7 @@ import type { DirectoryPageRegisterMutation } from "./__generated__/DirectoryPag
 import type { DirectoryPageRemoveMutation } from "./__generated__/DirectoryPageRemoveMutation.graphql";
 import type { DirectoryPageServiceAccountsQuery } from "./__generated__/DirectoryPageServiceAccountsQuery.graphql";
 import type { DirectoryPageSummaryQuery } from "./__generated__/DirectoryPageSummaryQuery.graphql";
-import DirectoryPageSummaryQueryNode from "./__generated__/DirectoryPageSummaryQuery.graphql";
 import { formatTime } from "./format";
-
-/** Started by the route's loader as navigation begins (ADR 0099). */
-export const loadDirectoryPageSummary = routeQuery<DirectoryPageSummaryQuery>(DirectoryPageSummaryQueryNode);
 
 const loading = <PageLoader />;
 
