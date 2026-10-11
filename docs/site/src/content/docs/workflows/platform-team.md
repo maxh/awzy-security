@@ -42,6 +42,8 @@ Kyverno admits only images awzy signed. Upgrades roll services without dropping 
 
 ## When things go wrong
 
+- **A service isn't ready:** the client portal's Status page says which, and
+  [Troubleshooting](/guides/troubleshooting/) says what to check for each.
 - **The PDP is unreachable:** awzy-gateway denies calls, except recent allows for low-sensitivity
   tools you chose to let fail open, and never for anyone contained.
 - **A bad policy locks admins out:** an enrolled admin rolls back to an earlier bundle with a

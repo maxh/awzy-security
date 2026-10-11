@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<e651bc1f6506aef7ed45d10a5f0791e4>>
+ * @generated SignedSource<<7a1fbc5bf0589eb04a8522a1df86a363>>
  * @lightSyntaxTransform
  */
 
@@ -14,6 +14,7 @@ export type StatusPageQuery$data = {
     readonly detail: string | null | undefined;
     readonly name: string;
     readonly ready: boolean;
+    readonly runbookUrl: string;
     readonly version: string | null | undefined;
   }>;
 };
@@ -59,6 +60,13 @@ var v0 = [
         "kind": "ScalarField",
         "name": "detail",
         "storageKey": null
+      },
+      {
+        "alias": null,
+        "args": null,
+        "kind": "ScalarField",
+        "name": "runbookUrl",
+        "storageKey": null
       }
     ],
     "storageKey": null
@@ -82,16 +90,16 @@ return {
     "selections": (v0/*:: as any*/)
   },
   "params": {
-    "cacheID": "549ee381ca2041784d7a9be3b861864b",
+    "cacheID": "5a2e58da8a06efc74ab91fea9a244c95",
     "id": null,
     "metadata": {},
     "name": "StatusPageQuery",
     "operationKind": "query",
-    "text": "query StatusPageQuery {\n  installStatus {\n    name\n    ready\n    version\n    detail\n  }\n}\n"
+    "text": "query StatusPageQuery {\n  installStatus {\n    name\n    ready\n    version\n    detail\n    runbookUrl\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "36e8817901f8962dd8aeb7eee126c0fb";
+(node as any).hash = "af205d084df79e3563f37c1f62b311a6";
 
 export default node;

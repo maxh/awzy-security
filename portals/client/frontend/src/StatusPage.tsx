@@ -1,5 +1,5 @@
 import { PageHeader, PageLoader, Section, StatusBadge } from "@awzy/ui";
-import { Button, Group, Table, Text } from "@mantine/core";
+import { Anchor, Button, Group, Table, Text } from "@mantine/core";
 import { Suspense, useState } from "react";
 import { graphql, useLazyLoadQuery } from "react-relay";
 
@@ -30,6 +30,7 @@ function Status({ fetchKey, onRefresh }: { fetchKey: number; onRefresh: () => vo
           ready
           version
           detail
+          runbookUrl
         }
       }
     `,
@@ -73,9 +74,14 @@ function Status({ fetchKey, onRefresh }: { fetchKey: number; onRefresh: () => vo
                 </Text>
               </Table.Td>
               <Table.Td>
-                <Text size="sm" c="dimmed">
-                  {c.detail ?? ""}
-                </Text>
+                {!c.ready && (
+                  <Text size="sm" c="dimmed">
+                    {c.detail}{" "}
+                    <Anchor href={c.runbookUrl} target="_blank" rel="noreferrer" size="sm">
+                      What to check
+                    </Anchor>
+                  </Text>
+                )}
               </Table.Td>
             </Table.Tr>
           ))}
@@ -84,8 +90,8 @@ function Status({ fetchKey, onRefresh }: { fetchKey: number; onRefresh: () => vo
       {down.length > 0 && (
         <Group p="md">
           <Text size="sm" c="dimmed">
-            A service that stays not ready is usually waiting on another: the PDP on awzy-policy and awzy-context,
-            awzy-challenge and awzy-context on Postgres. Your platform team can see more with kubectl.
+            A service that stays not ready is usually waiting on another: the PDP on awzy-policy, awzy-context, and
+            awzy-challenge, and those on Postgres. Your platform team can see more with kubectl.
           </Text>
         </Group>
       )}

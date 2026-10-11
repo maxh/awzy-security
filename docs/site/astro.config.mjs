@@ -42,6 +42,7 @@ export default defineConfig({
           items: [
             "guides/install",
             "guides/upgrading",
+            "guides/troubleshooting",
             "guides/writing-policies",
             "guides/mcp-gateway",
             "guides/sending-events",

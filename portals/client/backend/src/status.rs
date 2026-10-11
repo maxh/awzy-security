@@ -20,6 +20,9 @@ use crate::{
 /// How long the portal waits on each service.
 const TIMEOUT: Duration = Duration::from_secs(3);
 
+/// The docs site's troubleshooting guide, with a section per component.
+const RUNBOOKS: &str = "https://docs.awzysecurity.com/guides/troubleshooting/";
+
 type HttpClient = Client<HttpConnector, Empty<Bytes>>;
 
 /// The services the portal reaches, by the setting that holds each one's address.
@@ -39,6 +42,12 @@ pub struct ComponentStatus {
     pub version: Option<String>,
     /// What's wrong, when it isn't ready: unreachable, not ready yet, or not configured.
     pub detail: Option<String>,
+    /// What to check when it isn't ready.
+    pub runbook_url: String,
+}
+
+fn runbook_url(name: &str) -> String {
+    format!("{RUNBOOKS}#{}", name.to_lowercase())
 }
 
 #[derive(Default)]
@@ -79,6 +88,7 @@ async fn service_status(client: &HttpClient, name: &str, addr: Option<String>) -
         ready,
         version,
         detail,
+        runbook_url: runbook_url(name),
     };
     let Some(addr) = addr.map(|a| a.trim_end_matches('/').to_string()) else {
         return status(false, None, Some("not configured".into()));
@@ -104,6 +114,7 @@ async fn clickhouse_status(clickhouse: Option<&::clickhouse::Client>) -> Compone
         ready,
         version: None,
         detail,
+        runbook_url: runbook_url("ClickHouse"),
     };
     let Some(ch) = clickhouse else { return status(false, Some("not configured".into())) };
     match tokio::time::timeout(TIMEOUT, ch.query("SELECT 1").fetch_one::<u8>()).await {
@@ -142,6 +153,7 @@ mod tests {
         assert!(!gone.ready && gone.detail.unwrap().starts_with("unreachable"));
         let unset = service_status(&client, "awzy-challenge", None).await;
         assert_eq!(unset.detail.as_deref(), Some("not configured"));
+        assert_eq!(unset.runbook_url, "https://docs.awzysecurity.com/guides/troubleshooting/#awzy-challenge");
         assert_eq!(clickhouse_status(None).await.detail.as_deref(), Some("not configured"));
     }
 }
