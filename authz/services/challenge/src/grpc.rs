@@ -486,7 +486,13 @@ impl ChallengeService for Service {
         let human = required(req.human_id, "human_id")?;
         let key = self
             .keys()?
-            .finish_registration(&human, qid(&req.ceremony_qid)?, &req.name, &req.client_data_json, &req.attestation_object)
+            .finish_registration(
+                &human,
+                qid(&req.ceremony_qid)?,
+                &req.name,
+                &req.client_data_json,
+                &req.attestation_object,
+            )
             .await
             .map_err(key_status)?;
         tracing::warn!(key_id = %key.id, human = %human, added_with = ?key.added_with, "security key added");
@@ -499,8 +505,11 @@ impl ChallengeService for Service {
     ) -> Result<Response<RemoveSecurityKeyResponse>, Status> {
         let req = req.into_inner();
         let human = required(req.human_id, "human_id")?;
-        let authorization =
-            req.authorization.map(assertion).transpose()?.ok_or_else(|| Status::invalid_argument("authorization is required"))?;
+        let authorization = req
+            .authorization
+            .map(assertion)
+            .transpose()?
+            .ok_or_else(|| Status::invalid_argument("authorization is required"))?;
         let key = self.keys()?.remove(&human, qid(&req.security_key_qid)?, &authorization).await.map_err(key_status)?;
         tracing::warn!(key_id = %key.id, human = %human, "security key removed");
         Ok(Response::new(RemoveSecurityKeyResponse { key: Some(key_to_wire(key)) }))
@@ -536,7 +545,11 @@ impl ChallengeService for Service {
     ) -> Result<Response<FinishVerificationResponse>, Status> {
         let req = req.into_inner();
         let human = required(req.human_id, "human_id")?;
-        let a = req.assertion.map(assertion).transpose()?.ok_or_else(|| Status::invalid_argument("assertion is required"))?;
+        let a = req
+            .assertion
+            .map(assertion)
+            .transpose()?
+            .ok_or_else(|| Status::invalid_argument("assertion is required"))?;
         let c = self.keys()?.finish_verification(&human, &a).await.map_err(key_status)?;
         tracing::info!(challenge_id = %c.id, human = %human, status = c.status.as_str(), "challenge verified with a security key");
         Ok(Response::new(FinishVerificationResponse { challenge: Some(challenge_to_wire(c)) }))
