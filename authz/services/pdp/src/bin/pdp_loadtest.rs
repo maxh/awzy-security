@@ -3,6 +3,9 @@
 //! delegated (two Cedar evaluations), and prints throughput and latency percentiles.
 //!
 //! Entities are sent inline, as enforcement points do until awzy-context exists.
+//!
+//! In a cluster it runs from the PDP's image and sends the pod's service token for `awzy-pdp`
+//! (ADR 0054), mounted as awzy's workloads mount theirs; without one it sends none.
 
 use std::time::{Duration, Instant};
 
@@ -68,7 +71,8 @@ async fn main() -> anyhow::Result<()> {
     let clients: usize = args.get(2).map(|s| s.parse()).transpose()?.unwrap_or(16);
     let seconds: u64 = args.get(3).map(|s| s.parse()).transpose()?.unwrap_or(10);
 
-    let client = AuthorizerClient::connect(endpoint.clone()).await?;
+    let channel = tonic::transport::Channel::from_shared(endpoint.clone())?.connect().await?;
+    let client = AuthorizerClient::new(awzy_service_auth::grpc_channel(channel, "awzy-pdp"));
     // Warm up connections and the PDP.
     for i in 0..200 {
         client.clone().check(request(i)).await?;
