@@ -131,7 +131,7 @@ impl KubeApi {
             .call("GET", &format!("/apis/batch/v1/namespaces/{namespace}/jobs?labelSelector=awzy.io%2Frepair"), None)
             .await?;
         let mut runs: Vec<RepairRun> = list["items"].as_array().into_iter().flatten().filter_map(run).collect();
-        runs.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+        runs.sort_by_key(|r| std::cmp::Reverse(r.started_at));
         Ok(runs)
     }
 
