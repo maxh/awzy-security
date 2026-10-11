@@ -108,7 +108,7 @@ impl Config {
             source,
             chart_version: std::env::var("AWZY_CHART_VERSION").ok(),
             interval: Duration::from_secs(interval),
-            data: data_metrics::DataConfig::from_env(),
+            data: data_metrics::DataConfig::from_env()?,
         })
     }
 }

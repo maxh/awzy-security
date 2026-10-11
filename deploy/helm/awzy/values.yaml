@@ -32,6 +32,9 @@ postgres:
 
 kafka:
   brokers: "" # comma-separated host:port
+  # Speak TLS to the brokers: awzy's services and ClickHouse's Kafka engine alike. Installs set
+  # it (MSK serves TLS on its own port, so the brokers change with it); the local stack doesn't.
+  tls: false
 
 clickhouse:
   enabled: true

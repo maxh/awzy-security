@@ -25,6 +25,17 @@ spec:
             <select_from_system_db_requires_grant>true</select_from_system_db_requires_grant>
           </access_control_improvements>
         </clickhouse>
+      {{- if .Values.kafka.tls }}
+      # The Kafka engine's librdkafka speaks TLS to the brokers, trusting the image's CA bundle,
+      # which has Amazon's roots for MSK.
+      config.d/awzy-kafka.xml: |
+        <clickhouse>
+          <kafka>
+            <security_protocol>ssl</security_protocol>
+            <ssl_ca_location>/etc/ssl/certs/ca-certificates.crt</ssl_ca_location>
+          </kafka>
+        </clickhouse>
+      {{- end }}
     clusters:
       - name: awzy
         layout: { shardsCount: 1, replicasCount: 1 }
@@ -85,6 +96,7 @@ spec:
             - name: AWZY_CLICKHOUSE_PASSWORD
               valueFrom: { secretKeyRef: { name: {{ $ch.passwordSecret }}, key: password } }
             - { name: AWZY_CLICKHOUSE_KAFKA_BROKERS, value: {{ .Values.kafka.brokers | quote }} }
+            - { name: AWZY_KAFKA_TLS, value: {{ .Values.kafka.tls | toString | quote }} }
             # How many days decisions and events are kept; 0 keeps them all.
             - { name: AWZY_CLICKHOUSE_RETENTION_DAYS, value: {{ $ch.retentionDays | default 0 | quote }} }
             # Optional until bootstrap has made it; without it the reporter's user is left alone.

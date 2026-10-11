@@ -22,6 +22,7 @@ It reads the awzy namespaces' workloads with a Role per namespace, never cluster
   (dict "name" "AWZY_CLICKHOUSE_URL" "value" (printf "http://clickhouse-awzy.%s.svc:8123" .Values.namespaces.data))
   (dict "name" "AWZY_CLICKHOUSE_PASSWORD" "valueFrom" (dict "secretKeyRef" (dict "name" .Values.clickhouse.reporterPasswordSecret "key" "password" "optional" true)))
   (dict "name" "AWZY_KAFKA_BROKERS" "value" .Values.kafka.brokers)
+  (dict "name" "AWZY_KAFKA_TLS" "value" (toString .Values.kafka.tls))
 ) }}
 {{- end }}
 apiVersion: v1

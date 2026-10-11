@@ -71,8 +71,8 @@ resource "aws_rds_cluster_instance" "postgres" {
 }
 
 # --- Kafka: MSK provisioned. Decisions and events are kept 7 days so ClickHouse can replay
-# (ADR 0006). Plaintext is allowed inside the VPC because the PDP's Kafka client (rskafka)
-# doesn't use TLS yet; brokers are reachable only from EKS nodes.
+# (ADR 0006). awzy's services and ClickHouse connect over TLS (install_contract hands them the TLS
+# brokers); brokers are reachable only from EKS nodes.
 
 # MSK runs KRaft only on m5 and m7g brokers, so the small profile keeps t3.small brokers on 3.9,
 # the last line with ZooKeeper: about a fifth of the cost, and awzy needs nothing KRaft adds.
@@ -116,7 +116,8 @@ resource "aws_msk_cluster" "kafka" {
   encryption_info {
     encryption_at_rest_kms_key_arn = aws_kms_key.install.arn
     encryption_in_transit {
-      client_broker = "TLS_PLAINTEXT" # TODO: TLS only, once awzy services speak TLS to Kafka
+      # Plaintext stays open until installs have moved to TLS without a gap; then TLS only.
+      client_broker = "TLS_PLAINTEXT"
       in_cluster    = true
     }
   }

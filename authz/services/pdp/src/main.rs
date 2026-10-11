@@ -52,13 +52,12 @@ async fn main() -> anyhow::Result<()> {
         tokio::spawn(containments.follow());
     }
 
-    match std::env::var("AWZY_KAFKA_BROKERS") {
-        Ok(brokers) => {
+    match awzy_kafka::Brokers::from_env("AWZY_KAFKA_BROKERS")? {
+        Some(brokers) => {
             let topic = std::env::var("AWZY_DECISIONS_TOPIC").unwrap_or_else(|_| DEFAULT_DECISIONS_TOPIC.into());
-            let brokers = brokers.split(',').map(str::to_string).collect();
-            state = state.with_log(DecisionLog::connect_kafka(brokers, &topic).await?);
+            state = state.with_log(DecisionLog::connect_kafka(&brokers, &topic).await?);
         }
-        Err(_) => tracing::warn!("AWZY_KAFKA_BROKERS is not set; decisions are not logged"),
+        None => tracing::warn!("AWZY_KAFKA_BROKERS is not set; decisions are not logged"),
     }
 
     awzy_server::metrics::register(state.metrics.clone());

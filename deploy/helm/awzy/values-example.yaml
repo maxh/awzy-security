@@ -1,7 +1,7 @@
 # Only for `helm lint` / `helm template` in CI; real values come from bootstrap.
 image: { registry: 123456789012.dkr.ecr.us-east-2.amazonaws.com/awzy, tag: "0000000" }
 postgres: { host: awzy.cluster-example.us-east-2.rds.amazonaws.com, secretRef: "arn:aws:secretsmanager:us-east-2:123456789012:secret:rds!cluster-example" }
-kafka: { brokers: "b-1.awzy.example.kafka.us-east-2.amazonaws.com:9092,b-2.awzy.example.kafka.us-east-2.amazonaws.com:9092" }
+kafka: { brokers: "b-1.awzy.example.kafka.us-east-2.amazonaws.com:9094,b-2.awzy.example.kafka.us-east-2.amazonaws.com:9094", tls: true }
 clientPortal: { hostname: demo.awzysecurity.com, auth: { issuer: "https://idp.example.com", jwksUrl: "https://idp.example.com/.well-known/jwks.json" } }
 reporter: { installId: install_00000000-0000-7000-8000-000000000000 }
 mcpGateway: { enabled: true, hostname: mcp.example.com, upstreams: [{ name: drive, url: "http://drive-mcp.tools.svc:8080/mcp" }] }

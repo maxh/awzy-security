@@ -5,7 +5,7 @@ variable "install_contract" {
     region       = string
     size_profile = string
     postgres     = object({ host = string, port = number, database = string, secret_arn = string })
-    kafka        = object({ bootstrap_brokers = string })
+    kafka        = object({ bootstrap_brokers = string, tls = optional(bool, false) })
     storage_class = object({
       name        = string
       provisioner = string

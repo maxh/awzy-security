@@ -5,6 +5,7 @@ awzy_service(
     crate_name = "awzy_intake",
     binary_name = "awzy-intake",
     deps = [
+        "//authz/libs/kafka",
         "//libs/model",
         "//libs/server",
         "//libs/telemetry",
