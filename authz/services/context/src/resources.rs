@@ -431,14 +431,21 @@ impl ContextStore {
     }
 
     /// Resources never classified, or changed since, oldest change first (ADR 0047).
-    pub async fn resources_to_classify(&self, limit: i64) -> Result<Vec<Resource>, sqlx::Error> {
+    /// Claims up to `limit` resources to classify, locked for `conn`'s transaction. Rows another
+    /// replica has claimed are skipped, so replicas share the queue instead of each doing all of it.
+    pub async fn claim_resources_to_classify(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        limit: i64,
+    ) -> Result<Vec<Resource>, sqlx::Error> {
         sqlx::query(&format!(
             "SELECT {RESOURCE_COLUMNS} FROM resources
              WHERE classified_at IS NULL OR classified_at < updated_at
-             ORDER BY updated_at LIMIT $1"
+             ORDER BY updated_at LIMIT $1
+             FOR UPDATE SKIP LOCKED"
         ))
         .bind(limit)
-        .fetch_all(self.pool())
+        .fetch_all(conn)
         .await?
         .iter()
         .map(resource_from_row)
@@ -449,6 +456,7 @@ impl ContextStore {
     /// the resource stays queued and is classified again.
     pub async fn set_classification(
         &self,
+        conn: &mut sqlx::PgConnection,
         r: &Resource,
         result: Option<&awzy_classify::Classification>,
     ) -> Result<(), sqlx::Error> {
@@ -466,7 +474,7 @@ impl ContextStore {
         .bind(result.map(|c| c.source.as_str()))
         .bind(reason)
         .bind(r.updated_at)
-        .execute(self.pool())
+        .execute(conn)
         .await?;
         Ok(())
     }
