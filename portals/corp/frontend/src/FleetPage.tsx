@@ -144,97 +144,97 @@ function Fleet({
       <>
         {dialog}
         <EmptyState
-        icon={<IconServer2 size={22} />}
-        title="No installs yet"
-        description="Register an install to get its ID and reporting token, then put both in the install's reporter settings."
-        action={
-          <Button leftSection={<IconPlus size={16} />} onClick={onRegister}>
-            Register install
-          </Button>
-        }
-      />
+          icon={<IconServer2 size={22} />}
+          title="No installs yet"
+          description="Register an install to get its ID and reporting token, then put both in the install's reporter settings."
+          action={
+            <Button leftSection={<IconPlus size={16} />} onClick={onRegister}>
+              Register install
+            </Button>
+          }
+        />
       </>
     );
   }
   return (
     <>
-    {dialog}
-    <Table.ScrollContainer minWidth={900}>
-      <Table style={{ whiteSpace: "nowrap" }}>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Install</Table.Th>
-            <Table.Th>Health</Table.Th>
-            <Table.Th>Cloud</Table.Th>
-            <Table.Th>Channel</Table.Th>
-            <Table.Th>Version</Table.Th>
-            <Table.Th>Services</Table.Th>
-            <Table.Th ta="right">PDP p99</Table.Th>
-            <Table.Th ta="right">Decisions/s</Table.Th>
-            <Table.Th>Last seen</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {installs.map((i) => {
-            const health = healthOf(i.health);
-            const healthy = i.services.filter((s) => s.healthy).length;
-            return (
-              <Table.Tr key={i.id}>
-                <Table.Td>
-                  <Anchor
-                    fw={600}
-                    underline="hover"
-                    renderRoot={(props) => <Link to="/installs/$installId" params={{ installId: i.id }} {...props} />}
-                  >
-                    {i.client}
-                  </Anchor>
-                  <Text size="xs" c="dimmed">
-                    {i.environment}
-                  </Text>
-                </Table.Td>
-                <Table.Td>
-                  <StatusBadge tone={health.tone}>{health.label}</StatusBadge>
-                </Table.Td>
-                <Table.Td>
-                  <Text size="sm">{i.cloud.toUpperCase()}</Text>
-                  <Text size="xs" c="dimmed">
-                    {i.region}
-                  </Text>
-                </Table.Td>
-                <Table.Td>{channelLabel(i.channel, i.pinnedVersion)}</Table.Td>
-                <Table.Td ff="monospace" fz="xs">
-                  <Figure>{i.chartVersion ?? null}</Figure>
-                </Table.Td>
-                <Table.Td>
-                  <Figure>{i.services.length > 0 ? `${healthy}/${i.services.length} ready` : null}</Figure>
-                </Table.Td>
-                <Table.Td ta="right">
-                  <Figure>{i.metrics?.pdpP99Ms != null ? `${i.metrics.pdpP99Ms.toFixed(1)} ms` : null}</Figure>
-                </Table.Td>
-                <Table.Td ta="right">
-                  <Figure>
-                    {i.metrics?.decisionsPerSecond != null ? i.metrics.decisionsPerSecond.toLocaleString() : null}
-                  </Figure>
-                </Table.Td>
-                <Table.Td>
-                  {i.lastSeenAt ? (
-                    <Tooltip label={formatTime(i.lastSeenAt)}>
-                      <Text size="sm" span>
-                        {ago(i.lastSeenAt)}
-                      </Text>
-                    </Tooltip>
-                  ) : (
-                    <Text size="sm" c="dimmed" span>
-                      Never
+      {dialog}
+      <Table.ScrollContainer minWidth={900}>
+        <Table style={{ whiteSpace: "nowrap" }}>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Install</Table.Th>
+              <Table.Th>Health</Table.Th>
+              <Table.Th>Cloud</Table.Th>
+              <Table.Th>Channel</Table.Th>
+              <Table.Th>Version</Table.Th>
+              <Table.Th>Services</Table.Th>
+              <Table.Th ta="right">PDP p99</Table.Th>
+              <Table.Th ta="right">Decisions/s</Table.Th>
+              <Table.Th>Last seen</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {installs.map((i) => {
+              const health = healthOf(i.health);
+              const healthy = i.services.filter((s) => s.healthy).length;
+              return (
+                <Table.Tr key={i.id}>
+                  <Table.Td>
+                    <Anchor
+                      fw={600}
+                      underline="hover"
+                      renderRoot={(props) => <Link to="/installs/$installId" params={{ installId: i.id }} {...props} />}
+                    >
+                      {i.client}
+                    </Anchor>
+                    <Text size="xs" c="dimmed">
+                      {i.environment}
                     </Text>
-                  )}
-                </Table.Td>
-              </Table.Tr>
-            );
-          })}
-        </Table.Tbody>
-      </Table>
-    </Table.ScrollContainer>
+                  </Table.Td>
+                  <Table.Td>
+                    <StatusBadge tone={health.tone}>{health.label}</StatusBadge>
+                  </Table.Td>
+                  <Table.Td>
+                    <Text size="sm">{i.cloud.toUpperCase()}</Text>
+                    <Text size="xs" c="dimmed">
+                      {i.region}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>{channelLabel(i.channel, i.pinnedVersion)}</Table.Td>
+                  <Table.Td ff="monospace" fz="xs">
+                    <Figure>{i.chartVersion ?? null}</Figure>
+                  </Table.Td>
+                  <Table.Td>
+                    <Figure>{i.services.length > 0 ? `${healthy}/${i.services.length} ready` : null}</Figure>
+                  </Table.Td>
+                  <Table.Td ta="right">
+                    <Figure>{i.metrics?.pdpP99Ms != null ? `${i.metrics.pdpP99Ms.toFixed(1)} ms` : null}</Figure>
+                  </Table.Td>
+                  <Table.Td ta="right">
+                    <Figure>
+                      {i.metrics?.decisionsPerSecond != null ? i.metrics.decisionsPerSecond.toLocaleString() : null}
+                    </Figure>
+                  </Table.Td>
+                  <Table.Td>
+                    {i.lastSeenAt ? (
+                      <Tooltip label={formatTime(i.lastSeenAt)}>
+                        <Text size="sm" span>
+                          {ago(i.lastSeenAt)}
+                        </Text>
+                      </Tooltip>
+                    ) : (
+                      <Text size="sm" c="dimmed" span>
+                        Never
+                      </Text>
+                    )}
+                  </Table.Td>
+                </Table.Tr>
+              );
+            })}
+          </Table.Tbody>
+        </Table>
+      </Table.ScrollContainer>
     </>
   );
 }
@@ -361,7 +361,9 @@ function RegisterInstall({
                 value={environment}
                 onChange={setEnvironment}
                 description={taken.length > 0 ? `Already registered: ${taken.join(", ")}` : undefined}
-                error={taken.includes(environment.trim()) ? `${client.trim()} already has ${environment.trim()}` : undefined}
+                error={
+                  taken.includes(environment.trim()) ? `${client.trim()} already has ${environment.trim()}` : undefined
+                }
                 required
               />
             </Group>

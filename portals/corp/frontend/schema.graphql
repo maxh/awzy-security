@@ -31,6 +31,14 @@ type ChannelVersion {
 	changedAt: UtcTimestamp!
 }
 
+"""
+A cloud awzy installs in, and its regions.
+"""
+type CloudRegions {
+	cloud: String!
+	regions: [String!]!
+}
+
 type DeployedService {
 	"""
 	e.g. awzy-pdp.
@@ -357,6 +365,10 @@ type Query {
 	Refetches any object by its ID.
 	"""
 	node(id: ID!): Node
+	"""
+	The regions an install can be registered in, per cloud; the first of each is the default.
+	"""
+	cloudRegions: [CloudRegions!]!
 	"""
 	Every registered install, in registration order.
 	"""
