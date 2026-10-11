@@ -12,6 +12,7 @@ pub mod classify;
 pub mod connector_settings;
 #[cfg(test)]
 mod contract_tests;
+mod invalid;
 pub mod investigations;
 pub mod resources;
 pub mod risk;
@@ -32,6 +33,8 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 use store::{ContextStore, ServiceAccountInput, StoreError};
+
+pub use invalid::Invalid;
 
 #[derive(Deserialize)]
 struct SnapshotParams {

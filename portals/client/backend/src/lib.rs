@@ -294,7 +294,10 @@ async fn graphql_get(
         GraphQLWebSocket::new(socket, schema, protocol)
             .on_connection_init(move |params| async move {
                 let authorization = params["authorization"].as_str();
-                let viewer = auth.viewer(authorization).await.map_err(async_graphql::Error::new)?;
+                let viewer = auth
+                    .viewer(authorization)
+                    .await
+                    .map_err(|e| awzy_portal::ErrorCode::Unauthenticated.error(e.to_string()))?;
                 let mut data = async_graphql::Data::default();
                 data.insert(viewer);
                 Ok(data)

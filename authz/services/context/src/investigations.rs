@@ -17,7 +17,7 @@ use sqlx::{postgres::PgRow, Row};
 
 use awzy_model::{entity_type, EntityRef, InvestigationId};
 
-use crate::store::ContextStore;
+use crate::{store::ContextStore, Invalid};
 
 const VERDICTS: &[&str] = &["malicious", "suspicious", "benign", "inconclusive"];
 const CONTAINMENTS: &[&str] = &["none", "propose", "recommend"];
@@ -51,9 +51,9 @@ pub struct InvestigationInput {
 }
 
 impl InvestigationInput {
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), Invalid> {
         if ![entity_type::HUMAN, entity_type::SERVICE_ACCOUNT].contains(&self.principal.kind.as_str()) {
-            return Err(format!("{}: only people and service accounts are investigated", self.principal.kind));
+            return Err(format!("{}: only people and service accounts are investigated", self.principal.kind).into());
         }
         if self.principal.id.trim().is_empty() || self.principal.id.len() > 256 {
             return Err("principal.id is 1 to 256 characters".into());
@@ -260,7 +260,7 @@ fn unavailable(e: sqlx::Error) -> Response {
 
 async fn put(State(store): State<ContextStore>, Json(input): Json<InvestigationInput>) -> Response {
     if let Err(e) = input.validate() {
-        return (StatusCode::BAD_REQUEST, e).into_response();
+        return e.into_response();
     }
     match store.put_investigation(&input).await {
         Ok(i) => (StatusCode::CREATED, Json(json!({ "investigation": i }))).into_response(),

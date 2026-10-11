@@ -399,12 +399,12 @@ impl Auth {
 impl Auth {
     /// The viewer a bearer token (`Bearer …`) names, if it's valid. For the middleware below,
     /// and for a GraphQL WebSocket, whose token comes in its first message instead.
-    pub async fn viewer(&self, authorization: Option<&str>) -> Result<Viewer, String> {
+    pub async fn viewer(&self, authorization: Option<&str>) -> Result<Viewer, SignInError> {
         let registry: &dyn awzy_identity::ServiceAccounts =
             if self.0.defer_registry { &awzy_identity::DeferToPdp } else { &self.0.service_accounts };
         if let (Some(support), Some(token)) = (&self.0.support, authorization.and_then(|a| a.strip_prefix("Bearer "))) {
             if crate::support::SupportSignIn::claims_it(token) {
-                return support.viewer(token).await;
+                return Ok(support.viewer(token).await?);
             }
         }
         self.0
@@ -412,8 +412,17 @@ impl Auth {
             .principal(authorization, registry)
             .await
             .map(|a| Viewer(Arc::new(a), None))
-            .map_err(|e| e.to_string())
+            .map_err(SignInError::from)
     }
+}
+
+/// Why a bearer token signs no one in. Answered as 401.
+#[derive(Debug, thiserror::Error)]
+pub enum SignInError {
+    #[error(transparent)]
+    Token(#[from] awzy_identity::IdentityError),
+    #[error(transparent)]
+    Support(#[from] crate::support::SupportRefused),
 }
 
 /// Middleware: a valid bearer token, or 401. Puts the [`Viewer`] in the request's extensions.
@@ -429,7 +438,7 @@ pub async fn require_viewer(State(auth): State<Auth>, mut req: Request, next: Ne
             if let Some(url) = auth.metadata_url() {
                 challenge.push_str(&format!(r#", resource_metadata="{url}""#));
             }
-            let mut res = (StatusCode::UNAUTHORIZED, e).into_response();
+            let mut res = (StatusCode::UNAUTHORIZED, e.to_string()).into_response();
             if let Ok(v) = HeaderValue::from_str(&challenge) {
                 res.headers_mut().insert(header::WWW_AUTHENTICATE, v);
             }

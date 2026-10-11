@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 
 use awzy_model::{entity_type, EntityRef};
 
-use crate::store::ContextStore;
+use crate::{store::ContextStore, Invalid};
 
 /// The most scores one request may carry.
 pub const MAX_BATCH: usize = 10_000;
@@ -29,22 +29,22 @@ pub struct RiskInput {
 }
 
 impl RiskInput {
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), Invalid> {
         if ![entity_type::HUMAN, entity_type::SERVICE_ACCOUNT].contains(&self.principal.kind.as_str()) {
-            return Err(format!("{}: only people and service accounts have risk scores", self.principal.kind));
+            return Err(format!("{}: only people and service accounts have risk scores", self.principal.kind).into());
         }
         if self.principal.id.trim().is_empty() || self.principal.id.len() > 256 {
             return Err("principal.id is 1 to 256 characters".into());
         }
         if !(0..=100).contains(&self.score) {
-            return Err(format!("{}: score is 0 to 100, not {}", self.principal.id, self.score));
+            return Err(format!("{}: score is 0 to 100, not {}", self.principal.id, self.score).into());
         }
         if let Some(a) = self.automation {
             if self.principal.kind != entity_type::HUMAN {
-                return Err(format!("{}: only people have automation scores", self.principal.id));
+                return Err(format!("{}: only people have automation scores", self.principal.id).into());
             }
             if !(0..=100).contains(&a) {
-                return Err(format!("{}: automation is 0 to 100, not {a}", self.principal.id));
+                return Err(format!("{}: automation is 0 to 100, not {a}", self.principal.id).into());
             }
         }
         Ok(())
@@ -106,7 +106,7 @@ async fn put_risk(State(store): State<ContextStore>, Json(batch): Json<RiskBatch
         return (StatusCode::BAD_REQUEST, format!("at most {MAX_BATCH} scores per request")).into_response();
     }
     if let Some(e) = batch.scores.iter().find_map(|r| r.validate().err()) {
-        return (StatusCode::BAD_REQUEST, e).into_response();
+        return e.into_response();
     }
     match store.put_risk(&batch.scores).await {
         Ok(n) => Json(json!({ "written": n })).into_response(),
