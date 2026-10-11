@@ -3,10 +3,17 @@ import { PageHeader, PageLoader, Section, StatusBadge } from "@awzy/ui";
 import { Alert, Anchor, Button, Code, Group, ScrollArea, Stack, Table, Text } from "@mantine/core";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { Suspense, useState } from "react";
-import { fetchQuery, graphql, type PreloadedQuery, usePreloadedQuery, useRelayEnvironment } from "react-relay";
+import {
+  fetchQuery,
+  graphql,
+  type PreloadedQuery,
+  useFragment,
+  usePreloadedQuery,
+  useRelayEnvironment,
+} from "react-relay";
 
 import { prettyJson, Time } from "./format";
-import type { StatusPageExportQuery } from "./__generated__/StatusPageExportQuery.graphql";
+import type { StatusPage_heartbeatExport$key } from "./__generated__/StatusPage_heartbeatExport.graphql";
 import type { StatusPageDiagnosticsQuery } from "./__generated__/StatusPageDiagnosticsQuery.graphql";
 import type { StatusPageQuery } from "./__generated__/StatusPageQuery.graphql";
 import StatusPageQueryNode from "./__generated__/StatusPageQuery.graphql";
@@ -44,6 +51,9 @@ function Status({ queryRef, onRefresh }: { queryRef: PreloadedQuery<StatusPageQu
           version
           detail
           runbookUrl
+        }
+        heartbeatExport {
+          ...StatusPage_heartbeatExport
         }
       }
     `,
@@ -109,9 +119,7 @@ function Status({ queryRef, onRefresh }: { queryRef: PreloadedQuery<StatusPageQu
           </Group>
         )}
       </Section>
-      <Suspense fallback={<PageLoader />}>
-        <HeartbeatExport fetchKey={fetchKey} />
-      </Suspense>
+      <HeartbeatExport heartbeatExport={data.heartbeatExport} />
       {data.canGenerateDiagnostics && <Diagnostics />}
     </>
   );
@@ -121,23 +129,20 @@ function Status({ queryRef, onRefresh }: { queryRef: PreloadedQuery<StatusPageQu
  * What leaves the install for awzy: the heartbeat, whether it's on, and the last one exactly as
  * sent. Its fields are fixed (service health and aggregate metrics), never client data.
  */
-function HeartbeatExport({ fetchKey }: { fetchKey: number }) {
-  const { heartbeatExport: e } = useLazyLoadQuery<StatusPageExportQuery>(
+function HeartbeatExport({ heartbeatExport }: { heartbeatExport: StatusPage_heartbeatExport$key }) {
+  const e = useFragment(
     graphql`
-      query StatusPageExportQuery {
-        heartbeatExport {
-          enabled
-          corpUrl
-          intervalSecs
-          sentAt
-          delivered
-          error
-          heartbeat
-        }
+      fragment StatusPage_heartbeatExport on HeartbeatExport {
+        enabled
+        corpUrl
+        intervalSecs
+        sentAt
+        delivered
+        error
+        heartbeat
       }
     `,
-    {},
-    { fetchKey, fetchPolicy: "network-only" },
+    heartbeatExport,
   );
   if (!e.enabled) {
     return (
