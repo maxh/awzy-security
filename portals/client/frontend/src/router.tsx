@@ -1,25 +1,6 @@
-import { PageErrorBoundary, PortalShell, ShellNavLink } from "@awzy/ui";
-import {
-  IconAddressBook,
-  IconFileCode,
-  IconHandStop,
-  IconHeartbeat,
-  IconLifebuoy,
-  IconListCheck,
-  IconPlugConnected,
-  IconSearch,
-  IconShieldCheck,
-  IconUserSearch,
-} from "@tabler/icons-react";
-import {
-  createRootRouteWithContext,
-  createRoute,
-  createRouter,
-  Link,
-  Outlet,
-  redirect,
-  useRouterState,
-} from "@tanstack/react-router";
+import { PageErrorBoundary, PortalShell } from "@awzy/ui";
+import { Suspense } from "react";
+import { createRootRouteWithContext, createRoute, createRouter, Outlet, useRouterState } from "@tanstack/react-router";
 import type { RelayRouterContext } from "@awzy/relay/routes";
 
 import { ChallengesPage, loadChallengesPage } from "./ChallengesPage";
@@ -32,82 +13,23 @@ import { LookupPage } from "./LookupPage";
 import { loadPoliciesPage, PoliciesPage } from "./PoliciesPage";
 import { loadStatusPage, StatusPage } from "./StatusPage";
 import { loadSupportPage, SupportBanner, SupportPage } from "./SupportPage";
+import { Home, loadNav, Nav } from "./Nav";
 import { Account } from "./session";
-
-function Nav() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const icon = { size: 18, stroke: 1.6 };
-  return (
-    <>
-      <ShellNavLink
-        label="Decisions"
-        icon={<IconListCheck {...icon} />}
-        active={pathname.startsWith("/decisions")}
-        renderRoot={(props) => <Link to="/decisions" {...props} />}
-      />
-      <ShellNavLink
-        label="Policies"
-        icon={<IconFileCode {...icon} />}
-        active={pathname.startsWith("/policies")}
-        renderRoot={(props) => <Link to="/policies" {...props} />}
-      />
-      <ShellNavLink
-        label="Enforcement"
-        icon={<IconShieldCheck {...icon} />}
-        active={pathname.startsWith("/enforcement")}
-        renderRoot={(props) => <Link to="/enforcement" {...props} />}
-      />
-      <ShellNavLink
-        label="Directory"
-        icon={<IconAddressBook {...icon} />}
-        active={pathname.startsWith("/directory")}
-        renderRoot={(props) => <Link to="/directory" {...props} />}
-      />
-      <ShellNavLink
-        label="Challenges"
-        icon={<IconHandStop {...icon} />}
-        active={pathname.startsWith("/challenges")}
-        renderRoot={(props) => <Link to="/challenges" {...props} />}
-      />
-      <ShellNavLink
-        label="Investigations"
-        icon={<IconSearch {...icon} />}
-        active={pathname.startsWith("/investigations")}
-        renderRoot={(props) => <Link to="/investigations" {...props} />}
-      />
-      <ShellNavLink
-        label="Look up"
-        icon={<IconUserSearch {...icon} />}
-        active={pathname.startsWith("/lookup")}
-        renderRoot={(props) => <Link to="/lookup" {...props} />}
-      />
-      <ShellNavLink
-        label="Connectors"
-        icon={<IconPlugConnected {...icon} />}
-        active={pathname.startsWith("/connectors")}
-        renderRoot={(props) => <Link to="/connectors" {...props} />}
-      />
-      <ShellNavLink
-        label="Status"
-        icon={<IconHeartbeat {...icon} />}
-        active={pathname.startsWith("/status")}
-        renderRoot={(props) => <Link to="/status" {...props} />}
-      />
-      <ShellNavLink
-        label="Support"
-        icon={<IconLifebuoy {...icon} />}
-        active={pathname.startsWith("/support")}
-        renderRoot={(props) => <Link to="/support" {...props} />}
-      />
-    </>
-  );
-}
 
 function Root() {
   // A page that fails to load shows its error inside the shell; navigating away starts fresh.
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
-    <PortalShell product="Client portal" audience="client" nav={<Nav />} account={<Account />}>
+    <PortalShell
+      product="Client portal"
+      audience="client"
+      nav={
+        <Suspense fallback={null}>
+          <Nav />
+        </Suspense>
+      }
+      account={<Account />}
+    >
       <SupportBanner />
       <PageErrorBoundary key={pathname}>
         <Outlet />
@@ -116,16 +38,19 @@ function Root() {
   );
 }
 
-const rootRoute = createRootRouteWithContext<RelayRouterContext>()({ component: Root });
+const rootRoute = createRootRouteWithContext<RelayRouterContext>()({
+  // What the viewer may view, once per sign-in: the nav and `/` follow it.
+  loader: ({ context }) => loadNav(context.environment, {}),
+  staleTime: Infinity,
+  component: Root,
+});
 
 // A page's main query starts in its route's loader, as navigation begins (ADR 0099). Queries a
 // page runs on input (a search, a filter, a tab) stay in the page.
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  beforeLoad: () => {
-    throw redirect({ to: "/decisions" });
-  },
+  component: Home,
 });
 
 const decisionsRoute = createRoute({
