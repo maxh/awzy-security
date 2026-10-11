@@ -1,7 +1,7 @@
+load("@aspect_rules_js//js:defs.bzl", "js_test")
 load("@bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
 load("@bazel_lib//lib:write_source_files.bzl", "write_source_files")
 load("@npm//:defs.bzl", "npm_link_all_packages")
-load("@npm//portals/corp/frontend:relay-compiler/package_json.bzl", relay_bin = "bin")
 load("@npm//portals/corp/frontend:typescript/package_json.bzl", tsc_bin = "bin")
 load("@npm//portals/corp/frontend:vite/package_json.bzl", vite_bin = "bin")
 
@@ -38,13 +38,14 @@ write_source_files(
     files = {"schema.graphql": "//portals/corp/backend:schema_sdl"},
 )
 
-# Checks that the committed __generated__ Relay artifacts match the queries and schema.
-relay_bin.relay_compiler_test(
+# Checks that the committed __generated__ Relay artifacts and persisted_queries.json match the
+# queries and schema.
+js_test(
     name = "relay_test",
     size = "small",
-    args = ["--validate"],
     chdir = package_name(),
-    data = SRCS,
+    data = SRCS + [":node_modules/relay-compiler"],
+    entry_point = "//portals/common/relay:validate",
 )
 
 tsc_bin.tsc_test(
