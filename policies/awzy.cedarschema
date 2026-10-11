@@ -99,6 +99,14 @@ action view, administer appliesTo {
   context: RequestContext,
 };
 
+// Switching an enforcement mode, either way, on top of `administer` on the enforcement area:
+// asked only when someone switches, so policy can challenge the switch itself.
+action switch_enforcement appliesTo {
+  principal: [Human, ServiceAccount],
+  resource: [PortalArea],
+  context: RequestContext,
+};
+
 // Approving someone else's challenged request for this resource (awzy-challenge). awzy-challenge
 // asks the PDP before recording an approval, and never accepts one from the person asking or the
 // person an agent acts for. A service account, such as an overseer agent, approves only where a

@@ -410,10 +410,32 @@ pub(crate) mod tests {
         let mode = run("{ enforcement { mode changedBy { id } } }".into()).await;
         assert_eq!(mode["enforcement"]["mode"], "MONITOR", "a new install starts in monitor");
         assert!(mode["enforcement"]["changedBy"].is_null());
-        let switched =
-            run("mutation { setEnforcementMode(input: { mode: ENFORCE }) { enforcement { mode changedBy { id } } } }"
-                .into())
+        // The base policies ask for a security key to switch, and this PDP has no awzy-challenge to
+        // open one: nothing switches.
+        let res = schema
+            .execute(
+                async_graphql::Request::new(
+                    "mutation { setEnforcementMode(input: { mode: ENFORCE }) { enforcement { mode } } }",
+                )
+                .data(testing::human("alice", "security")),
+            )
             .await;
+        assert!(res.errors[0].message.contains("needs a verification challenge"), "{:?}", res.errors);
+        assert_eq!(run("{ enforcement { mode } }".into()).await["enforcement"]["mode"], "MONITOR");
+        // Under a bundle that doesn't ask, alice switches it.
+        let ask = "@id(\"enforcement-switches-need-a-key\")\n@challenge(\"verification\")\n\
+                   forbid (principal, action == Action::\"switch_enforcement\", resource);\n";
+        assert!(awzy_pdp::DEFAULT_POLICIES.contains(ask));
+        let unasked = crate::schema_with(Services {
+            pdp: Some(testing::pdp_with(&awzy_pdp::DEFAULT_POLICIES.replace(ask, "")).await),
+            ..schema.data::<Services>().unwrap().clone()
+        });
+        let switched = testing::run(
+            &unasked,
+            &alice,
+            "mutation { setEnforcementMode(input: { mode: ENFORCE }) { enforcement { mode changedBy { id } } } }",
+        )
+        .await;
         assert_eq!(switched["setEnforcementMode"]["enforcement"]["mode"], "ENFORCE");
         let history = run("{ enforcement { mode } enforcementHistory { mode changedBy { type id } } }".into()).await;
         assert_eq!(history["enforcement"]["mode"], "ENFORCE");

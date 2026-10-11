@@ -57,7 +57,8 @@ replaced.
 Whether awzy enforces its verdicts or only records them. See
 [Monitor, then enforce](/concepts/monitor-and-enforce/).
 
-- **Mode:** monitor or enforce for the install, with who switched it and when.
+- **Mode:** monitor or enforce for the install, with who switched it and when. Switching takes a
+  touch of your security key.
 - **What enforcing would change:** over the last 24 hours, how many decisions there were, how
   many would have been denied or challenged, and how many were. The most recent would-denies are
   listed, so you can check them before you switch.

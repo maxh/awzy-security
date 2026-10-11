@@ -589,9 +589,10 @@ type Mutation {
 	"""
 	publishPolicyBundle(input: PublishPolicyBundleInput!): PublishPolicyBundlePayload!
 	"""
-	Switches a scope between MONITOR and ENFORCE. PDPs pick up the install's within about 10
-	seconds; awzy-reasoner reads automated containments' on its next run.
-	TODO: require a security-key challenge for the switch to ENFORCE (awzy-challenge).
+	Switches a scope between MONITOR and ENFORCE. Every PDP picks up the install's as it's made;
+	awzy-reasoner reads automated containments' on its next run. Policy can ask for a security
+	key first, as the base policies do (`switch_enforcement`): then nothing is switched, and the
+	payload names the challenge to pass before switching again.
 	"""
 	setEnforcementMode(input: SetEnforcementModeInput!): SetEnforcementModePayload!
 	"""
@@ -1033,7 +1034,15 @@ input SetEnforcementModeInput {
 }
 
 type SetEnforcementModePayload {
-	enforcement: EnforcementSetting!
+	"""
+	The scope's setting once switched. Null while a challenge stands in the way.
+	"""
+	enforcement: EnforcementSetting
+	"""
+	The security-key challenge to pass first, when the switch needs one: answer it, then switch
+	again within its grant.
+	"""
+	challengeQid: ID
 }
 
 scalar UtcTimestamp

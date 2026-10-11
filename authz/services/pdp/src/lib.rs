@@ -762,6 +762,22 @@ mod tests {
     }
 
     #[test]
+    fn switching_enforcement_takes_the_security_teams_key_and_never_an_agent() {
+        let pdp = Pdp::with_defaults().unwrap();
+        let switch = |check: Check| Check {
+            action: "switch_enforcement".into(),
+            resource: EntityRef::new("PortalArea", "enforcement"),
+            ..check
+        };
+        let verify = Verdict::Challenge { challenges: Challenges::of(ChallengeKind::Verification) };
+        let d = pdp.decide(&switch(read("alice", "", 10)), &fixtures(&pdp)).unwrap();
+        assert_eq!((d.verdict, d.policies), (verify, vec!["enforcement-switches-need-a-key".to_string()]));
+        assert_eq!(pdp.decide(&switch(read("bob", "", 10)), &fixtures(&pdp)).unwrap().verdict, Verdict::Deny);
+        let agent = switch(sa_read("ops-bot", Some("alice"), "", 10));
+        assert_eq!(pdp.decide(&agent, &fixtures(&pdp)).unwrap().verdict, Verdict::Deny, "even acting for alice");
+    }
+
+    #[test]
     fn the_security_team_approves_challenges() {
         let pdp = Pdp::with_defaults().unwrap();
         let approve = |who: &str| Check { action: "approve".into(), ..read(who, "board-deck", 10) };

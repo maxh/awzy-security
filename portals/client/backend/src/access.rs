@@ -99,8 +99,16 @@ pub enum Surface {
 pub enum AccessError {
     #[error("{actor} may not {action} {area} (decision {decision})")]
     Denied { actor: String, action: &'static str, area: &'static str, decision: String },
-    #[error("{actor} may {action} {area} only after a {challenges} challenge, which the portal can't run yet (decision {decision})")]
-    Challenged { actor: String, action: &'static str, area: &'static str, challenges: String, decision: String },
+    #[error("{actor} may {action} {} only after a {challenges} challenge, which the portal can't run yet (decision {decision})", .area.as_str())]
+    Challenged {
+        actor: String,
+        action: &'static str,
+        area: PortalArea,
+        challenges: String,
+        decision: String,
+        /// The challenge awzy-challenge opened, when it did: answering it lets a retry through.
+        challenge_qid: Option<String>,
+    },
     #[error("the PDP is not configured (AWZY_PDP_ADDR)")]
     NotConfigured,
     #[error("awzy couldn't reach its policy decision point, so nothing was done: {0}")]
@@ -113,6 +121,18 @@ pub async fn authorize(
     viewer: &Viewer,
     surface: Surface,
     action: PortalAction,
+    area: PortalArea,
+) -> Result<(), AccessError> {
+    authorize_action(services, viewer, surface, action.as_str(), area).await
+}
+
+/// [`authorize`] for an action that isn't a [`PortalAction`], such as `switch_enforcement`, which
+/// the portal asks only when someone switches.
+pub async fn authorize_action(
+    services: &Services,
+    viewer: &Viewer,
+    surface: Surface,
+    action: &'static str,
     area: PortalArea,
 ) -> Result<(), AccessError> {
     let mut pdp = services.pdp.clone().ok_or(AccessError::NotConfigured)?;
@@ -129,7 +149,7 @@ pub async fn authorize(
     };
     let req = CheckRequest {
         principal: Some(wire(&viewer.subject)),
-        action: action.as_str().into(),
+        action: action.into(),
         resource: Some(WireRef { r#type: entity_type::PORTAL_AREA.into(), id: area.as_str().into() }),
         context: Some(json_to_struct(json!({ "client": client }).as_object().expect("object").clone())),
         on_behalf_of: viewer.on_behalf_of.as_ref().map(wire),
@@ -138,8 +158,7 @@ pub async fn authorize(
         always_enforced: true,
     };
     let res = pdp.check(req).await.map_err(|s| AccessError::Unavailable(s.message().to_string()))?.into_inner();
-    let (actor, action, area, decision) =
-        (viewer.actor().label(), action.as_str(), area.as_str(), res.decision_qid.clone());
+    let (actor, decision) = (viewer.actor().label(), res.decision_qid.clone());
     match res.verdict() {
         Verdict::Allow => Ok(()),
         Verdict::Challenge => {
@@ -147,9 +166,17 @@ pub async fn authorize(
                 .challenges()
                 .map(|c| c.as_str_name().trim_start_matches("CHALLENGE_KIND_").to_lowercase())
                 .collect::<Vec<_>>();
-            Err(AccessError::Challenged { actor, action, area, challenges: challenges.join(" and "), decision })
+            let challenge_qid = Some(res.challenge_qid.clone()).filter(|q| !q.is_empty());
+            Err(AccessError::Challenged {
+                actor,
+                action,
+                area,
+                challenges: challenges.join(" and "),
+                decision,
+                challenge_qid,
+            })
         }
-        _ => Err(AccessError::Denied { actor, action, area, decision }),
+        _ => Err(AccessError::Denied { actor, action, area: area.as_str(), decision }),
     }
 }
 
