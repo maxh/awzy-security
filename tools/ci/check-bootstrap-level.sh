@@ -11,4 +11,10 @@ if [ "$level" != "$required" ]; then
   echo "bootstrap_level is $level (deploy/terraform/bootstrap/main.tf) but the chart requires $required (deploy/helm/awzy/values.yaml); raise them together" >&2
   exit 1
 fi
+# The example values CI lints the chart with stand in for bootstrap, so they carry its level too.
+example=$(sed -nE 's/^bootstrap: *\{ *level: *([0-9]+).*/\1/p' deploy/helm/awzy/values-example.yaml)
+if [ "$example" != "$level" ]; then
+  echo "deploy/helm/awzy/values-example.yaml has bootstrap level ${example:-none}, not $level" >&2
+  exit 1
+fi
 echo "bootstrap level $level, required $required"
