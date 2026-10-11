@@ -334,7 +334,7 @@ impl SupportSession {
 
 #[derive(InputObject)]
 pub struct RequestSupportSessionInput {
-    pub install_id: ID,
+    pub install_qid: ID,
     /// Client portal areas, e.g. "decisions".
     pub areas: Vec<String>,
     pub reason: String,
@@ -367,7 +367,7 @@ impl SupportMutation {
         input: RequestSupportSessionInput,
     ) -> Result<SupportSession> {
         let staff = ctx.data::<Staff>()?;
-        let install: InstallId = input.install_id.parse()?;
+        let install: InstallId = input.install_qid.parse()?;
         let new = NewRequest {
             install,
             areas: input.areas,
@@ -381,11 +381,11 @@ impl SupportMutation {
     }
 
     /// Signs the staff member who asked in to an approved session's client portal.
-    async fn sign_in_to_support_session(&self, ctx: &Context<'_>, id: ID) -> Result<SupportSignIn> {
+    async fn sign_in_to_support_session(&self, ctx: &Context<'_>, support_session_qid: ID) -> Result<SupportSignIn> {
         let staff = ctx.data::<Staff>()?;
         let store = store(ctx)?;
         let signer = store.support_signer.clone().ok_or(SupportError::NoSigner)?;
-        let session = store.support_session(id.parse()?).await?;
+        let session = store.support_session(support_session_qid.parse()?).await?;
         let token = signer.sign(&session, &staff.username, Utc::now())?;
         tracing::info!(session = %session.id, install = %session.install, by = %staff.username, "support session token issued");
         Ok(SupportSignIn {

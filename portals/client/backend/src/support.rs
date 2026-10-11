@@ -332,7 +332,7 @@ impl SupportQuery {
 
 #[derive(InputObject)]
 pub struct DecideSupportSessionInput {
-    pub id: ID,
+    pub support_session_qid: ID,
     pub approve: bool,
     /// With approve: the areas to allow, at most those asked for.
     #[graphql(default)]
@@ -370,7 +370,7 @@ impl SupportMutation {
             }
         }
         let req = DecideSupportSessionRequest {
-            qid: input.id.0,
+            qid: input.support_session_qid.0,
             approve: input.approve,
             areas: input.areas,
             minutes: input.minutes,
@@ -381,9 +381,9 @@ impl SupportMutation {
     }
 
     /// Ends an approved support session now. The staff member's next request is refused.
-    async fn end_support_session(&self, ctx: &Context<'_>, id: ID) -> Result<SupportSession> {
+    async fn end_support_session(&self, ctx: &Context<'_>, support_session_qid: ID) -> Result<SupportSession> {
         let viewer = require(ctx, Administer, PortalArea::Enforcement).await?;
-        let req = EndSupportSessionRequest { qid: id.0, ended_by_actor: Some(viewer.actor().into()) };
+        let req = EndSupportSessionRequest { qid: support_session_qid.0, ended_by_actor: Some(viewer.actor().into()) };
         let session = client(ctx)?.end_support_session(req).await.map_err(grpc)?.into_inner().session;
         Ok(SupportSession(session.ok_or("awzy-challenge returned no support session")?))
     }

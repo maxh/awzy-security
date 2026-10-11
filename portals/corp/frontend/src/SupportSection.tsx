@@ -63,8 +63,8 @@ function Sessions({ installId, fetchKey, onChanged }: { installId: string; fetch
   );
   const sessions = data.node?.supportSessions ?? [];
   const [signIn, signingIn] = useMutation<SupportSectionSignInMutation>(graphql`
-    mutation SupportSectionSignInMutation($id: ID!) {
-      signInToSupportSession(id: $id) {
+    mutation SupportSectionSignInMutation($supportSessionQid: ID!) {
+      signInToSupportSession(supportSessionQid: $supportSessionQid) {
         signInUrl
       }
     }
@@ -72,7 +72,7 @@ function Sessions({ installId, fetchKey, onChanged }: { installId: string; fetch
   const [error, setError] = useState<string | null>(null);
   const open = (id: string) =>
     signIn({
-      variables: { id },
+      variables: { supportSessionQid: id },
       onCompleted: (res, errors) => {
         if (errors?.[0]) setError(errors[0].message);
         else window.open(res.signInToSupportSession.signInUrl, "_blank", "noopener");
@@ -162,7 +162,7 @@ function RequestForm({
   `);
   const submit = () =>
     request({
-      variables: { input: { installId, areas, reason, durationMinutes: minutes, portalUrl } },
+      variables: { input: { installQid: installId, areas, reason, durationMinutes: minutes, portalUrl } },
       onCompleted: (_, errors) => {
         if (errors?.[0]) {
           setError(errors[0].message);
