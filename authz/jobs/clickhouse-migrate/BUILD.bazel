@@ -15,6 +15,7 @@ awzy_service(
         "//libs/model",
     ],
     deps = [
+        "//authz/libs/kafka",
         "//libs/server",
         "//libs/telemetry",
     ],

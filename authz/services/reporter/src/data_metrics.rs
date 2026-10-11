@@ -8,18 +8,19 @@ use std::{collections::BTreeMap, time::Duration};
 
 use rskafka::client::{
     partition::{OffsetAt, UnknownTopicHandling},
-    Client as KafkaClient, ClientBuilder,
+    Client as KafkaClient,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 /// How to reach ClickHouse and Kafka: AWZY_CLICKHOUSE_URL, AWZY_CLICKHOUSE_USER (default
-/// `awzy_reporter`), AWZY_CLICKHOUSE_PASSWORD, and AWZY_KAFKA_BROKERS. Without ClickHouse,
+/// `awzy_reporter`), AWZY_CLICKHOUSE_PASSWORD, and AWZY_KAFKA_BROKERS (with awzy-kafka's TLS
+/// settings). Without ClickHouse,
 /// neither figure is measured; without Kafka, only disk use is.
 #[derive(Debug, Clone, Default)]
 pub struct DataConfig {
     pub clickhouse: Option<ClickHouseConfig>,
-    pub kafka_brokers: Vec<String>,
+    pub kafka: Option<awzy_kafka::Brokers>,
 }
 
 #[derive(Clone)]
@@ -36,7 +37,7 @@ impl std::fmt::Debug for ClickHouseConfig {
 }
 
 impl DataConfig {
-    pub fn from_env() -> Self {
+    pub fn from_env() -> anyhow::Result<Self> {
         let clickhouse = match (std::env::var("AWZY_CLICKHOUSE_URL"), std::env::var("AWZY_CLICKHOUSE_PASSWORD")) {
             (Ok(url), Ok(password)) => Some(ClickHouseConfig {
                 url,
@@ -45,10 +46,8 @@ impl DataConfig {
             }),
             _ => None,
         };
-        let kafka_brokers = std::env::var("AWZY_KAFKA_BROKERS")
-            .map(|b| b.split(',').map(str::trim).filter(|b| !b.is_empty()).map(str::to_string).collect())
-            .unwrap_or_default();
-        Self { clickhouse, kafka_brokers }
+        let kafka = awzy_kafka::Brokers::from_env("AWZY_KAFKA_BROKERS")?;
+        Ok(Self { clickhouse, kafka })
     }
 }
 
@@ -68,7 +67,7 @@ struct Position {
 
 pub struct DataSources {
     clickhouse: Option<clickhouse::Client>,
-    brokers: Vec<String>,
+    brokers: Option<awzy_kafka::Brokers>,
     kafka: Option<KafkaClient>,
 }
 
@@ -77,7 +76,7 @@ impl DataSources {
         let clickhouse = config
             .clickhouse
             .map(|c| clickhouse::Client::default().with_url(c.url).with_user(c.user).with_password(c.password));
-        Self { clickhouse, brokers: config.kafka_brokers, kafka: None }
+        Self { clickhouse, brokers: config.kafka, kafka: None }
     }
 
     pub async fn collect(&mut self) -> DataMetrics {
@@ -103,16 +102,16 @@ impl DataSources {
     }
 
     async fn kafka_lag(&mut self, ch: &clickhouse::Client) -> anyhow::Result<Option<u64>> {
-        if self.brokers.is_empty() {
+        let Some(brokers) = &self.brokers else {
             return Ok(None);
-        }
+        };
         let positions = consumer_positions(ch).await?;
         if positions.is_empty() {
             // No consumer is running, so there's nothing to measure lag against.
             return Ok(None);
         }
         if self.kafka.is_none() {
-            self.kafka = Some(ClientBuilder::new(self.brokers.clone()).build().await?);
+            self.kafka = Some(brokers.connect().await?);
         }
         let kafka = self.kafka.as_ref().expect("connected above");
         let mut ends = BTreeMap::new();
@@ -194,7 +193,7 @@ mod tests {
         };
         let mut sources = DataSources::new(DataConfig {
             clickhouse: Some(ClickHouseConfig { url, user: "awzy".into(), password: "awzy".into() }),
-            kafka_brokers: brokers.split(',').map(str::to_string).collect(),
+            kafka: Some(awzy_kafka::Brokers::plaintext(&brokers)),
         });
         let m = sources.collect().await;
         let disk = m.clickhouse_disk_used_percent.expect("disk use");

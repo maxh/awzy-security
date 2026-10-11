@@ -19,10 +19,13 @@ async fn main() -> anyhow::Result<()> {
         consumer_group: std::env::var("AWZY_CLICKHOUSE_CONSUMER_GROUP").unwrap_or_else(|_| "awzy-clickhouse".into()),
     };
     // Best effort: locally the brokers are named as ClickHouse reaches them, inside Docker.
+    // AWZY_KAFKA_TLS says whether to reach them over TLS, as it does for the services.
+    let topic_brokers = awzy_kafka::Brokers::from_env("AWZY_CLICKHOUSE_KAFKA_BROKERS")?
+        .context("AWZY_CLICKHOUSE_KAFKA_BROKERS is not set")?;
     let topics = [settings.decisions_topic.as_str(), settings.events_topic.as_str()];
     match tokio::time::timeout(
         std::time::Duration::from_secs(10),
-        awzy_clickhouse::ensure_topics(&settings.kafka_brokers, &topics),
+        awzy_clickhouse::ensure_topics(&topic_brokers, &topics),
     )
     .await
     {
@@ -32,6 +35,7 @@ async fn main() -> anyhow::Result<()> {
     }
     let applied = awzy_clickhouse::migrate(&client, &settings).await?;
     tracing::info!(?applied, "ClickHouse schema is current");
+    awzy_clickhouse::ensure_queue_brokers(&client, &settings.kafka_brokers).await?;
     // How long decisions and events are kept; unset or 0 keeps them all.
     let days = std::env::var("AWZY_CLICKHOUSE_RETENTION_DAYS").ok().map(|d| d.parse::<u32>()).transpose()?;
     awzy_clickhouse::ensure_retention(&client, days.filter(|d| *d > 0)).await?;

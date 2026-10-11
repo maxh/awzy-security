@@ -17,6 +17,7 @@ awzy-model.workspace = true
 bytes.workspace = true
 chrono.workspace = true
 clickhouse.workspace = true
+awzy-kafka.workspace = true
 rskafka.workspace = true
 http-body-util.workspace = true
 hyper-rustls.workspace = true

@@ -102,12 +102,9 @@ const TOPIC_PARTITIONS: i32 = 6;
 /// Creates the topics the queue tables read, if they don't exist. Their producers create them
 /// too, but until one has, the queue table only logs errors (an install without awzy-intake has
 /// no events topic).
-pub async fn ensure_topics(brokers: &str, topics: &[&str]) -> anyhow::Result<()> {
-    use rskafka::client::{
-        error::{Error as KafkaError, ProtocolError},
-        ClientBuilder,
-    };
-    let client = ClientBuilder::new(brokers.split(',').map(str::to_string).collect()).build().await?;
+pub async fn ensure_topics(brokers: &awzy_kafka::Brokers, topics: &[&str]) -> anyhow::Result<()> {
+    use rskafka::client::error::{Error as KafkaError, ProtocolError};
+    let client = brokers.connect().await?;
     let controller = client.controller_client()?;
     for &topic in topics {
         match controller.create_topic(topic, TOPIC_PARTITIONS, 1, 5_000).await {
@@ -117,6 +114,58 @@ pub async fn ensure_topics(brokers: &str, topics: &[&str]) -> anyhow::Result<()>
         }
     }
     Ok(())
+}
+
+/// Each Kafka queue table, and the materialized view that reads it.
+const QUEUES: &[(&str, &str)] = &[("decisions_queue", "decisions_mv"), ("events_queue", "events_mv")];
+
+/// Points every Kafka queue table at `brokers`. A migration writes the brokers into a queue table
+/// when it creates it, so when an install's brokers change, as when it moves to TLS (which MSK
+/// serves on another port), each table and its view are recreated with the new ones. The
+/// consumer group keeps its offsets, so nothing is read twice or skipped (ADR 0091). Run on every
+/// sync; it changes nothing when the brokers already match.
+pub async fn ensure_queue_brokers(client: &Client, brokers: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(!brokers.contains('\''), "Kafka brokers can't contain a quote: {brokers}");
+    for &(queue, view) in QUEUES {
+        let Some(create_queue) = create_query(client, queue).await? else { continue };
+        if broker_list(&create_queue) == Some(brokers) {
+            continue;
+        }
+        let create_queue = with_broker_list(&create_queue, brokers)
+            .ok_or_else(|| anyhow::anyhow!("{queue} has no kafka_broker_list"))?;
+        let create_view = create_query(client, view).await?;
+        client.query(&format!("DROP VIEW IF EXISTS {view}")).execute().await?;
+        client.query(&format!("DROP TABLE {queue}")).execute().await?;
+        client.query(&create_queue).execute().await?;
+        if let Some(create_view) = create_view {
+            client.query(&create_view).execute().await?;
+        }
+        tracing::info!(queue, brokers, "ClickHouse Kafka queue repointed");
+    }
+    Ok(())
+}
+
+/// The statement that creates `table` in the current database, if it exists.
+async fn create_query(client: &Client, table: &str) -> anyhow::Result<Option<String>> {
+    let mut rows: Vec<String> = client
+        .query("SELECT create_table_query FROM system.tables WHERE database = currentDatabase() AND name = ?")
+        .bind(table)
+        .fetch_all()
+        .await?;
+    Ok(rows.pop())
+}
+
+const BROKER_LIST: &str = "kafka_broker_list = '";
+
+fn broker_list(create: &str) -> Option<&str> {
+    let start = create.find(BROKER_LIST)? + BROKER_LIST.len();
+    let len = create[start..].find('\'')?;
+    Some(&create[start..start + len])
+}
+
+fn with_broker_list(create: &str, brokers: &str) -> Option<String> {
+    let current = broker_list(create)?;
+    Some(create.replacen(&format!("{BROKER_LIST}{current}'"), &format!("{BROKER_LIST}{brokers}'"), 1))
 }
 
 /// The ClickHouse user awzy-reporter reads disk use and Kafka consumer positions with (ADR 0042).
@@ -194,6 +243,16 @@ mod tests {
     }
 
     #[test]
+    fn a_queue_tables_brokers_are_read_and_replaced() {
+        let create = "CREATE TABLE db.decisions_queue (`id` String) ENGINE = Kafka SETTINGS kafka_broker_list = 'b-1:9092,b-2:9092', kafka_topic_list = 't'";
+        assert_eq!(broker_list(create), Some("b-1:9092,b-2:9092"));
+        let moved = with_broker_list(create, "b-1:9094,b-2:9094").unwrap();
+        assert_eq!(broker_list(&moved), Some("b-1:9094,b-2:9094"));
+        assert!(moved.ends_with("kafka_topic_list = 't'"));
+        assert_eq!(with_broker_list("CREATE TABLE x (a UInt8) ENGINE = Memory", "b:1"), None);
+    }
+
+    #[test]
     fn renders_placeholders() {
         let s = Settings {
             kafka_brokers: "k:1".into(),
@@ -234,6 +293,37 @@ mod tests {
             assert!(reporter.query(denied).fetch_one::<u64>().await.is_err(), "{denied}");
         }
         admin.query(&format!("DROP USER {user}")).execute().await.unwrap();
+    }
+
+    /// With --config=local-stack: when the brokers change, each queue table and its view are
+    /// recreated pointing at the new ones, and a second run changes nothing.
+    #[tokio::test]
+    async fn queue_tables_follow_the_brokers() {
+        let Ok(url) = std::env::var("AWZY_TEST_CLICKHOUSE_URL") else {
+            eprintln!("skipping: AWZY_TEST_CLICKHOUSE_URL is not set");
+            return;
+        };
+        let database = format!("test_{}", uuid::Uuid::now_v7().simple());
+        let admin = Client::default().with_url(&url).with_user("awzy").with_password("awzy");
+        admin.query(&format!("CREATE DATABASE {database}")).execute().await.unwrap();
+        let client = admin.clone().with_database(&database);
+        let settings = Settings {
+            kafka_brokers: "plaintext.invalid:9092".into(),
+            decisions_topic: format!("unused.{database}"),
+            events_topic: format!("unused-events.{database}"),
+            consumer_group: database.clone(),
+        };
+        migrate(&client, &settings).await.unwrap();
+
+        ensure_queue_brokers(&client, "tls.invalid:9094").await.unwrap();
+        ensure_queue_brokers(&client, "tls.invalid:9094").await.unwrap(); // every sync
+        for &(queue, view) in QUEUES {
+            let create = create_query(&client, queue).await.unwrap().unwrap();
+            assert_eq!(broker_list(&create), Some("tls.invalid:9094"), "{queue}");
+            assert!(create_query(&client, view).await.unwrap().is_some(), "{view} is back");
+        }
+        assert!(ensure_queue_brokers(&client, "it's:1").await.is_err());
+        admin.query(&format!("DROP DATABASE {database}")).execute().await.unwrap();
     }
 
     /// With --config=local-stack: the reasoner's user reads decisions and events, and nothing
@@ -294,9 +384,9 @@ mod tests {
         let client = admin.clone().with_database(&database);
 
         // The topics must exist before ClickHouse subscribes to them; connecting creates them.
-        let brokers: Vec<String> = host_brokers.split(',').map(str::to_string).collect();
-        let log = awzy_pdp::DecisionLog::connect_kafka(brokers.clone(), &topic).await.unwrap();
-        let events = awzy_intake::EventLog::connect_kafka(brokers, &events_topic).await.unwrap();
+        let brokers = awzy_kafka::Brokers::plaintext(&host_brokers);
+        let log = awzy_pdp::DecisionLog::connect_kafka(&brokers, &topic).await.unwrap();
+        let events = awzy_intake::EventLog::connect_kafka(&brokers, &events_topic).await.unwrap();
         let settings = Settings {
             kafka_brokers: clickhouse_brokers,
             decisions_topic: topic,
