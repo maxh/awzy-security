@@ -116,8 +116,9 @@ mod tests {
 
     #[test]
     fn a_json_string_is_valid_json_text() {
-        let s = JsonString::of(&serde_json::json!([{ "kind": "group", "id": "eng" }]));
-        assert_eq!(s.as_str(), r#"[{"id":"eng","kind":"group"}]"#);
+        let value = serde_json::json!([{ "kind": "group", "id": "eng" }]);
+        let s = JsonString::of(&value);
+        assert_eq!(serde_json::from_str::<serde_json::Value>(s.as_str()).unwrap(), value);
         assert_eq!(JsonString::parse(Value::String("{\"a\":1}".into())).unwrap().as_str(), "{\"a\":1}");
         assert!(JsonString::parse(Value::String("not json".into())).is_err());
     }
