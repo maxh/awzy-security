@@ -30,7 +30,7 @@ locals {
   # before it installs (ADR 0098). Raise it when a chart starts needing something new from here or
   # from the cloud layer (a Secret, a key, a value), and raise the chart's bootstrap.required to
   # match in the same change; tools/ci/check-bootstrap-level.sh keeps the two equal.
-  bootstrap_level = 1
+  bootstrap_level = 2
 
   namespaces = {
     system = "awzy-system"

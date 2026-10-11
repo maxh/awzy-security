@@ -18,7 +18,7 @@ It has two layers, applied in order:
 | Layer | Module | What it makes |
 | --- | --- | --- |
 | Cloud | [`deploy/terraform/aws/install`](deploy/terraform/aws/install) | VPC, EKS, Aurora Postgres, MSK (Kafka), ElastiCache (Valkey), an S3 bucket, a KMS key for data at rest and one awzy-policy signs policy with, and Pod Identity roles. Outputs `install_contract`. |
-| Cluster | [`deploy/terraform/bootstrap`](deploy/terraform/bootstrap) | Namespaces, Secrets, Argo CD, Kyverno, External Secrets, the ClickHouse operator, Envoy Gateway, and cert-manager, then an Argo CD Application for the awzy chart. Never cloud-specific. |
+| Cluster | [`deploy/terraform/bootstrap`](deploy/terraform/bootstrap) | Namespaces, Secrets, Argo CD, Kyverno, External Secrets, the ClickHouse operator, Envoy Gateway, cert-manager, and metrics-server, then an Argo CD Application for the awzy chart. Never cloud-specific. |
 
 You call both from your own Terraform, as
 [`examples/example-client`](deploy/terraform/examples/example-client) does.

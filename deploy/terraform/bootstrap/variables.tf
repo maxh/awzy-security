@@ -184,6 +184,12 @@ variable "ingress" {
   })
 }
 
+variable "metrics_server" {
+  description = "Install metrics-server, which the chart's autoscalers read CPU from. Set false when the cluster already runs one (such as the EKS add-on)"
+  type        = bool
+  default     = true
+}
+
 variable "versions" {
   description = "Pinned chart versions of the components bootstrap installs"
   type = object({
@@ -193,6 +199,7 @@ variable "versions" {
     clickhouse_operator = optional(string, "0.27.3")
     envoy_gateway       = optional(string, "v1.9.1")
     cert_manager        = optional(string, "v1.21.1")
+    metrics_server      = optional(string, "3.14.0")
   })
   default = {}
 }

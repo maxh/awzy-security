@@ -92,6 +92,17 @@ resource "helm_release" "cert_manager" {
   depends_on = [helm_release.envoy_gateway]
 }
 
+# The resource metrics API, for the chart's HorizontalPodAutoscalers. Most managed clusters don't
+# install it; one that already does sets metrics_server = false.
+resource "helm_release" "metrics_server" {
+  count      = var.metrics_server ? 1 : 0
+  name       = "metrics-server"
+  namespace  = "kube-system"
+  repository = "https://kubernetes-sigs.github.io/metrics-server/"
+  chart      = "metrics-server"
+  version    = var.versions.metrics_server
+}
+
 # Resources that need the CRDs above: the secret store, the signature policy, ingress, and
 # the Argo CD Application for the awzy chart.
 resource "helm_release" "config" {
