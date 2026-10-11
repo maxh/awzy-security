@@ -67,7 +67,14 @@ struct SessionClaims {
     sub: String,
     name: String,
     exp: u64,
+    /// "mcp" on a token for the MCP endpoint, which a session cookie never carries, so neither
+    /// works where the other is meant to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    aud: Option<String>,
 }
+
+/// How long a staff member's MCP token for an agent lasts.
+pub const MCP_TOKEN_LIFETIME: std::time::Duration = std::time::Duration::from_secs(30 * 24 * 3600);
 
 /// argon2id with the crate's defaults (19 MiB, 2 passes).
 pub fn hash_password(password: &str) -> anyhow::Result<String> {
@@ -122,8 +129,19 @@ impl Auth {
     }
 
     fn issue(&self, staff: &Staff) -> String {
-        let exp = now() + SESSION_LIFETIME.as_secs();
-        let claims = SessionClaims { sub: staff.username.clone(), name: staff.name.clone(), exp };
+        self.sign(staff, SESSION_LIFETIME, None)
+    }
+
+    /// A token for an agent working for `staff` on the MCP endpoint: read-only tools, and nothing
+    /// else this portal serves.
+    pub fn issue_mcp_token(&self, staff: &Staff) -> String {
+        self.sign(staff, MCP_TOKEN_LIFETIME, Some("mcp"))
+    }
+
+    fn sign(&self, staff: &Staff, lifetime: std::time::Duration, aud: Option<&str>) -> String {
+        let exp = now() + lifetime.as_secs();
+        let claims =
+            SessionClaims { sub: staff.username.clone(), name: staff.name.clone(), exp, aud: aud.map(str::to_string) };
         let body = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims).expect("serializable"));
         let mut mac = self.mac();
         mac.update(body.as_bytes());
@@ -133,11 +151,18 @@ impl Auth {
     /// The staff member a session cookie names, if it is ours, unexpired, and the account
     /// still exists.
     fn verify(&self, value: &str) -> Option<Staff> {
+        self.verify_for(value, None)
+    }
+
+    fn verify_for(&self, value: &str, aud: Option<&str>) -> Option<Staff> {
         let (body, sig) = value.split_once('.')?;
         let mut mac = self.mac();
         mac.update(body.as_bytes());
         mac.verify_slice(&URL_SAFE_NO_PAD.decode(sig).ok()?).ok()?;
         let claims: SessionClaims = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(body).ok()?).ok()?;
+        if claims.aud.as_deref() != aud {
+            return None;
+        }
         let account = self.0.accounts.get(&claims.sub)?;
         (claims.exp > now()).then(|| Staff { username: account.username.clone(), name: account.name.clone() })
     }
@@ -258,9 +283,40 @@ pub async fn require_staff(State(auth): State<Auth>, mut req: Request, next: Nex
     }
 }
 
+/// Middleware for `/mcp`: an agent's MCP token (`Bearer …`) from a staff member, or 401.
+pub async fn require_mcp_staff(State(auth): State<Auth>, mut req: Request, next: Next) -> Response {
+    let token = req
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(str::to_string);
+    match token.and_then(|t| auth.verify_for(&t, Some("mcp"))) {
+        Some(staff) => {
+            req.extensions_mut().insert(staff);
+            next.run(req).await
+        }
+        None => (StatusCode::UNAUTHORIZED, "send a staff member's MCP token from the corp portal").into_response(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_mcp_token_and_a_session_never_stand_in_for_each_other() {
+        let account =
+            StaffAccount { username: "max".into(), name: "Max".into(), password_hash: hash_password("pw").unwrap() };
+        let auth = Auth::new(vec![account], vec![7; 32], false).unwrap();
+        let staff = Staff { username: "max".into(), name: "Max".into() };
+        let session = auth.issue(&staff);
+        let mcp = auth.issue_mcp_token(&staff);
+        assert!(auth.verify(&session).is_some());
+        assert!(auth.verify(&mcp).is_none(), "an agent's token doesn't sign in to the portal");
+        assert!(auth.verify_for(&mcp, Some("mcp")).is_some());
+        assert!(auth.verify_for(&session, Some("mcp")).is_none(), "a session cookie isn't an MCP token");
+    }
 
     fn auth() -> Auth {
         Auth::new(vec![], vec![7; 32], true).unwrap()

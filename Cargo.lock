@@ -882,6 +882,7 @@ dependencies = [
  "http-body-util",
  "hyper-rustls",
  "hyper-util",
+ "rmcp",
  "rustls",
  "serde",
  "serde_json",

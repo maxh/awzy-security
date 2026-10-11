@@ -11,6 +11,7 @@ pub mod alerts;
 pub mod auth;
 pub mod fleet;
 mod installs;
+pub mod mcp;
 
 use async_graphql::{http::GraphiQLSource, Context, EmptySubscription, MergedObject, Object, Result, Schema};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
@@ -59,7 +60,7 @@ pub struct CorpPortalQuery(MetaQuery, installs::FleetQuery);
 
 #[derive(MergedObject, Default)]
 #[graphql(name = "Mutation")]
-pub struct CorpPortalMutation(installs::FleetMutation);
+pub struct CorpPortalMutation(installs::FleetMutation, mcp::McpTokenMutation);
 
 pub type CorpPortalSchema = Schema<CorpPortalQuery, CorpPortalMutation, EmptySubscription>;
 
@@ -78,15 +79,23 @@ fn schema_builder() -> async_graphql::SchemaBuilder<CorpPortalQuery, CorpPortalM
         .limit_complexity(awzy_portal::MAX_QUERY_COMPLEXITY)
 }
 
-/// `/graphql` behind sign-in, the sign-in routes under `/auth`, and heartbeat intake at
-/// `/v1/heartbeat`. GraphQL resolves the frontend's queries by ID from `persisted` (ADR 0088,
-/// 0090).
+/// `/graphql` behind sign-in, the sign-in routes under `/auth`, heartbeat intake at
+/// `/v1/heartbeat`, and MCP for awzy's agents at `/mcp`, behind a staff member's MCP token, for
+/// the Host headers in AWZY_CORP_PORTAL_MCP_ALLOWED_HOSTS (comma-separated; unset: loopback only).
+/// GraphQL resolves the frontend's queries by ID from `persisted` (ADR 0088, 0090).
 pub fn router(auth: Auth, store: FleetStore, persisted: awzy_portal::PersistedQueries) -> Router {
     let signed_in = middleware::from_fn_with_state(auth.clone(), auth::require_staff);
     let graphql = get(|| async { Html(GraphiQLSource::build().endpoint("/graphql").finish()) }).merge(
-        post(graphql).layer(signed_in).with_state(schema_builder().data(store.clone()).extension(persisted).finish()),
+        post(graphql)
+            .layer(signed_in)
+            .with_state(schema_builder().data(store.clone()).data(auth.clone()).extension(persisted).finish()),
     );
-    Router::new().route("/graphql", graphql).merge(auth::routes(auth)).merge(fleet::intake_routes(store))
+    let mcp_hosts = std::env::var("AWZY_CORP_PORTAL_MCP_ALLOWED_HOSTS")
+        .map(|v| v.split(',').map(|h| h.trim().to_string()).filter(|h| !h.is_empty()).collect())
+        .unwrap_or_default();
+    let mcp = mcp::router(store.clone(), mcp_hosts)
+        .layer(middleware::from_fn_with_state(auth.clone(), auth::require_mcp_staff));
+    Router::new().route("/graphql", graphql).merge(mcp).merge(auth::routes(auth)).merge(fleet::intake_routes(store))
 }
 
 async fn graphql(
