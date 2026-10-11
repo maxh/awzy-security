@@ -12,7 +12,7 @@ import {
   IconUserSearch,
 } from "@tabler/icons-react";
 import {
-  createRootRoute,
+  createRootRouteWithContext,
   createRoute,
   createRouter,
   Link,
@@ -20,17 +20,18 @@ import {
   redirect,
   useRouterState,
 } from "@tanstack/react-router";
+import type { RelayRouterContext } from "@awzy/relay/routes";
 
-import { ChallengesPage } from "./ChallengesPage";
-import { ConnectorsPage } from "./ConnectorsPage";
+import { ChallengesPage, loadChallengesPage } from "./ChallengesPage";
+import { ConnectorsPage, loadConnectorsPage } from "./ConnectorsPage";
 import { DecisionsPage } from "./DecisionsPage";
-import { DirectoryPage } from "./DirectoryPage";
-import { EnforcementPage } from "./EnforcementPage";
+import { DirectoryPage, loadDirectoryPageSummary } from "./DirectoryPage";
+import { EnforcementPage, loadEnforcementPage } from "./EnforcementPage";
 import { InvestigationsPage } from "./InvestigationsPage";
 import { LookupPage } from "./LookupPage";
-import { PoliciesPage } from "./PoliciesPage";
-import { StatusPage } from "./StatusPage";
-import { SupportBanner, SupportPage } from "./SupportPage";
+import { loadPoliciesPage, PoliciesPage } from "./PoliciesPage";
+import { loadStatusPage, StatusPage } from "./StatusPage";
+import { loadSupportPage, SupportBanner, SupportPage } from "./SupportPage";
 import { Account } from "./session";
 
 function Nav() {
@@ -115,8 +116,10 @@ function Root() {
   );
 }
 
-const rootRoute = createRootRoute({ component: Root });
+const rootRoute = createRootRouteWithContext<RelayRouterContext>()({ component: Root });
 
+// A page's main query starts in its route's loader, as navigation begins (ADR 0099). Queries a
+// page runs on input (a search, a filter, a tab) stay in the page.
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
@@ -134,24 +137,28 @@ const decisionsRoute = createRoute({
 const policiesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/policies",
+  loader: ({ context }) => loadPoliciesPage(context.environment, {}),
   component: PoliciesPage,
 });
 
 const enforcementRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/enforcement",
+  loader: ({ context }) => loadEnforcementPage(context.environment, {}),
   component: EnforcementPage,
 });
 
 const directoryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/directory",
+  loader: ({ context }) => loadDirectoryPageSummary(context.environment, {}),
   component: DirectoryPage,
 });
 
 const challengesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/challenges",
+  loader: ({ context }) => loadChallengesPage(context.environment, {}),
   component: ChallengesPage,
 });
 
@@ -170,18 +177,21 @@ const lookupRoute = createRoute({
 const connectorsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/connectors",
+  loader: ({ context }) => loadConnectorsPage(context.environment, {}),
   component: ConnectorsPage,
 });
 
 const statusRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/status",
+  loader: ({ context }) => loadStatusPage(context.environment, {}),
   component: StatusPage,
 });
 
 const supportRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/support",
+  loader: ({ context }) => loadSupportPage(context.environment, {}),
   component: SupportPage,
 });
 
@@ -199,6 +209,8 @@ export const router = createRouter({
     statusRoute,
     supportRoute,
   ]),
+  // Set where the router is rendered, from the signed-in environment.
+  context: { environment: undefined! },
 });
 
 declare module "@tanstack/react-router" {

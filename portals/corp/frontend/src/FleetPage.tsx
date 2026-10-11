@@ -1,3 +1,4 @@
+import { routeQuery } from "@awzy/relay/routes";
 import { EmptyState, PageHeader, PageLoader, Section, StatusBadge } from "@awzy/ui";
 import {
   Alert,
@@ -14,18 +15,26 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { IconPlus, IconRefresh, IconServer2 } from "@tabler/icons-react";
-import { Link } from "@tanstack/react-router";
+import { getRouteApi, Link, useRouter } from "@tanstack/react-router";
 import { type FormEvent, Suspense, useState } from "react";
-import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
+import { graphql, type PreloadedQuery, useMutation, usePreloadedQuery } from "react-relay";
 
 import type { FleetPageQuery } from "./__generated__/FleetPageQuery.graphql";
+import FleetPageQueryNode from "./__generated__/FleetPageQuery.graphql";
 import type { FleetPageRegisterMutation, ReleaseChannel } from "./__generated__/FleetPageRegisterMutation.graphql";
 import { ago, CHANNELS, channelLabel, formatTime, healthOf } from "./format";
 import { McpTokenButton } from "./McpTokenButton";
 
+/** Started by the route's loader as navigation begins (ADR 0099). */
+export const loadFleetPage = routeQuery<FleetPageQuery>(FleetPageQueryNode);
+
 /** Every registered install, with its health and what it last reported (ADR 0026). */
+const route = getRouteApi("/installs");
+
 export function FleetPage() {
-  const [fetchKey, setFetchKey] = useState(0);
+  const queryRef = route.useLoaderData();
+  const router = useRouter();
+  const refresh = () => void router.invalidate();
   const [registering, setRegistering] = useState(false);
   const register = () => setRegistering(true);
   return (
@@ -36,7 +45,7 @@ export function FleetPage() {
         actions={
           <>
             <McpTokenButton />
-            <Button variant="default" leftSection={<IconRefresh size={16} />} onClick={() => setFetchKey((k) => k + 1)}>
+            <Button variant="default" leftSection={<IconRefresh size={16} />} onClick={refresh}>
               Refresh
             </Button>
             <Button leftSection={<IconPlus size={16} />} onClick={register}>
@@ -47,14 +56,10 @@ export function FleetPage() {
       />
       <Section flush>
         <Suspense fallback={<PageLoader />}>
-          <Fleet fetchKey={fetchKey} onRegister={register} />
+          <Fleet queryRef={queryRef} onRegister={register} />
         </Suspense>
       </Section>
-      <RegisterInstall
-        opened={registering}
-        onClose={() => setRegistering(false)}
-        onRegistered={() => setFetchKey((k) => k + 1)}
-      />
+      <RegisterInstall opened={registering} onClose={() => setRegistering(false)} onRegistered={refresh} />
     </>
   );
 }
@@ -72,8 +77,8 @@ function Figure({ children }: { children: string | null }) {
   );
 }
 
-function Fleet({ fetchKey, onRegister }: { fetchKey: number; onRegister: () => void }) {
-  const data = useLazyLoadQuery<FleetPageQuery>(
+function Fleet({ queryRef, onRegister }: { queryRef: PreloadedQuery<FleetPageQuery>; onRegister: () => void }) {
+  const data = usePreloadedQuery<FleetPageQuery>(
     graphql`
       query FleetPageQuery {
         installs(first: 200) {
@@ -101,8 +106,7 @@ function Fleet({ fetchKey, onRegister }: { fetchKey: number; onRegister: () => v
         }
       }
     `,
-    {},
-    { fetchKey, fetchPolicy: "store-and-network" },
+    queryRef,
   );
   const installs = data.installs.edges.map((e) => e.node);
   if (installs.length === 0) {

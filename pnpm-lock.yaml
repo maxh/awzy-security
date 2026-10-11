@@ -101,6 +101,9 @@ importers:
 
   portals/common/relay:
     dependencies:
+      '@types/react-relay':
+        specifier: ^18.2.1
+        version: 18.2.1
       '@types/relay-runtime':
         specifier: ^20.1.1
         version: 20.1.1
@@ -110,6 +113,9 @@ importers:
       graphql-ws:
         specifier: ^6.3.0
         version: 6.3.0(graphql@16.14.2)(ws@8.22.0)
+      react-relay:
+        specifier: ^21.0.1
+        version: 21.0.1(react@19.3.0)
       relay-runtime:
         specifier: ^21.0.1
         version: 21.0.1

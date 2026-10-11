@@ -1,3 +1,4 @@
+import { routeQuery } from "@awzy/relay/routes";
 import { PageHeader, PageLoader, Stat, StatusBadge } from "@awzy/ui";
 import {
   Alert,
@@ -14,8 +15,9 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
+import { getRouteApi } from "@tanstack/react-router";
 import { type FormEvent, Suspense, useState } from "react";
-import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
+import { graphql, type PreloadedQuery, useLazyLoadQuery, useMutation, usePreloadedQuery } from "react-relay";
 
 import type { DirectoryPageGroupsQuery } from "./__generated__/DirectoryPageGroupsQuery.graphql";
 import type { DirectoryPageHumansQuery } from "./__generated__/DirectoryPageHumansQuery.graphql";
@@ -23,12 +25,19 @@ import type { DirectoryPageRegisterMutation } from "./__generated__/DirectoryPag
 import type { DirectoryPageRemoveMutation } from "./__generated__/DirectoryPageRemoveMutation.graphql";
 import type { DirectoryPageServiceAccountsQuery } from "./__generated__/DirectoryPageServiceAccountsQuery.graphql";
 import type { DirectoryPageSummaryQuery } from "./__generated__/DirectoryPageSummaryQuery.graphql";
+import DirectoryPageSummaryQueryNode from "./__generated__/DirectoryPageSummaryQuery.graphql";
 import { formatTime } from "./format";
+
+/** Started by the route's loader as navigation begins (ADR 0099). */
+export const loadDirectoryPageSummary = routeQuery<DirectoryPageSummaryQuery>(DirectoryPageSummaryQueryNode);
 
 const loading = <PageLoader />;
 
+const route = getRouteApi("/directory");
+
 /** People and groups from the IdP (read-only here), and the service accounts admins register. */
 export function DirectoryPage() {
+  const queryRef = route.useLoaderData();
   return (
     <Stack gap="md">
       <PageHeader
@@ -36,7 +45,7 @@ export function DirectoryPage() {
         description="The people and groups your IdP provisions, and the service accounts and AI agents registered here."
       />
       <Suspense fallback={loading}>
-        <Summary />
+        <Summary queryRef={queryRef} />
       </Suspense>
       <Card padding="lg">
         <Tabs defaultValue="humans" keepMounted={false}>
@@ -62,8 +71,8 @@ export function DirectoryPage() {
   );
 }
 
-function Summary() {
-  const { directorySummary: s } = useLazyLoadQuery<DirectoryPageSummaryQuery>(
+function Summary({ queryRef }: { queryRef: PreloadedQuery<DirectoryPageSummaryQuery> }) {
+  const { directorySummary: s } = usePreloadedQuery<DirectoryPageSummaryQuery>(
     graphql`
       query DirectoryPageSummaryQuery {
         directorySummary {
@@ -75,8 +84,7 @@ function Summary() {
         }
       }
     `,
-    {},
-    { fetchPolicy: "store-and-network" },
+    queryRef,
   );
   return (
     <SimpleGrid cols={{ base: 2, md: 4 }}>

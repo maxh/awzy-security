@@ -22,7 +22,7 @@ void signIn().then((session) => {
       <SessionContext.Provider value={session}>
         <RelayEnvironmentProvider environment={environment}>
           <AwzyProvider>
-            <RouterProvider router={router} />
+            <RouterProvider router={router} context={{ environment }} />
           </AwzyProvider>
         </RelayEnvironmentProvider>
       </SessionContext.Provider>

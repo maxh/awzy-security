@@ -1,7 +1,7 @@
 import { PageErrorBoundary, PortalShell, ShellNavLink } from "@awzy/ui";
 import { IconPackage, IconServer2 } from "@tabler/icons-react";
 import {
-  createRootRoute,
+  createRootRouteWithContext,
   createRoute,
   createRouter,
   Link,
@@ -10,9 +10,11 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 
-import { FleetPage } from "./FleetPage";
-import { InstallPage } from "./InstallPage";
-import { ReleasesPage } from "./ReleasesPage";
+import type { RelayRouterContext } from "@awzy/relay/routes";
+
+import { FleetPage, loadFleetPage } from "./FleetPage";
+import { InstallPage, loadInstallPage } from "./InstallPage";
+import { loadReleasesPage, ReleasesPage } from "./ReleasesPage";
 import { Account } from "./session";
 
 function Nav() {
@@ -47,7 +49,7 @@ function Root() {
   );
 }
 
-const rootRoute = createRootRoute({ component: Root });
+const rootRoute = createRootRouteWithContext<RelayRouterContext>()({ component: Root });
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -57,16 +59,30 @@ const indexRoute = createRoute({
   },
 });
 
-const installsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/installs", component: FleetPage });
+// Each page's query starts in its route's loader, as navigation begins (ADR 0099).
+const installsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/installs",
+  loader: ({ context }) => loadFleetPage(context.environment, {}),
+  component: FleetPage,
+});
 const installRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/installs/$installId",
+  loader: ({ context, params }) => loadInstallPage(context.environment, { id: params.installId }),
   component: InstallPage,
 });
-const releasesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/releases", component: ReleasesPage });
+const releasesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/releases",
+  loader: ({ context }) => loadReleasesPage(context.environment, {}),
+  component: ReleasesPage,
+});
 
 export const router = createRouter({
   routeTree: rootRoute.addChildren([indexRoute, installsRoute, installRoute, releasesRoute]),
+  // Set where the router is rendered, from the signed-in environment.
+  context: { environment: undefined! },
 });
 
 declare module "@tanstack/react-router" {

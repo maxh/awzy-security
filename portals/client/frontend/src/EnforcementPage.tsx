@@ -1,15 +1,21 @@
+import { routeQuery } from "@awzy/relay/routes";
 import { EmptyState, PageHeader, PageLoader, Section, Stat, StatusBadge } from "@awzy/ui";
 import { Alert, Button, Group, Modal, SimpleGrid, Stack, Table, Text } from "@mantine/core";
+import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { IconHistory, IconShieldCheck } from "@tabler/icons-react";
 import { Suspense, useState } from "react";
-import { graphql, useLazyLoadQuery, useRelayEnvironment } from "react-relay";
+import { graphql, type PreloadedQuery, usePreloadedQuery, useRelayEnvironment } from "react-relay";
 
 import type { EnforcementPageQuery } from "./__generated__/EnforcementPageQuery.graphql";
+import EnforcementPageQueryNode from "./__generated__/EnforcementPageQuery.graphql";
 import type { EnforcementPageSetModeMutation } from "./__generated__/EnforcementPageSetModeMutation.graphql";
 import { Entity, formatTime, Time } from "./format";
 import { OutageFallbackSection } from "./OutageFallbackSection";
 import { mutate, passChallenge } from "./securityKeyChallenge";
 import { webAuthnMessage } from "./webauthn";
+
+/** Started by the route's loader as navigation begins (ADR 0099). */
+export const loadEnforcementPage = routeQuery<EnforcementPageQuery>(EnforcementPageQueryNode);
 
 const setMode = graphql`
   mutation EnforcementPageSetModeMutation($input: SetEnforcementModeInput!) {
@@ -26,12 +32,15 @@ const setMode = graphql`
   }
 `;
 
+const route = getRouteApi("/enforcement");
+
 /**
  * Monitor or enforce for the whole install (ADR 0007), and what enforcing would change; and the
  * same switch for awzy-reasoner's automated containments (ADR 0066).
  */
 export function EnforcementPage() {
-  const [fetchKey, setFetchKey] = useState(0);
+  const queryRef = route.useLoaderData();
+  const router = useRouter();
   return (
     <>
       <PageHeader
@@ -39,7 +48,7 @@ export function EnforcementPage() {
         description="Whether decisions are enforced or only recorded, and what enforcing would have denied (ADR 0007)."
       />
       <Suspense fallback={<PageLoader />}>
-        <Enforcement fetchKey={fetchKey} onChanged={() => setFetchKey((k) => k + 1)} />
+        <Enforcement queryRef={queryRef} onChanged={() => void router.invalidate()} />
       </Suspense>
     </>
   );
@@ -49,8 +58,14 @@ function percent(part: number, total: number): string {
   return total === 0 ? "0%" : `${((part / total) * 100).toFixed(1)}%`;
 }
 
-function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => void }) {
-  const data = useLazyLoadQuery<EnforcementPageQuery>(
+function Enforcement({
+  queryRef,
+  onChanged,
+}: {
+  queryRef: PreloadedQuery<EnforcementPageQuery>;
+  onChanged: () => void;
+}) {
+  const data = usePreloadedQuery<EnforcementPageQuery>(
     graphql`
       query EnforcementPageQuery {
         canSwitch: viewerCan(action: ADMINISTER, area: ENFORCEMENT)
@@ -104,8 +119,7 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
         }
       }
     `,
-    {},
-    { fetchKey, fetchPolicy: "store-and-network" },
+    queryRef,
   );
   const environment = useRelayEnvironment();
   const [isSaving, setSaving] = useState(false);
