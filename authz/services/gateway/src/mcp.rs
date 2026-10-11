@@ -424,7 +424,13 @@ async fn check(
         human_present: principal.human_present,
         always_enforced: false,
     };
-    match state.0.pdp.clone().check(req).await {
+    // A PDP pod shutting down can break the connection under one check; ask again before
+    // treating it as an outage.
+    let ask = || {
+        let (mut pdp, req) = (state.0.pdp.clone(), req.clone());
+        async move { pdp.check(req).await }
+    };
+    match awzy_service_auth::retry_once_if_unanswered(ask).await {
         Ok(res) => {
             let res = res.into_inner();
             // UNSPECIFIED counts as enforce: never skip enforcement by accident.

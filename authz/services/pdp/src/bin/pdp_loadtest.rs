@@ -81,14 +81,19 @@ async fn main() -> anyhow::Result<()> {
     let deadline = Instant::now() + Duration::from_secs(seconds);
     let mut workers = Vec::new();
     for w in 0..clients {
-        let mut client = client.clone();
+        let client = client.clone();
         workers.push(tokio::spawn(async move {
             let mut latencies = Vec::new();
             let mut errors = 0usize;
             let mut i = w;
             while Instant::now() < deadline {
                 let start = Instant::now();
-                match client.check(request(i)).await {
+                // Retried once like an enforcement point does, so a rollout counts what they'd see.
+                let ask = || {
+                    let mut client = client.clone();
+                    async move { client.check(request(i)).await }
+                };
+                match awzy_service_auth::retry_once_if_unanswered(ask).await {
                     Ok(_) => latencies.push(start.elapsed()),
                     Err(_) => errors += 1,
                 }

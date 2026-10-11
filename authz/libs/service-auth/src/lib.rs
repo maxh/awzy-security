@@ -277,6 +277,30 @@ pub fn grpc_channel(channel: tonic::transport::Channel, audience: &str) -> AuthC
     )
 }
 
+/// Runs a gRPC call, and once more if it failed without the server's answer: the connection broke
+/// under it, as when the pod it reached is shutting down (ADR 0072), and a second try gets a new
+/// connection to another pod. Depending on where the connection broke, that's `Unavailable`,
+/// `Cancelled` (closed before the request was sent), `Internal` (the stream reset), or `Unknown`.
+/// Only for calls that are safe to repeat, like a PDP check.
+pub async fn retry_once_if_unanswered<T, F, Fut>(mut call: F) -> Result<T, tonic::Status>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<T, tonic::Status>>,
+{
+    match call().await {
+        Err(status) if unanswered(&status) => {
+            tracing::debug!(%status, "retrying a call the server didn't answer");
+            call().await
+        }
+        result => result,
+    }
+}
+
+fn unanswered(status: &tonic::Status) -> bool {
+    use tonic::Code;
+    matches!(status.code(), Code::Unavailable | Code::Cancelled | Code::Internal | Code::Unknown)
+}
+
 /// Adds `authorization` metadata to each gRPC call, read from the mounted token.
 #[derive(Clone)]
 pub struct TokenInterceptor {
@@ -543,5 +567,47 @@ mod tests {
         assert!(source.authorization("awzy-policy").is_err(), "no token mounted for that audience");
         assert_eq!(TokenSource::off().authorization("awzy-context").unwrap(), None);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_call_the_server_did_not_answer_is_tried_once_more() {
+        for code in [tonic::Code::Unavailable, tonic::Code::Cancelled, tonic::Code::Internal, tonic::Code::Unknown] {
+            let tries = std::cell::Cell::new(0);
+            let res = retry_once_if_unanswered(|| {
+                tries.set(tries.get() + 1);
+                let first = tries.get() == 1;
+                async move {
+                    if first {
+                        Err(tonic::Status::new(code, "connection closed"))
+                    } else {
+                        Ok("allow")
+                    }
+                }
+            })
+            .await;
+            assert_eq!(res.unwrap(), "allow", "{code:?}");
+            assert_eq!(tries.get(), 2);
+        }
+    }
+
+    #[tokio::test]
+    async fn only_once_and_never_after_the_server_answered() {
+        let tries = std::cell::Cell::new(0);
+        let res: Result<(), _> = retry_once_if_unanswered(|| {
+            tries.set(tries.get() + 1);
+            async { Err(tonic::Status::unavailable("still down")) }
+        })
+        .await;
+        assert_eq!(res.unwrap_err().code(), tonic::Code::Unavailable);
+        assert_eq!(tries.get(), 2, "one retry, not more");
+
+        let tries = std::cell::Cell::new(0);
+        let res: Result<(), _> = retry_once_if_unanswered(|| {
+            tries.set(tries.get() + 1);
+            async { Err(tonic::Status::invalid_argument("no action")) }
+        })
+        .await;
+        assert_eq!(res.unwrap_err().code(), tonic::Code::InvalidArgument);
+        assert_eq!(tries.get(), 1);
     }
 }

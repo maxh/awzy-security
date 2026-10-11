@@ -51,7 +51,7 @@ impl Approvals {
         approving_for: Option<&str>,
         entities: Vec<Entity>,
     ) -> Result<(), ApprovalError> {
-        let mut client = match self {
+        let client = match self {
             Self::Pdp(client) => client.clone(),
             Self::Off => return Err(ApprovalError::Unavailable("awzy-challenge has no PDP (AWZY_PDP_ADDR)".into())),
             #[cfg(test)]
@@ -67,16 +67,20 @@ impl Approvals {
         if let Some(human) = approving_for {
             context.insert("approving_for".into(), json!({ "__entity": { "type": entity_type::HUMAN, "id": human } }));
         }
-        let res = client
-            .check(CheckRequest {
-                principal: Some(approver.clone().into()),
-                action: APPROVE_ACTION.into(),
-                resource: Some(resource.clone().into()),
-                context: Some(json_to_struct(context)),
-                always_enforced: true,
-                entities,
-                ..Default::default()
-            })
+        let req = CheckRequest {
+            principal: Some(approver.clone().into()),
+            action: APPROVE_ACTION.into(),
+            resource: Some(resource.clone().into()),
+            context: Some(json_to_struct(context)),
+            always_enforced: true,
+            entities,
+            ..Default::default()
+        };
+        let ask = || {
+            let (mut client, req) = (client.clone(), req.clone());
+            async move { client.check(req).await }
+        };
+        let res = awzy_service_auth::retry_once_if_unanswered(ask)
             .await
             .map_err(|s| ApprovalError::Unavailable(s.message().to_string()))?
             .into_inner();
