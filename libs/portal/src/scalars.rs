@@ -75,7 +75,7 @@ impl JsonString {
     /// `text`, if it's valid JSON.
     pub fn parse_text(text: impl Into<String>) -> Result<Self, serde_json::Error> {
         let text = text.into();
-        serde_json::from_str::<serde_json::de::IgnoredAny>(&text)?;
+        serde_json::from_str::<serde_json::Value>(&text)?;
         Ok(Self(text))
     }
 
