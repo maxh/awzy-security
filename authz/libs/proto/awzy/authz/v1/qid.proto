@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+// Marks which of awzy's entities a field's QIDs are of (ADR 0101).
+package awzy.authz.v1;
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.FieldOptions {
+  // The entity, as its QIDs' prefix: `challenge` for `challenge_<uuid>`, one of those in
+  // libs/model/src/qid.rs. Every `qid` and `*_qid` field carries it, which CI checks. The wire
+  // stays a string; a service parses it into the entity's typed ID where a request arrives.
+  string qid = 50001;
+}

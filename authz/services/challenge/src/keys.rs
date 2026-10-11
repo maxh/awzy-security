@@ -49,9 +49,9 @@ pub struct Ceremony {
 }
 
 /// A browser's `navigator.credentials.get()` response.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Assertion {
-    pub ceremony_id: String,
+    pub ceremony_id: CeremonyId,
     pub credential_id: Vec<u8>,
     pub client_data_json: Vec<u8>,
     pub authenticator_data: Vec<u8>,
@@ -177,8 +177,7 @@ impl SecurityKeys {
     }
 
     /// Marks the ceremony used, committed on its own, before its response is checked.
-    async fn spend(&self, id: &str, human: &str, purpose: Purpose) -> Result<Spent, KeyError> {
-        let id: CeremonyId = id.parse().map_err(|_| KeyError::BadCeremony)?;
+    async fn spend(&self, id: CeremonyId, human: &str, purpose: Purpose) -> Result<Spent, KeyError> {
         let row = sqlx::query(
             "UPDATE webauthn_ceremonies SET used_at = now() \
              WHERE id = $1 AND human_id = $2 AND purpose = $3 AND used_at IS NULL AND expires_at > now() \
@@ -267,7 +266,7 @@ impl SecurityKeys {
             (true, _) => None,
             (false, None) => return Err(KeyError::NeedsExistingKey { human: human.into() }),
             (false, Some(a)) => {
-                let spent = self.spend(&a.ceremony_id, human, Purpose::KeyChange).await?;
+                let spent = self.spend(a.ceremony_id, human, Purpose::KeyChange).await?;
                 let mut tx = self.pool.begin().await?;
                 let key = self.check_assertion(&mut tx, human, &spent.challenge, a).await?;
                 tx.commit().await?;
@@ -293,7 +292,7 @@ impl SecurityKeys {
     pub async fn finish_registration(
         &self,
         human: &str,
-        ceremony_id: &str,
+        ceremony_id: CeremonyId,
         name: &str,
         client_data_json: &[u8],
         attestation_object: &[u8],
@@ -340,7 +339,7 @@ impl SecurityKeys {
         id: SecurityKeyId,
         authorization: &Assertion,
     ) -> Result<SecurityKey, KeyError> {
-        let spent = self.spend(&authorization.ceremony_id, human, Purpose::KeyChange).await?;
+        let spent = self.spend(authorization.ceremony_id, human, Purpose::KeyChange).await?;
         let mut tx = self.pool.begin().await?;
         let with = self.check_assertion(&mut tx, human, &spent.challenge, authorization).await?;
         let row = sqlx::query(
@@ -390,7 +389,7 @@ impl SecurityKeys {
 
     /// Passes the verification on the ceremony's challenge with the browser's `get()` response.
     pub async fn finish_verification(&self, human: &str, a: &Assertion) -> Result<Challenge, KeyError> {
-        let spent = self.spend(&a.ceremony_id, human, Purpose::Verify).await?;
+        let spent = self.spend(a.ceremony_id, human, Purpose::Verify).await?;
         let challenge_id = spent.challenge_id.ok_or(KeyError::BadCeremony)?;
         let mut tx = self.challenges.begin().await?;
         let c = self.challenges.lock_for(&mut tx, challenge_id, human, ChallengeKind::Verification).await?;
@@ -442,7 +441,7 @@ mod tests {
     fn assertion(key: &mut SoftKey, ceremony: &Ceremony) -> Assertion {
         let (client, auth, sig) = key.assert(&challenge_of(ceremony), PRESENT);
         Assertion {
-            ceremony_id: ceremony.id.to_string(),
+            ceremony_id: ceremony.id,
             credential_id: key.credential_id.clone(),
             client_data_json: client,
             authenticator_data: auth,
@@ -458,7 +457,7 @@ mod tests {
     ) -> Result<SecurityKey, KeyError> {
         let ceremony = keys.begin_registration(human, authorization).await?;
         let (client, object) = key.register(&challenge_of(&ceremony));
-        keys.finish_registration(human, &ceremony.id.to_string(), "YubiKey", &client, &object).await
+        keys.finish_registration(human, ceremony.id, "YubiKey", &client, &object).await
     }
 
     #[tokio::test]

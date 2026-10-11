@@ -27,7 +27,7 @@ use awzy_authz_proto::{
     challenges_from_wire, challenges_to_wire,
     prost_types::Timestamp,
 };
-use awzy_model::{ContainmentId, DecisionId, EntityRef, SupportSessionId};
+use awzy_model::{ContainmentId, DecisionId, EntityRef, PolicyBundleId, SupportSessionId};
 use axum::Router;
 use chrono::{DateTime, Utc};
 // tonic's own re-export, so the stream wrapper needs no dependency of its own.
@@ -363,6 +363,10 @@ impl ChallengeService for Service {
         req: Request<ReportBreakGlassRequest>,
     ) -> Result<Response<ReportBreakGlassResponse>, Status> {
         let req = req.into_inner();
+        // Optional: a break-glass restore names the bundle only when it restored one.
+        if !req.policy_bundle_qid.is_empty() {
+            qid::<PolicyBundleId>(&req.policy_bundle_qid)?;
+        }
         let details = serde_json::json!({
             "key_id": req.key_id,
             "reason": req.reason,
@@ -466,7 +470,7 @@ impl ChallengeService for Service {
     ) -> Result<Response<BeginKeyRegistrationResponse>, Status> {
         let req = req.into_inner();
         let human = required(req.human_id, "human_id")?;
-        let authorization = req.authorization.map(assertion);
+        let authorization = req.authorization.map(assertion).transpose()?;
         let c = self.keys()?.begin_registration(&human, authorization.as_ref()).await.map_err(key_status)?;
         Ok(Response::new(BeginKeyRegistrationResponse {
             ceremony_qid: c.id.to_string(),
@@ -482,7 +486,13 @@ impl ChallengeService for Service {
         let human = required(req.human_id, "human_id")?;
         let key = self
             .keys()?
-            .finish_registration(&human, &req.ceremony_qid, &req.name, &req.client_data_json, &req.attestation_object)
+            .finish_registration(
+                &human,
+                qid(&req.ceremony_qid)?,
+                &req.name,
+                &req.client_data_json,
+                &req.attestation_object,
+            )
             .await
             .map_err(key_status)?;
         tracing::warn!(key_id = %key.id, human = %human, added_with = ?key.added_with, "security key added");
@@ -495,8 +505,11 @@ impl ChallengeService for Service {
     ) -> Result<Response<RemoveSecurityKeyResponse>, Status> {
         let req = req.into_inner();
         let human = required(req.human_id, "human_id")?;
-        let authorization =
-            req.authorization.map(assertion).ok_or_else(|| Status::invalid_argument("authorization is required"))?;
+        let authorization = req
+            .authorization
+            .map(assertion)
+            .transpose()?
+            .ok_or_else(|| Status::invalid_argument("authorization is required"))?;
         let key = self.keys()?.remove(&human, qid(&req.security_key_qid)?, &authorization).await.map_err(key_status)?;
         tracing::warn!(key_id = %key.id, human = %human, "security key removed");
         Ok(Response::new(RemoveSecurityKeyResponse { key: Some(key_to_wire(key)) }))
@@ -532,7 +545,11 @@ impl ChallengeService for Service {
     ) -> Result<Response<FinishVerificationResponse>, Status> {
         let req = req.into_inner();
         let human = required(req.human_id, "human_id")?;
-        let a = req.assertion.map(assertion).ok_or_else(|| Status::invalid_argument("assertion is required"))?;
+        let a = req
+            .assertion
+            .map(assertion)
+            .transpose()?
+            .ok_or_else(|| Status::invalid_argument("assertion is required"))?;
         let c = self.keys()?.finish_verification(&human, &a).await.map_err(key_status)?;
         tracing::info!(challenge_id = %c.id, human = %human, status = c.status.as_str(), "challenge verified with a security key");
         Ok(Response::new(FinishVerificationResponse { challenge: Some(challenge_to_wire(c)) }))
@@ -637,14 +654,14 @@ fn required(s: String, what: &str) -> Result<String, Status> {
     }
 }
 
-fn assertion(a: WireAssertion) -> Assertion {
-    Assertion {
-        ceremony_id: a.ceremony_qid,
+fn assertion(a: WireAssertion) -> Result<Assertion, Status> {
+    Ok(Assertion {
+        ceremony_id: qid(&a.ceremony_qid)?,
         credential_id: a.credential_id,
         client_data_json: a.client_data_json,
         authenticator_data: a.authenticator_data,
         signature: a.signature,
-    }
+    })
 }
 
 fn key_status(e: KeyError) -> Status {

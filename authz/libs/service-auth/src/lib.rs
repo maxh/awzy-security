@@ -13,7 +13,12 @@
 //! where there's no service-account token: a laptop, a test. `AWZY_SERVICE_AUTH=on|off`
 //! overrides that.
 
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{Arc, RwLock},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use awzy_identity::jwks::Jwks;
 use axum::{
@@ -106,6 +111,38 @@ struct Checks {
     audience: String,
     issuer: String,
     keys: Keys,
+    verified: Verified,
+}
+
+/// Tokens that passed, by the exact token, with their caller and expiry. A workload sends the same
+/// projected token for minutes (the kubelet renews it at 80% of its life), so checking its
+/// signature again on every request costs CPU and proves nothing new: the PDP's hottest path.
+#[derive(Default)]
+struct Verified(RwLock<HashMap<String, (Caller, u64)>>);
+
+impl Verified {
+    /// Enough for every workload in an install, a few tokens each.
+    const MAX: usize = 10_000;
+
+    fn get(&self, token: &str, now: u64) -> Option<Caller> {
+        let cache = self.0.read().unwrap_or_else(|e| e.into_inner());
+        cache.get(token).filter(|(_, exp)| *exp > now).map(|(caller, _)| caller.clone())
+    }
+
+    fn insert(&self, token: &str, caller: &Caller, exp: u64, now: u64) {
+        let mut cache = self.0.write().unwrap_or_else(|e| e.into_inner());
+        if cache.len() >= Self::MAX {
+            cache.retain(|_, (_, exp)| *exp > now);
+            if cache.len() >= Self::MAX {
+                cache.clear();
+            }
+        }
+        cache.insert(token.to_string(), (caller.clone(), exp));
+    }
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or_default()
 }
 
 /// Checks callers' tokens for one receiving service. Off, it lets everyone through.
@@ -139,7 +176,7 @@ impl Verifier {
     }
 
     fn with_keys(audience: &str, issuer: &str, keys: Keys) -> Self {
-        Self(Some(Checks { audience: audience.into(), issuer: issuer.into(), keys }))
+        Self(Some(Checks { audience: audience.into(), issuer: issuer.into(), keys, verified: Verified::default() }))
     }
 
     /// Checks the request's `Authorization` header against `allowed`. `Ok(None)` when off.
@@ -163,10 +200,23 @@ impl Verifier {
 #[derive(Deserialize)]
 struct Claims {
     sub: String,
+    exp: u64,
 }
 
 impl Checks {
+    /// The token's caller: from the cache until the token expires, verified otherwise. Each
+    /// verifier checks one audience, so a token cached here passed for this service.
     async fn verify(&self, token: &str) -> Result<Caller, AuthError> {
+        let now = unix_now();
+        if let Some(caller) = self.verified.get(token, now) {
+            return Ok(caller);
+        }
+        let (caller, exp) = self.verify_signed(token).await?;
+        self.verified.insert(token, &caller, exp, now);
+        Ok(caller)
+    }
+
+    async fn verify_signed(&self, token: &str) -> Result<(Caller, u64), AuthError> {
         let invalid = |e: &dyn std::fmt::Display| AuthError::Invalid(e.to_string());
         let header = decode_header(token).map_err(|e| invalid(&e))?;
         // Kubernetes signs with RS256 or ES256; anything else (none, HS*) is refused outright.
@@ -183,7 +233,7 @@ impl Checks {
         // system:serviceaccount:<namespace>:<name>
         match claims.sub.split(':').collect::<Vec<_>>().as_slice() {
             ["system", "serviceaccount", namespace, name] => {
-                Ok(Caller { namespace: namespace.to_string(), service_account: name.to_string() })
+                Ok((Caller { namespace: namespace.to_string(), service_account: name.to_string() }, claims.exp))
             }
             _ => Err(AuthError::Invalid(format!("{} isn't a service account", claims.sub))),
         }
@@ -442,6 +492,48 @@ mod tests {
         let res = c.verifier.check(Some(&forged), &only_pdp).await;
         assert!(matches!(res, Err(AuthError::Invalid(_))), "signed by another key: {res:?}");
         assert_eq!(c.verifier.check(None, &only_pdp).await, Err(AuthError::Missing));
+    }
+
+    fn cached(c: &Cluster) -> usize {
+        c.verifier.0.as_ref().unwrap().verified.0.read().unwrap().len()
+    }
+
+    #[tokio::test]
+    async fn a_verified_token_is_remembered_until_it_expires_and_callers_are_still_checked() {
+        let c = cluster("awzy-context");
+        let pdp = token(&c, PDP, json!({}));
+        let only_pdp = Allowed::only(&["awzy-system/awzy-pdp"]);
+        for _ in 0..3 {
+            assert!(c.verifier.check(Some(&pdp), &only_pdp).await.is_ok());
+        }
+        assert_eq!(cached(&c), 1, "verified once, then remembered");
+        // Remembered or not, a caller the route doesn't allow is refused.
+        assert_eq!(
+            c.verifier.check(Some(&pdp), &Allowed::only(&["awzy-system/awzy-reporter"])).await,
+            Err(AuthError::Forbidden("awzy-system/awzy-pdp".into()))
+        );
+
+        // Refused tokens aren't remembered.
+        let elsewhere = token(&c, PDP, json!({ "aud": ["awzy-policy"] }));
+        assert!(c.verifier.check(Some(&elsewhere), &only_pdp).await.is_err());
+        assert_eq!(cached(&c), 1);
+
+        // Past its expiry, a remembered token isn't taken from the cache.
+        let checks = c.verifier.0.as_ref().unwrap();
+        let bearer = pdp.strip_prefix("Bearer ").unwrap();
+        assert!(checks.verified.get(bearer, now()).is_some());
+        assert!(checks.verified.get(bearer, now() + 601).is_none());
+    }
+
+    #[test]
+    fn the_cache_stays_bounded() {
+        let verified = Verified::default();
+        let caller = Caller { namespace: "awzy-system".into(), service_account: "awzy".into() };
+        for i in 0..Verified::MAX + 10 {
+            verified.insert(&format!("token-{i}"), &caller, 100, 50);
+        }
+        assert!(verified.0.read().unwrap().len() <= Verified::MAX);
+        assert!(verified.get(&format!("token-{}", Verified::MAX + 9), 50).is_some(), "the newest is kept");
     }
 
     #[tokio::test]
