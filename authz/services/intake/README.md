@@ -26,11 +26,14 @@ to `decisions` (migration 5 in [awzy-clickhouse-migrate](../../jobs/clickhouse-m
 - **All or nothing.** A batch (at most 1,000 events) is refused with `400` and the index of the
   first bad event, so a shipper never half-delivers.
 - **Bearer token.** Shippers send `AWZY_INTAKE_TOKEN`, compared in constant time.
-- **CloudTrail callers stay as CloudTrail named them**: `AwsPrincipal` with the ARN, or
-  `AwsService` for a service acting on its own. Mapping them to people and service accounts is
-  for awzy-context.
+- **CloudTrail sessions of people roles are the person**
+  ([ADR 0086](../../../docs/adr/0086-cloudtrail-sessions-of-people-roles-are-the-person.md)): an
+  IAM Identity Center session, or a session of a role named in `AWZY_INTAKE_HUMAN_ROLES`, becomes
+  the `Human` its session name names, with the ARN kept as `awsPrincipal`. Other callers stay as
+  CloudTrail named them: `AwsPrincipal` with the ARN, or `AwsService` for a service acting on its
+  own.
 
-Not yet: that identity mapping, Cloud Audit Logs and the Azure Activity Log, DLP and endpoint
-signals, OpenTelemetry agent traces, and the Helm chart (awzy-intake isn't deployed yet).
+Not yet: mapping other roles to registered service accounts, Cloud Audit Logs and the Azure
+Activity Log, DLP and endpoint signals, and OpenTelemetry agent traces.
 
 Running it locally: [DEVELOPMENT.md](../../../DEVELOPMENT.md#events-awzy-intake).
