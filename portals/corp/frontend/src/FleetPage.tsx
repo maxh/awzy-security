@@ -1,4 +1,3 @@
-import { routeQuery } from "@awzy/relay/routes";
 import { EmptyState, PageHeader, PageLoader, Section, StatusBadge } from "@awzy/ui";
 import {
   Alert,
@@ -20,13 +19,9 @@ import { type FormEvent, Suspense, useState } from "react";
 import { graphql, type PreloadedQuery, useMutation, usePreloadedQuery } from "react-relay";
 
 import type { FleetPageQuery } from "./__generated__/FleetPageQuery.graphql";
-import FleetPageQueryNode from "./__generated__/FleetPageQuery.graphql";
 import type { FleetPageRegisterMutation, ReleaseChannel } from "./__generated__/FleetPageRegisterMutation.graphql";
 import { ago, CHANNELS, channelLabel, formatTime, healthOf } from "./format";
 import { McpTokenButton } from "./McpTokenButton";
-
-/** Started by the route's loader as navigation begins (ADR 0099). */
-export const loadFleetPage = routeQuery<FleetPageQuery>(FleetPageQueryNode);
 
 /** Every registered install, with its health and what it last reported (ADR 0026). */
 const route = getRouteApi("/installs");

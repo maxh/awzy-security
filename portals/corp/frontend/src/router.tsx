@@ -4,6 +4,7 @@ import {
   createRootRouteWithContext,
   createRoute,
   createRouter,
+  lazyRouteComponent,
   Link,
   Outlet,
   redirect,
@@ -12,9 +13,7 @@ import {
 
 import type { RelayRouterContext } from "@awzy/relay/routes";
 
-import { FleetPage, loadFleetPage } from "./FleetPage";
-import { InstallPage, loadInstallPage } from "./InstallPage";
-import { loadReleasesPage, ReleasesPage } from "./ReleasesPage";
+import { loadFleetPage, loadInstallPage, loadReleasesPage } from "./loaders";
 import { Account } from "./session";
 
 function Nav() {
@@ -64,22 +63,24 @@ const installsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/installs",
   loader: ({ context }) => loadFleetPage(context.environment, {}),
-  component: FleetPage,
+  component: lazyRouteComponent(() => import("./FleetPage"), "FleetPage"),
 });
 const installRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/installs/$installId",
   loader: ({ context, params }) => loadInstallPage(context.environment, { id: params.installId }),
-  component: InstallPage,
+  component: lazyRouteComponent(() => import("./InstallPage"), "InstallPage"),
 });
 const releasesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/releases",
   loader: ({ context }) => loadReleasesPage(context.environment, {}),
-  component: ReleasesPage,
+  component: lazyRouteComponent(() => import("./ReleasesPage"), "ReleasesPage"),
 });
 
 export const router = createRouter({
+  // Hovering over a link starts the page's code and its query (ADR 0099).
+  defaultPreload: "intent",
   routeTree: rootRoute.addChildren([indexRoute, installsRoute, installRoute, releasesRoute]),
   // Set where the router is rendered, from the signed-in environment.
   context: { environment: undefined! },

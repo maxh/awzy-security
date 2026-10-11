@@ -1,4 +1,3 @@
-import { routeQuery } from "@awzy/relay/routes";
 import { EmptyState, PageHeader, PageLoader, Section, StatusBadge, type Tone } from "@awzy/ui";
 import { Button, SimpleGrid, Stack, Table, Text } from "@mantine/core";
 import { IconPlugConnected } from "@tabler/icons-react";
@@ -7,11 +6,7 @@ import { Suspense } from "react";
 import { graphql, type PreloadedQuery, usePreloadedQuery } from "react-relay";
 
 import type { ConnectorsPageQuery } from "./__generated__/ConnectorsPageQuery.graphql";
-import ConnectorsPageQueryNode from "./__generated__/ConnectorsPageQuery.graphql";
 import { Time } from "./format";
-
-/** Started by the route's loader as navigation begins (ADR 0099). */
-export const loadConnectorsPage = routeQuery<ConnectorsPageQuery>(ConnectorsPageQueryNode, "network-only");
 
 const LABELS: Record<string, string> = { drive: "Google Drive", jira: "Jira" };
 

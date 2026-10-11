@@ -1,19 +1,26 @@
 import { PageErrorBoundary, PortalShell } from "@awzy/ui";
 import { Suspense } from "react";
-import { createRootRouteWithContext, createRoute, createRouter, Outlet, useRouterState } from "@tanstack/react-router";
+import {
+  createRootRouteWithContext,
+  createRoute,
+  createRouter,
+  lazyRouteComponent,
+  Outlet,
+  useRouterState,
+} from "@tanstack/react-router";
 import type { RelayRouterContext } from "@awzy/relay/routes";
 
-import { ChallengesPage, loadChallengesPage } from "./ChallengesPage";
-import { ConnectorsPage, loadConnectorsPage } from "./ConnectorsPage";
-import { DecisionsPage } from "./DecisionsPage";
-import { DirectoryPage, loadDirectoryPageSummary } from "./DirectoryPage";
-import { EnforcementPage, loadEnforcementPage } from "./EnforcementPage";
-import { InvestigationsPage } from "./InvestigationsPage";
-import { LookupPage } from "./LookupPage";
-import { loadPoliciesPage, PoliciesPage } from "./PoliciesPage";
-import { loadStatusPage, StatusPage } from "./StatusPage";
-import { loadSupportPage, SupportBanner, SupportPage } from "./SupportPage";
+import { SupportBanner, SupportPage } from "./SupportPage";
 import { Home, loadNav, Nav } from "./Nav";
+import {
+  loadChallengesPage,
+  loadConnectorsPage,
+  loadDirectoryPageSummary,
+  loadEnforcementPage,
+  loadPoliciesPage,
+  loadStatusPage,
+  loadSupportPage,
+} from "./loaders";
 import { Account } from "./session";
 
 function Root() {
@@ -56,61 +63,61 @@ const indexRoute = createRoute({
 const decisionsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/decisions",
-  component: DecisionsPage,
+  component: lazyRouteComponent(() => import("./DecisionsPage"), "DecisionsPage"),
 });
 
 const policiesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/policies",
   loader: ({ context }) => loadPoliciesPage(context.environment, {}),
-  component: PoliciesPage,
+  component: lazyRouteComponent(() => import("./PoliciesPage"), "PoliciesPage"),
 });
 
 const enforcementRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/enforcement",
   loader: ({ context }) => loadEnforcementPage(context.environment, {}),
-  component: EnforcementPage,
+  component: lazyRouteComponent(() => import("./EnforcementPage"), "EnforcementPage"),
 });
 
 const directoryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/directory",
   loader: ({ context }) => loadDirectoryPageSummary(context.environment, {}),
-  component: DirectoryPage,
+  component: lazyRouteComponent(() => import("./DirectoryPage"), "DirectoryPage"),
 });
 
 const challengesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/challenges",
   loader: ({ context }) => loadChallengesPage(context.environment, {}),
-  component: ChallengesPage,
+  component: lazyRouteComponent(() => import("./ChallengesPage"), "ChallengesPage"),
 });
 
 const investigationsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/investigations",
-  component: InvestigationsPage,
+  component: lazyRouteComponent(() => import("./InvestigationsPage"), "InvestigationsPage"),
 });
 
 const lookupRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/lookup",
-  component: LookupPage,
+  component: lazyRouteComponent(() => import("./LookupPage"), "LookupPage"),
 });
 
 const connectorsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/connectors",
   loader: ({ context }) => loadConnectorsPage(context.environment, {}),
-  component: ConnectorsPage,
+  component: lazyRouteComponent(() => import("./ConnectorsPage"), "ConnectorsPage"),
 });
 
 const statusRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/status",
   loader: ({ context }) => loadStatusPage(context.environment, {}),
-  component: StatusPage,
+  component: lazyRouteComponent(() => import("./StatusPage"), "StatusPage"),
 });
 
 const supportRoute = createRoute({
@@ -121,6 +128,8 @@ const supportRoute = createRoute({
 });
 
 export const router = createRouter({
+  // Hovering over a link starts the page's code and its query (ADR 0099).
+  defaultPreload: "intent",
   routeTree: rootRoute.addChildren([
     indexRoute,
     decisionsRoute,

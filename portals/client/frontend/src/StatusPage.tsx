@@ -1,4 +1,3 @@
-import { routeQuery } from "@awzy/relay/routes";
 import { PageHeader, PageLoader, Section, StatusBadge } from "@awzy/ui";
 import { Alert, Anchor, Button, Code, Group, ScrollArea, Stack, Table, Text } from "@mantine/core";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
@@ -16,10 +15,6 @@ import { prettyJson, Time } from "./format";
 import type { StatusPage_heartbeatExport$key } from "./__generated__/StatusPage_heartbeatExport.graphql";
 import type { StatusPageDiagnosticsQuery } from "./__generated__/StatusPageDiagnosticsQuery.graphql";
 import type { StatusPageQuery } from "./__generated__/StatusPageQuery.graphql";
-import StatusPageQueryNode from "./__generated__/StatusPageQuery.graphql";
-
-/** Started by the route's loader as navigation begins (ADR 0099). */
-export const loadStatusPage = routeQuery<StatusPageQuery>(StatusPageQueryNode, "network-only");
 
 const route = getRouteApi("/status");
 
