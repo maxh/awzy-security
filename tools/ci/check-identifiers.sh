@@ -67,17 +67,23 @@ if [ -n "$binaries" ]; then
 fi
 
 case "${1:-}" in
+  # Only lines the cheap prefilter matches go on to findings(), which runs a few processes per
+  # line: a large commit otherwise runs thousands, and macOS kills the hook.
   --staged)
     input=$(git diff --cached -U0 --diff-filter=ACMR -- . "${skip[@]}" |
-      awk '/^\+\+\+ b\//{f=substr($0,7)} /^\+[^+]/{print f"\t"substr($0,2)}') ;;
+      awk '/^\+\+\+ b\//{f=substr($0,7)} /^\+[^+]/{print f"\t"substr($0,2)}' | { grep -E "$prefilter" || true; }) ;;
   --text)
-    input=$(awk '{print "PR text\t"$0}') ;;
+    input=$(awk '{print "PR text\t"$0}' | { grep -E "$prefilter" || true; }) ;;
   "")
     input=$(git grep -nE "$prefilter" -- . "${skip[@]}" | sed -E 's/^([^:]+:[0-9]+):/\1\t/' || true) ;;
   *) echo "usage: $0 [--staged | --text]" >&2; exit 2 ;;
 esac
 
 if ! out=$(printf '%s\n' "$input" | findings); then
+  if [ -z "$out" ]; then
+    echo "the identifier check itself failed without naming anything; run tools/ci/check-identifiers.sh ${1:-} to see why" >&2
+    exit 1
+  fi
   echo "$out" >&2
   echo "These look like real account, resource, or person identifiers, which don't belong in this public repository (.agents/skills/keep-deployments-out). Use a placeholder, or add a true placeholder to tools/ci/identifier-allowlist.txt." >&2
   exit 1
