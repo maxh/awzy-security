@@ -787,7 +787,8 @@ pub(crate) mod tests {
     async fn an_install_moves_between_channels_and_pins() {
         let Some(store) = test_store().await else { return };
         let (install, _) = store.register(&new_install("acme", "staging"), "max").await.unwrap();
-        let pinned = store.set_release(install.id, Channel::Pinned, Some("0.4.1-g000000000004")).await.unwrap().unwrap();
+        let pinned =
+            store.set_release(install.id, Channel::Pinned, Some("0.4.1-g000000000004")).await.unwrap().unwrap();
         assert_eq!((pinned.channel, pinned.pinned_version.as_deref()), (Channel::Pinned, Some("0.4.1-g000000000004")));
         let fast = store.set_release(install.id, Channel::Fast, None).await.unwrap().unwrap();
         assert_eq!((fast.channel, fast.pinned_version), (Channel::Fast, None));
@@ -796,7 +797,7 @@ pub(crate) mod tests {
         assert!(store.set_release(install.id, Channel::Stable, None).await.unwrap().is_none(), "not once it's retired");
     }
 
-        fn beat(install: InstallId, p99: f64, dps: f64, ready: u32) -> Heartbeat {
+    fn beat(install: InstallId, p99: f64, dps: f64, ready: u32) -> Heartbeat {
         serde_json::from_value(serde_json::json!({
             "schema_version": 1, "install_qid": install, "sent_at": Utc::now(), "chart_version": "0.5.0",
             "services": [{ "service": "awzy-pdp", "version": "0.5.0", "image_digest": null, "replicas_desired": 2,
