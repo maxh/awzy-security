@@ -199,8 +199,8 @@ the cluster on it.
 
 - **Upgrades** follow the release channel the install was registered with: Argo CD moves to the
   version the channel names within minutes of awzy moving it. `fast` gets every release as it's
-  published; a release reaches `stable` after it has run on `fast` for at least a day and a second
-  person at awzy has approved it. A pinned install stays on its version. Setting `chart_version`
+  published; a release reaches `stable` after it has run on `fast` for at least a day and awzy
+  promotes it. A pinned install stays on its version. Setting `chart_version`
   to an exact version and applying bootstrap again holds any install there. If a sync failed (a hook
   Job that kept failing, say), Argo CD keeps retrying that revision after you move on; stop it
   with `kubectl -n awzy-ops patch application awzy --type merge -p

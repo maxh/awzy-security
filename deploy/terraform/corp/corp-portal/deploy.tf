@@ -1,6 +1,6 @@
 # The role CI assumes after publishing to deploy the corp portal and the registry
 # (tools/ci/deploy-corp.sh), and to promote a chart to the stable channel (tools/ci/promote.sh).
-# Only pushes to main and the `stable` environment, behind its required reviewers, can assume it.
+# Only workflows on main can assume it.
 
 data "aws_iam_openid_connect_provider" "github" {
   url = "https://token.actions.githubusercontent.com"
@@ -22,12 +22,7 @@ data "aws_iam_policy_document" "ci_deploy_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      # Pushes to main deploy; the `stable` environment, behind its required reviewers, promotes
-      # (.github/workflows/promote.yml, ADR 0094).
-      values = [
-        "repo:${var.github_oidc_subject_repo}:ref:refs/heads/main",
-        "repo:${var.github_oidc_subject_repo}:environment:stable",
-      ]
+      values   = ["repo:${var.github_oidc_subject_repo}:ref:refs/heads/main"]
     }
   }
 }

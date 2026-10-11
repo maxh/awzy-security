@@ -19,7 +19,7 @@ type Actor {
 
 """
 The chart version a release channel names (ADR 0094): every publish moves `FAST`; a
-promotion, approved by a second person, moves `STABLE`.
+promotion, after a day's soak in fast, moves `STABLE`.
 """
 type ChannelVersion {
 	channel: ReleaseChannel!

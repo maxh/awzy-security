@@ -1,5 +1,5 @@
 -- Which chart version each release channel names (ADR 0094): every publish moves `fast`, and a
--- promotion, approved by a second person, moves `stable`. Append-only: a channel's version is its
+-- promotion, after a day's soak in fast, moves `stable`. Append-only: a channel's version is its
 -- latest row, and the rows are the history of who moved it. The registry proxy reads it to show
 -- each install only its channel's version.
 CREATE TABLE release_channel_changes (

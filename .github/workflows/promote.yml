@@ -1,7 +1,7 @@
 name: promote
-# Makes a chart version the stable channel's (ADR 0094). The `stable` environment's required
-# reviewers mean a second person approves each promotion before it runs; tools/ci/promote.sh
-# checks the version has soaked in fast first.
+# Makes a chart version the stable channel's (ADR 0094), once it has soaked in fast
+# (tools/ci/promote.sh checks). Run from main, so the deploy role trusts it. When awzy has a
+# second person to approve promotions, this job gets a GitHub environment with required reviewers.
 on:
   workflow_dispatch:
     inputs:
@@ -14,9 +14,8 @@ concurrency:
 jobs:
   stable:
     runs-on: ubuntu-latest
-    environment: stable
     permissions:
-      id-token: write # GitHub OIDC token for AWS: the deploy role trusts this environment
+      id-token: write # GitHub OIDC token for AWS: the deploy role trusts main
       contents: read
     steps:
       - uses: actions/checkout@v4

@@ -698,7 +698,6 @@ the registry proxy, which shows each one only the version its channel names
 portal's Releases page shows each channel's version.
 
 To promote a version to `stable`, run the `promote` workflow (Actions, or
-`gh workflow run promote.yml -f version=0.1.0-g<sha>`). It waits for a reviewer of the `stable`
-environment to approve, then refuses a version published less than 24 hours ago. The environment
-is set in the repository's settings: required reviewers, with "Prevent self-review" on, so the
-person who asks can't also approve.
+`gh workflow run promote.yml -f version=0.1.0-g<sha>`). It refuses a version published less than
+24 hours ago, so every stable release has run on `fast` first. Once there's a second person to
+approve promotions, the job gets a GitHub environment with required reviewers.

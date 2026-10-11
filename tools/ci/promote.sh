@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Makes a chart version the stable channel's (ADR 0094), after it has soaked: CI published it at
 # least AWZY_CORP_PROMOTE_SOAK_HOURS ago (default 24), and so it has been the fast channel's
-# since. Run by .github/workflows/promote.yml, in the `stable` environment, whose required
-# reviewers mean a second person approved it, as awzy-ci-deploy.
+# since. Run by .github/workflows/promote.yml, from main, as awzy-ci-deploy.
 #
 #   AWZY_CORP_PROMOTE_BY=<who asked> tools/ci/promote.sh 0.1.0-g<12 hex digits>
 set -euo pipefail

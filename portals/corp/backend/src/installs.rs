@@ -302,7 +302,7 @@ pub struct VersionSeen {
 }
 
 /// The chart version a release channel names (ADR 0094): every publish moves `FAST`; a
-/// promotion, approved by a second person, moves `STABLE`.
+/// promotion, after a day's soak in fast, moves `STABLE`.
 #[derive(SimpleObject)]
 pub struct ChannelVersion {
     pub channel: ReleaseChannel,
