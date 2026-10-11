@@ -78,6 +78,15 @@ tofu apply install.plan                      # 20–30 minutes, most of it EKS a
 and optionally `size_profile`, `vpc_cidr`, `eks_version`, `eks_public_access_cidrs`, and
 `deletion_protection`. Its one output, `install_contract`, is everything bootstrap needs.
 
+`size_profile` sets what costs the most:
+
+| Profile | NAT gateways | Aurora | Kafka (MSK) |
+| --- | --- | --- | --- |
+| `small` (default) | One, shared by both zones | Scales to zero after 10 idle minutes | Two `kafka.t3.small` brokers on Kafka 3.9 |
+| `standard`, `large` | One per zone | Never below 0.5 capacity units | Two `kafka.m7g.large` brokers on Kafka 4.1 (KRaft) |
+
+Only `small` has been sized and measured so far.
+
 **Check:** `aws eks update-kubeconfig --name awzy --region <region>` and
 `kubectl get nodes` lists ready nodes.
 
