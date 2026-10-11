@@ -11,6 +11,7 @@ pub mod access;
 pub mod awzy_bot;
 mod challenges;
 mod decisions;
+mod diagnostics;
 pub mod directory;
 mod dry_run;
 mod enforcement;
@@ -168,6 +169,7 @@ pub struct ClientPortalQuery(
     security_keys::SecurityKeyQuery,
     investigations::InvestigationQuery,
     status::StatusQuery,
+    diagnostics::DiagnosticsQuery,
 );
 
 #[derive(MergedObject, Default)]

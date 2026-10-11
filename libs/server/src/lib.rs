@@ -24,7 +24,7 @@ pub type Readiness = Arc<dyn Fn() -> bool + Send + Sync>;
 /// The release comes from AWZY_RELEASE_VERSION at runtime, which deployments set to the commit
 /// they deployed (the chart from its appVersion, the corp portal's deploy script from its tag).
 /// Builds don't stamp it: a version compiled in would make every commit rebuild every crate.
-fn version() -> serde_json::Value {
+pub fn version() -> serde_json::Value {
     version_from(std::env::var("AWZY_RELEASE_VERSION").ok(), std::env::var("AWZY_IMAGE_DIGEST").ok())
 }
 

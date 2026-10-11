@@ -13,7 +13,9 @@ description: What awzy can and can't see, and how releases reach your install.
   images included.
 - **A heartbeat, and nothing else, to awzy.** The only thing that leaves your install for awzy is
   a heartbeat to its corp portal: versions, readiness, and a few aggregate numbers, in a fixed
-  schema with no free-form fields. You can turn it off.
+  schema with no free-form fields. You can turn it off. A diagnostics bundle from the client
+  portal reaches awzy only if an admin downloads it and sends it, and holds no data about your
+  people, resources, decisions, or policies.
 - **Your own services, only when you turn them on.** Awzy Bot and investigations send prompts,
   including decisions and document text, to the model service in your own cloud account. Slack
   notifications send short messages naming the request to your own Slack workspace. Connectors

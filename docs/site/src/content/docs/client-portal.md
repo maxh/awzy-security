@@ -114,6 +114,13 @@ awzy-policy, awzy-context, awzy-challenge, and ClickHouse. It's a first look whe
 wrong, for anyone who can view the Enforcement page. A service that stays not ready is usually
 waiting on another; your platform team can see more with `kubectl`.
 
+Those who can administer enforcement can also generate a **diagnostics bundle** here, for when
+awzy support needs more than this page shows: each service's status, the portal's release, which
+optional features are on, and the names of the settings the portal runs with. It never holds your
+people, resources, decisions, or policies, and shows a setting's value only for a few harmless ones
+such as the log format, so no secret or hostname is in it. The page shows the whole bundle before
+you download it, and the file is exactly what you read.
+
 ## MCP for your own agents
 
 The portal also serves an [MCP](https://modelcontextprotocol.io) endpoint at `/mcp`, so your
