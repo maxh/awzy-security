@@ -8,6 +8,9 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { Configure } from "./ConnectorsPage";
 
+// relay-test-utils' mock environment calls jest.fn; Vitest's vi is the same API.
+vi.hoisted(() => Object.assign(globalThis, { jest: vi }));
+
 vi.mock("@tanstack/react-router", () => ({
   getRouteApi: () => ({ useLoaderData: () => null }),
   useRouter: () => ({ invalidate: () => Promise.resolve() }),
