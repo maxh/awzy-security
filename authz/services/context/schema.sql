@@ -37,6 +37,16 @@ BEGIN
 END
 $$;
 
+CREATE TABLE public.connector_settings (
+    name text NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    settings jsonb NOT NULL,
+    credential_set_at timestamp with time zone,
+    updated_by text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT connector_settings_name_check CHECK ((name = ANY (ARRAY['drive'::text, 'jira'::text])))
+);
+
 CREATE TABLE public.group_members (
     group_id uuid NOT NULL,
     member_id uuid NOT NULL
@@ -176,6 +186,9 @@ CREATE TABLE public.work_items (
 );
 
 ALTER TABLE ONLY public.resource_changes ALTER COLUMN seq SET DEFAULT nextval('public.resource_changes_seq_seq'::regclass);
+
+ALTER TABLE ONLY public.connector_settings
+    ADD CONSTRAINT connector_settings_pkey PRIMARY KEY (name);
 
 ALTER TABLE ONLY public.group_members
     ADD CONSTRAINT group_members_pkey PRIMARY KEY (group_id, member_id);

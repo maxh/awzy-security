@@ -9,6 +9,7 @@
 //! ([`investigations`]; ADR 0071). The Kafka change feed comes next.
 
 pub mod classify;
+pub mod connector_settings;
 pub mod investigations;
 pub mod resources;
 pub mod risk;
@@ -237,6 +238,9 @@ pub fn router(store: ContextStore, scim_token: &str, access: &Access) -> Router 
         .merge(guarded(investigations::read_router(store.clone()), &either(&access.writers, &access.directory)))
         // A person closes one in the client portal.
         .merge(guarded(investigations::close_router(store.clone()), &access.directory))
+        // Connector settings (ADR 0104): the client portal sets them, and connectors read them.
+        .merge(guarded(connector_settings::write_router(store.clone()), &access.directory))
+        .merge(guarded(connector_settings::read_router(store.clone()), &either(&access.readers, &access.directory)))
         .merge(guarded(directory, &access.directory))
         .merge(scim::router(store, scim_token))
 }

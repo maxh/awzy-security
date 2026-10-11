@@ -51,6 +51,11 @@ pub fn register(name: &'static str, settings: BTreeMap<&'static str, String>, in
     STATUS.lock().unwrap_or_else(|e| e.into_inner()).insert(name, status);
 }
 
+/// A connector that's no longer configured, or about to start again with new settings.
+pub fn unregister(name: &'static str) {
+    STATUS.lock().unwrap_or_else(|e| e.into_inner()).remove(name);
+}
+
 pub fn succeeded(name: &'static str, written: usize, deleted: usize) {
     with(name, |s| {
         s.last_success_at = Some(Utc::now());

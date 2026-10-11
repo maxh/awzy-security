@@ -44,23 +44,21 @@ pub struct DriveConfig {
 }
 
 impl DriveConfig {
-    /// From `AWZY_CONNECTORS_DRIVE_*`. None when `AWZY_CONNECTORS_DRIVE_SUBJECT` isn't set: Drive
-    /// is off.
-    pub fn from_env() -> anyhow::Result<Option<Self>> {
-        let Ok(subject) = std::env::var("AWZY_CONNECTORS_DRIVE_SUBJECT") else { return Ok(None) };
-        let domain = std::env::var("AWZY_CONNECTORS_DRIVE_DOMAIN")
-            .ok()
+    /// From the settings the client portal set (ADR 0104): `subject`, and optionally
+    /// `admin_subject`, `domain` (the subject's, by default), and `interval_secs`.
+    pub fn from_settings(s: &serde_json::Value) -> anyhow::Result<Self> {
+        let text = |k: &str| s[k].as_str().map(str::trim).filter(|v| !v.is_empty()).map(str::to_string);
+        let subject = text("subject").context("Drive's settings have no subject")?;
+        let domain = text("domain")
             .or_else(|| subject.split_once('@').map(|(_, d)| d.to_string()))
-            .context("AWZY_CONNECTORS_DRIVE_DOMAIN is needed when the subject isn't an email")?;
-        let interval =
-            std::env::var("AWZY_CONNECTORS_DRIVE_INTERVAL_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(300);
-        Ok(Some(Self {
+            .context("Drive needs a domain when the subject isn't an email address")?;
+        Ok(Self {
             subject,
-            admin_subject: std::env::var("AWZY_CONNECTORS_DRIVE_ADMIN_SUBJECT").ok().filter(|s| !s.is_empty()),
+            admin_subject: text("admin_subject"),
             domain: domain.to_lowercase(),
             api_base: "https://www.googleapis.com".into(),
-            interval: Duration::from_secs(interval),
-        }))
+            interval: Duration::from_secs(s["interval_secs"].as_u64().unwrap_or(300)),
+        })
     }
 }
 

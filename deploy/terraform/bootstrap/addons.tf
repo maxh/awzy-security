@@ -194,18 +194,11 @@ resource "helm_release" "config" {
         enabled  = var.intake != null
         hostname = try(var.intake.hostname == null ? "" : var.intake.hostname, "")
       }
+      # Settings come from the client portal; credentials from the cloud's secrets manager
+      # (ADR 0104).
       connectors = {
-        drive = {
-          subject      = var.drive == null ? "" : nonsensitive(var.drive.subject)
-          adminSubject = var.drive == null ? "" : nonsensitive(var.drive.admin_subject)
-          domain       = var.drive == null ? "" : nonsensitive(var.drive.domain)
-        }
-        jira = {
-          url      = var.jira == null ? "" : nonsensitive(var.jira.url)
-          user     = var.jira == null ? "" : nonsensitive(var.jira.user)
-          projects = var.jira == null ? [] : nonsensitive(var.jira.projects)
-          watchers = var.jira == null ? false : nonsensitive(var.jira.watchers)
-        }
+        drive = { secretRef = lookup(local.c.connector_secrets, "drive", "") }
+        jira  = { secretRef = lookup(local.c.connector_secrets, "jira", "") }
       }
     }
   })]
@@ -214,7 +207,7 @@ resource "helm_release" "config" {
     helm_release.argo_cd, helm_release.kyverno, helm_release.external_secrets,
     helm_release.clickhouse_operator, helm_release.envoy_gateway, helm_release.cert_manager,
     kubernetes_secret_v1.clickhouse, kubernetes_secret_v1.reporting_token, kubernetes_secret_v1.scim_token,
-    kubernetes_secret_v1.intake_token, kubernetes_secret_v1.drive, kubernetes_secret_v1.jira,
+    kubernetes_secret_v1.intake_token,
     kubernetes_secret_v1.registry, kubernetes_secret_v1.registry_kyverno, kubernetes_secret_v1.chart_repo,
     kubernetes_secret_v1.policy_verify, kubernetes_secret_v1.break_glass,
   ]

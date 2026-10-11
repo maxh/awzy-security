@@ -98,7 +98,7 @@ resource "aws_iam_role_policy" "services" {
 }
 
 # External Secrets Operator (installed by bootstrap) reads the Postgres credentials that RDS
-# keeps in Secrets Manager.
+# keeps in Secrets Manager, and the connectors' credentials.
 resource "aws_iam_role" "external_secrets" {
   name               = "${var.name}-external-secrets"
   assume_role_policy = data.aws_iam_policy_document.pod_identity_trust.json
@@ -108,11 +108,24 @@ resource "aws_iam_role_policy" "external_secrets" {
   role = aws_iam_role.external_secrets.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
-      Resource = [aws_rds_cluster.postgres.master_user_secret[0].secret_arn]
-    }]
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
+        # The Postgres credentials, and the connectors' (ADR 0104).
+        Resource = concat(
+          [aws_rds_cluster.postgres.master_user_secret[0].secret_arn],
+          [for s in aws_secretsmanager_secret.connector : s.arn],
+        )
+      },
+      {
+        # The connectors' secrets are encrypted with the install's key.
+        Effect    = "Allow"
+        Action    = ["kms:Decrypt"]
+        Resource  = [aws_kms_key.install.arn]
+        Condition = { StringEquals = { "kms:ViaService" = "secretsmanager.${data.aws_region.current.region}.amazonaws.com" } }
+      },
+    ]
   })
 }
 

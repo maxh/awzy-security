@@ -8,7 +8,9 @@ bootstrap:
   level: 0 # a bootstrap that predates the check passes none
   # 1: the policy signing key is the cloud layer's KMS key (#157)
   # 2: metrics-server, which the autoscalers below read CPU from (#66)
-  required: 2
+  # 3: the connectors' credentials in the cloud's secrets manager, in place of bootstrap's Secrets
+  #    (ADR 0104)
+  required: 3
 
 image:
   # install_contract.registry_prefix, e.g. 123456789012.dkr.ecr.us-east-2.amazonaws.com/awzy
@@ -248,24 +250,15 @@ intake:
     requests: { cpu: 100m, memory: 128Mi }
     limits: { memory: 256Mi }
 
-# awzy-connectors: on when Drive or Jira is configured. Always one replica.
+# awzy-connectors (ADR 0104): one replica, always deployed. A client admin configures Drive and
+# Jira in the client portal; their credentials come from the cloud's secrets manager, which
+# bootstrap names here.
 connectors:
-  # Google Drive (ADR 0069): a service account with domain-wide delegation, acting as `subject`,
-  # a Content manager of each shared drive to cover. Secret with key "key.json".
+  enabled: true
   drive:
-    subject: ""
-    adminSubject: "" # to name group shares as SCIM does; optional
-    domain: "" # default: the subject's
-    keySecret: awzy-connectors-drive
-    intervalSeconds: 300
-  # Jira Cloud (ADR 0070): an account that can browse the projects. Secret with key "token".
+    secretRef: "" # the Google service account key's secret
   jira:
-    url: "" # https://<site>.atlassian.net
-    user: ""
-    projects: [] # default: every project the account can browse
-    tokenSecret: awzy-connectors-jira
-    intervalSeconds: 300
-    watchers: false # count an issue's watchers as working on it; a Jira call per issue
+    secretRef: "" # the API token's secret
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { memory: 256Mi }

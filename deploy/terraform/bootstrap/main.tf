@@ -30,7 +30,7 @@ locals {
   # before it installs (ADR 0098). Raise it when a chart starts needing something new from here or
   # from the cloud layer (a Secret, a key, a value), and raise the chart's bootstrap.required to
   # match in the same change; tools/ci/check-bootstrap-level.sh keeps the two equal.
-  bootstrap_level = 2
+  bootstrap_level = 3
 
   namespaces = {
     system = "awzy-system"
@@ -155,25 +155,6 @@ output "intake" {
     token = random_password.intake[0].result
   }
   sensitive = true
-}
-
-# The connectors' credentials (ADR 0069, 0070).
-resource "kubernetes_secret_v1" "drive" {
-  count = var.drive == null ? 0 : 1
-  metadata {
-    name      = "awzy-connectors-drive"
-    namespace = kubernetes_namespace_v1.awzy["system"].metadata[0].name
-  }
-  data = { "key.json" = var.drive.key_json }
-}
-
-resource "kubernetes_secret_v1" "jira" {
-  count = var.jira == null ? 0 : 1
-  metadata {
-    name      = "awzy-connectors-jira"
-    namespace = kubernetes_namespace_v1.awzy["system"].metadata[0].name
-  }
-  data = { token = var.jira.token }
 }
 
 # The reporter sends heartbeats to the corp portal with this token (ADR 0026).
