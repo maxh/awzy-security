@@ -18,7 +18,7 @@ It has two layers, applied in order:
 | Layer | Module | What it makes |
 | --- | --- | --- |
 | Cloud | [`deploy/terraform/aws/install`](deploy/terraform/aws/install) | VPC, EKS, Aurora Postgres, MSK (Kafka), ElastiCache (Valkey), an S3 bucket, a KMS key for data at rest and one awzy-policy signs policy with, and Pod Identity roles. Outputs `install_contract`. |
-| Cluster | [`deploy/terraform/bootstrap`](deploy/terraform/bootstrap) | Namespaces, Secrets, Argo CD, Kyverno, External Secrets, the ClickHouse operator, Envoy Gateway, and cert-manager, then an Argo CD Application for the awzy chart. Never cloud-specific. |
+| Cluster | [`deploy/terraform/bootstrap`](deploy/terraform/bootstrap) | Namespaces, Secrets, Argo CD, Kyverno, External Secrets, the ClickHouse operator, Envoy Gateway, cert-manager, and metrics-server, then an Argo CD Application for the awzy chart. Never cloud-specific. |
 
 You call both from your own Terraform, as
 [`examples/example-client`](deploy/terraform/examples/example-client) does.
@@ -116,6 +116,7 @@ Bootstrap takes:
 | `intake` | awzy-intake, for your apps' and audit logs' events: its hostname for sources outside the cluster (null keeps it in-cluster); `null` for none |
 | `drive` | The Google Drive connector: the member user it acts as (a Content manager of each shared drive to cover), an admin to name group shares, and the Google service account's JSON key, with domain-wide delegation for `drive.metadata.readonly` and `admin.directory.group.readonly`; `null` for none |
 | `jira` | The Jira connector: your site's URL, an account that can browse the projects, the projects (default: all), and its API token; `null` for none |
+| `clickhouse_retention_days` | How many days ClickHouse keeps decisions and events; `0` (the default) keeps them all. See the docs site's "Data retention and backups" |
 | `break_glass_public_keys` | The PEM public keys of the admins who may roll back a policy bundle that locks everyone out, without the portal or your IdP; `null` turns break-glass off |
 | `demo_idp`, `demo_data`, `demo_activity` | **Demo installs only:** the dev IdP, the synthetic company, and its everyday tool calls through awzy-gateway each weekday (needs `mcp_gateway`) |
 
@@ -216,10 +217,18 @@ You can use your own monitoring instead: scrape each awzy pod's `/metrics` (port
 - **Upgrades** follow the release channel the install was registered with: Argo CD moves to the
   version the channel names within minutes of awzy moving it. `fast` gets every release as it's
   published; a release reaches `stable` after it has run on `fast` for at least a day and awzy
-  promotes it. A pinned install stays on its version. Setting `chart_version`
-  to an exact version and applying bootstrap again holds any install there, and setting an earlier
-  one rolls it back. Apply bootstrap from the same awzy commit as the chart: a release can change
-  what bootstrap makes for it (the policy signing key moved to KMS this way). Upgrades and
+  promotes it. A pinned install stays on its version. awzy's registry serves an install only the
+  version its channel names or the one it's pinned to, so holding an install on a version, or
+  rolling it back to an earlier one, is a pin: ask awzy to pin the install in the corp portal, then
+  set `chart_version` to that version and apply bootstrap. A `chart_version` the registry isn't
+  serving shows in Argo CD as `ComparisonError … not found`. Apply bootstrap from the same awzy
+  commit as the chart: a release can change what bootstrap makes for it (the policy signing key
+  moved to KMS this way).
+- **A release that needs a newer bootstrap waits.** Each release names the bootstrap level it needs,
+  and bootstrap passes the install's. When a channel brings a release your bootstrap is too old for,
+  Argo CD installs nothing and keeps the release you have running; `kubectl -n awzy-ops get
+  application awzy` shows `ComparisonError` and a message naming the awzy commit to apply. Apply the
+  cloud layer and then bootstrap from that commit, and the release installs. Upgrades and
   rollbacks were tested on the example install under load (the deployment plan's step 4). If a sync failed (a hook
   Job that kept failing, say), Argo CD keeps retrying that revision after you move on; stop it
   with `kubectl -n awzy-ops patch application awzy --type merge -p

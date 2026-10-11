@@ -884,6 +884,7 @@ dependencies = [
  "hyper-util",
  "jsonwebtoken",
  "p256",
+ "rmcp",
  "rustls",
  "serde",
  "serde_json",

@@ -42,6 +42,7 @@ export default defineConfig({
           items: [
             "guides/install",
             "guides/upgrading",
+            "guides/monitoring",
             "guides/troubleshooting",
             "guides/writing-policies",
             "guides/mcp-gateway",
@@ -49,6 +50,7 @@ export default defineConfig({
             "guides/connectors",
             "guides/optional-features",
             "guides/break-glass",
+            "guides/data-retention",
           ],
         },
         {

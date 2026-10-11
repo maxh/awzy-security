@@ -1,6 +1,15 @@
 # Values come from bootstrap, which maps install_contract onto them (deploy/terraform/bootstrap).
 # Namespaces and the ClickHouse credentials Secret are created by bootstrap, not this chart.
 
+# What the release needs from bootstrap (ADR 0098). `level` is set by bootstrap; `required` belongs
+# to the chart: an install whose bootstrap is older than this release needs installs nothing new,
+# keeps running the release it has, and says what to apply.
+bootstrap:
+  level: 0 # a bootstrap that predates the check passes none
+  # 1: the policy signing key is the cloud layer's KMS key (#157)
+  # 2: metrics-server, which the autoscalers below read CPU from (#66)
+  required: 2
+
 image:
   # install_contract.registry_prefix, e.g. 123456789012.dkr.ecr.us-east-2.amazonaws.com/awzy
   registry: ""
@@ -55,7 +64,13 @@ clickhouse:
   retentionDays: 0
 
 pdp:
-  replicas: 2
+  replicas: 2 # the minimum when autoscaling
+  # A HorizontalPodAutoscaler adds replicas, up to maxReplicas, to keep average CPU near cpuPercent
+  # of the request. It reads CPU from metrics-server, which bootstrap installs.
+  autoscaling:
+    enabled: true
+    maxReplicas: 4
+    cpuPercent: 70
   resources:
     requests: { cpu: 250m, memory: 256Mi }
     limits: { memory: 512Mi }
@@ -77,7 +92,11 @@ policy:
     limits: { memory: 256Mi }
 
 clientPortal:
-  replicas: 2
+  replicas: 2 # the minimum when autoscaling
+  autoscaling:
+    enabled: true
+    maxReplicas: 3
+    cpuPercent: 70
   # The client's IdP (required: the portal refuses to start without one).
   auth:
     issuer: ""
@@ -180,7 +199,11 @@ context:
 # portal's IdP unless auth is set here. Off until there's an upstream MCP server to front.
 mcpGateway:
   enabled: false
-  replicas: 2
+  replicas: 2 # the minimum when autoscaling
+  autoscaling:
+    enabled: true
+    maxReplicas: 4
+    cpuPercent: 70
   # Public hostname for agents outside the cluster: https://<hostname>/mcp/<upstream>. Empty: in-cluster only.
   hostname: ""
   # Tokens from the client portal's IdP unless set here, for an audience of their own (ADR 0081).
@@ -231,6 +254,7 @@ connectors:
     projects: [] # default: every project the account can browse
     tokenSecret: awzy-connectors-jira
     intervalSeconds: 300
+    watchers: false # count an issue's watchers as working on it; a Jira call per issue
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { memory: 256Mi }

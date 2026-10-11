@@ -1,5 +1,5 @@
 {
-  "checksum": "6ab9fe219a32c2e80bcb3fa6d4712bfba6a136f5c1d5af2f3ce96c3fdad722f0",
+  "checksum": "72a9ead17bf12d0848e5ff4173516bcda390fa627bcee03397bdb63cbfc5eb24",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -3652,6 +3652,10 @@
           {
             "id": "jsonwebtoken 11.1.0",
             "target": "jsonwebtoken"
+          },
+          {
+            "id": "rmcp 3.5.1",
+            "target": "rmcp"
           },
           {
             "id": "rustls 0.23.45",

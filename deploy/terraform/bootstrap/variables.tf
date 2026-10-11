@@ -126,11 +126,12 @@ variable "drive" {
 }
 
 variable "jira" {
-  description = "The Jira connector (ADR 0070): the site URL, the account's email, the projects in scope (default: all it can browse), and its API token. Null leaves it off"
+  description = "The Jira connector (ADR 0070): the site URL, the account's email, the projects in scope (default: all it can browse), whether watchers count as working on an issue (default: no), and its API token. Null leaves it off"
   type = object({
     url      = string
     user     = string
     projects = optional(list(string), [])
+    watchers = optional(bool, false)
     token    = string
   })
   default   = null
@@ -141,6 +142,16 @@ variable "demo_idp" {
   description = "DEMO INSTALLS ONLY (ADR 0032): sign the client portal in against the dev IdP at https://<hostname>/idp"
   type        = bool
   default     = false
+}
+
+variable "clickhouse_retention_days" {
+  description = "How many days ClickHouse keeps decisions and events before they expire; 0 keeps them all. Can change after install"
+  type        = number
+  default     = 0
+  validation {
+    condition     = var.clickhouse_retention_days >= 0 && floor(var.clickhouse_retention_days) == var.clickhouse_retention_days
+    error_message = "clickhouse_retention_days is a whole number of days, 0 or more."
+  }
 }
 
 variable "demo_data" {
@@ -179,6 +190,12 @@ variable "ingress" {
   })
 }
 
+variable "metrics_server" {
+  description = "Install metrics-server, which the chart's autoscalers read CPU from. Set false when the cluster already runs one (such as the EKS add-on)"
+  type        = bool
+  default     = true
+}
+
 variable "versions" {
   description = "Pinned chart versions of the components bootstrap installs"
   type = object({
@@ -188,6 +205,7 @@ variable "versions" {
     clickhouse_operator = optional(string, "0.27.3")
     envoy_gateway       = optional(string, "v1.9.1")
     cert_manager        = optional(string, "v1.21.1")
+    metrics_server      = optional(string, "3.14.0")
   })
   default = {}
 }

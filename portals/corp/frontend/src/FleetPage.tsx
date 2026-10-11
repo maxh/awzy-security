@@ -21,6 +21,7 @@ import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
 import type { FleetPageQuery } from "./__generated__/FleetPageQuery.graphql";
 import type { FleetPageRegisterMutation, ReleaseChannel } from "./__generated__/FleetPageRegisterMutation.graphql";
 import { ago, channelLabel, formatTime, healthOf } from "./format";
+import { McpTokenButton } from "./McpTokenButton";
 
 /** Every registered install, with its health and what it last reported (ADR 0026). */
 export function FleetPage() {
@@ -34,6 +35,7 @@ export function FleetPage() {
         description="Every registered install, with the health and numbers its last heartbeat reported."
         actions={
           <>
+            <McpTokenButton />
             <Button variant="default" leftSection={<IconRefresh size={16} />} onClick={() => setFetchKey((k) => k + 1)}>
               Refresh
             </Button>

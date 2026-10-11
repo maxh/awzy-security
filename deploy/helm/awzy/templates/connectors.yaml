@@ -25,6 +25,7 @@
   (dict "name" "AWZY_CONNECTORS_JIRA_USER" "value" (required "connectors.jira.user is required with connectors.jira.url" .user))
 ) }}
 {{- with .projects }}{{- $env = append $env (dict "name" "AWZY_CONNECTORS_JIRA_PROJECTS" "value" (join "," .)) }}{{- end }}
+{{- if .watchers }}{{- $env = append $env (dict "name" "AWZY_CONNECTORS_JIRA_WATCHERS" "value" "true") }}{{- end }}
 {{- $volumes = append $volumes (dict "name" "jira" "secret" (dict "secretName" .tokenSecret "items" (list (dict "key" "token" "path" "token")))) }}
 {{- $mounts = append $mounts (dict "name" "jira" "mountPath" "/etc/awzy/jira" "readOnly" true) }}
 {{- end }}{{- end }}

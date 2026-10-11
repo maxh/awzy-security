@@ -116,8 +116,8 @@ resource "aws_msk_cluster" "kafka" {
   encryption_info {
     encryption_at_rest_kms_key_arn = aws_kms_key.install.arn
     encryption_in_transit {
-      # Plaintext stays open until installs have moved to TLS without a gap; then TLS only.
-      client_broker = "TLS_PLAINTEXT"
+      # TLS only: every client moved to TLS first, so closing plaintext had no gap (ADR 0091).
+      client_broker = "TLS"
       in_cluster    = true
     }
   }

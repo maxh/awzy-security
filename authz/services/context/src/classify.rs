@@ -3,7 +3,7 @@
 //! sets `updated_at`, which puts it back in the queue.
 //!
 //! What the rules can't place keeps no tier and stays `unclassified` for policies, until the
-//! model step exists.
+//! model step exists. Each replica claims its batch with `SKIP LOCKED`, so they share the work.
 
 use std::time::Duration;
 
@@ -30,7 +30,9 @@ pub async fn run(store: ContextStore, every: Duration) {
 /// One pass over up to `limit` resources that are new or changed since they were classified.
 /// Returns how many it looked at.
 pub async fn classify_pending(store: &ContextStore, limit: i64) -> Result<usize, sqlx::Error> {
-    let pending = store.resources_to_classify(limit).await?;
+    // The batch stays locked until its results are written, in the same transaction.
+    let mut tx = store.pool().begin().await?;
+    let pending = store.claim_resources_to_classify(&mut tx, limit).await?;
     for r in &pending {
         // The resource itself comes first; its folders' names are part of what it's about.
         let chain = store.resource_with_ancestors(&r.id).await?;
@@ -44,8 +46,9 @@ pub async fn classify_pending(store: &ContextStore, limit: i64) -> Result<usize,
             text: r.text.as_deref(),
         };
         let result = classify(&facts);
-        store.set_classification(r, result.as_ref()).await?;
+        store.set_classification(&mut tx, r, result.as_ref()).await?;
     }
+    tx.commit().await?;
     Ok(pending.len())
 }
 
@@ -74,6 +77,23 @@ mod tests {
             url: None,
             attributes: Value::Null,
         }
+    }
+
+    #[tokio::test]
+    async fn replicas_claim_different_resources_to_classify() {
+        let Some(store) = test_store().await else { return };
+        let docs: Vec<_> =
+            (0..4).map(|i| input(&format!("synthetic:doc:{i}"), "document", "Doc", None, None)).collect();
+        store.put_resources(&docs).await.unwrap();
+        // Two replicas, each mid-pass: the second skips what the first holds.
+        let mut first = store.pool().begin().await.unwrap();
+        let mut second = store.pool().begin().await.unwrap();
+        let a = store.claim_resources_to_classify(&mut first, 2).await.unwrap();
+        let b = store.claim_resources_to_classify(&mut second, 10).await.unwrap();
+        assert_eq!((a.len(), b.len()), (2, 2));
+        assert!(a.iter().all(|r| b.iter().all(|s| s.id != r.id)), "no resource is claimed twice");
+        first.rollback().await.unwrap();
+        second.rollback().await.unwrap();
     }
 
     #[tokio::test]

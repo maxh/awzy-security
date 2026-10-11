@@ -92,6 +92,17 @@ resource "helm_release" "cert_manager" {
   depends_on = [helm_release.envoy_gateway]
 }
 
+# The resource metrics API, for the chart's HorizontalPodAutoscalers. Most managed clusters don't
+# install it; one that already does sets metrics_server = false.
+resource "helm_release" "metrics_server" {
+  count      = var.metrics_server ? 1 : 0
+  name       = "metrics-server"
+  namespace  = "kube-system"
+  repository = "https://kubernetes-sigs.github.io/metrics-server/"
+  chart      = "metrics-server"
+  version    = var.versions.metrics_server
+}
+
 # Resources that need the CRDs above: the secret store, the signature policy, ingress, and
 # the Argo CD Application for the awzy chart.
 resource "helm_release" "config" {
@@ -115,7 +126,8 @@ resource "helm_release" "config" {
     cosignPubKey = var.cosign_public_key
     chart        = { repository = "${local.registry_host}/awzy/charts", version = var.chart_version }
     awzyValues = {
-      image = { registry = local.c.registry_prefix }
+      bootstrap = { level = local.bootstrap_level }
+      image     = { registry = local.c.registry_prefix }
       postgres = {
         host      = local.c.postgres.host
         port      = local.c.postgres.port
@@ -127,7 +139,7 @@ resource "helm_release" "config" {
         breakGlassKeysSecret = var.break_glass_public_keys == null ? "" : "awzy-policy-break-glass"
         signingKmsKey        = local.c.policy_signing.kms_key
       }
-      clickhouse = { storageClass = local.c.storage_class.name }
+      clickhouse = { storageClass = local.c.storage_class.name, retentionDays = var.clickhouse_retention_days }
       demoIdp    = { enabled = var.demo_idp }
       demoData   = { enabled = var.demo_data, activity = { enabled = var.demo_activity } }
       reporter   = var.reporter == null ? { enabled = false, installId = "" } : { enabled = true, installId = nonsensitive(var.reporter.install_id) }
@@ -181,6 +193,7 @@ resource "helm_release" "config" {
           url      = var.jira == null ? "" : nonsensitive(var.jira.url)
           user     = var.jira == null ? "" : nonsensitive(var.jira.user)
           projects = var.jira == null ? [] : nonsensitive(var.jira.projects)
+          watchers = var.jira == null ? false : nonsensitive(var.jira.watchers)
         }
       }
     }

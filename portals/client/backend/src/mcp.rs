@@ -795,7 +795,7 @@ impl ClientPortalMcp {
 }
 
 /// One principal from awzy-context's snapshot, with its groups up the hierarchy and its risk.
-fn principal_from_snapshot(snapshot: &serde_json::Value, kind: &str, id: &str) -> PrincipalOut {
+pub(crate) fn principal_from_snapshot(snapshot: &serde_json::Value, kind: &str, id: &str) -> PrincipalOut {
     let entities = snapshot["entities"].as_array().cloned().unwrap_or_default();
     let find =
         |kind: &str, id: &str| entities.iter().find(|e| e["uid"]["type"] == kind && e["uid"]["id"] == id).cloned();

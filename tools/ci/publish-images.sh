@@ -91,7 +91,11 @@ push_and_sign() {
   if cosign verify --key "$pubkey" --insecure-ignore-tlog "$ref" >/dev/null 2>&1; then
     echo "already signed"
   else
-    cosign sign --yes --tlog-upload=false --key "$key" "$ref" || return 1
+    # Two main runs can publish the same unchanged image at once, and the registry's tags are
+    # immutable: if this one loses the race, the signature is already there.
+    cosign sign --yes --tlog-upload=false --key "$key" "$ref" ||
+      cosign verify --key "$pubkey" --insecure-ignore-tlog "$ref" >/dev/null 2>&1 ||
+      { echo "cosign sign failed"; return 1; }
   fi
   if cosign verify-attestation --type spdxjson --key "$pubkey" --insecure-ignore-tlog "$ref" >/dev/null 2>&1; then
     echo "already has its SBOM"
@@ -101,6 +105,7 @@ push_and_sign() {
     syft scan --platform linux/amd64 "registry:$ref" -o "spdx-json=$scripts/$1.spdx.json" ||
       { echo "syft failed"; return 1; }
     cosign attest --yes --tlog-upload=false --key "$key" --type spdxjson --predicate "$scripts/$1.spdx.json" "$ref" ||
+      cosign verify-attestation --type spdxjson --key "$pubkey" --insecure-ignore-tlog "$ref" >/dev/null 2>&1 ||
       { echo "cosign attest failed"; return 1; }
   fi
 }
