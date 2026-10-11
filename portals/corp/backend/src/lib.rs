@@ -18,6 +18,7 @@ pub mod support;
 use async_graphql::{http::GraphiQLSource, Context, EmptySubscription, MergedObject, Object, Result, Schema};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use auth::{Auth, Staff};
+use awzy_portal::ErrorCode;
 use axum::{
     extract::State,
     middleware,
@@ -41,7 +42,7 @@ impl MetaQuery {
 
     /// The signed-in staff member.
     async fn viewer(&self, ctx: &Context<'_>) -> Result<Staff> {
-        Ok(ctx.data::<Staff>().map_err(|_| "sign in first")?.clone())
+        Ok(ctx.data::<Staff>().map_err(|_| ErrorCode::Unauthenticated.error("sign in first"))?.clone())
     }
 }
 

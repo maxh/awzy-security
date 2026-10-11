@@ -26,6 +26,9 @@ Both portals' schemas are generated from the Rust backends and held to conventio
 ## Access
 
 - Every resolver starts with `require(ctx, action, area)`.
+- An error says what kind it is: `ErrorCode::InvalidInput.error("...")` for bad input,
+  `ErrorCode::NotFound` for a missing ID, `ErrorCode::Unavailable` when a service didn't answer.
+  `require` already codes denials and challenges. A bare string error has no code.
 - A field more sensitive than its area goes in `fields.rs`'s list and is nullable, so a policy can
   hide it (ADR 0103); the frontend shows null as `<Hidden />`.
 - A change policy might want a security key for gets its own Cedar action, asked with

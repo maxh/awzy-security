@@ -6,7 +6,7 @@
 use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject, ID};
 use awzy_heartbeat::{SupportRequest, SupportSessionState, SupportStatus};
 use awzy_model::{InstallId, SupportSessionId};
-use awzy_portal::{Qid, UtcTimestamp};
+use awzy_portal::{ErrorCode, Qid, UtcTimestamp};
 use chrono::{DateTime, Utc};
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use serde::Serialize;
@@ -351,7 +351,7 @@ pub struct SupportSignIn {
 }
 
 fn store<'a>(ctx: &Context<'a>) -> Result<&'a FleetStore> {
-    ctx.data::<FleetStore>().map_err(|_| "Postgres is not configured (AWZY_POSTGRES_URL)".into())
+    ctx.data::<FleetStore>().map_err(|_| ErrorCode::Unavailable.error("Postgres is not configured (AWZY_POSTGRES_URL)"))
 }
 
 #[derive(Default)]

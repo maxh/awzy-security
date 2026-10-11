@@ -8,7 +8,7 @@ use async_graphql::{
 };
 use awzy_heartbeat::{Service as WireService, ServiceStatus};
 use awzy_model::InstallId;
-use awzy_portal::{Actor, Qid, UtcTimestamp};
+use awzy_portal::{Actor, ErrorCode, Qid, UtcTimestamp};
 use chrono::Utc;
 
 use crate::{
@@ -20,7 +20,7 @@ const DEFAULT_PAGE: usize = 50;
 const MAX_PAGE: usize = 200;
 
 fn store<'a>(ctx: &Context<'a>) -> Result<&'a FleetStore> {
-    ctx.data::<FleetStore>().map_err(|_| "Postgres is not configured (AWZY_POSTGRES_URL)".into())
+    ctx.data::<FleetStore>().map_err(|_| ErrorCode::Unavailable.error("Postgres is not configured (AWZY_POSTGRES_URL)"))
 }
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq)]
@@ -491,7 +491,7 @@ pub struct FleetMutation;
 impl FleetMutation {
     /// Registers an install so its heartbeats are accepted.
     async fn register_install(&self, ctx: &Context<'_>, input: RegisterInstallInput) -> Result<RegisterInstallPayload> {
-        let staff = ctx.data::<Staff>().map_err(|_| "sign in first")?;
+        let staff = ctx.data::<Staff>().map_err(|_| ErrorCode::Unauthenticated.error("sign in first"))?;
         let new = NewInstall {
             client: input.client,
             environment: input.environment,
@@ -518,7 +518,7 @@ impl FleetMutation {
         ctx: &Context<'_>,
         input: SetInstallReleaseInput,
     ) -> Result<SetInstallReleasePayload> {
-        let staff = ctx.data::<Staff>().map_err(|_| "sign in first")?;
+        let staff = ctx.data::<Staff>().map_err(|_| ErrorCode::Unauthenticated.error("sign in first"))?;
         let id = input.install_qid.0;
         let pinned = input.pinned_version.as_deref().map(str::trim).filter(|v| !v.is_empty());
         let record = match store(ctx)?.set_release(id, input.channel.into(), pinned).await {
@@ -534,9 +534,12 @@ impl FleetMutation {
     /// Retires an install: its reporting and pull tokens stop working at once, it leaves the
     /// fleet views, and its client and environment can be registered again.
     async fn retire_install(&self, ctx: &Context<'_>, input: RetireInstallInput) -> Result<RetireInstallPayload> {
-        let staff = ctx.data::<Staff>().map_err(|_| "sign in first")?;
+        let staff = ctx.data::<Staff>().map_err(|_| ErrorCode::Unauthenticated.error("sign in first"))?;
         let id = input.install_qid.0;
-        let record = store(ctx)?.retire(id, &staff.username).await?.ok_or("no active install with that ID")?;
+        let record = store(ctx)?
+            .retire(id, &staff.username)
+            .await?
+            .ok_or_else(|| ErrorCode::NotFound.error("no active install with that ID"))?;
         tracing::warn!(install = %record.id, client = %record.client, environment = %record.environment, by = %staff.username, "install retired");
         Ok(RetireInstallPayload { install: Install(record) })
     }

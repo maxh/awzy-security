@@ -99,6 +99,9 @@ bazel build --config=lint //...                    # clippy
 - **Rust errors:** `thiserror` types in libraries, `anyhow` in binaries and at the edges. No bare
   `unwrap()` or other panic outside tests; an `expect` says why it can't fail. The lint config
   enforces it (`.bazelrc`, `clippy.toml`).
+- **GraphQL errors** carry a `code` extension (`awzy_portal::ErrorCode`: `FORBIDDEN`,
+  `CHALLENGE_REQUIRED`, `INVALID_INPUT`, `NOT_FOUND`, `UNAVAILABLE`, `UNAUTHENTICATED`), and
+  frontends branch on `errorCode(e)` from `@awzy/ui`, never on the message.
 - **TypeScript narrowing:** never `as`. Narrow with `isOneOf`, `oneOf`, or `isRecord` from
   `@awzy/ui`, or a type guard; oxlint's `no-unsafe-type-assertion` enforces it.
 - **Quality ratchets:** `tools/ci/check-quality-ratchets.sh` counts what the code-quality pass is

@@ -570,6 +570,17 @@ pub(crate) mod tests {
 
         let anonymous = schema.execute("{ policyBundles { id } }").await;
         assert_eq!(anonymous.errors[0].message, "sign in first");
+        let code = |e: &async_graphql::ServerError| e.extensions.as_ref().and_then(|x| x.get("code")).cloned();
+        assert_eq!(code(&anonymous.errors[0]), Some(async_graphql::Value::from("UNAUTHENTICATED")));
+        let denied = schema
+            .execute(
+                async_graphql::Request::new(
+                    "mutation { setEnforcementMode(input: { mode: MONITOR }) { enforcement { mode } } }",
+                )
+                .data(bob.clone()),
+            )
+            .await;
+        assert_eq!(code(&denied.errors[0]), Some(async_graphql::Value::from("FORBIDDEN")));
         let no_pdp = crate::schema_with(Services {
             policy: None,
             clickhouse: None,
@@ -581,6 +592,8 @@ pub(crate) mod tests {
         });
         let err = testing::run_err(&no_pdp, &alice, "{ policyBundles { id } }").await;
         assert!(err.contains("AWZY_PDP_ADDR"), "nothing is authorized without a PDP: {err}");
+        let res = no_pdp.execute(async_graphql::Request::new("{ policyBundles { id } }").data(alice.clone())).await;
+        assert_eq!(code(&res.errors[0]), Some(async_graphql::Value::from("UNAVAILABLE")));
     }
 
     /// A GraphQL string literal.

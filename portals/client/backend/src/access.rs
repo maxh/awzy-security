@@ -12,13 +12,14 @@
 
 use std::sync::Arc;
 
-use async_graphql::{Context, Enum};
+use async_graphql::{Context, Enum, ErrorExtensions};
 use awzy_authz_proto::{
     authz::v1::{CheckRequest, EntityRef as WireRef, Verdict},
     entity_from_json, json_to_struct,
 };
 use awzy_identity::{Principal, ServiceAccountConfig, TokenConfig, TokenKey, Verifier};
 use awzy_model::entity_type;
+use awzy_portal::ErrorCode;
 use axum::{
     extract::{Request, State},
     http::{header, HeaderValue, StatusCode},
@@ -117,6 +118,23 @@ pub enum AccessError {
     NotConfigured,
     #[error("awzy couldn't reach its policy decision point, so nothing was done: {0}")]
     Unavailable(String),
+}
+
+impl ErrorExtensions for AccessError {
+    fn extend(&self) -> async_graphql::Error {
+        let code = match self {
+            AccessError::Denied { .. } => ErrorCode::Forbidden,
+            AccessError::Challenged { .. } => ErrorCode::ChallengeRequired,
+            AccessError::NotConfigured | AccessError::Unavailable(_) => ErrorCode::Unavailable,
+        };
+        let e = code.error(self.to_string());
+        match self {
+            AccessError::Challenged { challenge_qid: Some(qid), .. } => {
+                e.extend_with(|_, x| x.set("challengeQid", qid.as_str()))
+            }
+            _ => e,
+        }
+    }
 }
 
 /// Checks one operation with the PDP and applies the verdict whatever the install's mode.
@@ -239,15 +257,20 @@ async fn check(
     }
 }
 
+/// For GraphQL resolvers: the signed-in viewer, whatever they may do.
+pub(crate) fn signed_in<'a>(ctx: &Context<'a>) -> async_graphql::Result<&'a Viewer> {
+    ctx.data::<Viewer>().map_err(|_| ErrorCode::Unauthenticated.error("sign in first"))
+}
+
 /// For GraphQL resolvers: the signed-in viewer, if they may do `action` in `area`.
 pub(crate) async fn require(
     ctx: &Context<'_>,
     action: PortalAction,
     area: PortalArea,
 ) -> async_graphql::Result<Viewer> {
-    let viewer = ctx.data::<Viewer>().map_err(|_| "sign in first")?.clone();
+    let viewer = signed_in(ctx)?.clone();
     let services = ctx.data::<Services>()?;
-    authorize(services, &viewer, Surface::Portal, action, area).await?;
+    authorize(services, &viewer, Surface::Portal, action, area).await.map_err(|e| e.extend())?;
     Ok(viewer)
 }
 
