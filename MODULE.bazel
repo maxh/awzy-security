@@ -53,6 +53,15 @@ crate.from_cargo(
     cargo_lockfile = "//:Cargo.lock",
     lockfile = "//:cargo-bazel-lock.json",
     manifests = ["//:Cargo.toml"],
+    # Only the platforms awzy builds for: Linux images (amd64, arm64) and macOS hosts. Fewer
+    # triples keep other platforms' dependencies (Windows, Android, ...) out of the lockfile;
+    # building for one not listed fails at analysis, so add it here first.
+    supported_platform_triples = [
+        "aarch64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+    ],
 )
 use_repo(crate, "crates")
 
