@@ -40,6 +40,7 @@ resource "aws_iam_role_policy" "execution_secrets" {
         aws_secretsmanager_secret.session.arn,
         aws_secretsmanager_secret.accounts.arn,
         aws_secretsmanager_secret.alerts_slack_webhook.arn,
+        aws_secretsmanager_secret.support_signing_key.arn,
       ]
     }]
   })
@@ -101,6 +102,7 @@ resource "aws_ecs_task_definition" "corp" {
       secrets = [
         { name = "AWZY_CORP_PORTAL_ALERTS_SLACK_WEBHOOK_URL", valueFrom = aws_secretsmanager_secret.alerts_slack_webhook.arn },
         { name = "AWZY_CORP_PORTAL_SESSION_SECRET", valueFrom = aws_secretsmanager_secret.session.arn },
+        { name = "AWZY_CORP_PORTAL_SUPPORT_SIGNING_KEY", valueFrom = aws_secretsmanager_secret.support_signing_key.arn },
         { name = "AWZY_POSTGRES_URL", valueFrom = aws_secretsmanager_secret.postgres_url.arn },
       ]
       mountPoints            = [{ sourceVolume = "config", containerPath = local.accounts_dir, readOnly = true }]

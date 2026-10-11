@@ -9,6 +9,7 @@ import type { InstallPageQuery } from "./__generated__/InstallPageQuery.graphql"
 import type { InstallPageRetireMutation } from "./__generated__/InstallPageRetireMutation.graphql";
 import { ago, channelLabel, formatTime, healthOf, shortDigest } from "./format";
 import { InstallCharts } from "./InstallCharts";
+import { SupportSection } from "./SupportSection";
 
 /** One install: the deployed units inside it, its numbers, and its upgrade history. */
 export function InstallPage() {
@@ -206,6 +207,8 @@ function Install({ id }: { id: string }) {
             </Table>
           )}
         </Section>
+
+        <SupportSection installId={id} />
       </Stack>
     </>
   );

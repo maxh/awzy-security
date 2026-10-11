@@ -91,6 +91,10 @@ type Install implements Node {
 	The staff member who retired it.
 	"""
 	retiredBy: Actor
+	"""
+	Support sessions asked for on this install, newest first (ADR 0095).
+	"""
+	supportSessions: [SupportSession!]!
 }
 
 type InstallConnection {
@@ -230,6 +234,8 @@ type Mutation {
 	fleet views, and its client and environment can be registered again.
 	"""
 	retireInstall(input: RetireInstallInput!): RetireInstallPayload!
+	requestSupportSession(input: RequestSupportSessionInput!): SupportSession!
+	signInToSupportSession(id: ID!): SupportSignIn!
 }
 
 interface Node {
@@ -367,4 +373,38 @@ directive @skip(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
 schema {
 	query: Query
 	mutation: Mutation
+}
+
+input RequestSupportSessionInput {
+	installId: ID!
+	areas: [String!]!
+	reason: String!
+	durationMinutes: Int!
+	portalUrl: String!
+}
+
+type SupportSession {
+	id: ID!
+	status: SupportSessionStatus!
+	requestedBy: String!
+	areas: [String!]!
+	reason: String!
+	durationMinutes: Int!
+	portalUrl: String!
+	requestedAt: UtcTimestamp!
+	expiresAt: UtcTimestamp
+	delivered: Boolean!
+}
+
+enum SupportSessionStatus {
+	REQUESTED
+	APPROVED
+	REJECTED
+	ENDED
+	EXPIRED
+}
+
+type SupportSignIn {
+	signInUrl: String!
+	expiresAt: UtcTimestamp!
 }
