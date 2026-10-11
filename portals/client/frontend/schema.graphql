@@ -675,6 +675,10 @@ enum InvestigationVerdict {
 	INCONCLUSIVE
 }
 
+scalar JSONObject
+
+scalar JSONString
+
 input JustifyChallengeInput {
 	challengeQid: Qid!
 	"""
@@ -1037,17 +1041,6 @@ type PublishPolicyBundlePayload {
 	"""
 	wouldLockYouOut: String
 }
-
-"""
-A JSON object, sent as an object rather than text, so the frontend reads it without parsing.
-"""
-scalar JSONObject
-
-"""
-JSON as text, for where the exact text matters: a download shown as it will be saved, or
-options handed to a browser API. Always valid JSON, in and out.
-"""
-scalar JSONString
 
 """
 One of awzy's IDs, `<entity_type>_<uuid>`, e.g. `challenge_0199a8f2-6c1e-7b3a-9d4e-2f8c1a5b7e90`.
