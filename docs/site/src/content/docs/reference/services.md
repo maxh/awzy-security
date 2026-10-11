@@ -209,7 +209,9 @@ what each page does.
 
 The install's heartbeat to awzy.
 
-- **Reads:** service health from Kubernetes, ClickHouse disk use, and Kafka consumer offsets.
+- **Reads:** service health from Kubernetes, ClickHouse disk use, Kafka consumer offsets, and
+  whether the release synced: the one Argo CD Application that installs it, which the chart lets
+  it read and nothing else of Argo CD.
 - **Sends:** them, as fixed-schema numbers, to awzy's corp portal every minute. It's the only
   thing that leaves your install for awzy.
 - **API:** none beyond health and metrics.
