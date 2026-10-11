@@ -26,7 +26,6 @@ resource "aws_security_group" "data" {
 resource "aws_vpc_security_group_ingress_rule" "data_from_nodes" {
   for_each = {
     postgres  = 5432
-    kafka     = 9092
     kafka_tls = 9094
     valkey    = 6379
     valkey_ro = 6380
