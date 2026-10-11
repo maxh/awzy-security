@@ -15,6 +15,7 @@ use crate::{
 
 #[derive(Interface)]
 #[graphql(field(name = "id", ty = "ID"))]
+#[allow(clippy::large_enum_variant, reason = "one is built per node(id) call; boxing buys nothing")]
 pub enum Node {
     PolicyBundle(PolicyBundle),
     Decision(Decision),
