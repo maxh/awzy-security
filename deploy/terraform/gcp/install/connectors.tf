@@ -27,4 +27,6 @@ resource "google_secret_manager_secret_iam_member" "portal_writes" {
   secret_id = each.value.id
   role      = "roles/secretmanager.secretVersionAdder"
   member    = local.principal.portal
+  # The identity pool exists once the cluster does.
+  depends_on = [google_container_cluster.this]
 }

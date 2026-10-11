@@ -19,6 +19,8 @@ resource "google_kms_crypto_key_iam_member" "policy_signs" {
   crypto_key_id = google_kms_crypto_key.policy_signing.id
   role          = "roles/cloudkms.signerVerifier"
   member        = local.principal.policy
+  # The identity pool exists once the cluster does.
+  depends_on = [google_container_cluster.this]
 }
 
 # External Secrets reads the Postgres credentials and the connectors' into the cluster.
@@ -27,6 +29,8 @@ resource "google_secret_manager_secret_iam_member" "external_secrets" {
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
   member    = local.principal.external_secrets
+  # The identity pool exists once the cluster does.
+  depends_on = [google_container_cluster.this]
 }
 
 # awzy's services: connector raw data in the bucket.
@@ -34,4 +38,6 @@ resource "google_storage_bucket_iam_member" "services" {
   bucket = google_storage_bucket.data.name
   role   = "roles/storage.objectUser"
   member = local.principal.services
+  # The identity pool exists once the cluster does.
+  depends_on = [google_container_cluster.this]
 }
