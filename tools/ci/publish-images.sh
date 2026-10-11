@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Pushes one release's images to <registry>/awzy/<binary>:<tag> and signs each digest with
-# cosign (ADR 0053). Run by .github/workflows/ci.yml on pushes to main, after AWS credentials for
+# Pushes one release's images to <registry>/awzy/<binary>:<tag>, signs each digest with cosign
+# (ADR 0053), and attaches each one's SBOM (syft, from the OCI layout Bazel built) as a signed
+# attestation (ADR 0093). Run by .github/workflows/ci.yml on pushes to main, after AWS credentials for
 # the publish role are in the environment.
 #
 #   authz:        everything an install runs: authz/, the client portal, and the demo's dev IdP
@@ -75,20 +76,23 @@ while read -r pkg repo; do
   bazel run --config=ci --config=release --script_path="$scripts/$name.sh" "$pkg:image_push" </dev/null >&2
   layout=$(awk -v l="$pkg:image_index" '$1 == l { print $2 }' <<< "$layouts")
   digest=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1] + "/index.json"))["manifests"][0]["digest"])' "$layout")
-  echo "$name $repo $digest"
+  echo "$name $repo $digest $layout"
 done <<< "$targets" > "$scripts/plan"
 
 # No upload to the public Rekor log: installs verify against the KMS public key only.
 push_and_sign() {
   "$scripts/$1.sh" --repository "$registry/$2" --tag "$tag" &&
-    cosign sign --yes --tlog-upload=false --key "$key" "$registry/$2@$3"
+    cosign sign --yes --tlog-upload=false --key "$key" "$registry/$2@$3" &&
+    syft scan -q --platform linux/amd64 "oci-dir:$4" -o "spdx-json=$scripts/$1.spdx.json" &&
+    cosign attest --yes --tlog-upload=false --key "$key" --type spdxjson --predicate "$scripts/$1.spdx.json" \
+      "$registry/$2@$3"
 }
 export -f push_and_sign
 export scripts registry tag key
 failed=0
 xargs -P 6 -L 1 bash -c 'push_and_sign "$0" "$@" > "$scripts/$0.log" 2>&1 || { echo "$0" >> "$scripts/failed"; }' \
   < "$scripts/plan" || failed=1
-while read -r name repo digest; do
+while read -r name repo digest _; do
   echo "::group::$registry/$repo:$tag"; cat "$scripts/$name.log"; echo "::endgroup::"
 done < "$scripts/plan"
 if [ "$failed" = 1 ] || [ -s "$scripts/failed" ]; then

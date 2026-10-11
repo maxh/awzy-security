@@ -1,6 +1,6 @@
 # 0080. Enforcement modes are signed, nothing older replaces what a PDP applied, and a grant answers its own policies
 
-- Status: Accepted
+- Status: Accepted; amended by [0092](0092-awzy-policy-signs-with-the-installs-kms-key.md) (signs with the install's KMS key)
 - Date: 2026-10-10
 - Amends: [0021](0021-signed-policy-bundles.md) (signed bundles) and
   [0054](0054-challenges-and-containments-over-grpc.md) (challenge grants)

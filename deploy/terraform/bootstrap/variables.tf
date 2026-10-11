@@ -6,6 +6,8 @@ variable "install_contract" {
     size_profile = string
     postgres     = object({ host = string, port = number, database = string, secret_arn = string })
     kafka        = object({ bootstrap_brokers = string, tls = optional(bool, false) })
+    # The cloud KMS key awzy-policy signs with, and its public key (ADR 0092).
+    policy_signing = object({ kms_key = string, public_key_pem = string })
     storage_class = object({
       name        = string
       provisioner = string

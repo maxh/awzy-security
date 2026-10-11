@@ -1,0 +1,17 @@
+[package]
+name = "awzy-signing-aws"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+awzy-signing.workspace = true
+aws-config.workspace = true
+aws-sdk-kms.workspace = true
+aws-smithy-http-client.workspace = true
+p256.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

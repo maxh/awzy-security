@@ -17,7 +17,7 @@ It has two layers, applied in order:
 
 | Layer | Module | What it makes |
 | --- | --- | --- |
-| Cloud | [`deploy/terraform/aws/install`](deploy/terraform/aws/install) | VPC, EKS, Aurora Postgres, MSK (Kafka), ElastiCache (Valkey), an S3 bucket, a KMS key, and Pod Identity roles. Outputs `install_contract`. |
+| Cloud | [`deploy/terraform/aws/install`](deploy/terraform/aws/install) | VPC, EKS, Aurora Postgres, MSK (Kafka), ElastiCache (Valkey), an S3 bucket, a KMS key for data at rest and one awzy-policy signs policy with, and Pod Identity roles. Outputs `install_contract`. |
 | Cluster | [`deploy/terraform/bootstrap`](deploy/terraform/bootstrap) | Namespaces, Secrets, Argo CD, Kyverno, External Secrets, the ClickHouse operator, Envoy Gateway, and cert-manager, then an Argo CD Application for the awzy chart. Never cloud-specific. |
 
 You call both from your own Terraform, as
@@ -133,7 +133,7 @@ It makes these Secrets, none of which leave the cluster:
 | `awzy-clickhouse-reasoner` | data, system | awzy-reasoner's read-only user: decisions and events |
 | `awzy-reporting-token` | system | The heartbeat, when `reporter` is set |
 | `awzy-scim-token` | system | Your IdP's SCIM provisioning |
-| `awzy-policy-signing`, `awzy-policy-verify` | system | The key awzy-policy signs policy bundles and enforcement mode changes with, and its public half, which the PDPs check them against |
+| `awzy-policy-verify` | system | The public half of the KMS key awzy-policy signs policy bundles, enforcement mode changes, and the outage fallback with, which the PDPs and awzy-gateway check them against. The private half never leaves KMS, and only awzy-policy's role may sign with it |
 | `awzy-policy-break-glass` | system | The break-glass admins' public keys, when `break_glass_public_keys` is set |
 | `awzy-intake-token` | system | Event sources, when `intake` is set; read it from the `intake` output |
 | `awzy-connectors-drive`, `awzy-connectors-jira` | system | The connectors' credentials, when `drive` or `jira` is set |

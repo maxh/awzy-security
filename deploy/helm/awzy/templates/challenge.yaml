@@ -5,14 +5,14 @@
 # challenges and follows the containment feed; the client portal answers and manages them.
 # Who may call which methods (ADR 0055): the PDPs resolve and follow; only the portal answers for
 # a person; the portal and the backend (awzy-reasoner, ADR 0066) contain, lift, and list; and
-# the backend (awzy-policy) reports break-glass rollbacks.
+# awzy-policy, under its own account, reports break-glass rollbacks.
 {{- $env := list
     (dict "name" "AWZY_CHALLENGE_ANSWERERS" "value" $portal)
     (dict "name" "AWZY_CHALLENGE_CONTAINERS" "value" (printf "%s,%s" $backend $portal))
     (dict "name" "AWZY_CHALLENGE_GRANT_SECS" "value" (toString .Values.challenge.grantSeconds))
     (dict "name" "AWZY_CHALLENGE_PDPS" "value" $backend)
     (dict "name" "AWZY_CHALLENGE_PENDING_SECS" "value" (toString .Values.challenge.pendingSeconds))
-    (dict "name" "AWZY_CHALLENGE_POLICY" "value" $backend)
+    (dict "name" "AWZY_CHALLENGE_POLICY" "value" (printf "%s/awzy-policy" $sys))
     (dict "name" "AWZY_PDP_ADDR" "value" (printf "http://awzy-pdp.%s.svc:8080" $sys))
     (dict "name" "AWZY_POSTGRES_URL" "valueFrom" (dict "secretKeyRef" (dict "name" "awzy-postgres" "key" "challenge_url")))
     (dict "name" "AWZY_POSTGRES_MIGRATE" "value" "check")

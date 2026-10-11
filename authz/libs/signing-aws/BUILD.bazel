@@ -1,0 +1,10 @@
+load("//tools:rust.bzl", "awzy_rust_library")
+
+# awzy-policy's signer in an AWS install (ADR 0092). Apart from awzy-signing, so only
+# awzy-policy links the AWS SDK; PDPs and gateways only verify.
+awzy_rust_library(
+    name = "signing-aws",
+    crate_name = "awzy_signing_aws",
+    visibility = ["//tools:client_side"],
+    deps = ["//authz/libs/signing"],
+)

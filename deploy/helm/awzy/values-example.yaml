@@ -7,3 +7,4 @@ reporter: { installId: install_00000000-0000-7000-8000-000000000000 }
 mcpGateway: { enabled: true, hostname: mcp.example.com, upstreams: [{ name: drive, url: "http://drive-mcp.tools.svc:8080/mcp" }] }
 intake: { enabled: true }
 connectors: { drive: { subject: awzy-reader@example.com }, jira: { url: "https://example.atlassian.net", user: awzy@example.com, projects: [FIN, ENG] } }
+policy: { signingKmsKey: "arn:aws:kms:us-east-2:123456789012:key/00000000-0000-0000-0000-000000000000" }
