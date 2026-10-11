@@ -1,5 +1,5 @@
 {
-  "checksum": "9807169ff72a1fe2d93523fcc3ce13ef0785d9473e1986cacdf1f2503f0b9173",
+  "checksum": "0b5ee136d9b4dcc9b705b472dd852b5a7696576a55c0db518f2ea5635db4fdb0",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -4800,6 +4800,10 @@
           {
             "id": "axum 0.8.9",
             "target": "axum"
+          },
+          {
+            "id": "hyper-util 0.1.21",
+            "target": "hyper_util"
           },
           {
             "id": "serde_json 1.0.151",
