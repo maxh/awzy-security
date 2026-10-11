@@ -48,6 +48,7 @@ export default defineConfig({
             "guides/sending-events",
             "guides/optional-features",
             "guides/break-glass",
+            "guides/data-retention",
           ],
         },
         {

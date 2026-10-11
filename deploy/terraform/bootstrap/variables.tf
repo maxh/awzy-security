@@ -137,6 +137,16 @@ variable "demo_idp" {
   default     = false
 }
 
+variable "clickhouse_retention_days" {
+  description = "How many days ClickHouse keeps decisions and events before they expire; 0 keeps them all. Can change after install"
+  type        = number
+  default     = 0
+  validation {
+    condition     = var.clickhouse_retention_days >= 0 && floor(var.clickhouse_retention_days) == var.clickhouse_retention_days
+    error_message = "clickhouse_retention_days is a whole number of days, 0 or more."
+  }
+}
+
 variable "demo_data" {
   description = "DEMO INSTALLS ONLY (ADR 0039): provision the synthetic company into awzy-context"
   type        = bool
