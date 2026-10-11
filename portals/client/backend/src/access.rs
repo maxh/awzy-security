@@ -75,14 +75,8 @@ pub enum PortalArea {
 }
 
 impl PortalArea {
-    pub(crate) const ALL: [PortalArea; 6] = [
-        Self::Decisions,
-        Self::Policies,
-        Self::Enforcement,
-        Self::Directory,
-        Self::Challenges,
-        Self::Investigations,
-    ];
+    pub(crate) const ALL: [PortalArea; 6] =
+        [Self::Decisions, Self::Policies, Self::Enforcement, Self::Directory, Self::Challenges, Self::Investigations];
 
     pub(crate) fn as_str(self) -> &'static str {
         match self {
