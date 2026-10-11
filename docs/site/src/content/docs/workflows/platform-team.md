@@ -10,7 +10,7 @@ in, all in your own cloud account. awzy has no access to any of it.
 
 1. **Register the install with awzy.** You get an install ID, a registry pull token, and a
    reporting token for the heartbeat.
-2. **Apply the cloud layer** for your cloud (`aws/install` on AWS, the only one so far): the
+2. **Apply the cloud layer** for your cloud (`aws/install` on AWS, `gcp/install` on Google Cloud): the
    network, the Kubernetes cluster, managed Postgres and Kafka, the cache, and the encryption key.
    Choose a size profile. On a cluster you already have, run the preflight check instead.
 3. **Apply the cluster layer** (`bootstrap`): Argo CD, Kyverno, and the operators, then the awzy

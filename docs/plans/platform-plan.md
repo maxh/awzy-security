@@ -12,7 +12,7 @@ So awzy-authz is a small fleet of services deployed together in one Kubernetes c
 
 To run the same product on AWS, Google Cloud, and Azure, Kubernetes is the shared platform and awzy's services are identical on all three. awzy cannot log in to a client install, so it should operate as little stateful software there as it can. Postgres, Kafka, and Valkey default to each cloud's managed service. Only ClickHouse runs in the cluster, because the product depends on its specific features. Cloud-specific pieces (object storage, key management, workload identity, LLM provider, private networking, and the managed data services) sit behind small Rust traits and Terraform modules with one adapter per cloud.
 
-Development and the first design partners are on AWS only. The portability rules hold from day one, but GCP and Azure installs are built when a design partner needs them (Phase 5), not before.
+Development and the first design partners are on AWS. Google Cloud has a cloud layer and an example install too ([ADR 0107](../adr/0107-google-cloud-install-with-kafka-in-the-cluster.md)), so portability is tested on a second cloud from early on. Azure is built when a design partner needs it (Phase 5).
 
 > **Core design rule: precompute, then decide fast.** The paper is explicit that inference must be front-loaded. Anything that needs an LLM or a large scan runs asynchronously and writes *attributes*. The hot decision path only reads attributes and evaluates policy. It never calls a model inline.
 
@@ -29,7 +29,7 @@ One line per decision, for readers who won't read the whole plan. Details are in
 | Rollout | Every install, policy set, and automated containment starts in monitor mode ([Enforcement modes](#enforcement-modes)) | Decided |
 | Data stores | Managed Postgres, Kafka, and Valkey; ClickHouse in the cluster ([Data layer](#data-layer)) | Decided |
 | Who operates ClickHouse | Client with runbooks, or ClickHouse Cloud BYOC ([Operating model](#operating-model)) | Open |
-| Clouds | AWS only until a design partner needs GCP or Azure | Decided |
+| Clouds | AWS and Google Cloud (ADR 0107); Azure when a design partner needs it | Decided |
 | Install | A per-cloud Terraform module for infrastructure, then a cloud-agnostic bootstrap module that installs Argo CD; Argo CD pulls the OCI Helm chart from a release channel ([Clouds and accounts](#clouds-and-accounts)) | Decided |
 | Support access | Read-only, time-boxed, client-approved sessions; no write access for awzy | Decided |
 | Build | Bazel monorepo, with a capped setup budget and a Cargo/pnpm fallback | Decided |
