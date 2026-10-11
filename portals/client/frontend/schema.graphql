@@ -233,6 +233,28 @@ type ComponentStatus {
 	runbookUrl: String!
 }
 
+input ConfigureConnectorInput {
+	name: ConnectorName!
+	enabled: Boolean! = true
+	settings: JSONObject!
+	"""
+	A new credential: Drive's service account key (its JSON), or Jira's API token. Omit it to
+	keep the one already set.
+	"""
+	credential: String
+}
+
+type ConfigureConnectorPayload {
+	"""
+	The connector as saved; null when a challenge must be passed first.
+	"""
+	connector: ConnectorConfig
+	"""
+	The challenge to pass, then save again.
+	"""
+	challengeQid: Qid
+}
+
 """
 A configured connector and how its syncing is going.
 """
@@ -297,28 +319,6 @@ One of a connector's settings, for display.
 type ConnectorSetting {
 	name: String!
 	value: String!
-}
-
-input ConfigureConnectorInput {
-	name: ConnectorName!
-	enabled: Boolean! = true
-	settings: JSONObject!
-	"""
-	A new credential: Drive's service account key (its JSON), or Jira's API token. Omit it to
-	keep the one already set.
-	"""
-	credential: String
-}
-
-type ConfigureConnectorPayload {
-	"""
-	The connector as saved; null when a challenge must be passed first.
-	"""
-	connector: ConnectorConfig
-	"""
-	The challenge to pass, then save again.
-	"""
-	challengeQid: Qid
 }
 
 input ContainPrincipalInput {
