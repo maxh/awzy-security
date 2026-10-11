@@ -17,28 +17,32 @@ It has two layers, applied in order:
 
 | Layer | Module | What it makes |
 | --- | --- | --- |
-| Cloud | [`deploy/terraform/aws/install`](deploy/terraform/aws/install) | VPC, EKS, Aurora Postgres, MSK (Kafka), ElastiCache (Valkey), an S3 bucket, a KMS key for data at rest and one awzy-policy signs policy with, and Pod Identity roles. Outputs `install_contract`. |
+| Cloud | One per cloud: [`deploy/terraform/aws/install`](deploy/terraform/aws/install) on AWS | The network, a Kubernetes cluster, managed Postgres, Kafka, and Valkey, a bucket, a key for data at rest and one awzy-policy signs policy with, and workload identities. Outputs `install_contract`. On AWS: VPC, EKS, Aurora, MSK, ElastiCache, S3, KMS, and Pod Identity. |
 | Cluster | [`deploy/terraform/bootstrap`](deploy/terraform/bootstrap) | Namespaces, Secrets, Argo CD, Kyverno, External Secrets, the ClickHouse operator, Envoy Gateway, cert-manager, and metrics-server, then an Argo CD Application for the awzy chart. Never cloud-specific. |
 
 You call both from your own Terraform, as
-[`examples/example-client`](deploy/terraform/examples/example-client) does.
+[`examples/example-client`](deploy/terraform/examples/example-client) does. On a cluster you
+already have, you make the cloud resources yourself, write `install_contract` to match, check the
+cluster with the preflight in step 5, and apply only the cluster layer.
 
 ## 1. Before you start
 
-- **Tools:** OpenTofu ≥ 1.10 (or Terraform), the AWS CLI, and kubectl.
-- **An AWS account for the install**, separate from the one that holds Terraform state. The
-  example client keeps state in its management account and installs into a member account
+- **Tools:** OpenTofu ≥ 1.10 (or Terraform), kubectl, and your cloud's CLI.
+- **A cloud account for the install**, separate from the one that holds Terraform state. The
+  example client keeps state in its AWS management account and installs into a member account
   (`awzy-example-install`).
-- **Region and SCPs:** pick one Region with two availability zones. The install works under
-  SCPs that deny other Regions and deny IAM users with access keys; it uses neither.
+- **A region with two zones.**
 - **A hostname** for the client portal (`awzy.example.com`) in DNS you control, and an email
   address for Let's Encrypt.
-- **Load balancers:** some new AWS accounts can't create them until AWS Support allows it
-  (`OperationNotPermitted: This AWS account currently does not support creating load
-  balancers`, on the Gateway's Service). Open a support case for the install account early; the
-  Service retries on its own once it's lifted.
-- **Cost:** the `small` profile costs roughly $250 a month while it runs (EKS, MSK, Aurora). Test
-  installs set `deletion_protection = false` and are destroyed between uses.
+- **On AWS:**
+  - The install works under SCPs that deny other Regions and deny IAM users with access keys; it
+    uses neither.
+  - Some new accounts can't create load balancers until AWS Support allows it
+    (`OperationNotPermitted: This AWS account currently does not support creating load
+    balancers`, on the Gateway's Service). Open a support case for the install account early;
+    the Service retries on its own once it's lifted.
+  - The `small` profile costs roughly $250 a month while it runs (EKS, MSK, Aurora). Test
+    installs set `deletion_protection = false` and are destroyed between uses.
 
 ## 2. Register the install with awzy
 
@@ -71,6 +75,8 @@ Back the file up, since it's the only record of what the deployment targets:
 `tools/deployment-env push example-client`.
 
 ## 4. Apply the cloud layer
+
+This step is per cloud; AWS's is below. On a cluster you already have, skip to step 5.
 
 ```sh
 cd install
@@ -108,9 +114,9 @@ Bootstrap takes:
 | `support_public_key` | awzy's support key (`deploy/release/support.pub`), so awzy staff can sign in to a support session your admin approves; `null` leaves support sessions unable to sign in |
 | `ingress` | The portal hostname and the Let's Encrypt contact |
 | `client_portal` | Your IdP's issuer, JWKS URL, and the portal's public URL; the token audiences for the portal (`audience`, default `awzy`) and for its MCP endpoint (`mcp_audience`, default `awzy-mcp`); and `subject_claim`, the claim holding a person's SCIM user name when `sub` doesn't (default `sub`) |
-| `awzy_bot` | Whether Awzy Bot runs; needs Claude enabled in the install account's Bedrock |
-| `investigations`, `investigation_budget` | Whether awzy-reasoner investigates the people it flags, and its monthly token budget and privileged groups; needs Claude in Bedrock |
-| `llm_model` | The Bedrock model ID for both, when the default isn't reachable directly |
+| `awzy_bot` | Whether Awzy Bot runs; needs Claude enabled in your cloud's model service (Bedrock on AWS) |
+| `investigations`, `investigation_budget` | Whether awzy-reasoner investigates the people it flags, and its monthly token budget and privileged groups; needs Claude in your cloud's model service |
+| `llm_model` | The model ID for both, when the default isn't reachable directly |
 | `slack` | Your Slack app's bot token and the security team's channel, for notifications; `null` for none |
 | `mcp_gateway` | awzy-gateway, the MCP proxy your agents call: its hostname (with a DNS record to the load balancer; null keeps it in-cluster), its token audience (`audience`, default `awzy-gateway`), the MCP servers it fronts, and the tiers that may fail open while the PDP is unreachable; `null` for none |
 | `intake` | awzy-intake, for your apps' and audit logs' events: its hostname for sources outside the cluster (null keeps it in-cluster); `null` for none |
@@ -143,14 +149,14 @@ It makes these Secrets, none of which leave the cluster:
 | `awzy-clickhouse-reasoner` | data, system | awzy-reasoner's read-only user: decisions and events |
 | `awzy-reporting-token` | system | The heartbeat, when `reporter` is set |
 | `awzy-scim-token` | system | Your IdP's SCIM provisioning |
-| `awzy-policy-verify` | system | The public half of the KMS key awzy-policy signs policy bundles, enforcement mode changes, and the outage fallback with, which the PDPs and awzy-gateway check them against. The private half never leaves KMS, and only awzy-policy's role may sign with it |
+| `awzy-policy-verify` | system | The public half of the cloud key awzy-policy signs policy bundles, enforcement mode changes, and the outage fallback with, which the PDPs and awzy-gateway check them against. The private half never leaves your cloud's key service (KMS on AWS), and only awzy-policy's workload identity may sign with it |
 | `awzy-policy-break-glass` | system | The break-glass admins' public keys, when `break_glass_public_keys` is set |
 | `awzy-intake-token` | system | Event sources, when `intake` is set; read it from the `intake` output |
 | `awzy-connectors-drive`, `awzy-connectors-jira` | system | The connectors' credentials, when `drive` or `jira` is set |
 | `awzy-registry`, `awzy-chart-repo` | system, data, portal, Kyverno, ops | Pulling images and the chart |
 
-Postgres credentials stay in Secrets Manager, where RDS keeps them; External Secrets reads them
-with Pod Identity.
+Postgres credentials stay in your cloud's secret store, and External Secrets reads them with its
+workload identity. On AWS, that's Secrets Manager, where RDS keeps them, read with Pod Identity.
 
 Argo CD then installs the chart into `awzy-system`, `awzy-portal`, and `awzy-data`, and keeps
 the cluster on it.
@@ -231,7 +237,7 @@ You can use your own monitoring instead: scrape each awzy pod's `/metrics` (port
   set `chart_version` to that version and apply bootstrap. A `chart_version` the registry isn't
   serving shows in Argo CD as `ComparisonError … not found`. Apply bootstrap from the same awzy
   commit as the chart: a release can change what bootstrap makes for it (the policy signing key
-  moved to KMS this way).
+  moved to the cloud's key service this way).
 - **A release that needs a newer bootstrap waits.** Each release names the bootstrap level it needs,
   and bootstrap passes the install's. When a channel brings a release your bootstrap is too old for,
   Argo CD installs nothing and keeps the release you have running; `kubectl -n awzy-ops get

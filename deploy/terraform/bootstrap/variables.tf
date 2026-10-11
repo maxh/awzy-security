@@ -59,13 +59,13 @@ variable "client_portal" {
 }
 
 variable "awzy_bot" {
-  description = "Awzy Bot in the client portal (ADR 0048). AWS only: Claude must be enabled in the install account's Bedrock"
+  description = "Awzy Bot in the client portal (ADR 0048). Needs Claude enabled in your cloud's model service, in the install's account (Amazon Bedrock, the only one so far)"
   type        = bool
   default     = false
 }
 
 variable "investigations" {
-  description = "awzy-reasoner's investigations of the people it flags (ADR 0071). AWS only: Claude must be enabled in the install account's Bedrock"
+  description = "awzy-reasoner's investigations of the people it flags (ADR 0071). Needs Claude enabled in your cloud's model service, in the install's account (Amazon Bedrock, the only one so far)"
   type        = bool
   default     = false
 }
@@ -80,7 +80,7 @@ variable "investigation_budget" {
 }
 
 variable "llm_model" {
-  description = "The Bedrock model ID for Awzy Bot and investigations, when the default (anthropic.claude-opus-5-5) isn't reachable directly, e.g. a cross-region profile like us.anthropic.claude-opus-5-5"
+  description = "The model ID in your cloud's model service for Awzy Bot and investigations, when the default (anthropic.claude-opus-5-5) isn't reachable directly: on Bedrock, e.g. a cross-region profile like us.anthropic.claude-opus-5-5"
   type        = string
   default     = ""
 }
@@ -191,7 +191,7 @@ variable "ingress" {
 }
 
 variable "metrics_server" {
-  description = "Install metrics-server, which the chart's autoscalers read CPU from. Set false when the cluster already runs one (such as the EKS add-on)"
+  description = "Install metrics-server, which the chart's autoscalers read CPU from. Set false when the cluster already runs one (such as a managed cluster's metrics add-on)"
   type        = bool
   default     = true
 }

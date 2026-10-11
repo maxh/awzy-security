@@ -1,6 +1,6 @@
 ---
 title: Sending events to awzy-intake
-description: Getting your apps' access logs and CloudTrail into awzy, so they count toward risk.
+description: Getting your apps' access logs and your cloud's audit logs into awzy, so they count toward risk.
 ---
 
 awzy-reasoner scores each person and service account from what the PDPs decided and from events:
@@ -50,7 +50,17 @@ in the cluster layer's Terraform (see [Installing awzy](/guides/install/), step 
   containments: `download`, `export`, `send_external`, and `share_external`.
 - `attributes` holds anything else worth keeping. Don't put document contents there.
 
-## AWS CloudTrail
+## Your cloud's audit logs
+
+Each cloud's audit log format has its own endpoint, which takes log files as the cloud writes them
+and turns each record into an event: what was called, by whom, on what, and whether it failed.
+Cloud roles whose sessions name a person are recorded as that person, so their cloud activity
+counts toward their scores.
+
+AWS CloudTrail is the only format so far. For another cloud, convert its records to awzy's own
+schema and send them to `POST /v1/events`.
+
+### AWS CloudTrail
 
 `POST /v1/events/aws-cloudtrail` with a CloudTrail log file's JSON, `{"Records": [...]}`, as
 CloudTrail writes it to S3 (decompressed). A small function triggered by new log objects in the
@@ -58,10 +68,9 @@ trail's bucket can read each one and send it.
 
 - Each record becomes an event: its source, its name as the action, the first resource it lists,
   and `failure` when it carries an error code.
-- A session of an IAM Identity Center role is recorded as the person it names, so their AWS
-  activity counts toward their scores. List other roles whose session names are people in the
-  chart's `intake.humanRoles`. Every other caller stays as CloudTrail named it, and the original
-  ARN is kept with the event either way.
+- A session of an IAM Identity Center role is recorded as the person it names. List other roles
+  whose session names are people in the chart's `intake.humanRoles`. Every other caller stays as
+  CloudTrail named it, and the original ARN is kept with the event either way.
 
 ## What awzy records itself
 
