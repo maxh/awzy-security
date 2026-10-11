@@ -217,37 +217,84 @@ impl DryRunQuery {
     async fn policy_dry_run(&self, ctx: &Context<'_>, draft_qid: ID, days: Option<u32>) -> Result<PolicyDryRun> {
         require(ctx, PortalAction::View, PortalArea::Policies).await?;
         require(ctx, PortalAction::View, PortalArea::Decisions).await?;
-        let services = ctx.data::<Services>()?;
-        let days = days.unwrap_or(DEFAULT_DAYS).clamp(1, MAX_DAYS);
-        let policy = crate::policy_client(ctx)?;
-        let ch = services.clickhouse.as_ref().ok_or("the decision log isn't configured (AWZY_CLICKHOUSE_URL)")?;
-
-        let id: PolicyBundleId = draft_qid.parse()?;
-        let draft = policies::get(policy.clone(), id).await?.ok_or("no such policy bundle")?;
-        let draft = Pdp::new(&draft.schema, &draft.policies)?;
-        let (active, compared_with_version) = match policies::active(policy).await? {
-            Some(b) => (Pdp::new(&b.schema, &b.policies)?, b.version),
-            None => (Pdp::with_defaults()?, 0),
-        };
-        let replayer = match &services.context {
-            Some(context) => Replayer::from_context(context.base()).await?,
-            None => Replayer::without_context(),
-        };
-        let (groups, decisions, distinct) = recent_requests(ch, days, MAX_REQUESTS).await?;
-        let (unchanged, changes, skipped, skipped_reason) = compare(&replayer, &active, &draft, &groups).await;
-        Ok(PolicyDryRun {
-            days,
-            compared_with_version,
-            decisions,
-            distinct_requests: distinct,
-            replayed_requests: groups.len() as u64,
-            truncated: distinct > groups.len() as u64,
-            unchanged_decisions: unchanged,
-            changes,
-            skipped_requests: skipped,
-            skipped_reason,
-        })
+        Ok(run(ctx.data::<Services>()?, &draft_qid, days).await?)
     }
+}
+
+/// A dry run as JSON, for the MCP tool.
+pub(crate) fn to_json(r: &PolicyDryRun) -> serde_json::Value {
+    let example = |e: &PolicyDryRunExample| {
+        serde_json::json!({
+            "principal": format!("{}::{}", e.principal_type, e.principal_id),
+            "on_behalf_of": e.on_behalf_of_id,
+            "action": e.action,
+            "resource_id": e.resource_id,
+            "decisions": e.decisions,
+            "sample_decision_qid": e.sample_decision_qid,
+            "policies_before": e.policies_before,
+            "policies_after": e.policies_after,
+        })
+    };
+    serde_json::json!({
+        "days": r.days,
+        "compared_with_version": r.compared_with_version,
+        "decisions": r.decisions,
+        "distinct_requests": r.distinct_requests,
+        "replayed_requests": r.replayed_requests,
+        "truncated": r.truncated,
+        "unchanged_decisions": r.unchanged_decisions,
+        "changes": r.changes.iter().map(|c| serde_json::json!({
+            "from": c.from, "to": c.to, "decisions": c.decisions, "requests": c.requests,
+            "examples": c.examples.iter().map(example).collect::<Vec<_>>(),
+        })).collect::<Vec<_>>(),
+        "skipped_requests": r.skipped_requests,
+        "skipped_reason": r.skipped_reason,
+    })
+}
+
+/// The replayer a dry run or a what-if check decides with: today's people and resources from
+/// awzy-context when the portal has it, else only what the request carries.
+pub(crate) async fn replayer(services: &Services) -> anyhow::Result<Replayer> {
+    Ok(match &services.context {
+        Some(context) => Replayer::from_context(context.base()).await?,
+        None => Replayer::without_context(),
+    })
+}
+
+/// A dry run of draft `draft_qid` over the last `days` (default 7, at most 30). The caller has
+/// checked the viewer may see policies and decisions.
+pub(crate) async fn run(services: &Services, draft_qid: &str, days: Option<u32>) -> anyhow::Result<PolicyDryRun> {
+    let days = days.unwrap_or(DEFAULT_DAYS).clamp(1, MAX_DAYS);
+    let policy = services
+        .policy
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("the policy service is not configured (AWZY_POLICY_ADDR)"))?;
+    let ch = services
+        .clickhouse
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("the decision log isn't configured (AWZY_CLICKHOUSE_URL)"))?;
+    let id: PolicyBundleId = draft_qid.parse()?;
+    let draft = policies::get(policy.clone(), id).await?.ok_or_else(|| anyhow::anyhow!("no such policy bundle"))?;
+    let draft = Pdp::new(&draft.schema, &draft.policies)?;
+    let (active, compared_with_version) = match policies::active(policy).await? {
+        Some(b) => (Pdp::new(&b.schema, &b.policies)?, b.version),
+        None => (Pdp::with_defaults()?, 0),
+    };
+    let replayer = replayer(services).await?;
+    let (groups, decisions, distinct) = recent_requests(ch, days, MAX_REQUESTS).await?;
+    let (unchanged, changes, skipped, skipped_reason) = compare(&replayer, &active, &draft, &groups).await;
+    Ok(PolicyDryRun {
+        days,
+        compared_with_version,
+        decisions,
+        distinct_requests: distinct,
+        replayed_requests: groups.len() as u64,
+        truncated: distinct > groups.len() as u64,
+        unchanged_decisions: unchanged,
+        changes,
+        skipped_requests: skipped,
+        skipped_reason,
+    })
 }
 
 #[cfg(test)]
