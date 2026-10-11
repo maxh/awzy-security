@@ -286,6 +286,30 @@ input DecideChallengeInput {
 	note: String
 }
 
+input DecideSupportSessionInput {
+	id: ID!
+	approve: Boolean!
+	"""
+	With approve: the areas to allow, at most those asked for.
+	"""
+	areas: [String!]! = []
+	"""
+	With approve: for how long, at most what was asked for.
+	"""
+	minutes: Int! = 0
+}
+
+type DecideSupportSessionPayload {
+	"""
+	The session as decided; null when a challenge must be passed first.
+	"""
+	supportSession: SupportSession
+	"""
+	The challenge to pass, then decide again.
+	"""
+	challengeQid: ID
+}
+
 type Decision implements Node {
 	"""
 	QID: decision_<uuid>, the ID the PDP returned to the enforcement point.
@@ -623,6 +647,16 @@ type Mutation {
 	"""
 	setOutageFallback(input: SetOutageFallbackInput!): SetOutageFallbackPayload!
 	"""
+	Approves or rejects a support session. Approving lets an awzy staff member view the areas
+	approved, read-only, until it expires; like switching enforcement, policy can ask for a
+	security key first.
+	"""
+	decideSupportSession(input: DecideSupportSessionInput!): DecideSupportSessionPayload!
+	"""
+	Ends an approved support session now. The staff member's next request is refused.
+	"""
+	endSupportSession(id: ID!): SupportSession!
+	"""
 	Registers a service account, or changes one. Until it's registered, the PDP denies it.
 	"""
 	registerServiceAccount(input: RegisterServiceAccountInput!): RegisterServiceAccountPayload!
@@ -678,14 +712,6 @@ type Mutation {
 	Closes an investigation once a person has reviewed it. It stays, with who closed it and why.
 	"""
 	closeInvestigation(input: CloseInvestigationInput!): CloseInvestigationPayload!
-	"""
-	Approves or rejects a support session.
-	"""
-	decideSupportSession(input: DecideSupportSessionInput!): DecideSupportSessionPayload!
-	"""
-	Ends an approved support session now.
-	"""
-	endSupportSession(id: ID!): SupportSession!
 }
 
 interface Node {
@@ -1015,12 +1041,6 @@ type Query {
 	"""
 	outageFallback: OutageFallback!
 	"""
-	A diagnostics bundle as JSON: each service's status, the portal's release, and which
-	settings it was started with, with no client data. For those who may administer the
-	enforcement area, to review before sending it to awzy support.
-	"""
-	diagnosticsBundle: String!
-	"""
 	Support sessions awzy staff asked for, newest first. For those who may view enforcement.
 	"""
 	supportSessions: [SupportSession!]!
@@ -1028,6 +1048,12 @@ type Query {
 	Null unless the viewer is awzy staff in a support session.
 	"""
 	viewerSupport: ViewerSupport
+	"""
+	A diagnostics bundle as JSON: each service's status, the portal's release, and which
+	settings it was started with, with no client data. For those who may administer the
+	enforcement area, to review before sending it to awzy support.
+	"""
+	diagnosticsBundle: String!
 }
 
 input RegisterServiceAccountInput {
@@ -1177,6 +1203,49 @@ type SetOutageFallbackPayload {
 	challengeQid: ID
 }
 
+type SupportSession {
+	"""
+	Its QID, which the corp portal minted.
+	"""
+	id: ID!
+	status: SupportSessionStatus!
+	"""
+	The awzy staff member who asked.
+	"""
+	requestedBy: String!
+	"""
+	The portal areas asked for.
+	"""
+	areas: [String!]!
+	reason: String!
+	"""
+	How long was asked for.
+	"""
+	durationMinutes: Int!
+	requestedAt: UtcTimestamp
+	"""
+	The areas approved, at most those asked for.
+	"""
+	approvedAreas: [String!]!
+	expiresAt: UtcTimestamp
+	decidedBy: Actor
+	decidedAt: UtcTimestamp
+	endedBy: Actor
+	endedAt: UtcTimestamp
+	"""
+	How many operations the staff member has made in it.
+	"""
+	actionCount: Int!
+}
+
+enum SupportSessionStatus {
+	REQUESTED
+	APPROVED
+	REJECTED
+	ENDED
+	EXPIRED
+}
+
 """
 A tool's tier.
 """
@@ -1224,6 +1293,16 @@ type ViewerInfo {
 }
 
 """
+The signed-in viewer's own support session, when they're awzy staff in one.
+"""
+type ViewerSupport {
+	sessionId: ID!
+	staff: String!
+	areas: [String!]!
+	expiresAt: UtcTimestamp!
+}
+
+"""
 One WebAuthn ceremony for the browser to run.
 """
 type WebAuthnCeremony {
@@ -1250,48 +1329,4 @@ schema {
 	query: Query
 	mutation: Mutation
 	subscription: ClientPortalSubscription
-}
-
-input DecideSupportSessionInput {
-	id: ID!
-	approve: Boolean!
-	areas: [String!]! = []
-	minutes: Int! = 0
-}
-
-type DecideSupportSessionPayload {
-	supportSession: SupportSession
-	challengeQid: ID
-}
-
-type SupportSession {
-	id: ID!
-	status: SupportSessionStatus!
-	requestedBy: String!
-	areas: [String!]!
-	reason: String!
-	durationMinutes: Int!
-	requestedAt: UtcTimestamp
-	approvedAreas: [String!]!
-	expiresAt: UtcTimestamp
-	decidedBy: Actor
-	decidedAt: UtcTimestamp
-	endedBy: Actor
-	endedAt: UtcTimestamp
-	actionCount: Int!
-}
-
-enum SupportSessionStatus {
-	REQUESTED
-	APPROVED
-	REJECTED
-	ENDED
-	EXPIRED
-}
-
-type ViewerSupport {
-	sessionId: ID!
-	staff: String!
-	areas: [String!]!
-	expiresAt: UtcTimestamp!
 }
