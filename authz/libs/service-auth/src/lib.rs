@@ -294,6 +294,15 @@ impl tonic::service::Interceptor for TokenInterceptor {
             let value = a.parse().map_err(|_| tonic::Status::internal("the service token isn't a valid header"))?;
             req.metadata_mut().insert("authorization", value);
         }
+        // The caller's trace goes along (ADR 0097); nothing when traces are off.
+        for (key, value) in awzy_telemetry::trace_headers() {
+            if let (Ok(key), Ok(value)) = (
+                tonic::metadata::MetadataKey::from_bytes(key.as_bytes()),
+                value.parse::<tonic::metadata::MetadataValue<_>>(),
+            ) {
+                req.metadata_mut().insert(key, value);
+            }
+        }
         Ok(req)
     }
 }

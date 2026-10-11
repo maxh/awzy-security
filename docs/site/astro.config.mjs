@@ -46,6 +46,7 @@ export default defineConfig({
             "guides/writing-policies",
             "guides/mcp-gateway",
             "guides/sending-events",
+            "guides/connectors",
             "guides/optional-features",
             "guides/break-glass",
           ],
@@ -53,6 +54,7 @@ export default defineConfig({
         {
           label: "Reference",
           items: [
+            "reference/configuration",
             "reference/services",
             "reference/decision-api",
             "reference/domain-model",

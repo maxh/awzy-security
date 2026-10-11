@@ -37,3 +37,7 @@ module "install" {
 output "install_contract" {
   value = module.install.install_contract
 }
+
+output "monitoring" {
+  value = module.install.monitoring
+}

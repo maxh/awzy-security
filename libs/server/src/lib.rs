@@ -77,7 +77,7 @@ pub async fn serve_with_readiness(service: &'static str, app: Router, ready: Rea
     let stopping = Arc::new(AtomicBool::new(false));
     let ready = draining(ready, stopping.clone());
     metrics::register(Arc::new(metrics::Readiness(ready.clone())));
-    let app = metrics::with_metrics(with_readiness(app, ready));
+    let app = metrics::with_metrics(with_readiness(app, ready)).layer(axum::middleware::from_fn(traced));
     let drained = async move {
         shutdown_signal().await;
         stopping.store(true, Ordering::Release);
@@ -89,6 +89,15 @@ pub async fn serve_with_readiness(service: &'static str, app: Router, ready: Rea
     };
     axum::serve(listener, app).with_graceful_shutdown(drained).await?;
     Ok(())
+}
+
+/// Each request in a span that continues the caller's trace, when it sent one (ADR 0097): an
+/// enforcement point's check, through the PDP, to awzy-context and awzy-challenge.
+async fn traced(req: axum::extract::Request, next: axum::middleware::Next) -> axum::response::Response {
+    use tracing::Instrument;
+    let span = tracing::info_span!("request", method = %req.method(), path = %req.uri().path());
+    awzy_telemetry::continue_trace(&span, |k| req.headers().get(k).and_then(|v| v.to_str().ok()).map(str::to_string));
+    next.run(req).instrument(span).await
 }
 
 /// `ready`, until shutdown begins.

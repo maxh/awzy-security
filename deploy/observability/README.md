@@ -11,8 +11,9 @@ serves Prometheus metrics at `/metrics` on its own port; these files are what re
 
 Locally, `docker compose -f deploy/local/compose.yaml --profile observability up -d` runs
 Prometheus (http://localhost:9091) and Grafana (http://localhost:3000) with both, scraping the
-services you've started with `bazel run`. The AWS monitoring module will ship the same files to
-managed Prometheus and Grafana.
+services you've started with `bazel run`. On AWS, `deploy/terraform/aws/monitoring` loads the
+alert rules into Amazon Managed Prometheus, and `deploy/terraform/grafana` the dashboards into any
+Grafana (ADR 0096).
 
 Edit a dashboard in Grafana, export it as JSON (Share, Export, without "external"), and save it
 here; keep `uid` and the datasource uid `prometheus`.
