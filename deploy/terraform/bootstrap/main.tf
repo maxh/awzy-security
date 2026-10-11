@@ -38,12 +38,14 @@ locals {
 
   # Third-party images, mirrored into the release registry and signed (ADR 0057): name =>
   # { repository, tag }, from the list CI mirrors. Changing a component's version in
-  # var.versions means mirroring its new images first.
+  # var.versions means mirroring its new images first. The tag carries the digest
+  # (`<tag>@sha256:…`): Kyverno rejects any later change to a Deployment whose image has none.
   mirror_lines = [
-    for l in split("\n", file("${path.module}/../../release/third-party-images.txt")) : split(":", split(" ", trimspace(l))[0])
+    for l in split("\n", file("${path.module}/../../release/third-party-images.txt")) :
+    regex("^([a-z0-9-]+):(\\S+)\\s+\\S+@(sha256:[0-9a-f]+)$", trimspace(l))
     if trimspace(l) != "" && !startswith(trimspace(l), "#")
   ]
-  mirrored = { for m in local.mirror_lines : m[0] => { repository = "${local.c.registry_prefix}/third-party/${m[0]}", tag = m[1] } }
+  mirrored = { for m in local.mirror_lines : m[0] => { repository = "${local.c.registry_prefix}/third-party/${m[0]}", tag = "${m[1]}@${m[2]}" } }
 }
 
 resource "kubernetes_namespace_v1" "awzy" {

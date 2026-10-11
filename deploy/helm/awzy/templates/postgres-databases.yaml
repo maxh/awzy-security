@@ -26,7 +26,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: create
-          image: {{ include "awzy.thirdPartyImage" (dict "root" . "ref" "postgres:17-alpine-b0f9560a2de0") }}
+          image: {{ include "awzy.thirdPartyImage" (dict "root" . "ref" "postgres:17-alpine-b0f9560a2de0@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24") }}
           command:
             - sh
             - -c
