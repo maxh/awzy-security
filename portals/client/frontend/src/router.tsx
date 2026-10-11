@@ -8,6 +8,7 @@ import {
   IconListCheck,
   IconSearch,
   IconShieldCheck,
+  IconUserSearch,
 } from "@tabler/icons-react";
 import {
   createRootRoute,
@@ -24,6 +25,7 @@ import { DecisionsPage } from "./DecisionsPage";
 import { DirectoryPage } from "./DirectoryPage";
 import { EnforcementPage } from "./EnforcementPage";
 import { InvestigationsPage } from "./InvestigationsPage";
+import { LookupPage } from "./LookupPage";
 import { PoliciesPage } from "./PoliciesPage";
 import { StatusPage } from "./StatusPage";
 import { SupportBanner, SupportPage } from "./SupportPage";
@@ -69,6 +71,12 @@ function Nav() {
         icon={<IconSearch {...icon} />}
         active={pathname.startsWith("/investigations")}
         renderRoot={(props) => <Link to="/investigations" {...props} />}
+      />
+      <ShellNavLink
+        label="Look up"
+        icon={<IconUserSearch {...icon} />}
+        active={pathname.startsWith("/lookup")}
+        renderRoot={(props) => <Link to="/lookup" {...props} />}
       />
       <ShellNavLink
         label="Status"
@@ -145,6 +153,12 @@ const investigationsRoute = createRoute({
   component: InvestigationsPage,
 });
 
+const lookupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/lookup",
+  component: LookupPage,
+});
+
 const statusRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/status",
@@ -166,6 +180,7 @@ export const router = createRouter({
     directoryRoute,
     challengesRoute,
     investigationsRoute,
+    lookupRoute,
     statusRoute,
     supportRoute,
   ]),

@@ -916,6 +916,33 @@ enum PortalArea {
 	INVESTIGATIONS
 }
 
+"""
+A person or service account as the PDPs see it.
+"""
+type PrincipalDetail {
+	"""
+	Whether awzy knows it at all: provisioned by the IdP, or a registered service account.
+	"""
+	known: Boolean!
+	"""
+	Its Cedar attributes, as JSON: `active`, a service account's `owner` and `ai`.
+	"""
+	attributes: String
+	"""
+	Every group above it, nested groups included.
+	"""
+	groups: [String!]!
+	"""
+	awzy-reasoner's risk score, 0 to 100, when it has one.
+	"""
+	riskScore: Int
+}
+
+enum PrincipalType {
+	HUMAN
+	SERVICE_ACCOUNT
+}
+
 input PublishPolicyBundleInput {
 	"""
 	A draft bundle's QID.
@@ -1049,6 +1076,20 @@ type Query {
 	"""
 	viewerSupport: ViewerSupport
 	"""
+	A person or service account as the PDPs see it: attributes, groups (nested ones
+	included), and risk. For those who may view the directory.
+	"""
+	principal(type: PrincipalType!, id: String!): PrincipalDetail!
+	"""
+	Resources whose ID or name contains `query`, ignoring case. At most 50.
+	"""
+	searchResources(query: String!): [ResourceSummary!]!
+	"""
+	One resource: its tiers and the classifier's reason, owner, sharing, the folders above it,
+	and who is assigned to work that links it. Null when awzy-context doesn't know it.
+	"""
+	resource(id: String!): ResourceDetail
+	"""
 	A diagnostics bundle as JSON: each service's status, the portal's release, and which
 	settings it was started with, with no client data. For those who may administer the
 	enforcement area, to review before sending it to awzy support.
@@ -1092,6 +1133,66 @@ type RemoveServiceAccountPayload {
 
 input ResetSecurityKeyInput {
 	securityKeyQid: ID!
+}
+
+"""
+What awzy-classify decided about a resource (ADR 0047).
+"""
+type ResourceClassification {
+	"""
+	None when nothing placed it yet.
+	"""
+	sensitivity: String
+	"""
+	label, content, or metadata.
+	"""
+	by: String
+	reason: String!
+}
+
+"""
+A resource as the PDPs see it.
+"""
+type ResourceDetail {
+	id: String!
+	name: String!
+	kind: String!
+	source: String!
+	owner: String
+	"""
+	The connector's tier.
+	"""
+	sensitivity: String
+	classification: ResourceClassification
+	"""
+	Who it's shared with, as JSON (the connector's sharing entries).
+	"""
+	sharing: String!
+	labels: [String!]!
+	url: String
+	"""
+	The folders above it, nearest first, by ID.
+	"""
+	folders: [String!]!
+	"""
+	Who is assigned to open work that links it or a folder above it.
+	"""
+	assignees: [String!]!
+}
+
+"""
+One resource awzy-context knows, as a search finds it.
+"""
+type ResourceSummary {
+	id: String!
+	name: String!
+	kind: String!
+	source: String!
+	owner: String
+	"""
+	The connector's tier; the classifier's may be higher (see `resource`).
+	"""
+	sensitivity: String
 }
 
 type SecurityKey {
