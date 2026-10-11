@@ -2,15 +2,20 @@
 {{- $portal := printf "%s/awzy" .Values.namespaces.portal -}}
 {{- $glass := .Values.policy.breakGlassKeysSecret -}}
 {{- /* Demo installs: the synthetic company's Job sets the demo tools' tiers (ADR 0089). */ -}}
+{{- $readers := printf "%s,%s" $backend $portal -}}
 {{- $writers := $portal -}}
-{{- if .Values.demoData.enabled }}{{- $writers = printf "%s,%s/awzy-demo-data" $portal .Values.namespaces.system -}}{{- end }}
+{{- /* It reads the tiers first, to leave any the portal set alone. */ -}}
+{{- if .Values.demoData.enabled }}
+{{- $readers = printf "%s,%s/awzy-demo-data" $readers .Values.namespaces.system -}}
+{{- $writers = printf "%s,%s/awzy-demo-data" $portal .Values.namespaces.system -}}
+{{- end }}
 # Who may call which methods (ADR 0055): the PDP and the portal read bundles and the mode; only
 # the portal drafts, publishes, and switches the mode. Break-glass rollback is signed instead.
 # awzy-policy signs each bundle, mode change, and outage fallback with the install's KMS key, under
 # its own account, which alone may use it; the PDPs and gateways check them (ADR 0080, 0092).
 {{- $env := list
     (dict "name" "AWZY_CHALLENGE_ADDR" "value" (printf "http://awzy-challenge.%s.svc:8080" .Values.namespaces.system))
-    (dict "name" "AWZY_POLICY_READERS" "value" (printf "%s,%s" $backend $portal))
+    (dict "name" "AWZY_POLICY_READERS" "value" $readers)
     (dict "name" "AWZY_POLICY_SIGNING_KMS_KEY" "value" (required "policy.signingKmsKey is required" .Values.policy.signingKmsKey))
     (dict "name" "AWZY_POLICY_WRITERS" "value" $writers)
     (dict "name" "AWZY_POSTGRES_URL" "valueFrom" (dict "secretKeyRef" (dict "name" "awzy-postgres" "key" "policy_url")))
