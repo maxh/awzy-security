@@ -79,6 +79,20 @@ spec:
   ingress:
     - from: [{{ toJson $awzy }}]
 ---
+{{- if .Values.reporter.enabled }}
+# awzy-reporter serves the last heartbeat it sent to the client portal.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: awzy-reporter
+  namespace: {{ .Values.namespaces.system }}
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: awzy-reporter } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{{ toJson $awzy }}]
+---
+{{- end }}
 # awzy-challenge only from awzy's own services: the PDP and the client portal.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

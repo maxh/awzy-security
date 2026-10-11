@@ -554,6 +554,16 @@ input FinishSecurityKeyRegistrationInput {
 """
 A person, as the IdP provisioned them: a `Human` in policies.
 """
+type HeartbeatExport {
+	enabled: Boolean!
+	corpUrl: String
+	intervalSecs: Int
+	sentAt: UtcTimestamp
+	delivered: Boolean
+	error: String
+	heartbeat: String
+}
+
 type Human {
 	"""
 	Their ID in policies and tokens.
@@ -1135,6 +1145,11 @@ type Query {
 	enforcement area, to review before sending it to awzy support.
 	"""
 	diagnosticsBundle: String!
+	"""
+	What this install sends awzy, and the last heartbeat it sent. For those who may view the
+	enforcement area.
+	"""
+	heartbeatExport: HeartbeatExport!
 }
 
 input RegisterServiceAccountInput {

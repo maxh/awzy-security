@@ -16,6 +16,8 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
     tracing::info!(install = %config.install_id, corp = %config.corp_url, source = ?config.source, every = ?config.interval, "reporting to awzy");
-    tokio::spawn(awzy_reporter::run(reporter));
-    awzy_server::serve("awzy-reporter", Router::new()).await
+    let last = awzy_reporter::LastSent::default();
+    let app = awzy_reporter::router(&config, last.clone());
+    tokio::spawn(awzy_reporter::run(reporter, last));
+    awzy_server::serve("awzy-reporter", app).await
 }
