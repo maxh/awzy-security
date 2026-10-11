@@ -133,8 +133,8 @@ impl NewInstall {
         if !is_slug(&self.client) || !is_slug(&self.environment) || !is_slug(&self.region) {
             return invalid("client, environment, and region must be lowercase letters, digits, and hyphens");
         }
-        if !["aws", "gcp", "azure"].contains(&self.cloud.as_str()) {
-            return invalid("cloud must be aws, gcp, or azure");
+        if let Err(e) = crate::regions::check(&self.cloud, &self.region) {
+            return Err(RegisterError::Invalid(e.to_string()));
         }
         check_release(self.channel, self.pinned_version.as_deref())
     }

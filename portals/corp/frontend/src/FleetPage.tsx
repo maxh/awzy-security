@@ -3,6 +3,7 @@ import {
   ActionIcon,
   Alert,
   Anchor,
+  Autocomplete,
   Box,
   Button,
   Code,
@@ -54,10 +55,15 @@ export function FleetPage() {
       />
       <Section flush>
         <Suspense fallback={<PageLoader />}>
-          <Fleet queryRef={queryRef} onRegister={register} />
+          <Fleet
+            queryRef={queryRef}
+            onRegister={register}
+            registering={registering}
+            onRegisterClose={() => setRegistering(false)}
+            onRegistered={refresh}
+          />
         </Suspense>
       </Section>
-      <RegisterInstall opened={registering} onClose={() => setRegistering(false)} onRegistered={refresh} />
     </>
   );
 }
@@ -75,10 +81,26 @@ function Figure({ children }: { children: string | null }) {
   );
 }
 
-function Fleet({ queryRef, onRegister }: { queryRef: PreloadedQuery<FleetPageQuery>; onRegister: () => void }) {
+function Fleet({
+  queryRef,
+  onRegister,
+  registering,
+  onRegisterClose,
+  onRegistered,
+}: {
+  queryRef: PreloadedQuery<FleetPageQuery>;
+  onRegister: () => void;
+  registering: boolean;
+  onRegisterClose: () => void;
+  onRegistered: () => void;
+}) {
   const data = usePreloadedQuery<FleetPageQuery>(
     graphql`
       query FleetPageQuery {
+        cloudRegions {
+          cloud
+          regions
+        }
         installs(first: 200) {
           edges {
             node {
@@ -107,97 +129,113 @@ function Fleet({ queryRef, onRegister }: { queryRef: PreloadedQuery<FleetPageQue
     queryRef,
   );
   const installs = data.installs.edges.map((e) => e.node);
+  // Rendered here, where the clouds' regions and the installs already registered are loaded.
+  const dialog = (
+    <RegisterInstall
+      opened={registering}
+      onClose={onRegisterClose}
+      onRegistered={onRegistered}
+      cloudRegions={data.cloudRegions}
+      registered={installs}
+    />
+  );
   if (installs.length === 0) {
     return (
-      <EmptyState
-        icon={<IconServer2 size={22} />}
-        title="No installs yet"
-        description="Register an install to get its ID and reporting token, then put both in the install's reporter settings."
-        action={
-          <Button leftSection={<IconPlus size={16} />} onClick={onRegister}>
-            Register install
-          </Button>
-        }
-      />
+      <>
+        {dialog}
+        <EmptyState
+          icon={<IconServer2 size={22} />}
+          title="No installs yet"
+          description="Register an install to get its ID and reporting token, then put both in the install's reporter settings."
+          action={
+            <Button leftSection={<IconPlus size={16} />} onClick={onRegister}>
+              Register install
+            </Button>
+          }
+        />
+      </>
     );
   }
   return (
-    <Table.ScrollContainer minWidth={900}>
-      <Table style={{ whiteSpace: "nowrap" }}>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Install</Table.Th>
-            <Table.Th>Health</Table.Th>
-            <Table.Th>Cloud</Table.Th>
-            <Table.Th>Channel</Table.Th>
-            <Table.Th>Version</Table.Th>
-            <Table.Th>Services</Table.Th>
-            <Table.Th ta="right">PDP p99</Table.Th>
-            <Table.Th ta="right">Decisions/s</Table.Th>
-            <Table.Th>Last seen</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {installs.map((i) => {
-            const health = healthOf(i.health);
-            const healthy = i.services.filter((s) => s.healthy).length;
-            return (
-              <Table.Tr key={i.id}>
-                <Table.Td>
-                  <Anchor
-                    fw={600}
-                    underline="hover"
-                    renderRoot={(props) => <Link to="/installs/$installId" params={{ installId: i.id }} {...props} />}
-                  >
-                    {i.client}
-                  </Anchor>
-                  <Text size="xs" c="dimmed">
-                    {i.environment}
-                  </Text>
-                </Table.Td>
-                <Table.Td>
-                  <StatusBadge tone={health.tone}>{health.label}</StatusBadge>
-                </Table.Td>
-                <Table.Td>
-                  <Text size="sm">{i.cloud.toUpperCase()}</Text>
-                  <Text size="xs" c="dimmed">
-                    {i.region}
-                  </Text>
-                </Table.Td>
-                <Table.Td>{channelLabel(i.channel, i.pinnedVersion)}</Table.Td>
-                <Table.Td ff="monospace" fz="xs">
-                  <Figure>{i.chartVersion ?? null}</Figure>
-                </Table.Td>
-                <Table.Td>
-                  <Figure>{i.services.length > 0 ? `${healthy}/${i.services.length} ready` : null}</Figure>
-                </Table.Td>
-                <Table.Td ta="right">
-                  <Figure>{i.metrics?.pdpP99Ms != null ? `${i.metrics.pdpP99Ms.toFixed(1)} ms` : null}</Figure>
-                </Table.Td>
-                <Table.Td ta="right">
-                  <Figure>
-                    {i.metrics?.decisionsPerSecond != null ? i.metrics.decisionsPerSecond.toLocaleString() : null}
-                  </Figure>
-                </Table.Td>
-                <Table.Td>
-                  {i.lastSeenAt ? (
-                    <Tooltip label={formatTime(i.lastSeenAt)}>
-                      <Text size="sm" span>
-                        {ago(i.lastSeenAt)}
-                      </Text>
-                    </Tooltip>
-                  ) : (
-                    <Text size="sm" c="dimmed" span>
-                      Never
+    <>
+      {dialog}
+      <Table.ScrollContainer minWidth={900}>
+        <Table style={{ whiteSpace: "nowrap" }}>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Install</Table.Th>
+              <Table.Th>Health</Table.Th>
+              <Table.Th>Cloud</Table.Th>
+              <Table.Th>Channel</Table.Th>
+              <Table.Th>Version</Table.Th>
+              <Table.Th>Services</Table.Th>
+              <Table.Th ta="right">PDP p99</Table.Th>
+              <Table.Th ta="right">Decisions/s</Table.Th>
+              <Table.Th>Last seen</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {installs.map((i) => {
+              const health = healthOf(i.health);
+              const healthy = i.services.filter((s) => s.healthy).length;
+              return (
+                <Table.Tr key={i.id}>
+                  <Table.Td>
+                    <Anchor
+                      fw={600}
+                      underline="hover"
+                      renderRoot={(props) => <Link to="/installs/$installId" params={{ installId: i.id }} {...props} />}
+                    >
+                      {i.client}
+                    </Anchor>
+                    <Text size="xs" c="dimmed">
+                      {i.environment}
                     </Text>
-                  )}
-                </Table.Td>
-              </Table.Tr>
-            );
-          })}
-        </Table.Tbody>
-      </Table>
-    </Table.ScrollContainer>
+                  </Table.Td>
+                  <Table.Td>
+                    <StatusBadge tone={health.tone}>{health.label}</StatusBadge>
+                  </Table.Td>
+                  <Table.Td>
+                    <Text size="sm">{i.cloud.toUpperCase()}</Text>
+                    <Text size="xs" c="dimmed">
+                      {i.region}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>{channelLabel(i.channel, i.pinnedVersion)}</Table.Td>
+                  <Table.Td ff="monospace" fz="xs">
+                    <Figure>{i.chartVersion ?? null}</Figure>
+                  </Table.Td>
+                  <Table.Td>
+                    <Figure>{i.services.length > 0 ? `${healthy}/${i.services.length} ready` : null}</Figure>
+                  </Table.Td>
+                  <Table.Td ta="right">
+                    <Figure>{i.metrics?.pdpP99Ms != null ? `${i.metrics.pdpP99Ms.toFixed(1)} ms` : null}</Figure>
+                  </Table.Td>
+                  <Table.Td ta="right">
+                    <Figure>
+                      {i.metrics?.decisionsPerSecond != null ? i.metrics.decisionsPerSecond.toLocaleString() : null}
+                    </Figure>
+                  </Table.Td>
+                  <Table.Td>
+                    {i.lastSeenAt ? (
+                      <Tooltip label={formatTime(i.lastSeenAt)}>
+                        <Text size="sm" span>
+                          {ago(i.lastSeenAt)}
+                        </Text>
+                      </Tooltip>
+                    ) : (
+                      <Text size="sm" c="dimmed" span>
+                        Never
+                      </Text>
+                    )}
+                  </Table.Td>
+                </Table.Tr>
+              );
+            })}
+          </Table.Tbody>
+        </Table>
+      </Table.ScrollContainer>
+    </>
   );
 }
 
@@ -205,15 +243,25 @@ function RegisterInstall({
   opened,
   onClose,
   onRegistered,
+  cloudRegions,
+  registered,
 }: {
   opened: boolean;
   onClose: () => void;
   onRegistered: () => void;
+  /** Each cloud's regions, the first its default (from the corp portal, which checks them too). */
+  cloudRegions: readonly { readonly cloud: string; readonly regions: readonly string[] }[];
+  /** The installs already registered, for the environments each client has. */
+  registered: readonly { readonly client: string; readonly environment: string }[];
 }) {
+  const regionsOf = (c: string | null) => cloudRegions.find((r) => r.cloud === c)?.regions ?? [];
   const [client, setClient] = useState("");
   const [environment, setEnvironment] = useState("prod");
   const [cloud, setCloud] = useState<string | null>("aws");
-  const [region, setRegion] = useState("us-east-2");
+  const [region, setRegion] = useState<string | null>(regionsOf("aws")[0] ?? null);
+  // A client's environments are its own names; suggest the usual ones and those it already has.
+  const taken = registered.filter((i) => i.client === client.trim()).map((i) => i.environment);
+  const environments = [...new Set(["prod", "staging", "dev", "demo", ...taken])];
   const [channel, setChannel] = useState<string | null>("FAST");
   const [pinned, setPinned] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -244,7 +292,7 @@ function RegisterInstall({
           client: client.trim(),
           environment: environment.trim(),
           cloud: cloud ?? "aws",
-          region: region.trim(),
+          region: region ?? "",
           channel: oneOf(CHANNEL_NAMES, channel) ?? "FAST",
           pinnedVersion: channel === "PINNED" ? pinned.trim() : null,
         },
@@ -307,22 +355,38 @@ function RegisterInstall({
                 onChange={(e) => setClient(e.currentTarget.value)}
                 required
               />
-              <TextInput
+              <Autocomplete
                 label="Environment"
+                data={environments}
                 value={environment}
-                onChange={(e) => setEnvironment(e.currentTarget.value)}
+                onChange={setEnvironment}
+                description={taken.length > 0 ? `Already registered: ${taken.join(", ")}` : undefined}
+                error={
+                  taken.includes(environment.trim()) ? `${client.trim()} already has ${environment.trim()}` : undefined
+                }
                 required
               />
             </Group>
             <Group grow>
               <Select
                 label="Cloud"
-                data={["aws", "gcp", "azure"]}
+                data={cloudRegions.map((r) => r.cloud)}
                 value={cloud}
-                onChange={setCloud}
+                onChange={(c) => {
+                  setCloud(c);
+                  setRegion(regionsOf(c)[0] ?? null);
+                }}
                 allowDeselect={false}
               />
-              <TextInput label="Region" value={region} onChange={(e) => setRegion(e.currentTarget.value)} required />
+              <Select
+                label="Region"
+                data={[...regionsOf(cloud)]}
+                value={region}
+                onChange={setRegion}
+                searchable
+                allowDeselect={false}
+                required
+              />
             </Group>
             <Group grow>
               <Select
@@ -343,8 +407,8 @@ function RegisterInstall({
               )}
             </Group>
             <Text size="xs" c="dimmed">
-              Client, environment, and region are lowercase letters, digits, and hyphens. The client's name stays here;
-              installs report only their ID.
+              Client and environment are lowercase letters, digits, and hyphens. The client's name stays here; installs
+              report only their ID.
             </Text>
             <Group justify="flex-end">
               <Button type="submit" loading={isSaving}>
