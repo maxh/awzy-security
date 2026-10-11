@@ -11,19 +11,23 @@ use uuid::Uuid;
 
 /// A string that isn't a QID of the entity expected. Says which entity's it is, when it's
 /// another of awzy's.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("{}", describe(*expected, value))]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QidError {
     expected: QidEntity,
     value: String,
 }
 
-fn describe(expected: QidEntity, value: &str) -> String {
-    match QidEntity::of(value) {
-        Some(other) => format!("{value:?} is a {other} ID, not a {expected} ID"),
-        None => format!("{value:?} is not a {expected} ID; expected {expected}_<uuid>"),
+impl fmt::Display for QidError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (value, expected) = (&self.value, self.expected);
+        match QidEntity::of(value) {
+            Some(other) => write!(f, "{value:?} is a {other} ID, not a {expected} ID"),
+            None => write!(f, "{value:?} is not a {expected} ID; expected {expected}_<uuid>"),
+        }
     }
 }
+
+impl std::error::Error for QidError {}
 
 impl QidError {
     /// The entity the QID should have been of.
