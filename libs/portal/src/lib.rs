@@ -4,11 +4,13 @@
 use std::path::{Path, PathBuf};
 
 mod actor;
+mod errors;
 mod persisted;
 mod qid;
 mod scalars;
 
 pub use actor::Actor;
+pub use errors::ErrorCode;
 pub use persisted::{PersistedQueries, PersistedQueriesError};
 pub use qid::Qid;
 pub use scalars::{JsonObject, JsonString, UtcTimestamp};

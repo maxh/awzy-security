@@ -33,7 +33,7 @@ pub mod support;
 use access::{Auth, PortalAction, PortalArea, Surface, Viewer};
 use async_graphql::{
     http::{GraphiQLSource, ALL_WEBSOCKET_PROTOCOLS},
-    Context, MergedObject, MergedSubscription, Object, Result, Schema, SimpleObject,
+    Context, ErrorExtensions, MergedObject, MergedSubscription, Object, Result, Schema, SimpleObject,
 };
 use async_graphql_axum::{GraphQLProtocol, GraphQLRequest, GraphQLResponse, GraphQLWebSocket};
 use awzy_authz_proto::{
@@ -131,7 +131,7 @@ impl MetaQuery {
 
     /// Who is signed in.
     async fn viewer(&self, ctx: &Context<'_>) -> Result<ViewerInfo> {
-        let v = ctx.data::<Viewer>().map_err(|_| "sign in first")?;
+        let v = access::signed_in(ctx)?;
         Ok(ViewerInfo {
             id: v.subject.id.clone(),
             kind: v.subject.kind.clone(),
@@ -142,18 +142,18 @@ impl MetaQuery {
 
     /// Whether the viewer may do `action` in `area`, so the portal can hide what they can't use.
     async fn viewer_can(&self, ctx: &Context<'_>, action: PortalAction, area: PortalArea) -> Result<bool> {
-        let viewer = ctx.data::<Viewer>().map_err(|_| "sign in first")?;
+        let viewer = access::signed_in(ctx)?;
         match access::authorize(ctx.data::<Services>()?, viewer, Surface::Portal, action, area).await {
             Ok(()) => Ok(true),
             Err(access::AccessError::Denied { .. } | access::AccessError::Challenged { .. }) => Ok(false),
-            Err(e) => Err(e.into()),
+            Err(e) => Err(e.extend()),
         }
     }
 
     /// The areas the viewer may view, so the portal shows only the pages they can open. Asks the
     /// PDP about each area at once.
     async fn viewer_areas(&self, ctx: &Context<'_>) -> Result<Vec<PortalArea>> {
-        let viewer = ctx.data::<Viewer>().map_err(|_| "sign in first")?;
+        let viewer = access::signed_in(ctx)?;
         let services = ctx.data::<Services>()?;
         let checks = PortalArea::ALL.iter().map(|&area| async move {
             match access::authorize(services, viewer, Surface::Portal, PortalAction::View, area).await {
@@ -163,7 +163,8 @@ impl MetaQuery {
             }
         });
         let results = async_graphql::futures_util::future::join_all(checks).await;
-        Ok(results.into_iter().collect::<Result<Vec<_>, _>>()?.into_iter().flatten().collect())
+        let areas = results.into_iter().collect::<Result<Vec<_>, _>>().map_err(|e| e.extend())?;
+        Ok(areas.into_iter().flatten().collect())
     }
 }
 

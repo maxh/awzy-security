@@ -19,7 +19,6 @@ import {
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
-  commitMutation,
   fetchQuery,
   graphql,
   type PreloadedQuery,
@@ -29,7 +28,7 @@ import {
   useRelayEnvironment,
   useSubscription,
 } from "react-relay";
-import type { Environment, GraphQLSubscriptionConfig, GraphQLTaggedNode, MutationParameters } from "relay-runtime";
+import type { Environment, GraphQLSubscriptionConfig } from "relay-runtime";
 
 import type { ChallengesPageAdminQuery } from "./__generated__/ChallengesPageAdminQuery.graphql";
 import type { ChallengesPageContainMutation } from "./__generated__/ChallengesPageContainMutation.graphql";
@@ -48,6 +47,7 @@ import type { ChallengesPageKeysOfQuery } from "./__generated__/ChallengesPageKe
 import type { ChallengesPageRemoveKeyMutation } from "./__generated__/ChallengesPageRemoveKeyMutation.graphql";
 import type { ChallengesPageResetKeyMutation } from "./__generated__/ChallengesPageResetKeyMutation.graphql";
 import { entityLabel, formatTime } from "./format";
+import { mutate } from "./securityKeyChallenge";
 import { createCredential, getAssertion, webAuthnAvailable, webAuthnMessage } from "./webauthn";
 
 /** The challenge a notification linked to (`/challenges?challenge=<qid>`), highlighted. Read as
@@ -110,26 +110,6 @@ type Answered = {
   grantExpiresAt: string | null;
   stillNeeded: ReadonlyArray<string>;
 };
-
-/** A Relay mutation as a promise, for flows that chain several around a browser prompt. */
-function mutate<T extends MutationParameters>(
-  environment: Environment,
-  mutation: GraphQLTaggedNode,
-  variables: T["variables"],
-): Promise<T["response"]> {
-  return new Promise((resolve, reject) =>
-    commitMutation<T>(environment, {
-      mutation,
-      variables,
-      onCompleted: (response, errors) => {
-        const first = errors?.[0];
-        if (first) reject(new Error(first.message));
-        else resolve(response);
-      },
-      onError: reject,
-    }),
-  );
-}
 
 const beginKeyChange = graphql`
   mutation ChallengesPageBeginKeyChangeMutation {

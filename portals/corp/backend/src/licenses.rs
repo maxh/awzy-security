@@ -3,7 +3,7 @@
 //! nothing in an install reads them yet.
 
 use async_graphql::{Context, Enum, InputObject, Object, Result};
-use awzy_portal::{Actor, UtcTimestamp};
+use awzy_portal::{Actor, ErrorCode, UtcTimestamp};
 use chrono::{DateTime, Utc};
 use sqlx::{postgres::PgRow, Row};
 
@@ -217,8 +217,10 @@ pub struct LicenseMutation;
 impl LicenseMutation {
     /// Sets a client's license, replacing any it had. Shared by all the client's installs.
     async fn set_license(&self, ctx: &Context<'_>, input: SetLicenseInput) -> Result<License> {
-        let staff = ctx.data::<Staff>().map_err(|_| "sign in first")?;
-        let store = ctx.data::<FleetStore>().map_err(|_| "Postgres is not configured (AWZY_POSTGRES_URL)")?;
+        let staff = ctx.data::<Staff>().map_err(|_| ErrorCode::Unauthenticated.error("sign in first"))?;
+        let store = ctx
+            .data::<FleetStore>()
+            .map_err(|_| ErrorCode::Unavailable.error("Postgres is not configured (AWZY_POSTGRES_URL)"))?;
         let record = store
             .set_license(
                 &input.client,

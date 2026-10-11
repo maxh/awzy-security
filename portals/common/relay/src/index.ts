@@ -47,6 +47,34 @@ function isGraphQLResponse(v: unknown): v is GraphQLSingularResponse {
 }
 
 /**
+ * A failed operation, with what kind of failure it was: the `code` extension of its first error
+ * that has one (FORBIDDEN, CHALLENGE_REQUIRED, ...; #224), and the challenge to answer for a
+ * CHALLENGE_REQUIRED. Branch on `code`, never on the message.
+ */
+export class PortalError extends Error {
+  readonly code: string | null;
+  readonly challengeQid: string | null;
+
+  constructor(errors: readonly unknown[]) {
+    const messages = errors.map((e) => (hasField(e, "message") && typeof e.message === "string" ? e.message : ""));
+    super([...new Set(messages.filter(Boolean))].join("\n"));
+    this.name = "PortalError";
+    const extensions = errors
+      .map((e) => (hasField(e, "extensions") ? e.extensions : undefined))
+      .find((x) => hasField(x, "code") && typeof x.code === "string");
+    this.code = hasField(extensions, "code") && typeof extensions.code === "string" ? extensions.code : null;
+    this.challengeQid =
+      hasField(extensions, "challengeQid") && typeof extensions.challengeQid === "string"
+        ? extensions.challengeQid
+        : null;
+  }
+}
+
+function hasField<K extends string>(v: unknown, key: K): v is Record<K, unknown> {
+  return typeof v === "object" && v !== null && key in v;
+}
+
+/**
  * Relay environment for a portal backend: queries and mutations over HTTP POST,
  * subscriptions over graphql-ws on the same path, each sent by its persisted ID.
  */
@@ -70,11 +98,9 @@ export function createEnvironment(endpoint = "/graphql", options: EnvironmentOpt
     const body: unknown = await res.json();
     if (!isGraphQLResponse(body)) throw new Error("The portal's answer isn't a GraphQL response.");
     // Pages don't handle partial data, so any error fails the whole query, with the server's
-    // reasons. The page's error boundary shows them.
+    // reasons and code. The page's error boundary shows them.
     const errors = "errors" in body ? (body.errors ?? []) : [];
-    if (errors.length) {
-      throw new Error([...new Set(errors.map((e) => e.message))].join("\n"));
-    }
+    if (errors.length) throw new PortalError(errors);
     return body;
   };
 

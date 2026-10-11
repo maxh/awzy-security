@@ -1,3 +1,4 @@
+import { PortalError } from "@awzy/relay";
 import { commitMutation, graphql } from "react-relay";
 import type { Environment, GraphQLTaggedNode, MutationParameters } from "relay-runtime";
 
@@ -25,7 +26,7 @@ const finish = graphql`
   }
 `;
 
-/** A mutation as a promise, rejected with the server's first error. */
+/** A mutation as a promise, rejected with a `PortalError` carrying the server's errors and code. */
 export function mutate<T extends MutationParameters>(
   environment: Environment,
   mutation: GraphQLTaggedNode,
@@ -36,8 +37,7 @@ export function mutate<T extends MutationParameters>(
       mutation,
       variables,
       onCompleted: (response, errors) => {
-        const first = errors?.[0];
-        if (first) reject(new Error(first.message));
+        if (errors?.length) reject(new PortalError(errors));
         else resolve(response);
       },
       onError: reject,
