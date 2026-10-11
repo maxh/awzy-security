@@ -113,6 +113,8 @@ jobs:
       AWS_REGION: ${{ vars.AWZY_CORP_AWS_REGION }} # the name the AWS CLI reads
       # Two releases from each commit (ADR 0053), to the same registry for now.
       AWZY_AUTHZ_RELEASE_COSIGN_KEY: ${{ vars.AWZY_CORP_COSIGN_KEY }}
+      # publish-images.sh authz writes each image's digest here; publish-chart.sh puts them in the chart.
+      AWZY_AUTHZ_RELEASE_DIGESTS: /tmp/awzy-authz-digests.yaml
       AWZY_AUTHZ_RELEASE_REGISTRY: ${{ vars.AWZY_CORP_RELEASE_REGISTRY }}
       AWZY_AUTHZ_RELEASE_TAG: ${{ github.sha }}
       AWZY_CI_PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWZY_CORP_RELEASE_REGISTRY != '' }}

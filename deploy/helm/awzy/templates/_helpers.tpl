@@ -1,6 +1,12 @@
+{{- /* A released chart pins each image's digest (image-digests.yaml, added by
+tools/ci/publish-chart.sh), unless image.tag picks other images. */ -}}
 {{- define "awzy.image" -}}
 {{- $tag := .root.Values.image.tag | default .root.Chart.AppVersion -}}
-{{- required "image.registry is required" .root.Values.image.registry -}}/{{ .name }}:{{ $tag }}
+{{- $digest := "" -}}
+{{- if not .root.Values.image.tag -}}
+{{- $digest = get (.root.Files.Get "image-digests.yaml" | fromYaml) .name | default "" -}}
+{{- end -}}
+{{- required "image.registry is required" .root.Values.image.registry -}}/{{ .name }}:{{ $tag }}{{ with $digest }}@{{ . }}{{ end }}
 {{- end -}}
 
 {{- /* A third-party image mirrored into the release registry and signed (ADR 0057); `ref` is a
