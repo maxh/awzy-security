@@ -18,6 +18,18 @@ async fn main() -> anyhow::Result<()> {
         events_topic: std::env::var("AWZY_EVENTS_TOPIC").unwrap_or_else(|_| "awzy.events.v1".into()),
         consumer_group: std::env::var("AWZY_CLICKHOUSE_CONSUMER_GROUP").unwrap_or_else(|_| "awzy-clickhouse".into()),
     };
+    // Best effort: locally the brokers are named as ClickHouse reaches them, inside Docker.
+    let topics = [settings.decisions_topic.as_str(), settings.events_topic.as_str()];
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        awzy_clickhouse::ensure_topics(&settings.kafka_brokers, &topics),
+    )
+    .await
+    {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => tracing::warn!(error = %e, "couldn't create the Kafka topics; their producers will"),
+        Err(_) => tracing::warn!("couldn't reach Kafka to create the topics; their producers will"),
+    }
     let applied = awzy_clickhouse::migrate(&client, &settings).await?;
     tracing::info!(?applied, "ClickHouse schema is current");
     // How long decisions and events are kept; unset or 0 keeps them all.
