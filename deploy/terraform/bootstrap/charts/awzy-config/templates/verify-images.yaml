@@ -22,6 +22,8 @@ spec:
                 {{- end }}
       verifyImages:
         - imageReferences: [{{ printf "%s/*" .Values.registry.prefix | quote }}]
+          # Reject, not just report: without this Kyverno audits, and an unsigned image would run.
+          failureAction: Enforce
           imageRegistryCredentials:
             secrets: [awzy-registry]
           mutateDigest: true
