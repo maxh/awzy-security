@@ -2,6 +2,7 @@
 //! the MCP endpoint's `get_principal` and `get_resource`, for those who may view the directory.
 
 use async_graphql::{Context, Enum, Object, Result, SimpleObject};
+use awzy_portal::{JsonObject, JsonString};
 use serde_json::Value;
 
 use crate::{
@@ -32,7 +33,7 @@ pub struct PrincipalDetail {
     pub known: bool,
     /// Its Cedar attributes, as JSON: `active`, a service account's `owner` and `ai`. Null when a
     /// policy hides them (ADR 0103).
-    pub attributes: Option<String>,
+    pub attributes: Option<JsonObject>,
     /// Every group above it, nested groups included.
     pub groups: Vec<String>,
     /// awzy-reasoner's risk score, 0 to 100, when it has one and no policy hides it (ADR 0103).
@@ -74,7 +75,7 @@ pub struct ResourceDetail {
     pub classification: Option<ResourceClassification>,
     /// Who it's shared with, as JSON (the connector's sharing entries). Null when a policy hides
     /// it (ADR 0103).
-    pub sharing: Option<String>,
+    pub sharing: Option<JsonString>,
     pub labels: Vec<String>,
     pub url: Option<String>,
     /// The folders above it, nearest first, by ID.
@@ -114,7 +115,7 @@ impl LookupQuery {
         let found = principal_from_snapshot(&snapshot, r#type.as_str(), id.trim());
         Ok(PrincipalDetail {
             known: found.entity.is_some(),
-            attributes: found.entity.as_ref().map(|e| e["attrs"].to_string()),
+            attributes: found.entity.as_ref().and_then(|e| JsonObject::from_json(e["attrs"].clone())),
             groups: found.groups,
             risk_score: found.risk_score,
         })
@@ -179,7 +180,7 @@ impl LookupQuery {
                 by: text(&c["by"]),
                 reason: text(&c["reason"]).unwrap_or_default(),
             }),
-            sharing: Some(r["sharing"].to_string()),
+            sharing: Some(JsonString::of(&r["sharing"])),
             labels: strings(&r["labels"]),
             url: text(&r["url"]),
             folders,

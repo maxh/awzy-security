@@ -12,7 +12,7 @@ use hyper_util::{
     rt::TokioExecutor,
 };
 
-use awzy_portal::UtcTimestamp;
+use awzy_portal::{JsonObject, UtcTimestamp};
 use chrono::{DateTime, Utc};
 
 use crate::{
@@ -70,7 +70,7 @@ pub struct HeartbeatExport {
     pub error: Option<String>,
     /// The last heartbeat, as JSON, byte for byte the fields that were sent. None before the
     /// first, which goes out within a minute of awzy-reporter starting.
-    pub heartbeat: Option<String>,
+    pub heartbeat: Option<JsonObject>,
 }
 
 #[derive(Default)]
@@ -115,7 +115,7 @@ async fn heartbeat_export(client: &HttpClient, addr: Option<String>) -> Heartbea
         sent_at: last["heartbeat"]["sent_at"].as_str().and_then(|t| t.parse::<DateTime<Utc>>().ok()).map(UtcTimestamp),
         delivered: last["delivered"].as_bool(),
         error: last["error"].as_str().map(str::to_string),
-        heartbeat: last.get("heartbeat").filter(|h| !h.is_null()).map(|h| h.to_string()),
+        heartbeat: last.get("heartbeat").cloned().and_then(JsonObject::from_json),
     }
 }
 
@@ -240,6 +240,6 @@ mod tests {
         let sent = heartbeat_export(&client, Some(reporter)).await;
         assert_eq!((sent.enabled, sent.delivered, sent.interval_secs), (true, Some(true), Some(60)));
         assert_eq!(sent.sent_at.unwrap().0.to_rfc3339(), "2026-10-11T12:00:00+00:00");
-        assert_eq!(sent.heartbeat.as_deref(), Some(r#"{"sent_at":"2026-10-11T12:00:00Z"}"#));
+        assert_eq!(sent.heartbeat.unwrap().0["sent_at"], "2026-10-11T12:00:00Z");
     }
 }

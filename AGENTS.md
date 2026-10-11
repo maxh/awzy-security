@@ -82,6 +82,9 @@ bazel build --config=lint //...                    # clippy
   `awzy_portal::Qid<ChallengeId>` and so on in Rust, so a resolver gets the entity it expects.
   `tools/ci/check-graphql-schemas.mjs`, run by `pnpm lint`, holds both schemas to these and to
   `UtcTimestamp` for times (ADR 0100).
+- **JSON in GraphQL** is never a plain `String`: `JSONObject` (`awzy_portal::JsonObject`) for an
+  object the frontend reads, `JSONString` (`JsonString`) for JSON text that must stay as it is,
+  such as a download or options for a browser API.
 - **Humans** are `human` in every name, and several are `humans`: code, wire fields, schema
   attributes, policy IDs, routes, GraphQL (`shared_humans`, `human_id`, `answering_human`). Never
   `person` or `people` in a name; prose can say "the person" (ADR 0074).

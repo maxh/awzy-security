@@ -11,7 +11,7 @@ import {
   useRelayEnvironment,
 } from "react-relay";
 
-import { prettyJson, Time } from "./format";
+import { prettyObject, Time } from "./format";
 import { Repairs } from "./Repairs";
 import type { StatusPage_heartbeatExport$key } from "./__generated__/StatusPage_heartbeatExport.graphql";
 import type { StatusPageDiagnosticsQuery } from "./__generated__/StatusPageDiagnosticsQuery.graphql";
@@ -180,7 +180,7 @@ function HeartbeatExport({ heartbeatExport }: { heartbeatExport: StatusPage_hear
         )}
         {e.heartbeat && (
           <ScrollArea.Autosize mah={420}>
-            <Code block>{prettyJson(e.heartbeat)}</Code>
+            <Code block>{prettyObject(e.heartbeat)}</Code>
           </ScrollArea.Autosize>
         )}
       </Stack>
