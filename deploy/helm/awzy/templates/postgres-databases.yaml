@@ -7,8 +7,10 @@ metadata:
   namespace: {{ .Values.namespaces.system }}
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
-    # Jobs can't be changed in place; recreate it when the chart changes it.
-    argocd.argoproj.io/sync-options: Replace=true
+    # A hook, like the other Jobs: Argo CD deletes it and creates it anew each sync. Replacing a
+    # Job in place fails, since its selector is generated and its template can't change.
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
   backoffLimit: 10
   ttlSecondsAfterFinished: 3600
