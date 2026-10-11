@@ -290,7 +290,6 @@ impl InvestigationQuery {
         let list = list(context(ctx)?, status.map(InvestigationStatus::as_str), first).await?;
         Ok(list.into_iter().map(Investigation).collect())
     }
-
 }
 
 /// One investigation, for `node(id)`. For those who may view investigations.

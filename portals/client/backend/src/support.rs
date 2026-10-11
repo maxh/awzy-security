@@ -397,7 +397,10 @@ impl SupportMutation {
         support_session_qid: Qid<SupportSessionId>,
     ) -> Result<SupportSession> {
         let viewer = require(ctx, Administer, PortalArea::Enforcement).await?;
-        let req = EndSupportSessionRequest { qid: support_session_qid.to_string(), ended_by_actor: Some(viewer.actor().into()) };
+        let req = EndSupportSessionRequest {
+            qid: support_session_qid.to_string(),
+            ended_by_actor: Some(viewer.actor().into()),
+        };
         let session = client(ctx)?.end_support_session(req).await.map_err(grpc)?.into_inner().session;
         Ok(SupportSession(session.ok_or("awzy-challenge returned no support session")?))
     }

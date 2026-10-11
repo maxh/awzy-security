@@ -2,7 +2,9 @@
 //! `node(id)` routes on the type the ID parses as.
 
 use async_graphql::{Context, Interface, Object, Result, ID};
-use awzy_model::{ChallengeId, ContainmentId, DecisionId, InvestigationId, PolicyBundleId, SecurityKeyId, SupportSessionId};
+use awzy_model::{
+    ChallengeId, ContainmentId, DecisionId, InvestigationId, PolicyBundleId, SecurityKeyId, SupportSessionId,
+};
 
 use crate::{
     challenges::{Challenge, Containment},

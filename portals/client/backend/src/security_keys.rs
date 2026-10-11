@@ -46,7 +46,11 @@ impl SecurityKey {
 
     /// The key that authorized adding this one; null for a person's first key.
     async fn added_with_qid(&self) -> Result<Option<Qid<SecurityKeyId>>> {
-        Ok(Some(&self.0.added_with_qid).filter(|s| !s.is_empty()).map(|s| s.parse::<SecurityKeyId>()).transpose()?.map(Qid))
+        Ok(Some(&self.0.added_with_qid)
+            .filter(|s| !s.is_empty())
+            .map(|s| s.parse::<SecurityKeyId>())
+            .transpose()?
+            .map(Qid))
     }
 
     async fn created_at(&self) -> Option<UtcTimestamp> {
@@ -256,8 +260,10 @@ impl SecurityKeyMutation {
         input: BeginChallengeVerificationInput,
     ) -> Result<WebAuthnCeremony> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
-        let req =
-            BeginVerificationRequest { challenge_qid: input.challenge_qid.to_string(), human_id: answering_human(&viewer)? };
+        let req = BeginVerificationRequest {
+            challenge_qid: input.challenge_qid.to_string(),
+            human_id: answering_human(&viewer)?,
+        };
         let res = client(ctx)?.begin_verification(req).await.map_err(grpc)?.into_inner();
         ceremony(res.ceremony_qid, res.options_json)
     }

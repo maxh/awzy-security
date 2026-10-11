@@ -935,6 +935,7 @@ type PolicyDryRunExample {
 	decisions: Int!
 	"""
 	One of those decisions, `decision_<uuid>`.
+	Null if the sample's ID in ClickHouse isn't a UUID.
 	"""
 	sampleDecisionQid: Qid
 	"""
@@ -1030,6 +1031,12 @@ type PublishPolicyBundlePayload {
 	"""
 	wouldLockYouOut: String
 }
+
+"""
+One of awzy's IDs, `<entity_type>_<uuid>`, e.g. `challenge_0199a8f2-6c1e-7b3a-9d4e-2f8c1a5b7e90`.
+Each field and argument takes one entity's; any other is refused.
+"""
+scalar Qid
 
 type Query {
 	"""
@@ -1439,12 +1446,6 @@ input ToolTierInput {
 	tool: String!
 	tier: SensitivityTier!
 }
-
-"""
-One of awzy's IDs, `<entity_type>_<uuid>`, e.g. `challenge_0199a8f2-6c1e-7b3a-9d4e-2f8c1a5b7e90`.
-Each field and argument takes one entity's; any other is refused.
-"""
-scalar Qid
 
 scalar UtcTimestamp
 
