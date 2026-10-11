@@ -52,5 +52,25 @@
   (dict "name" "AWZY_CLICKHOUSE_PASSWORD" "valueFrom" (dict "secretKeyRef" (dict "name" .Values.clickhouse.passwordSecret "key" "password")))
 ) }}
 {{- end }}
+{{- /* Support sessions (ADR 0095): awzy staff sign in with the corp portal's token for this install. */ -}}
+{{- $volumes := list -}}
+{{- $mounts := list -}}
+{{- with $p.supportPublicKey }}
+{{- $env = concat $env (list
+  (dict "name" "AWZY_INSTALL_ID" "value" (required "reporter.installId is required for support sessions" $.Values.reporter.installId))
+  (dict "name" "AWZY_SUPPORT_PUBLIC_KEY_FILE" "value" "/etc/awzy/support/support.pub")
+) }}
+{{- $volumes = list (dict "name" "support" "configMap" (dict "name" "awzy-support-key")) }}
+{{- $mounts = list (dict "name" "support" "mountPath" "/etc/awzy/support" "readOnly" true) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: awzy-support-key
+  namespace: {{ $.Values.namespaces.portal }}
+data:
+  support.pub: {{ . | quote }}
+{{- end }}
+---
 {{ include "awzy.service" (dict "root" . "name" "awzy-client-portal" "namespace" .Values.namespaces.portal "values" $p "env" $env
-  "tokens" (list "awzy-challenge" "awzy-context" "awzy-pdp" "awzy-policy")) }}
+  "tokens" (list "awzy-challenge" "awzy-context" "awzy-pdp" "awzy-policy") "volumes" $volumes "mounts" $mounts) }}

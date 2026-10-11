@@ -18,10 +18,16 @@ use awzy_authz_proto::{
         SecurityKey as WireKey, WatchChallengesRequest, WatchChallengesResponse, WatchContainmentsRequest,
         WatchContainmentsResponse,
     },
+    challenge::v1::{
+        DecideSupportSessionRequest, DecideSupportSessionResponse, EndSupportSessionRequest, EndSupportSessionResponse,
+        GetSupportSessionRequest, GetSupportSessionResponse, ListSupportSessionsRequest, ListSupportSessionsResponse,
+        RecordSupportActionRequest, RecordSupportActionResponse, RecordSupportRequestsRequest,
+        RecordSupportRequestsResponse,
+    },
     challenges_from_wire, challenges_to_wire,
     prost_types::Timestamp,
 };
-use awzy_model::{ContainmentId, DecisionId, EntityRef};
+use awzy_model::{ContainmentId, DecisionId, EntityRef, SupportSessionId};
 use axum::Router;
 use chrono::{DateTime, Utc};
 // tonic's own re-export, so the stream wrapper needs no dependency of its own.
@@ -33,6 +39,7 @@ use crate::{
     feed::{Feed, HEARTBEAT},
     keys::{Assertion, KeyError, SecurityKey, SecurityKeys},
     store::{Challenge, ChallengeStatus, ChallengeStore, ChallengedPolicy, Containment, RequestKey, StoreError},
+    support::{self, SupportError, SupportStore},
 };
 
 /// Who may call which methods (ADR 0055). Each group's callers come from the chart, as
@@ -51,6 +58,8 @@ pub struct Access {
     gateways: Allowed,
     /// Reporting break-glass rollbacks: awzy-policy.
     policies: Allowed,
+    /// Bringing in support session requests from the corp portal (ADR 0095): awzy-reporter.
+    reporters: Allowed,
 }
 
 /// Callers either group allows.
@@ -63,7 +72,7 @@ fn either(a: &Allowed, b: &Allowed) -> Allowed {
 
 impl Access {
     /// From `AWZY_CHALLENGE_ANSWERERS`, `AWZY_CHALLENGE_CONTAINERS`, `AWZY_CHALLENGE_GATEWAYS`,
-    /// `AWZY_CHALLENGE_PDPS`, and `AWZY_CHALLENGE_POLICY`.
+    /// `AWZY_CHALLENGE_PDPS`, `AWZY_CHALLENGE_POLICY`, and `AWZY_CHALLENGE_REPORTERS`.
     pub fn from_env() -> anyhow::Result<Self> {
         Ok(Self {
             verifier: Arc::new(awzy_service_auth::Verifier::from_env("awzy-challenge")?),
@@ -72,6 +81,7 @@ impl Access {
             containers: Allowed::from_env("AWZY_CHALLENGE_CONTAINERS"),
             gateways: Allowed::from_env("AWZY_CHALLENGE_GATEWAYS"),
             policies: Allowed::from_env("AWZY_CHALLENGE_POLICY"),
+            reporters: Allowed::from_env("AWZY_CHALLENGE_REPORTERS"),
         })
     }
 
@@ -85,6 +95,7 @@ impl Access {
             containers: nobody(),
             gateways: nobody(),
             policies: nobody(),
+            reporters: nobody(),
         }
     }
 
@@ -121,6 +132,19 @@ impl Access {
         // Asking for a lift: the portal, for whoever signed in to it.
         rules.extend(group(&["RequestLift"], &self.answerers));
         rules.extend(group(&["ReportBreakGlass"], &self.policies));
+        // Support sessions (ADR 0095): the reporter brings requests in; the portal does the rest,
+        // for the admin or the staff member it authenticated.
+        rules.extend(group(&["RecordSupportRequests"], &self.reporters));
+        rules.extend(group(
+            &[
+                "ListSupportSessions",
+                "GetSupportSession",
+                "DecideSupportSession",
+                "EndSupportSession",
+                "RecordSupportAction",
+            ],
+            &self.answerers,
+        ));
         PathGuard::new(self.verifier.clone(), rules)
     }
 }
@@ -134,7 +158,8 @@ pub fn router(
     keys: Option<Arc<SecurityKeys>>,
     access: &Access,
 ) -> Router {
-    tonic::service::Routes::new(ChallengeServiceServer::new(Service { store, feed, approvals, keys }))
+    let support = SupportStore::new(store.pool().clone());
+    tonic::service::Routes::new(ChallengeServiceServer::new(Service { store, feed, approvals, keys, support }))
         .into_axum_router()
         .route_layer(axum::middleware::from_fn_with_state(access.guard(), require_by_path))
 }
@@ -144,6 +169,7 @@ struct Service {
     feed: Arc<Feed>,
     approvals: Arc<Approvals>,
     keys: Option<Arc<SecurityKeys>>,
+    support: SupportStore,
 }
 
 type FeedStream = Pin<Box<dyn Stream<Item = Result<WatchContainmentsResponse, Status>> + Send>>;
@@ -154,6 +180,73 @@ const CHALLENGE_HEARTBEAT: std::time::Duration = std::time::Duration::from_secs(
 
 #[tonic::async_trait]
 impl ChallengeService for Service {
+    async fn record_support_requests(
+        &self,
+        req: Request<RecordSupportRequestsRequest>,
+    ) -> Result<Response<RecordSupportRequestsResponse>, Status> {
+        let requests: Vec<support::Request> =
+            req.into_inner().requests.into_iter().filter_map(|r| support::request_from_wire(r).ok()).collect();
+        let sessions = self.support.record_requests(&requests).await.map_err(support_status)?;
+        Ok(Response::new(RecordSupportRequestsResponse {
+            sessions: sessions.into_iter().map(support::session_to_wire).collect(),
+        }))
+    }
+
+    async fn list_support_sessions(
+        &self,
+        req: Request<ListSupportSessionsRequest>,
+    ) -> Result<Response<ListSupportSessionsResponse>, Status> {
+        let sessions = self.support.list(limit(req.into_inner().limit)).await.map_err(support_status)?;
+        Ok(Response::new(ListSupportSessionsResponse {
+            sessions: sessions.into_iter().map(support::session_to_wire).collect(),
+        }))
+    }
+
+    async fn get_support_session(
+        &self,
+        req: Request<GetSupportSessionRequest>,
+    ) -> Result<Response<GetSupportSessionResponse>, Status> {
+        let id = qid::<SupportSessionId>(&req.into_inner().qid)?;
+        let session = self.support.get(id).await.map_err(support_status)?;
+        Ok(Response::new(GetSupportSessionResponse { session: Some(support::session_to_wire(session)) }))
+    }
+
+    async fn decide_support_session(
+        &self,
+        req: Request<DecideSupportSessionRequest>,
+    ) -> Result<Response<DecideSupportSessionResponse>, Status> {
+        let req = req.into_inner();
+        let id = qid::<SupportSessionId>(&req.qid)?;
+        // Only a person decides, acting for themselves.
+        human(req.decided_by_actor.clone(), "", "decided_by_actor")?;
+        let by = actor(req.decided_by_actor, "", "decided_by_actor")?;
+        let session =
+            self.support.decide(id, req.approve, &req.areas, req.minutes, &by).await.map_err(support_status)?;
+        Ok(Response::new(DecideSupportSessionResponse { session: Some(support::session_to_wire(session)) }))
+    }
+
+    async fn end_support_session(
+        &self,
+        req: Request<EndSupportSessionRequest>,
+    ) -> Result<Response<EndSupportSessionResponse>, Status> {
+        let req = req.into_inner();
+        let id = qid::<SupportSessionId>(&req.qid)?;
+        human(req.ended_by_actor.clone(), "", "ended_by_actor")?;
+        let by = actor(req.ended_by_actor, "", "ended_by_actor")?;
+        let session = self.support.end(id, &by).await.map_err(support_status)?;
+        Ok(Response::new(EndSupportSessionResponse { session: Some(support::session_to_wire(session)) }))
+    }
+
+    async fn record_support_action(
+        &self,
+        req: Request<RecordSupportActionRequest>,
+    ) -> Result<Response<RecordSupportActionResponse>, Status> {
+        let req = req.into_inner();
+        let id = qid::<SupportSessionId>(&req.qid)?;
+        self.support.record_action(id, &req.operation).await.map_err(support_status)?;
+        Ok(Response::new(RecordSupportActionResponse {}))
+    }
+
     async fn resolve(&self, req: Request<ResolveRequest>) -> Result<Response<ResolveResponse>, Status> {
         let req = req.into_inner();
         let decision_id = qid::<DecisionId>(&req.decision_qid)?;
@@ -612,6 +705,18 @@ fn status(e: StoreError) -> Status {
         StoreError::Invalid(_) => Status::invalid_argument(e.to_string()),
         StoreError::Db(error) => {
             tracing::error!(%error, "challenge store failed");
+            Status::internal("challenge store unavailable")
+        }
+    }
+}
+
+fn support_status(e: SupportError) -> Status {
+    match e {
+        SupportError::NotFound(_) => Status::not_found(e.to_string()),
+        SupportError::Invalid(_) => Status::invalid_argument(e.to_string()),
+        SupportError::WrongStatus { .. } => Status::failed_precondition(e.to_string()),
+        SupportError::Db(error) => {
+            tracing::error!(%error, "support store failed");
             Status::internal("challenge store unavailable")
         }
     }

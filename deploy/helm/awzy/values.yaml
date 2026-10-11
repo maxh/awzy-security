@@ -91,6 +91,9 @@ clientPortal:
     # Entra): e.g. email. Empty: sub.
     subjectClaim: ""
   publicUrl: ""
+  # The corp portal's public key for support session tokens (PEM; ADR 0095). awzy staff sign in
+  # with one only while a session your admin approved lasts. Empty: support sessions can't sign in.
+  supportPublicKey: ""
   # GraphQL runs only the portal's own pages' queries (ADR 0088). Only awzy's own staging and demo
   # installs turn it off, so a local frontend can run against them (ADR 0024).
   persistedQueriesOnly: true

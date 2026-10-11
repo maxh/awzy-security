@@ -124,6 +124,18 @@ people, resources, decisions, or policies, and shows a setting's value only for 
 such as the log format, so no secret or hostname is in it. The page shows the whole bundle before
 you download it, and the file is exactly what you read.
 
+### Support
+
+When awzy support needs to see inside your portal, they ask for a session, with the areas they
+want to see, why, and for how long. The request shows up here. An admin approves it, with a
+touch of their security key, choosing which of the areas to allow and for how long (never more
+than was asked), or rejects it.
+
+While an approved session lasts, the awzy staff member who asked can view those areas and nothing
+else: they can't change anything, and every page they open is recorded against the session. It
+ends when the time runs out, or when you end it here, and their next request is refused. awzy
+never has access to your install otherwise.
+
 ## MCP for your own agents
 
 The portal also serves an [MCP](https://modelcontextprotocol.io) endpoint at `/mcp`, so your

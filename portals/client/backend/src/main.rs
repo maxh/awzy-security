@@ -16,7 +16,10 @@ async fn main() -> anyhow::Result<()> {
     };
     let mut services = awzy_client_portal::Services::from_env()?;
     services.bot = awzy_client_portal::awzy_bot::model_from_env().await;
-    let auth = awzy_client_portal::access::Auth::from_env()?;
+    // awzy staff in a support session a client admin approved sign in with the corp portal's
+    // token (ADR 0095); without AWZY_SUPPORT_PUBLIC_KEY_FILE, they can't.
+    let support = awzy_client_portal::support::SupportSignIn::from_env(services.challenge.clone())?;
+    let auth = awzy_client_portal::access::Auth::from_env()?.with_support(support);
     let mcp_auth = awzy_client_portal::access::Auth::from_env_for_mcp()?;
     // The built frontend carries the queries it sends by ID (ADR 0090).
     let frontend = awzy_portal::frontend_dir_from_env();

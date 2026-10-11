@@ -6,7 +6,9 @@ description: What awzy can and can't see, and how releases reach your install.
 - **Single-tenant, in your account.** Each client runs its own install in its own cloud
   account. There is no shared awzy service holding client data.
 - **No vendor access.** awzy has no credentials for your install, even in an emergency. Repairs
-  are run by your team.
+  are run by your team. When awzy support needs to look inside, they ask, and an admin of yours
+  approves a support session in the client portal: read-only, limited to the areas you choose,
+  ending on its own or when you end it, and recording everything it opens.
 - **Pull-based, signed releases.** Your install pulls releases from awzy's registry with its own
   revocable token. Every image is signed with awzy's release key and carries its SBOM, signed
   with the same key, and the cluster refuses any image in awzy's namespaces that isn't from that
