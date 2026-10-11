@@ -10,7 +10,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
 use jsonwebtoken::{jwk::JwkSet, DecodingKey};
 use rustls_pki_types::{pem::PemObject, CertificateDer};

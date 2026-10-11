@@ -7,8 +7,6 @@
 use std::{collections::HashSet, sync::Arc};
 
 use awzy_model::{Check, Decision, DecisionId, EnforcementMode, Verdict};
-use bytes::Bytes;
-use http_body_util::Full;
 use serde_json::Value;
 
 use crate::{

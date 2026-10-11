@@ -29,8 +29,7 @@ use std::{
 };
 
 use awzy_model::{entity_type, EntityRef};
-use bytes::Bytes;
-use http_body_util::{BodyExt, Full};
+use http_body_util::BodyExt;
 use serde_json::{json, Value};
 
 /// The tier a resource awzy-context doesn't know gets. Matches awzy-context's default for one
