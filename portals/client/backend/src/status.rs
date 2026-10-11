@@ -33,7 +33,8 @@ const SERVICES: &[(&str, &str)] = &[
     ("awzy-challenge", "AWZY_CHALLENGE_ADDR"),
 ];
 
-#[derive(SimpleObject, Debug, Clone, PartialEq)]
+#[derive(SimpleObject, serde::Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct ComponentStatus {
     pub name: String,
     /// It answered that it's ready to serve.
@@ -59,16 +60,20 @@ impl StatusQuery {
     /// those who may view the enforcement area.
     async fn install_status(&self, ctx: &Context<'_>) -> Result<Vec<ComponentStatus>> {
         require(ctx, PortalAction::View, PortalArea::Enforcement).await?;
-        let services = ctx.data::<Services>()?;
-        let client: HttpClient = Client::builder(TokioExecutor::new()).build_http();
-        let checks = SERVICES.iter().map(|(name, var)| {
-            let client = client.clone();
-            async move { service_status(&client, name, std::env::var(var).ok()).await }
-        });
-        let mut status = async_graphql::futures_util::future::join_all(checks).await;
-        status.push(clickhouse_status(services.clickhouse.as_ref()).await);
-        Ok(status)
+        Ok(check(ctx.data::<Services>()?).await)
     }
+}
+
+/// Every component, checked at once. The diagnostics bundle carries the same.
+pub(crate) async fn check(services: &Services) -> Vec<ComponentStatus> {
+    let client: HttpClient = Client::builder(TokioExecutor::new()).build_http();
+    let checks = SERVICES.iter().map(|(name, var)| {
+        let client = client.clone();
+        async move { service_status(&client, name, std::env::var(var).ok()).await }
+    });
+    let mut status = async_graphql::futures_util::future::join_all(checks).await;
+    status.push(clickhouse_status(services.clickhouse.as_ref()).await);
+    status
 }
 
 async fn get(client: &HttpClient, url: &str) -> anyhow::Result<(u16, Bytes)> {

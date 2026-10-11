@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<7a1fbc5bf0589eb04a8522a1df86a363>>
+ * @generated SignedSource<<706e138f10cd86870e4c8c7d32a058d6>>
  * @lightSyntaxTransform
  */
 
@@ -10,6 +10,7 @@
 import { ConcreteRequest } from 'relay-runtime';
 export type StatusPageQuery$variables = Record<PropertyKey, never>;
 export type StatusPageQuery$data = {
+  readonly canGenerateDiagnostics: boolean;
   readonly installStatus: ReadonlyArray<{
     readonly detail: string | null | undefined;
     readonly name: string;
@@ -25,6 +26,24 @@ export type StatusPageQuery = {
 
 const node: ConcreteRequest = (function(){
 var v0 = [
+  {
+    "alias": "canGenerateDiagnostics",
+    "args": [
+      {
+        "kind": "Literal",
+        "name": "action",
+        "value": "ADMINISTER"
+      },
+      {
+        "kind": "Literal",
+        "name": "area",
+        "value": "ENFORCEMENT"
+      }
+    ],
+    "kind": "ScalarField",
+    "name": "viewerCan",
+    "storageKey": "viewerCan(action:\"ADMINISTER\",area:\"ENFORCEMENT\")"
+  },
   {
     "alias": null,
     "args": null,
@@ -90,16 +109,16 @@ return {
     "selections": (v0/*:: as any*/)
   },
   "params": {
-    "cacheID": "5a2e58da8a06efc74ab91fea9a244c95",
+    "cacheID": "1456a2eeddfd8b3d08731e68a8bfbbc9",
     "id": null,
     "metadata": {},
     "name": "StatusPageQuery",
     "operationKind": "query",
-    "text": "query StatusPageQuery {\n  installStatus {\n    name\n    ready\n    version\n    detail\n    runbookUrl\n  }\n}\n"
+    "text": "query StatusPageQuery {\n  canGenerateDiagnostics: viewerCan(action: ADMINISTER, area: ENFORCEMENT)\n  installStatus {\n    name\n    ready\n    version\n    detail\n    runbookUrl\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "af205d084df79e3563f37c1f62b311a6";
+(node as any).hash = "7e0e34c09f829797fe2efd2b7203cb12";
 
 export default node;

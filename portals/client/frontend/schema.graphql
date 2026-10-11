@@ -978,6 +978,12 @@ type Query {
 	those who may view the enforcement area.
 	"""
 	installStatus: [ComponentStatus!]!
+	"""
+	A diagnostics bundle as JSON: each service's status, the portal's release, and which
+	settings it was started with, with no client data. For those who may administer the
+	enforcement area, to review before sending it to awzy support.
+	"""
+	diagnosticsBundle: String!
 }
 
 input RegisterServiceAccountInput {
