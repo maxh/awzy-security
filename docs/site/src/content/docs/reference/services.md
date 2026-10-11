@@ -91,6 +91,7 @@ An enforcement point in front of your MCP servers.
   A blocked call comes back as a tool error that says why, with the decision's QID.
 - **Calls:** awzy-pdp for each tool call. It follows awzy-challenge's containment feed, so during
   a PDP outage it never replays an allow for someone contained.
+- **Writes:** each tool call it forwards to awzy-intake, as an event, when awzy-intake is on.
 
 ### awzy-policy
 
@@ -191,6 +192,7 @@ what each page does.
   through your IdP.
 - **Stores:** nothing of its own.
 - **Reads:** decisions from ClickHouse. Everything else comes from the services above.
+- **Writes:** each MCP tool call to awzy-intake, as an event, when awzy-intake is on.
 
 ### awzy-reporter
 

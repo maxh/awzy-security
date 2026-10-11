@@ -333,7 +333,8 @@ impl ClientPortalMcp {
         Extension(parts): Extension<Parts>,
         Parameters(p): Parameters<ListInvestigationsParams>,
     ) -> Result<Json<InvestigationList>, ErrorData> {
-        self.allow(&parts, PortalAction::View, PortalArea::Investigations).await?;
+        let viewer = self.allow(&parts, PortalAction::View, PortalArea::Investigations).await?;
+        self.record(&viewer, "list_investigations");
         if let Some(s) = p.status.as_deref().filter(|s| !["needs_review", "done", "closed"].contains(s)) {
             return Err(ErrorData::invalid_params(format!("status is needs_review, done, or closed, not {s:?}"), None));
         }
@@ -351,7 +352,8 @@ impl ClientPortalMcp {
         Extension(parts): Extension<Parts>,
         Parameters(p): Parameters<GetInvestigationParams>,
     ) -> Result<Json<InvestigationOut>, ErrorData> {
-        self.allow(&parts, PortalAction::View, PortalArea::Investigations).await?;
+        let viewer = self.allow(&parts, PortalAction::View, PortalArea::Investigations).await?;
+        self.record(&viewer, "get_investigation");
         let found = crate::investigations::get(self.context()?, &p.investigation_qid).await.map_err(internal)?;
         Ok(Json(InvestigationOut { investigation: found.as_ref().map(crate::investigations::to_json) }))
     }
@@ -365,7 +367,8 @@ impl ClientPortalMcp {
         Extension(parts): Extension<Parts>,
         Parameters(p): Parameters<SearchDecisionsParams>,
     ) -> Result<Json<DecisionList>, ErrorData> {
-        self.allow(&parts, PortalAction::View, PortalArea::Decisions).await?;
+        let viewer = self.allow(&parts, PortalAction::View, PortalArea::Decisions).await?;
+        self.record(&viewer, "search_decisions");
         let since = p.since.as_deref().map(parse_time).transpose()?;
         let page = decisions::search(
             self.clickhouse()?,
@@ -393,7 +396,8 @@ impl ClientPortalMcp {
         Extension(parts): Extension<Parts>,
         Parameters(p): Parameters<ExplainDecisionParams>,
     ) -> Result<Json<Explanation>, ErrorData> {
-        self.allow(&parts, PortalAction::View, PortalArea::Decisions).await?;
+        let viewer = self.allow(&parts, PortalAction::View, PortalArea::Decisions).await?;
+        self.record(&viewer, "explain_decision");
         let id: DecisionId =
             p.decision_qid.parse().map_err(|e: awzy_model::QidError| ErrorData::invalid_params(e.to_string(), None))?;
         let row = decisions::find(self.clickhouse()?, id)
@@ -422,7 +426,8 @@ impl ClientPortalMcp {
         Extension(parts): Extension<Parts>,
         Parameters(p): Parameters<CheckAccessParams>,
     ) -> Result<Json<CheckAccessOut>, ErrorData> {
-        self.allow(&parts, PortalAction::View, PortalArea::Policies).await?;
+        let viewer = self.allow(&parts, PortalAction::View, PortalArea::Policies).await?;
+        self.record(&viewer, "check_access");
         let pdp = match policies::active(self.policy()?).await.map_err(internal)? {
             Some(b) => awzy_pdp::Pdp::new(&b.schema, &b.policies).map_err(internal)?,
             None => awzy_pdp::Pdp::with_defaults().map_err(internal)?,
@@ -469,7 +474,8 @@ impl ClientPortalMcp {
         Extension(parts): Extension<Parts>,
         Parameters(p): Parameters<DryRunPolicyParams>,
     ) -> Result<Json<DryRunOut>, ErrorData> {
-        self.allow(&parts, PortalAction::View, PortalArea::Policies).await?;
+        let viewer = self.allow(&parts, PortalAction::View, PortalArea::Policies).await?;
+        self.record(&viewer, "dry_run_policy");
         self.allow(&parts, PortalAction::View, PortalArea::Decisions).await?;
         let run = crate::dry_run::run(&self.services, &p.draft_qid, p.days).await.map_err(internal)?;
         Ok(Json(DryRunOut { dry_run: crate::dry_run::to_json(&run) }))
@@ -483,7 +489,8 @@ impl ClientPortalMcp {
         &self,
         Extension(parts): Extension<Parts>,
     ) -> Result<Json<ActiveBundle>, ErrorData> {
-        self.allow(&parts, PortalAction::View, PortalArea::Policies).await?;
+        let viewer = self.allow(&parts, PortalAction::View, PortalArea::Policies).await?;
+        self.record(&viewer, "get_active_policy_bundle");
         let bundle = policies::active(self.policy()?).await.map_err(internal)?;
         Ok(Json(ActiveBundle { bundle: bundle.map(|b| bundle_out(b, true)) }))
     }
@@ -493,7 +500,8 @@ impl ClientPortalMcp {
         description = "Whether awzy is enforcing verdicts or only monitoring them, and over the last 24 hours how many decisions would have been denied or challenged. Read-only: switching modes is done by a person in the client portal."
     )]
     async fn get_enforcement(&self, Extension(parts): Extension<Parts>) -> Result<Json<EnforcementOut>, ErrorData> {
-        self.allow(&parts, PortalAction::View, PortalArea::Enforcement).await?;
+        let viewer = self.allow(&parts, PortalAction::View, PortalArea::Enforcement).await?;
+        self.record(&viewer, "get_enforcement");
         let setting = crate::enforcement::current(self.policy()?, crate::enforcement::EnforcementScope::Install)
             .await
             .map_err(internal)?;
@@ -520,7 +528,8 @@ impl ClientPortalMcp {
         Extension(parts): Extension<Parts>,
         Parameters(p): Parameters<ListPolicyBundlesParams>,
     ) -> Result<Json<BundleList>, ErrorData> {
-        self.allow(&parts, PortalAction::View, PortalArea::Policies).await?;
+        let viewer = self.allow(&parts, PortalAction::View, PortalArea::Policies).await?;
+        self.record(&viewer, "list_policy_bundles");
         let limit = p.limit.unwrap_or(20).min(500) as i32;
         let bundles = policies::list(self.policy()?, limit).await.map_err(internal)?;
         Ok(Json(BundleList { bundles: bundles.into_iter().map(|b| bundle_out(b, false)).collect() }))
@@ -536,6 +545,7 @@ impl ClientPortalMcp {
         Parameters(p): Parameters<ProposePolicyParams>,
     ) -> Result<Json<Proposal>, ErrorData> {
         let viewer = self.allow(&parts, PortalAction::Administer, PortalArea::Policies).await?;
+        self.record(&viewer, "propose_policy");
         let schema = match p.schema {
             Some(s) => s,
             None => policies::active(self.policy()?)
@@ -574,6 +584,16 @@ impl ClientPortalMcp {
             }
             Err(e) => Err(ErrorData::internal_error(e.to_string(), None)),
         }
+    }
+
+    /// Records the tool call as the viewer's activity in awzy-intake (ADR 0084), once the PDP
+    /// allowed it. Best effort, and never waits.
+    fn record(&self, viewer: &Viewer, tool: &str) {
+        let tool = awzy_model::EntityRef::new(awzy_model::entity_type::MCP_TOOL, format!("awzy-portal/{tool}"));
+        let activity =
+            awzy_activity::Activity::now(viewer.subject.clone(), viewer.on_behalf_of.clone(), "call", Some(tool))
+                .with_attribute("client", "mcp");
+        self.services.activity.record(activity);
     }
 
     fn clickhouse(&self) -> Result<&::clickhouse::Client, ErrorData> {
@@ -696,6 +716,7 @@ mod tests {
             pdp: Some(testing::pdp().await),
             context: None,
             bot: None,
+            activity: Default::default(),
         }
     }
 

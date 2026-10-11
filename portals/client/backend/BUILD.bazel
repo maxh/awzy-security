@@ -12,6 +12,7 @@ awzy_service(
     ],
     visibility = ["//tools:client_side"],
     deps = [
+        "//authz/libs/activity",
         "//authz/libs/identity",
         "//authz/services/pdp",
         "//authz/libs/proto",

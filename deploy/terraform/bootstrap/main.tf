@@ -136,11 +136,12 @@ resource "random_password" "intake" {
   special = false
 }
 
+# In the portal namespace too: the client portal records its MCP calls as activity (ADR 0084).
 resource "kubernetes_secret_v1" "intake_token" {
-  count = var.intake == null ? 0 : 1
+  for_each = var.intake == null ? toset([]) : toset(["system", "portal"])
   metadata {
     name      = "awzy-intake-token"
-    namespace = kubernetes_namespace_v1.awzy["system"].metadata[0].name
+    namespace = kubernetes_namespace_v1.awzy[each.key].metadata[0].name
   }
   data = { token = random_password.intake[0].result }
 }

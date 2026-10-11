@@ -57,11 +57,14 @@ pub struct Services {
     /// awzy-challenge, for challenges and containments (ADR 0054).
     pub challenge:
         Option<awzy_authz_proto::challenge::v1::challenge_service_client::ChallengeServiceClient<AuthChannel>>,
+    /// awzy-intake, where calls to the MCP endpoint are recorded as activity (ADR 0084); off
+    /// without it.
+    pub activity: awzy_activity::ActivityLog,
 }
 
 impl Services {
     /// AWZY_CHALLENGE_ADDR, AWZY_CLICKHOUSE_{URL,USER,PASSWORD,DATABASE}, AWZY_CONTEXT_ADDR,
-    /// AWZY_PDP_ADDR, and AWZY_POLICY_ADDR.
+    /// AWZY_INTAKE_{URL,TOKEN}, AWZY_PDP_ADDR, and AWZY_POLICY_ADDR.
     pub fn from_env() -> anyhow::Result<Self> {
         let channel = |k: &str| -> anyhow::Result<Option<Channel>> {
             Ok(match std::env::var(k) {
@@ -87,7 +90,8 @@ impl Services {
                 "awzy-challenge",
             ))
         });
-        Ok(Self { policy, clickhouse, pdp, context, bot: None, challenge })
+        let activity = awzy_activity::ActivityLog::from_env("awzy-client-portal");
+        Ok(Self { policy, clickhouse, pdp, context, bot: None, challenge, activity })
     }
 }
 

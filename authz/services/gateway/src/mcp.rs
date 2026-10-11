@@ -64,6 +64,8 @@ struct Inner {
     containments: Arc<Containments>,
     /// The MCP client each session's `initialize` named, for `context.mcp_client` (ADR 0081).
     sessions: SessionClients,
+    /// Where forwarded tool calls are recorded as activity (ADR 0084).
+    activity: awzy_activity::ActivityLog,
 }
 
 /// The client name each MCP session started with, by session ID, for the principal that started
@@ -192,7 +194,14 @@ impl GatewayState {
             allows,
             containments,
             sessions: SessionClients::default(),
+            activity: awzy_activity::ActivityLog::off(),
         })))
+    }
+
+    /// Records each forwarded tool call in awzy-intake (ADR 0084). Call before sharing the state.
+    pub fn with_activity(mut self, activity: awzy_activity::ActivityLog) -> Self {
+        Arc::get_mut(&mut self.0).expect("not shared yet").activity = activity;
+        self
     }
 
     /// Drops cached allows for calls by, or for, the contained principals (`Type::id`).
@@ -265,6 +274,7 @@ async fn proxy(State(state): State<GatewayState>, Path(upstream): Path<String>, 
 
     let session = parts.headers.get("mcp-session-id").and_then(|v| v.to_str().ok()).map(str::to_string);
     let mut initializing = None;
+    let mut calling = None;
     if parts.method == Method::POST {
         match serde_json::from_slice::<Value>(&body) {
             Ok(Value::Array(batch)) if batch.iter().any(is_tool_call) => {
@@ -275,6 +285,8 @@ async fn proxy(State(state): State<GatewayState>, Path(upstream): Path<String>, 
                 if let Some(blocked) = authorize(&state, &up, &principal, &msg, client.as_deref()).await {
                     return blocked;
                 }
+                let tool = msg.pointer("/params/name").and_then(Value::as_str).unwrap_or_default();
+                calling = Some((format!("{}/{tool}", up.name), client));
             }
             Ok(msg @ Value::Object(_)) => initializing = initialize_client(&msg),
             Ok(Value::Array(_)) => {}
@@ -284,6 +296,19 @@ async fn proxy(State(state): State<GatewayState>, Path(upstream): Path<String>, 
         }
     }
     let res = forward(&state, &up, parts, body).await;
+    // A forwarded tool call is activity, whatever the upstream made of it (ADR 0084). Blocked ones
+    // are in the decision log already.
+    if let Some((tool_id, client)) = calling {
+        let tool = EntityRef::new(entity_type::MCP_TOOL, tool_id);
+        let mut activity =
+            awzy_activity::Activity::now(principal.subject.clone(), principal.on_behalf_of.clone(), "call", Some(tool))
+                .with_outcome((!res.status().is_success()).then_some("failure"))
+                .with_attribute("client", "mcp");
+        if let Some(name) = client {
+            activity = activity.with_attribute("mcp_client", name);
+        }
+        state.0.activity.record(activity);
+    }
     // The upstream names the session in its answer to `initialize`.
     if let Some(client) = initializing {
         if let Some(id) = res.headers().get("mcp-session-id").and_then(|v| v.to_str().ok()) {

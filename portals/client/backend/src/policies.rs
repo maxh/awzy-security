@@ -424,6 +424,7 @@ pub(crate) mod tests {
             pdp: Some(testing::pdp().await),
             context: None,
             bot: None,
+            activity: Default::default(),
         });
         let alice = testing::human("alice", "security");
         let run = |q: String| {
@@ -534,6 +535,7 @@ pub(crate) mod tests {
             pdp: Some(testing::pdp().await),
             context: None,
             bot: None,
+            activity: Default::default(),
         });
         let bob = testing::human("bob", "engineering");
 
@@ -561,6 +563,7 @@ pub(crate) mod tests {
             pdp: None,
             context: None,
             bot: None,
+            activity: Default::default(),
             challenge: None,
         });
         let err = testing::run_err(&no_pdp, &alice, "{ policyBundles { id } }").await;

@@ -10,6 +10,7 @@ members = [
     "libs/store",
     "libs/telemetry",
     "tools/dev-idp",
+    "authz/libs/activity",
     "authz/libs/proto",
     "authz/services/challenge",
     "authz/demo/evals",
@@ -99,6 +100,7 @@ awzy-gateway = { path = "authz/services/gateway" }
 awzy-heartbeat = { path = "libs/heartbeat" }
 awzy-portal = { path = "libs/portal" }
 awzy-registry = { path = "portals/corp/registry" }
+awzy-activity = { path = "authz/libs/activity" }
 awzy-authz-proto = { path = "authz/libs/proto" }
 awzy-llm = { path = "libs/llm" }
 awzy-identity = { path = "authz/libs/identity" }

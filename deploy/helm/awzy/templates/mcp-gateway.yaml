@@ -28,14 +28,22 @@ metadata:
   labels: {{- include "awzy.labels" (dict "root" . "name" "awzy-gateway") | nindent 4 }}
 data:
   config.json: {{ toJson $config | quote }}
----
-{{ include "awzy.service" (dict "root" . "name" "awzy-gateway" "namespace" $sys "values" $g
-  "tokens" (list "awzy-challenge" "awzy-pdp")
-  "env" (list
+{{- $env := list
     (dict "name" "AWZY_CHALLENGE_ADDR" "value" (printf "http://awzy-challenge.%s.svc:8080" $sys))
     (dict "name" "AWZY_GATEWAY_CONFIG" "value" "/etc/awzy/gateway/config.json")
     (dict "name" "AWZY_PDP_ADDR" "value" (printf "http://awzy-pdp.%s.svc:8080" $sys))
-  )
+-}}
+{{- /* Forwarded tool calls, recorded as activity (ADR 0084). */ -}}
+{{- if .Values.intake.enabled }}
+{{- $env = concat $env (list
+    (dict "name" "AWZY_INTAKE_URL" "value" (printf "http://awzy-intake.%s.svc:8080" $sys))
+    (dict "name" "AWZY_INTAKE_TOKEN" "valueFrom" (dict "secretKeyRef" (dict "name" .Values.intake.tokenSecret "key" "token")))
+) }}
+{{- end }}
+---
+{{ include "awzy.service" (dict "root" . "name" "awzy-gateway" "namespace" $sys "values" $g
+  "tokens" (list "awzy-challenge" "awzy-pdp")
+  "env" $env
   "volumes" (list (dict "name" "config" "configMap" (dict "name" "awzy-gateway")))
   "mounts" (list (dict "name" "config" "mountPath" "/etc/awzy/gateway" "readOnly" true))) }}
 {{- if $g.hostname }}
