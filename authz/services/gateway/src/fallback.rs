@@ -15,9 +15,9 @@ use std::{
 use awzy_authz_proto::policy::v1::{
     policy_service_client::PolicyServiceClient, GetOutageFallbackRequest, OutageFallback as WireFallback,
 };
-use awzy_model::OutageFallback;
+use awzy_model::{FallbackError, OutageFallback};
 use awzy_service_auth::AuthChannel;
-use awzy_signing::BundleVerifier;
+use awzy_signing::{BundleVerifier, SigningError};
 
 /// How often the gateway asks awzy-policy for a newer setting.
 const POLL: Duration = Duration::from_secs(10);
@@ -55,7 +55,7 @@ impl Fallback {
 
     /// Takes `wire` if it's newer than the setting held and verifies; returns whether it did.
     /// Without `verifier`, as when run locally, an unsigned setting is taken.
-    pub fn accept(&self, wire: WireFallback, verifier: Option<&BundleVerifier>) -> Result<bool, String> {
+    pub fn accept(&self, wire: WireFallback, verifier: Option<&BundleVerifier>) -> Result<bool, RefusedFallback> {
         if wire.version <= self.version() {
             return Ok(false);
         }
@@ -64,17 +64,26 @@ impl Fallback {
             servers: wire.servers.into_iter().collect(),
             fail_open_tiers: wire.fail_open_tiers.into_iter().collect(),
         };
-        fallback.validate().map_err(|e| e.to_string())?;
+        fallback.validate()?;
         if let Some(verifier) = verifier {
             let by =
                 awzy_authz_proto::actor_from_wire(wire.changed_by_actor, "").map(|a| a.to_string()).unwrap_or_default();
             let at = wire.changed_at.map(|t| t.seconds).unwrap_or_default();
             let payload = awzy_signing::fallback_payload(wire.version, &by, at, &fallback.content());
-            verifier.verify_payload(&payload, &wire.signature, &wire.signing_key_id).map_err(|e| e.to_string())?;
+            verifier.verify_payload(&payload, &wire.signature, &wire.signing_key_id)?;
         }
         *self.current.write().expect("fallback lock") = (wire.version, fallback);
         Ok(true)
     }
+}
+
+/// Why a fallback setting from awzy-policy wasn't taken.
+#[derive(Debug, thiserror::Error)]
+pub enum RefusedFallback {
+    #[error(transparent)]
+    Invalid(#[from] FallbackError),
+    #[error(transparent)]
+    Unverified(#[from] SigningError),
 }
 
 /// Follows awzy-policy forever. Errors are logged and the held setting stays.
@@ -142,7 +151,7 @@ mod tests {
         assert_eq!(fallback.outage_tier("drive", "search"), None);
 
         let f = drive_search_fails_open();
-        assert_eq!(fallback.accept(signed(2, &f, 7), Some(&verifier)), Ok(true));
+        assert!(fallback.accept(signed(2, &f, 7), Some(&verifier)).unwrap());
         assert_eq!(fallback.outage_tier("drive", "search"), Some(("internal".into(), true)));
 
         // Signed by another key, or changed after signing: refused, and the held one stays.
@@ -155,7 +164,7 @@ mod tests {
         assert_eq!(fallback.outage_tier("drive", "delete_file"), None);
 
         // An older genuine setting can't be replayed over a newer one.
-        assert_eq!(fallback.accept(signed(1, &OutageFallback::default(), 7), Some(&verifier)), Ok(false));
+        assert!(!fallback.accept(signed(1, &OutageFallback::default(), 7), Some(&verifier)).unwrap());
         assert_eq!(fallback.version(), 2);
     }
 }
