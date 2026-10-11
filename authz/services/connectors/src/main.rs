@@ -39,7 +39,8 @@ async fn main() -> anyhow::Result<()> {
         let context = ContextClient::new(&context_url, http.clone(), awzy_service_auth::TokenSource::from_env());
         awzy_server::metrics::register(Arc::new(JiraMetrics));
         tracing::info!(site = %cfg.base_url, projects = ?cfg.projects, "syncing Jira");
-        let projects = if cfg.projects.is_empty() { "every project it can browse".into() } else { cfg.projects.join(", ") };
+        let projects =
+            if cfg.projects.is_empty() { "every project it can browse".into() } else { cfg.projects.join(", ") };
         let watchers = if cfg.watchers { "yes" } else { "no" }.to_string();
         let settings = BTreeMap::from([
             ("Site", cfg.base_url.clone()),
