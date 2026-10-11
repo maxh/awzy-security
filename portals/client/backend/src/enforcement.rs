@@ -206,16 +206,27 @@ pub struct SetEnforcementModePayload {
 /// Whether policy lets `viewer` change what's enforced now (`switch_enforcement`, ADR 0080):
 /// `Some` names the challenge to pass first, as the base policies ask for a security key.
 pub(crate) async fn switch_challenge(ctx: &Context<'_>, viewer: &access::Viewer) -> Result<Option<Qid<ChallengeId>>> {
+    action_challenge(ctx, viewer, "switch_enforcement", "changing what's enforced").await
+}
+
+/// Whether policy lets `viewer` do `action` on the enforcement area now, an action the portal asks
+/// about only when someone does it, so policy can challenge it: `Some` names the challenge to pass
+/// first. `what` says what's being done, for the error when no challenge could be opened.
+pub(crate) async fn action_challenge(
+    ctx: &Context<'_>,
+    viewer: &access::Viewer,
+    action: &'static str,
+    what: &str,
+) -> Result<Option<Qid<ChallengeId>>> {
     let services = ctx.data::<crate::Services>()?;
-    let switch = "switch_enforcement";
-    match access::authorize_action(services, viewer, Surface::Portal, switch, PortalArea::Enforcement).await {
+    match access::authorize_action(services, viewer, Surface::Portal, action, PortalArea::Enforcement).await {
         Ok(()) => Ok(None),
         Err(access::AccessError::Challenged { challenge_qid: Some(qid), .. }) => {
             Ok(Some(Qid(qid.parse::<ChallengeId>()?)))
         }
         Err(access::AccessError::Challenged { challenges, decision, .. }) => Err(format!(
-            "changing what's enforced needs a {challenges} challenge, and none could be opened: is awzy-challenge \
-             reachable? (decision {decision})"
+            "{what} needs a {challenges} challenge, and none could be opened: is awzy-challenge reachable? \
+             (decision {decision})"
         )
         .into()),
         Err(e) => Err(e.into()),

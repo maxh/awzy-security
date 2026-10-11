@@ -10,6 +10,7 @@ pub mod google;
 pub mod http;
 pub mod jira;
 pub mod status;
+pub mod supervisor;
 
 use axum::Router;
 

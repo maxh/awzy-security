@@ -11,6 +11,7 @@ pub mod access;
 mod audit;
 pub mod awzy_bot;
 mod challenges;
+mod connector_config;
 mod connectors;
 mod decisions;
 mod diagnostics;
@@ -193,6 +194,7 @@ pub struct ClientPortalQuery(
     investigations::InvestigationQuery,
     status::StatusQuery,
     connectors::ConnectorsQuery,
+    connector_config::ConnectorConfigQuery,
     outage::OutageQuery,
     support::SupportQuery,
     lookup::LookupQuery,
@@ -213,6 +215,7 @@ pub struct ClientPortalMutation(
     security_keys::SecurityKeyMutation,
     investigations::InvestigationMutation,
     repairs::RepairMutation,
+    connector_config::ConnectorConfigMutation,
 );
 
 /// Live updates: the Challenges page's challenges and containments.

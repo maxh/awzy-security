@@ -1,34 +1,46 @@
 {{- $c := .Values.connectors -}}
-{{- if or $c.drive.subject $c.jira.url }}
+{{- if $c.enabled }}
 {{- $sys := .Values.namespaces.system -}}
 # awzy-connectors: Google Drive's shared drives (ADR 0069) and Jira's issues (ADR 0070) into
 # awzy-context, read-only, with its service token. One replica: two would sync the same things.
-{{- $env := list (dict "name" "AWZY_CONTEXT_URL" "value" (printf "http://awzy-context.%s.svc:8080" $sys)) -}}
-{{- $volumes := list -}}
-{{- $mounts := list -}}
-{{- with $c.drive }}{{- if .subject }}
-{{- $env = concat $env (list
-  (dict "name" "AWZY_CONNECTORS_DRIVE_INTERVAL_SECS" "value" (toString .intervalSeconds))
+# It reads each connector's settings from awzy-context, as the client portal sets them, and its
+# credential from the files below, restarting a connector when either changes (ADR 0104).
+{{- $env := list
   (dict "name" "AWZY_CONNECTORS_DRIVE_KEY_FILE" "value" "/etc/awzy/drive/key.json")
-  (dict "name" "AWZY_CONNECTORS_DRIVE_SUBJECT" "value" .subject)
-) }}
-{{- with .adminSubject }}{{- $env = append $env (dict "name" "AWZY_CONNECTORS_DRIVE_ADMIN_SUBJECT" "value" .) }}{{- end }}
-{{- with .domain }}{{- $env = append $env (dict "name" "AWZY_CONNECTORS_DRIVE_DOMAIN" "value" .) }}{{- end }}
-{{- $volumes = append $volumes (dict "name" "drive" "secret" (dict "secretName" .keySecret "items" (list (dict "key" "key.json" "path" "key.json")))) }}
-{{- $mounts = append $mounts (dict "name" "drive" "mountPath" "/etc/awzy/drive" "readOnly" true) }}
-{{- end }}{{- end }}
-{{- with $c.jira }}{{- if .url }}
-{{- $env = concat $env (list
-  (dict "name" "AWZY_CONNECTORS_JIRA_INTERVAL_SECS" "value" (toString .intervalSeconds))
   (dict "name" "AWZY_CONNECTORS_JIRA_TOKEN_FILE" "value" "/etc/awzy/jira/token")
-  (dict "name" "AWZY_CONNECTORS_JIRA_URL" "value" .url)
-  (dict "name" "AWZY_CONNECTORS_JIRA_USER" "value" (required "connectors.jira.user is required with connectors.jira.url" .user))
-) }}
-{{- with .projects }}{{- $env = append $env (dict "name" "AWZY_CONNECTORS_JIRA_PROJECTS" "value" (join "," .)) }}{{- end }}
-{{- if .watchers }}{{- $env = append $env (dict "name" "AWZY_CONNECTORS_JIRA_WATCHERS" "value" "true") }}{{- end }}
-{{- $volumes = append $volumes (dict "name" "jira" "secret" (dict "secretName" .tokenSecret "items" (list (dict "key" "token" "path" "token")))) }}
-{{- $mounts = append $mounts (dict "name" "jira" "mountPath" "/etc/awzy/jira" "readOnly" true) }}
-{{- end }}{{- end }}
+  (dict "name" "AWZY_CONTEXT_URL" "value" (printf "http://awzy-context.%s.svc:8080" $sys))
+-}}
+{{- /* Optional: a credential nobody has set yet has no Secret, and the connector waits for it. */ -}}
+{{- $volumes := list
+  (dict "name" "drive" "secret" (dict "secretName" "awzy-connectors-drive" "optional" true "items" (list (dict "key" "key.json" "path" "key.json"))))
+  (dict "name" "jira" "secret" (dict "secretName" "awzy-connectors-jira" "optional" true "items" (list (dict "key" "token" "path" "token"))))
+-}}
+{{- $mounts := list
+  (dict "name" "drive" "mountPath" "/etc/awzy/drive" "readOnly" true)
+  (dict "name" "jira" "mountPath" "/etc/awzy/jira" "readOnly" true)
+-}}
+{{- range $name, $key := dict "drive" "key.json" "jira" "token" }}
+{{- with (index $c $name).secretRef }}
+---
+# {{ $name }}'s credential, as the client portal last wrote it to the cloud's secrets manager.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: awzy-connectors-{{ $name }}
+  namespace: {{ $sys }}
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: {{ $.Values.postgres.secretStore }}
+  target:
+    name: awzy-connectors-{{ $name }}
+  data:
+    - secretKey: {{ $key }}
+      remoteRef: { key: {{ . | quote }} }
+{{- end }}
+{{- end }}
+---
 {{ include "awzy.service" (dict "root" . "name" "awzy-connectors" "namespace" $sys "values" (merge (dict "replicas" 1) $c)
   "tokens" (list "awzy-context") "env" $env "volumes" $volumes "mounts" $mounts) }}
 {{- end }}

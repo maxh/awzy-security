@@ -529,11 +529,15 @@ run it as a Job after each sync (`demoData.enabled` in the chart, `demo_data` in
 
 awzy-connectors syncs a real Workspace's shared drives into awzy-context. It needs a Google
 service account key with domain-wide delegation (see
-[the connector's README](authz/services/connectors/README.md)), and awzy-context running:
+[the connector's README](authz/services/connectors/README.md)), and awzy-context running. Its
+settings come from awzy-context, as the client portal sets them (ADR 0104); locally, set them
+there directly, and point it at the key file:
 
 ```sh
+curl -s -X PUT http://127.0.0.1:8084/v1/connector-settings/drive -H 'content-type: application/json' \
+  -d '{"enabled": true, "settings": {"subject": "awzy-reader@example.com"}, "updated_by": "you"}'
 AWZY_LISTEN_ADDR=127.0.0.1:8088 AWZY_CONTEXT_URL=http://127.0.0.1:8084 \
-  AWZY_CONNECTORS_DRIVE_KEY_FILE=$PWD/drive-key.json AWZY_CONNECTORS_DRIVE_SUBJECT=awzy-reader@example.com \
+  AWZY_CONNECTORS_DRIVE_KEY_FILE=$PWD/drive-key.json \
   bazel run //authz/services/connectors:awzy-connectors
 curl -s 'http://127.0.0.1:8084/v1/resources?source=google_drive&limit=5'
 ```
@@ -543,10 +547,11 @@ Keep the key file out of the repository.
 Jira (ADR 0070) runs in the same process, with an Atlassian API token in a file:
 
 ```sh
+curl -s -X PUT http://127.0.0.1:8084/v1/connector-settings/jira -H 'content-type: application/json' \
+  -d '{"enabled": true, "settings": {"url": "https://example.atlassian.net", "user": "awzy@example.com", "projects": ["FIN", "ENG"]}, "updated_by": "you"}'
 AWZY_LISTEN_ADDR=127.0.0.1:8088 AWZY_CONTEXT_URL=http://127.0.0.1:8084 \
-  AWZY_CONNECTORS_JIRA_URL=https://example.atlassian.net AWZY_CONNECTORS_JIRA_USER=awzy@example.com \
-  AWZY_CONNECTORS_JIRA_TOKEN_FILE=$PWD/jira-token AWZY_CONNECTORS_JIRA_PROJECTS=FIN,ENG \
-  bazel run //authz/services/connectors:awzy-connectors   # add the Drive variables to run both
+  AWZY_CONNECTORS_JIRA_TOKEN_FILE=$PWD/jira-token \
+  bazel run //authz/services/connectors:awzy-connectors
 curl -s 'http://127.0.0.1:8084/v1/work-items?source=jira&limit=5'
 ```
 

@@ -19,6 +19,8 @@ variable "install_contract" {
     secret_store    = any # External Secrets provider block, passed through as-is
     load_balancer   = object({ service_annotations = map(string) })
     registry_prefix = string
+    # Each connector's credential in the cloud's secrets manager (ADR 0104).
+    connector_secrets = map(string)
   })
 }
 
@@ -114,31 +116,6 @@ variable "intake" {
     hostname = optional(string)
   })
   default = null
-}
-
-variable "drive" {
-  description = "The Google Drive connector (ADR 0069): the member user it acts as, an admin to name group shares (optional), the domain (default: the subject's), and the Google service account's JSON key. Null leaves it off"
-  type = object({
-    subject       = string
-    admin_subject = optional(string, "")
-    domain        = optional(string, "")
-    key_json      = string
-  })
-  default   = null
-  sensitive = true
-}
-
-variable "jira" {
-  description = "The Jira connector (ADR 0070): the site URL, the account's email, the projects in scope (default: all it can browse), whether watchers count as working on an issue (default: no), and its API token. Null leaves it off"
-  type = object({
-    url      = string
-    user     = string
-    projects = optional(list(string), [])
-    watchers = optional(bool, false)
-    token    = string
-  })
-  default   = null
-  sensitive = true
 }
 
 variable "demo_idp" {

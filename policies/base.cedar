@@ -79,6 +79,19 @@ permit (
 @challenge("verification")
 forbid (principal, action == Action::"switch_enforcement", resource);
 
+// Connectors decide what awzy reads from your systems, with credentials that can read them
+// (ADR 0104). The security team's people configure them, with a touch of their security key.
+@id("security-team-configures-connectors")
+permit (
+  principal is Human in Group::"security",
+  action == Action::"configure_connectors",
+  resource == PortalArea::"enforcement"
+);
+
+@id("connectors-need-a-key")
+@challenge("verification")
+forbid (principal, action == Action::"configure_connectors", resource);
+
 // Support sessions (ADR 0095): an awzy staff member views the portal areas a client admin approved,
 // and nothing else, until the session ends. The client portal names those areas, from the approved
 // session, only on that staff member's checks, so these never touch anyone else.

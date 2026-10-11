@@ -59,7 +59,12 @@ impl Auth {
 
     pub fn from_file(path: &str, http: Http) -> anyhow::Result<Self> {
         let text = std::fs::read_to_string(path).with_context(|| format!("reading {path}"))?;
-        Self::new(serde_json::from_str(&text).with_context(|| format!("{path} isn't a service account key"))?, http)
+        Self::from_json(&text, http).with_context(|| format!("{path} isn't a service account key"))
+    }
+
+    /// From a service account key's JSON, as the client portal stored it (ADR 0104).
+    pub fn from_json(text: &str, http: Http) -> anyhow::Result<Self> {
+        Self::new(serde_json::from_str(text).context("not a service account key")?, http)
     }
 
     /// An access token acting as `subject` for `scope`, reused until a minute before it expires.

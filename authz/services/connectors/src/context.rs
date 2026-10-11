@@ -14,6 +14,7 @@ pub const BATCH: usize = 1000;
 /// Who the writes are recorded as (ADR 0060).
 const ACTOR: &str = "AwzyService::awzy-connectors";
 
+#[derive(Clone)]
 pub struct ContextClient {
     base_url: String,
     http: Http,
@@ -73,6 +74,15 @@ impl ContextClient {
             bail!("awzy-context refused to delete {id} ({status}): {res}");
         }
         Ok(())
+    }
+
+    /// Every connector's settings, as the client portal set them (ADR 0104).
+    pub async fn connector_settings(&self) -> anyhow::Result<Vec<Value>> {
+        let (status, res) = self.send(Method::GET, "/v1/connector-settings", Body::None).await?;
+        if !status.is_success() {
+            bail!("awzy-context refused to give connector settings ({status}): {res}");
+        }
+        Ok(res["connectors"].as_array().cloned().unwrap_or_default())
     }
 
     /// The IDs of every resource from `source`, page by page.

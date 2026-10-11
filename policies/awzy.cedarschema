@@ -128,6 +128,14 @@ action switch_enforcement appliesTo {
   context: RequestContext,
 };
 
+// Configuring a connector or setting its credential (ADR 0104), on top of `administer` on the
+// enforcement area: a connector decides what awzy can read, so policy can challenge it.
+action configure_connectors appliesTo {
+  principal: [Human, ServiceAccount],
+  resource: [PortalArea],
+  context: RequestContext,
+};
+
 // Approving someone else's challenged request for this resource (awzy-challenge). awzy-challenge
 // asks the PDP before recording an approval, and never accepts one from the person asking or the
 // person an agent acts for. A service account, such as an overseer agent, approves only where a

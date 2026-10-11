@@ -46,25 +46,24 @@ pub struct JiraConfig {
 }
 
 impl JiraConfig {
-    /// From `AWZY_CONNECTORS_JIRA_*`. None when `AWZY_CONNECTORS_JIRA_URL` isn't set: Jira is off.
-    pub fn from_env() -> anyhow::Result<Option<Self>> {
-        let Ok(base_url) = std::env::var("AWZY_CONNECTORS_JIRA_URL") else { return Ok(None) };
-        let user =
-            std::env::var("AWZY_CONNECTORS_JIRA_USER").context("AWZY_CONNECTORS_JIRA_USER is needed for Jira")?;
-        let token_file = std::env::var("AWZY_CONNECTORS_JIRA_TOKEN_FILE")
-            .context("AWZY_CONNECTORS_JIRA_TOKEN_FILE is needed for Jira")?;
-        let token = std::fs::read_to_string(&token_file).with_context(|| format!("reading {token_file}"))?;
-        let projects = std::env::var("AWZY_CONNECTORS_JIRA_PROJECTS").unwrap_or_default();
-        let interval =
-            std::env::var("AWZY_CONNECTORS_JIRA_INTERVAL_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(300);
-        Ok(Some(Self {
+    /// From the settings the client portal set (ADR 0104), `url`, `user`, and optionally
+    /// `projects`, `watchers`, and `interval_secs`, and the API token from the secrets manager.
+    pub fn from_settings(s: &serde_json::Value, token: &str) -> anyhow::Result<Self> {
+        let text = |k: &str| s[k].as_str().map(str::trim).filter(|v| !v.is_empty()).map(str::to_string);
+        let base_url = text("url").context("Jira's settings have no url")?;
+        Ok(Self {
             base_url: base_url.trim_end_matches('/').to_string(),
-            user,
+            user: text("user").context("Jira's settings have no user")?,
             token: token.trim().to_string(),
-            projects: projects.split(',').map(str::trim).filter(|p| !p.is_empty()).map(str::to_string).collect(),
-            interval: Duration::from_secs(interval),
-            watchers: std::env::var("AWZY_CONNECTORS_JIRA_WATCHERS").as_deref() == Ok("true"),
-        }))
+            projects: s["projects"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|p| p.as_str().map(str::trim).filter(|p| !p.is_empty()).map(str::to_string))
+                .collect(),
+            interval: Duration::from_secs(s["interval_secs"].as_u64().unwrap_or(300)),
+            watchers: s["watchers"].as_bool().unwrap_or(false),
+        })
     }
 
     /// `project in (…) AND ` when scoped, so it prefixes the rest of a query.

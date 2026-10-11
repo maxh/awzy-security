@@ -61,6 +61,8 @@ output "install_contract" {
       }
     }
     registry_prefix = var.registry_prefix
+    # Where the client portal writes each connector's credential (ADR 0104).
+    connector_secrets = { for k, s in aws_secretsmanager_secret.connector : k => s.arn }
   }
 }
 

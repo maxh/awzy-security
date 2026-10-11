@@ -6,7 +6,8 @@ description: Bringing your shared drives and your Jira work into awzy, so decisi
 awzy decides better when it knows what a resource is and why someone would need it. Connectors
 read that from your systems of record and keep awzy-context up to date. They read metadata only:
 names, folders, sharing, and assignments, never a file's content. Two are built: Google Drive and
-Jira. Both are off until you configure them in bootstrap.
+Jira. Both are off until someone on your security team sets them up on the client portal's
+**Connectors** page.
 
 ## What they add to decisions
 
@@ -33,14 +34,14 @@ Without Jira, `context.assigned` is absent, and those policies don't apply.
    shared drive awzy should cover. Drives they aren't in stay out of awzy.
 4. Optionally, pick an admin user, so group shares are named the way your IdP names groups.
 
-**In bootstrap**, set `drive`:
+**In the client portal**, on the Connectors page, set up Google Drive:
 
 | Field | |
 | --- | --- |
-| `subject` | The member user from step 3 |
-| `admin_subject` | The admin from step 4. Optional |
-| `domain` | Your domain. Default: the subject's |
-| `key_json` | The service account's JSON key |
+| Acts as | The member user from step 3 |
+| Reads groups as | The admin from step 4. Optional |
+| Domain | Your domain. Default: the subject's |
+| Service account key | The service account's JSON key |
 
 The connector crawls every covered drive when it starts, then follows each drive's changes every
 five minutes. Files that leave Drive leave awzy-context.
@@ -52,22 +53,31 @@ Atlassian API token for it. Assignees are matched to people by email, so the acc
 to see users' emails (your Atlassian organization's email visibility). This also assumes your
 IdP's user names are email addresses.
 
-**In bootstrap**, set `jira`:
+**In the client portal**, on the Connectors page, set up Jira:
 
 | Field | |
 | --- | --- |
-| `url` | `https://<your-site>.atlassian.net` |
-| `user` | The account's email |
-| `projects` | Project keys to cover. Default: every project the account can browse |
-| `watchers` | `true` counts an issue's watchers as working on it, like its assignee. It costs one more Jira call per issue. Default: `false` |
-| `token` | The account's API token |
+| Site | `https://<your-site>.atlassian.net` |
+| Account | The account's email |
+| Projects | Project keys to cover. Default: every project the account can browse |
+| Watchers | Counts an issue's watchers as working on it, like its assignee. It costs one more Jira call per issue. Default: off |
+| API token | The account's API token |
 
 The connector reads open issues when it starts and again daily, and issues updated since its last
 round every five minutes. Done issues no longer count as work.
 
+## Credentials and changes
+
+Saving a connector asks for a touch of your security key, as switching enforcement does: a
+connector decides what awzy can read. Its credential goes to your cloud's secrets manager, where
+the portal can write it and nothing in awzy but the connectors can read it; the portal never shows
+it again, only when it was last set. A change reaches the connector within a minute or two, and it
+starts over with a full read.
+
 ## Checking that they work
 
-awzy-connectors serves Prometheus metrics. `awzy_connectors_drive_sync_age_seconds` says how long
+The Connectors page shows whether each one is syncing, when it last synced, and its last error.
+awzy-connectors also serves Prometheus metrics. `awzy_connectors_drive_sync_age_seconds` says how long
 ago Drive last synced. The Jira connector counts assignees it couldn't match to a person
 (`unmapped_assignees`); a growing count usually means hidden emails.
 

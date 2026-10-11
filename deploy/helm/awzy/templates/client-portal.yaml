@@ -19,9 +19,11 @@
   (dict "name" "AWZY_POLICY_ADDR" "value" (printf "http://awzy-policy.%s.svc:8080" $sys))
   (dict "name" "AWZY_PORTAL_PERSISTED_QUERIES_ONLY" "value" (ternary "true" "false" (ne $p.persistedQueriesOnly false)))
 -}}
-{{- /* Without it, the Connectors page says none is configured. */ -}}
-{{- if or .Values.connectors.drive.subject .Values.connectors.jira.url }}
+{{- /* The connectors' status, and where to write their credentials (ADR 0104). */ -}}
+{{- if .Values.connectors.enabled }}
 {{- $env = append $env (dict "name" "AWZY_CONNECTORS_ADDR" "value" (printf "http://awzy-connectors.%s.svc:8080" $sys)) }}
+{{- with .Values.connectors.drive.secretRef }}{{- $env = append $env (dict "name" "AWZY_PORTAL_DRIVE_SECRET" "value" .) }}{{- end }}
+{{- with .Values.connectors.jira.secretRef }}{{- $env = append $env (dict "name" "AWZY_PORTAL_JIRA_SECRET" "value" .) }}{{- end }}
 {{- end }}
 {{- /* Without it, the portal shows that nothing is sent to awzy. */ -}}
 {{- if .Values.reporter.enabled }}

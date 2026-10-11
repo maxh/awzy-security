@@ -13,10 +13,12 @@ awzy_service(
     visibility = ["//tools:client_side"],
     deps = [
         "//authz/libs/activity",
+        "//authz/libs/secrets-aws",
         "//authz/libs/identity",
         "//authz/services/pdp",
         "//authz/libs/proto",
         "//authz/libs/service-auth",
+        "//libs/cloud",
         "//libs/llm",
         "//libs/model",
         "//libs/portal",
