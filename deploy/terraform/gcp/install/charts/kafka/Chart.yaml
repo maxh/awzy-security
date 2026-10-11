@@ -1,0 +1,4 @@
+apiVersion: v2
+name: awzy-kafka
+description: The Google Cloud install's Kafka, as Strimzi custom resources (deploy/terraform/gcp/install/kafka.tf)
+version: 0.1.0
