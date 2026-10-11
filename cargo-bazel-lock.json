@@ -1,5 +1,5 @@
 {
-  "checksum": "c948e70ad7f2ddc8fa77a7afb672e120c7481f381b3c1ef63bb12285b86f7f6c",
+  "checksum": "6ab9fe219a32c2e80bcb3fa6d4712bfba6a136f5c1d5af2f3ce96c3fdad722f0",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -44,6 +44,7 @@
       "aarch64-apple-darwin"
     ],
     "cfg(all(target_arch = \"loongarch64\", target_os = \"linux\"))": [],
+    "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [],
     "cfg(all(target_arch = \"wasm32\", target_os = \"unknown\"))": [],
     "cfg(all(target_arch = \"wasm32\", target_os = \"wasi\"))": [],
     "cfg(all(target_arch = \"wasm32\", target_os = \"wasi\", target_env = \"p2\"))": [],
@@ -5125,8 +5126,28 @@
       "common_attrs": {
         "deps": [
           {
+            "id": "anyhow 1.0.104",
+            "target": "anyhow"
+          },
+          {
+            "id": "opentelemetry 0.31.0",
+            "target": "opentelemetry"
+          },
+          {
+            "id": "opentelemetry-otlp 0.31.1",
+            "target": "opentelemetry_otlp"
+          },
+          {
+            "id": "opentelemetry_sdk 0.31.0",
+            "target": "opentelemetry_sdk"
+          },
+          {
             "id": "tracing 0.1.44",
             "target": "tracing"
+          },
+          {
+            "id": "tracing-opentelemetry 0.32.1",
+            "target": "tracing_opentelemetry"
           },
           {
             "id": "tracing-subscriber 0.3.23",
@@ -10142,6 +10163,7 @@
     "futures-executor 0.3.34": {
       "common_attrs": {
         "crate_features": [
+          "default",
           "std"
         ],
         "deps": [
@@ -15159,6 +15181,270 @@
         }
       ],
       "version": "0.2.1"
+    },
+    "opentelemetry 0.31.0": {
+      "common_attrs": {
+        "crate_features": [
+          "default",
+          "futures",
+          "futures-core",
+          "futures-sink",
+          "internal-logs",
+          "logs",
+          "metrics",
+          "pin-project-lite",
+          "thiserror",
+          "trace",
+          "tracing"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "futures-core 0.3.34",
+              "target": "futures_core"
+            },
+            {
+              "id": "futures-sink 0.3.34",
+              "target": "futures_sink"
+            },
+            {
+              "id": "pin-project-lite 0.2.17",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "thiserror 2.0.21",
+              "target": "thiserror"
+            },
+            {
+              "id": "tracing 0.1.44",
+              "target": "tracing"
+            }
+          ],
+          "selects": {
+            "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
+              {
+                "id": "js-sys 0.3.106",
+                "target": "js_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2021"
+      },
+      "library_target_name": "opentelemetry",
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "name": "opentelemetry",
+      "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry",
+      "repository": {
+        "Http": {
+          "sha256": "b84bcd6ae87133e903af7ef497404dda70c60d0ea14895fc8a5e6722754fc2a0",
+          "url": "https://static.crates.io/crates/opentelemetry/0.31.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "opentelemetry",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.31.0"
+    },
+    "opentelemetry-otlp 0.31.1": {
+      "common_attrs": {
+        "crate_features": [
+          "grpc-tonic",
+          "http",
+          "prost",
+          "tokio",
+          "tonic",
+          "trace"
+        ],
+        "deps": [
+          {
+            "id": "http 1.5.0",
+            "target": "http"
+          },
+          {
+            "id": "opentelemetry 0.31.0",
+            "target": "opentelemetry"
+          },
+          {
+            "id": "opentelemetry-proto 0.31.0",
+            "target": "opentelemetry_proto"
+          },
+          {
+            "id": "opentelemetry_sdk 0.31.0",
+            "target": "opentelemetry_sdk"
+          },
+          {
+            "id": "prost 0.14.4",
+            "target": "prost"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          },
+          {
+            "id": "tokio 1.53.2",
+            "target": "tokio"
+          },
+          {
+            "id": "tonic 0.14.6",
+            "target": "tonic"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "opentelemetry_otlp",
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "name": "opentelemetry-otlp",
+      "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-otlp",
+      "repository": {
+        "Http": {
+          "sha256": "1f69cd6acbb9af919df949cd1ec9e5e7fdc2ef15d234b6b795aaa525cc02f71f",
+          "url": "https://static.crates.io/crates/opentelemetry-otlp/0.31.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "opentelemetry_otlp",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.31.1"
+    },
+    "opentelemetry-proto 0.31.0": {
+      "common_attrs": {
+        "crate_features": [
+          "gen-tonic",
+          "gen-tonic-messages",
+          "prost",
+          "tonic",
+          "tonic-prost",
+          "trace"
+        ],
+        "deps": [
+          {
+            "id": "opentelemetry 0.31.0",
+            "target": "opentelemetry"
+          },
+          {
+            "id": "opentelemetry_sdk 0.31.0",
+            "target": "opentelemetry_sdk"
+          },
+          {
+            "id": "prost 0.14.4",
+            "target": "prost"
+          },
+          {
+            "id": "tonic 0.14.6",
+            "target": "tonic"
+          },
+          {
+            "id": "tonic-prost 0.14.6",
+            "target": "tonic_prost"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "opentelemetry_proto",
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "name": "opentelemetry-proto",
+      "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-proto",
+      "repository": {
+        "Http": {
+          "sha256": "a7175df06de5eaee9909d4805a3d07e28bb752c34cab57fa9cff549da596b30f",
+          "url": "https://static.crates.io/crates/opentelemetry-proto/0.31.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "opentelemetry_proto",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.31.0"
+    },
+    "opentelemetry_sdk 0.31.0": {
+      "common_attrs": {
+        "crate_features": [
+          "default",
+          "internal-logs",
+          "logs",
+          "metrics",
+          "percent-encoding",
+          "rand",
+          "trace"
+        ],
+        "deps": [
+          {
+            "id": "futures-channel 0.3.34",
+            "target": "futures_channel"
+          },
+          {
+            "id": "futures-executor 0.3.34",
+            "target": "futures_executor"
+          },
+          {
+            "id": "futures-util 0.3.34",
+            "target": "futures_util"
+          },
+          {
+            "id": "opentelemetry 0.31.0",
+            "target": "opentelemetry"
+          },
+          {
+            "id": "percent-encoding 2.3.2",
+            "target": "percent_encoding"
+          },
+          {
+            "id": "rand 0.9.5",
+            "target": "rand"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "opentelemetry_sdk",
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "name": "opentelemetry_sdk",
+      "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-sdk",
+      "repository": {
+        "Http": {
+          "sha256": "e14ae4f5991976fd48df6d843de219ca6d31b01daaab2dad5af2badeded372bd",
+          "url": "https://static.crates.io/crates/opentelemetry_sdk/0.31.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "opentelemetry_sdk",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.31.0"
     },
     "outref 0.5.2": {
       "common_attrs": {
@@ -24059,6 +24345,80 @@
       ],
       "version": "0.2.0"
     },
+    "tracing-opentelemetry 0.32.1": {
+      "common_attrs": {
+        "crate_features": [
+          "default",
+          "metrics",
+          "smallvec",
+          "tracing-log"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "opentelemetry 0.31.0",
+              "target": "opentelemetry"
+            },
+            {
+              "id": "smallvec 1.16.2",
+              "target": "smallvec"
+            },
+            {
+              "id": "tracing 0.1.44",
+              "target": "tracing"
+            },
+            {
+              "id": "tracing-core 0.1.36",
+              "target": "tracing_core"
+            },
+            {
+              "id": "tracing-log 0.2.0",
+              "target": "tracing_log"
+            },
+            {
+              "id": "tracing-subscriber 0.3.23",
+              "target": "tracing_subscriber"
+            }
+          ],
+          "selects": {
+            "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
+              {
+                "id": "js-sys 0.3.106",
+                "target": "js_sys"
+              },
+              {
+                "id": "web-time 1.1.0",
+                "target": "web_time"
+              }
+            ]
+          }
+        },
+        "edition": "2021"
+      },
+      "library_target_name": "tracing_opentelemetry",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "tracing-opentelemetry",
+      "package_url": "https://github.com/tokio-rs/tracing-opentelemetry",
+      "repository": {
+        "Http": {
+          "sha256": "1ac28f2d093c6c477eaa76b23525478f38de514fa9aeb1285738d4b97a9552fc",
+          "url": "https://static.crates.io/crates/tracing-opentelemetry/0.32.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tracing_opentelemetry",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.32.1"
+    },
     "tracing-serde 0.2.0": {
       "common_attrs": {
         "deps": [
@@ -25413,6 +25773,50 @@
         }
       ],
       "version": "0.2.129"
+    },
+    "web-time 1.1.0": {
+      "common_attrs": {
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(all(target_family = \"wasm\", target_os = \"unknown\"))": [
+              {
+                "id": "js-sys 0.3.106",
+                "target": "js_sys"
+              },
+              {
+                "id": "wasm-bindgen 0.2.129",
+                "target": "wasm_bindgen"
+              }
+            ]
+          }
+        },
+        "edition": "2021"
+      },
+      "library_target_name": "web_time",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "web-time",
+      "package_url": "https://github.com/daxpedda/web-time",
+      "repository": {
+        "Http": {
+          "sha256": "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb",
+          "url": "https://static.crates.io/crates/web-time/1.1.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "web_time",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.1.0"
     },
     "webpki-roots 0.26.11": {
       "common_attrs": {
@@ -27391,6 +27795,9 @@
     "hyper-rustls 0.27.10",
     "hyper-util 0.1.21",
     "jsonwebtoken 11.1.0",
+    "opentelemetry 0.31.0",
+    "opentelemetry-otlp 0.31.1",
+    "opentelemetry_sdk 0.31.0",
     "p256 0.13.2",
     "prost 0.14.4",
     "prost-types 0.14.4",
@@ -27412,6 +27819,7 @@
     "tonic-prost-build 0.14.6",
     "tower-http 0.7.1",
     "tracing 0.1.44",
+    "tracing-opentelemetry 0.32.1",
     "tracing-subscriber 0.3.23",
     "uuid 1.27.0",
     "webpki-roots 1.0.9"
