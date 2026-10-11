@@ -7,10 +7,14 @@
 
 use std::{sync::Arc, time::Duration};
 
+use awzy_model::ChallengeId;
 use sqlx::postgres::PgListener;
-use tokio::sync::watch;
+use tokio::sync::{broadcast, watch};
 
 use crate::store::{ActiveContainments, ChallengeStore, StoreError, CONTAINMENT_CHANNEL};
+
+/// Each new or changed challenge's ID, notified by the `challenges` table's trigger.
+pub const CHALLENGE_CHANNEL: &str = "awzy_challenges";
 
 /// How often a stream sends a heartbeat when nothing changed. PDPs treat the feed as stale
 /// after missing a few.
@@ -22,17 +26,25 @@ const RELOAD_EVERY: Duration = Duration::from_secs(5);
 pub struct Feed {
     /// None until the first load: a stream never sends a list it hasn't read.
     tx: watch::Sender<Option<Arc<ActiveContainments>>>,
+    /// Challenges as they change, for `WatchChallenges`. A watcher that falls this far behind
+    /// misses some, and catches up from its next list.
+    challenges: broadcast::Sender<ChallengeId>,
 }
 
 impl Default for Feed {
     fn default() -> Self {
-        Self { tx: watch::Sender::new(None) }
+        Self { tx: watch::Sender::new(None), challenges: broadcast::Sender::new(1024) }
     }
 }
 
 impl Feed {
     pub fn subscribe(&self) -> watch::Receiver<Option<Arc<ActiveContainments>>> {
         self.tx.subscribe()
+    }
+
+    /// Challenges' IDs as they're opened or change.
+    pub fn challenges(&self) -> broadcast::Receiver<ChallengeId> {
+        self.challenges.subscribe()
     }
 
     /// Whether the list has been loaded once.
@@ -64,13 +76,20 @@ impl Feed {
 
     async fn follow_once(&self, store: &ChallengeStore) -> anyhow::Result<()> {
         let mut listener = PgListener::connect_with(store.pool()).await?;
-        listener.listen(CONTAINMENT_CHANNEL).await?;
+        listener.listen_all([CONTAINMENT_CHANNEL, CHALLENGE_CHANNEL]).await?;
         // After listening, so a change made in between is either notified or in this load.
         self.refresh_logged(store).await;
         loop {
             tokio::select! {
                 notification = listener.recv() => {
-                    notification?;
+                    let notification = notification?;
+                    if notification.channel() == CHALLENGE_CHANNEL {
+                        if let Ok(id) = notification.payload().parse::<uuid::Uuid>() {
+                            // No one watching is fine: the send just finds no receivers.
+                            let _ = self.challenges.send(ChallengeId::from_uuid(id));
+                        }
+                        continue;
+                    }
                     self.refresh_logged(store).await;
                 }
                 _ = tokio::time::sleep(RELOAD_EVERY) => self.refresh_logged(store).await,

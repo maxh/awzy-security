@@ -16,9 +16,17 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { Suspense, useState } from "react";
-import { commitMutation, fetchQuery, graphql, useLazyLoadQuery, useMutation, useRelayEnvironment } from "react-relay";
-import type { Environment, GraphQLTaggedNode, MutationParameters } from "relay-runtime";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  commitMutation,
+  fetchQuery,
+  graphql,
+  useLazyLoadQuery,
+  useMutation,
+  useRelayEnvironment,
+  useSubscription,
+} from "react-relay";
+import type { Environment, GraphQLSubscriptionConfig, GraphQLTaggedNode, MutationParameters } from "relay-runtime";
 
 import type { ChallengesPageAdminQuery } from "./__generated__/ChallengesPageAdminQuery.graphql";
 import type { ChallengesPageContainMutation } from "./__generated__/ChallengesPageContainMutation.graphql";
@@ -28,6 +36,8 @@ import type { ChallengesPageLiftMutation } from "./__generated__/ChallengesPageL
 import type { ChallengesPageQuery } from "./__generated__/ChallengesPageQuery.graphql";
 import type { ChallengesPageBeginKeyChangeMutation } from "./__generated__/ChallengesPageBeginKeyChangeMutation.graphql";
 import type { ChallengesPageBeginRegistrationMutation } from "./__generated__/ChallengesPageBeginRegistrationMutation.graphql";
+import type { ChallengesPageChallengeUpdatedSubscription } from "./__generated__/ChallengesPageChallengeUpdatedSubscription.graphql";
+import type { ChallengesPageContainmentsChangedSubscription } from "./__generated__/ChallengesPageContainmentsChangedSubscription.graphql";
 import type { ChallengesPageBeginVerificationMutation } from "./__generated__/ChallengesPageBeginVerificationMutation.graphql";
 import type { ChallengesPageFinishRegistrationMutation } from "./__generated__/ChallengesPageFinishRegistrationMutation.graphql";
 import type { ChallengesPageFinishVerificationMutation } from "./__generated__/ChallengesPageFinishVerificationMutation.graphql";
@@ -189,6 +199,7 @@ export function ChallengesPage() {
   // Kept outside Suspense so the refetch after submitting doesn't clear it.
   const [answered, setAnswered] = useState<Answered | null>(null);
   const refresh = () => setFetchKey((k) => k + 1);
+  useLive(refresh);
   return (
     <Stack gap="md">
       <PageHeader
@@ -211,6 +222,60 @@ export function ChallengesPage() {
 }
 
 /** The next step after an answer: retry the request, or wait for what's left. */
+/**
+ * Refreshes the page when a challenge opens or changes, or a containment is added or lifted, so
+ * no one has to reload to see a request approved. A burst of changes refreshes once. Containments
+ * are only for those who administer challenges; for anyone else that subscription is refused,
+ * which is fine.
+ */
+function useLive(refresh: () => void) {
+  const latest = useRef(refresh);
+  useEffect(() => {
+    latest.current = refresh;
+  });
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const changed = useMemo(
+    () => () => {
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => latest.current(), 300);
+    },
+    [],
+  );
+  const challenges = useMemo<GraphQLSubscriptionConfig<ChallengesPageChallengeUpdatedSubscription>>(
+    () => ({
+      subscription: graphql`
+        subscription ChallengesPageChallengeUpdatedSubscription {
+          challengeUpdated {
+            id
+          }
+        }
+      `,
+      variables: {},
+      onNext: changed,
+      onError: () => {},
+    }),
+    [changed],
+  );
+  const containments = useMemo<GraphQLSubscriptionConfig<ChallengesPageContainmentsChangedSubscription>>(
+    () => ({
+      subscription: graphql`
+        subscription ChallengesPageContainmentsChangedSubscription {
+          containmentsChanged {
+            id
+          }
+        }
+      `,
+      variables: {},
+      onNext: changed,
+      onError: () => {},
+    }),
+    [changed],
+  );
+  useSubscription(challenges);
+  useSubscription(containments);
+}
+
 function AnsweredNotice({ answered: j, onClose }: { answered: Answered; onClose: () => void }) {
   if (j.stillNeeded.length > 0) {
     return (

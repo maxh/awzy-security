@@ -233,14 +233,22 @@ impl Auth {
     }
 }
 
+impl Auth {
+    /// The viewer a bearer token (`Bearer …`) names, if it's valid. For the middleware below,
+    /// and for a GraphQL WebSocket, whose token comes in its first message instead.
+    pub async fn viewer(&self, authorization: Option<&str>) -> Result<Viewer, String> {
+        let registry: &dyn awzy_identity::ServiceAccounts =
+            if self.0.defer_registry { &awzy_identity::DeferToPdp } else { &self.0.service_accounts };
+        self.0.verifier.accessor(authorization, registry).await.map(|a| Viewer(Arc::new(a))).map_err(|e| e.to_string())
+    }
+}
+
 /// Middleware: a valid bearer token, or 401. Puts the [`Viewer`] in the request's extensions.
 pub async fn require_viewer(State(auth): State<Auth>, mut req: Request, next: Next) -> Response {
     let authorization = req.headers().get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()).map(str::to_string);
-    let registry: &dyn awzy_identity::ServiceAccounts =
-        if auth.0.defer_registry { &awzy_identity::DeferToPdp } else { &auth.0.service_accounts };
-    match auth.0.verifier.accessor(authorization.as_deref(), registry).await {
-        Ok(accessor) => {
-            req.extensions_mut().insert(Viewer(Arc::new(accessor)));
+    match auth.viewer(authorization.as_deref()).await {
+        Ok(viewer) => {
+            req.extensions_mut().insert(viewer);
             next.run(req).await
         }
         Err(e) => {
@@ -248,7 +256,7 @@ pub async fn require_viewer(State(auth): State<Auth>, mut req: Request, next: Ne
             if let Some(url) = auth.metadata_url() {
                 challenge.push_str(&format!(r#", resource_metadata="{url}""#));
             }
-            let mut res = (StatusCode::UNAUTHORIZED, e.to_string()).into_response();
+            let mut res = (StatusCode::UNAUTHORIZED, e).into_response();
             if let Ok(v) = HeaderValue::from_str(&challenge) {
                 res.headers_mut().insert(header::WWW_AUTHENTICATE, v);
             }

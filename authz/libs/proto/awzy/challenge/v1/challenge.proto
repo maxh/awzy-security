@@ -30,6 +30,9 @@ service ChallengeService {
   // The active containments, for a PDP: the whole list on connect and on every change, and a
   // heartbeat in between, so a PDP knows when its copy may be stale.
   rpc WatchContainments(WatchContainmentsRequest) returns (stream WatchContainmentsResponse);
+  // Every challenge as it's opened or changes, for a live view: the client portal's Challenges
+  // page. With a heartbeat (no challenge) when nothing has changed for a while.
+  rpc WatchChallenges(WatchChallengesRequest) returns (stream WatchChallengesResponse);
 
   // Security keys (WebAuthn, ADR 0059). Each Begin returns a single-use ceremony and the options
   // for the browser's navigator.credentials call; the matching Finish takes its response.
@@ -236,6 +239,16 @@ message ListContainmentsRequest {
 
 message ListContainmentsResponse {
   repeated Containment containments = 1;
+}
+
+message WatchChallengesRequest {
+  // Only the challenges this person answers (a Human ID); empty for every challenge.
+  string answerer_id = 1;
+}
+
+message WatchChallengesResponse {
+  // The challenge as it is now; unset for a heartbeat.
+  Challenge challenge = 1;
 }
 
 message WatchContainmentsRequest {}
