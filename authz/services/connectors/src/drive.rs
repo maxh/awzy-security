@@ -272,10 +272,12 @@ impl DriveSync {
             match round {
                 Ok(s) => {
                     SYNC.succeeded();
+                    crate::status::succeeded("drive", s.written, s.deleted);
                     tracing::info!(written = s.written, deleted = s.deleted, "Google Drive synced");
                 }
                 Err(error) => {
                     SYNC.failed();
+                    crate::status::failed("drive", &error);
                     tracing::warn!(error = format!("{error:#}"), "Google Drive sync failed; retrying next round");
                 }
             }

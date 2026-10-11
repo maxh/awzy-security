@@ -54,7 +54,8 @@ spec:
     - {}
 ---
 {{- end }}
-# awzy-connectors serves only /metrics and health, to awzy's own services (the reporter).
+# awzy-connectors serves /metrics, health, and its status, to awzy's own services (the reporter
+# and the client portal).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

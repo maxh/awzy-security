@@ -238,6 +238,23 @@ input ContainPrincipalInput {
 	reason: String!
 }
 
+type Connector {
+	name: String!
+	settings: [ConnectorSetting!]!
+	intervalSecs: Int!
+	lastSuccessAt: UtcTimestamp
+	lastFailureAt: UtcTimestamp
+	lastError: String
+	failures: Int!
+	written: Int!
+	deleted: Int!
+}
+
+type ConnectorSetting {
+	name: String!
+	value: String!
+}
+
 type Containment {
 	"""
 	QID: containment_<uuid>.
@@ -1095,6 +1112,11 @@ type Query {
 	enforcement area, to review before sending it to awzy support.
 	"""
 	diagnosticsBundle: String!
+	"""
+	The configured connectors and how their syncing is going. For those who may view the
+	enforcement area.
+	"""
+	connectors: [Connector!]!
 }
 
 input RegisterServiceAccountInput {

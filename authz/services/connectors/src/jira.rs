@@ -208,10 +208,12 @@ impl JiraSync {
             match round {
                 Ok(s) => {
                     SYNC.succeeded();
+                    crate::status::succeeded("jira", s.written, s.deleted);
                     tracing::info!(full, written = s.written, deleted = s.deleted, "Jira synced");
                 }
                 Err(error) => {
                     SYNC.failed();
+                    crate::status::failed("jira", &error);
                     tracing::warn!(error = format!("{error:#}"), "Jira sync failed; retrying next round");
                 }
             }
