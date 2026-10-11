@@ -64,21 +64,21 @@ page, and any other is denied.
 
 ### Tokens
 
-The gateway accepts the same tokens as the client portal: from your IdP (the portal's issuer and
-keys, RS256 or ES256), for the audience `awzy`. A person is identified by the token's `sub`, which
-has to be their user name as your IdP provisions it over SCIM. Choosing another claim, such as
-`email` for an IdP whose `sub` is an opaque ID, isn't available in an install yet.
+The gateway accepts tokens from the client portal's IdP (its issuer and keys, RS256 or ES256), for
+an audience of its own: `awzy-gateway`, or the `audience` you set in `mcp_gateway`. The client
+portal doesn't accept them, so a token you give an agent for the gateway can't answer challenges
+or approve anything there.
 
-Because the two accept the same tokens, a token you give an agent for the gateway also works on
-the client portal's API. See
-[An agent using a person's own credentials](/concepts/principals-and-delegation/#an-agent-using-a-persons-own-credentials).
+A person is identified by the claim your install names as `client_portal.subject_claim`: `sub`
+by default, or a claim such as `email` when your IdP's `sub` is an opaque ID. Either way it has to
+hold their user name as your IdP provisions it over SCIM.
 
 ## Who's calling
 
 The token says who the request is for:
 
 - **A person**, through an agent that uses their token: the principal is that person, and the
-  check carries `context.client == "mcp"`. See
+  check carries `context.client == "mcp"` and the MCP client's name as `context.mcp_client`. See
   [An agent using a person's own credentials](/concepts/principals-and-delegation/#an-agent-using-a-persons-own-credentials).
 - **An agent acting for a person**, with an RFC 8693 `act` claim (`{"act": {"sub": "sales-genie"}}`):
   the agent is the principal, `sub` is the person, and both are checked. See
@@ -100,13 +100,18 @@ before the outage.
 
 ## Connecting an agent
 
-Give the agent the gateway's URL for the server, `https://<gateway>/mcp/<name>`, and a token from
-your IdP for the audience `awzy`. Register each agent's service account, with its owner, on the
-client portal's Directory page first, or every call it makes is denied.
+Give the agent the gateway's URL for the server, `https://<gateway>/mcp/<name>`. Register each
+agent's service account, with its owner, on the client portal's Directory page first, or every
+call it makes is denied.
 
-The gateway doesn't publish OAuth sign-in metadata yet, so an MCP client can't sign in to it on
-its own. Configure the token as an `Authorization: Bearer` header in the client. For Claude Code,
-for example:
+The gateway publishes OAuth protected resource metadata for each server, at
+`https://<gateway>/.well-known/oauth-protected-resource/mcp/<name>`, and points to it when it
+refuses a call without a token. An MCP client that supports it finds your IdP there and signs in
+on its own, if your IdP lets the client register or knows it already, and issues tokens for the
+gateway's audience.
+
+Otherwise, get a token for the gateway's audience and configure it as an `Authorization: Bearer`
+header in the client. For Claude Code, for example:
 
 ```sh
 claude mcp add --transport http drive https://mcp.example.com/mcp/drive \

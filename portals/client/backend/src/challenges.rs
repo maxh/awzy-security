@@ -259,10 +259,52 @@ pub(crate) async fn get_by_id(ctx: &Context<'_>, id: ChallengeId) -> Result<Opti
         Err(s) => return Err(grpc(s)),
     };
     let Some(c) = c else { return Ok(None) };
-    if c.answerer_id != viewer.subject.id || viewer.subject.kind != entity_type::HUMAN {
+    let answers_it = c.answerer_id == viewer.subject.id && viewer.subject.kind == entity_type::HUMAN;
+    if !answers_it && !may_approve(ctx.data::<Services>()?, &viewer, &c).await {
         require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
     }
     Ok(Some(Challenge(c)))
+}
+
+/// Whether `viewer` may approve challenge `c` now: it's waiting for an approval, the viewer isn't
+/// a party to it, and policy lets them `approve` its resource. The same check awzy-challenge makes
+/// before it records an approval, asked ahead so the portal shows each approver what they can
+/// act on. Any failure reads as no.
+pub(crate) async fn may_approve(services: &Services, viewer: &Viewer, c: &WireChallenge) -> bool {
+    use awzy_authz_proto::authz::v1::{CheckRequest, Verdict};
+    let approval = awzy_authz_proto::authz::v1::ChallengeKind::Approval as i32;
+    let pending = c.status() == WireStatus::Pending && c.kinds.contains(&approval) && !c.passed.contains(&approval);
+    let (Some(mut pdp), Some(resource)) = (services.pdp.clone(), c.resource.clone()) else { return false };
+    if !pending || viewer.on_behalf_of.is_some() {
+        return false;
+    }
+    let me = |r: &Option<awzy_authz_proto::authz::v1::EntityRef>| {
+        r.as_ref().is_some_and(|r| r.r#type == viewer.subject.kind && r.id == viewer.subject.id)
+    };
+    let answers = viewer.subject.kind == entity_type::HUMAN && c.answerer_id == viewer.subject.id;
+    if me(&c.principal) || me(&c.on_behalf_of) || answers {
+        return false;
+    }
+    let mut context = serde_json::Map::new();
+    if !c.answerer_id.is_empty() {
+        context.insert(
+            "approving_for".into(),
+            serde_json::json!({ "__entity": { "type": entity_type::HUMAN, "id": c.answerer_id } }),
+        );
+    }
+    let req = CheckRequest {
+        principal: Some(awzy_authz_proto::authz::v1::EntityRef {
+            r#type: viewer.subject.kind.clone(),
+            id: viewer.subject.id.clone(),
+        }),
+        action: "approve".into(),
+        resource: Some(resource),
+        context: Some(awzy_authz_proto::json_to_struct(context)),
+        entities: viewer.entities.iter().map(awzy_authz_proto::entity_from_json).collect(),
+        always_enforced: true,
+        ..Default::default()
+    };
+    matches!(pdp.check(req).await, Ok(res) if res.get_ref().verdict() == Verdict::Allow)
 }
 
 #[derive(Default)]
@@ -280,6 +322,21 @@ impl ChallengeQuery {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let me = answering_human(&viewer)?;
         list(ctx, me, status, first).await
+    }
+
+    /// Requests waiting for an approval the signed-in principal may give, newest first: a
+    /// resource's owner, say, or an overseer agent policy names.
+    async fn challenges_to_approve(&self, ctx: &Context<'_>, first: Option<i32>) -> Result<Vec<Challenge>> {
+        let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
+        let services = ctx.data::<Services>()?;
+        if viewer.on_behalf_of.is_some() {
+            return Ok(vec![]);
+        }
+        let pending = list(ctx, String::new(), Some(ChallengeStatus::Pending), Some(500)).await?;
+        let checks = pending.iter().map(|c| may_approve(services, &viewer, &c.0));
+        let allowed = async_graphql::futures_util::future::join_all(checks).await;
+        let n = self::first(first) as usize;
+        Ok(pending.into_iter().zip(allowed).filter(|(_, ok)| *ok).map(|(c, _)| c).take(n).collect())
     }
 
     /// Every challenge, newest first. For those who administer challenges.
@@ -541,6 +598,14 @@ mod tests {
             (human("bob", "engineering"), human("carol", "engineering"), human("alice", "security"));
 
         assert!(run_err(&schema, &bob, "{ challenges { id } }").await.contains("may not administer challenges"));
+        // Each approver sees what policy lets them approve, and nobody their own request.
+        let to_approve = |v: &Viewer| {
+            let (schema, v) = (schema.clone(), v.clone());
+            async move { run(&schema, &v, "{ challengesToApprove { id } }").await["challengesToApprove"].clone() }
+        };
+        assert_eq!(to_approve(&alice).await, json!([{ "id": id }]));
+        assert_eq!(to_approve(&bob).await, json!([]), "bob asked");
+        assert_eq!(to_approve(&carol).await, json!([]), "policy doesn't let carol approve the board deck");
         let pending = run(&schema, &alice, "{ challenges(status: PENDING) { id principal { id } } }").await;
         assert_eq!(pending["challenges"], json!([{ "id": id, "principal": { "id": "bob" } }]));
 

@@ -29,5 +29,7 @@ description: What awzy can and can't see, and how releases reach your install.
 - **awzy knows an agent only by its token.** An agent with its own identity, through a token
   exchange, is checked as itself and as its person, and can't answer their challenges. An agent
   using a person's own token is that person to awzy; only a security key proves the person
-  themselves was there. See
+  themselves was there. The client portal's API, its MCP endpoint, and awzy-gateway each take
+  tokens for their own audience, so a token handed to an agent for one doesn't open the others.
+  See
   [People, agents, and delegation](/concepts/principals-and-delegation/).

@@ -102,12 +102,12 @@ Bootstrap takes:
 | `reporter` | Install ID and reporting token, or `null` to send no heartbeat |
 | `cosign_public_key` | [`deploy/release/cosign.pub`](deploy/release/cosign.pub); Kyverno rejects images not signed with it |
 | `ingress` | The portal hostname and the Let's Encrypt contact |
-| `client_portal` | Your IdP's issuer, JWKS URL, and the portal's public URL |
+| `client_portal` | Your IdP's issuer, JWKS URL, and the portal's public URL; the token audiences for the portal (`audience`, default `awzy`) and for its MCP endpoint (`mcp_audience`, default `awzy-mcp`); and `subject_claim`, the claim holding a person's SCIM user name when `sub` doesn't (default `sub`) |
 | `awzy_bot` | Whether Awzy Bot runs; needs Claude enabled in the install account's Bedrock |
 | `investigations`, `investigation_budget` | Whether awzy-reasoner investigates the people it flags, and its monthly token budget and privileged groups; needs Claude in Bedrock |
 | `llm_model` | The Bedrock model ID for both, when the default isn't reachable directly |
 | `slack` | Your Slack app's bot token and the security team's channel, for notifications; `null` for none |
-| `mcp_gateway` | awzy-gateway, the MCP proxy your agents call: its hostname (with a DNS record to the load balancer; null keeps it in-cluster), the MCP servers it fronts, and the tiers that may fail open while the PDP is unreachable; `null` for none |
+| `mcp_gateway` | awzy-gateway, the MCP proxy your agents call: its hostname (with a DNS record to the load balancer; null keeps it in-cluster), its token audience (`audience`, default `awzy-gateway`), the MCP servers it fronts, and the tiers that may fail open while the PDP is unreachable; `null` for none |
 | `intake` | awzy-intake, for your apps' and audit logs' events: its hostname for sources outside the cluster (null keeps it in-cluster); `null` for none |
 | `drive` | The Google Drive connector: the member user it acts as (a Content manager of each shared drive to cover), an admin to name group shares, and the Google service account's JSON key, with domain-wide delegation for `drive.metadata.readonly` and `admin.directory.group.readonly`; `null` for none |
 | `jira` | The Jira connector: your site's URL, an account that can browse the projects, the projects (default: all), and its API token; `null` for none |
@@ -150,10 +150,13 @@ the cluster on it.
    bearer token. Enter both in your IdP's provisioning settings (Okta, Entra) so people and
    groups reach awzy-context.
 3. **Sign-in:** register the client portal as an OIDC application in your IdP, with the issuer
-   and JWKS URL you gave bootstrap as `client_portal`. Its access tokens are for the audience
-   `awzy`, and carry each person's SCIM user name as `sub`: awzy matches people by `sub`, and an
-   install can't choose another claim yet. Someone whose `sub` doesn't match is checked with the
-   groups in their token alone.
+   and JWKS URL you gave bootstrap as `client_portal`. awzy takes tokens for three audiences, kept
+   apart so a token handed to an agent for one doesn't open another: the portal's own (`awzy`),
+   its MCP endpoint's (`awzy-mcp`), and awzy-gateway's (`awzy-gateway`). Set each in bootstrap
+   if your IdP names them differently (Entra's audiences are app ID URIs, `api://…`). Every token
+   has to carry the person's SCIM user name in `sub`, or in the claim you name as
+   `client_portal.subject_claim` (usually `email` with Entra, whose `sub` is opaque). Someone whose
+   claim doesn't match is checked with the groups in their token alone.
 
 ## 7. Check the install
 

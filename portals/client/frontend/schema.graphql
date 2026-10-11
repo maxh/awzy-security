@@ -910,6 +910,11 @@ type Query {
 	"""
 	myChallenges(status: ChallengeStatus, first: Int): [Challenge!]!
 	"""
+	Requests waiting for an approval the signed-in principal may give, newest first: a
+	resource's owner, say, or an overseer agent policy names.
+	"""
+	challengesToApprove(first: Int): [Challenge!]!
+	"""
 	Every challenge, newest first. For those who administer challenges.
 	"""
 	challenges(status: ChallengeStatus, first: Int): [Challenge!]!

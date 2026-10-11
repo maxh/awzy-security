@@ -37,11 +37,14 @@ variable "cosign_public_key" {
 }
 
 variable "client_portal" {
-  description = "The client's IdP for the client portal (not needed with demo_idp)"
+  description = "The client's IdP for the client portal (not needed with demo_idp): its issuer and keys; the audiences of the portal's own tokens and of those agents get for its MCP endpoint (ADR 0081); and the claim holding a person's SCIM userName, when `sub` doesn't (empty: sub)"
   type = object({
-    issuer     = optional(string, "")
-    jwks_url   = optional(string, "")
-    public_url = optional(string, "")
+    issuer        = optional(string, "")
+    jwks_url      = optional(string, "")
+    public_url    = optional(string, "")
+    audience      = optional(string, "awzy")
+    mcp_audience  = optional(string, "awzy-mcp")
+    subject_claim = optional(string, "")
   })
   default = {}
 }
@@ -87,6 +90,7 @@ variable "mcp_gateway" {
   description = "awzy-gateway, the MCP proxy agents call (ADR 0019): its public hostname (null keeps it in-cluster; it needs a DNS record to the load balancer), the MCP servers it fronts as the chart's mcpGateway.upstreams, and the tiers that may fail open while the PDP is unreachable (ADR 0030). Null leaves it off"
   type = object({
     hostname        = optional(string)
+    audience        = optional(string, "awzy-gateway")
     upstreams       = any
     fail_open_tiers = optional(list(string), [])
   })

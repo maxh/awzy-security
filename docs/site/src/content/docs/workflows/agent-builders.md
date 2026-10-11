@@ -34,8 +34,8 @@ Some policies ask for more when nobody is present.
 ### Not with the person's own token
 
 The easy path, signing your agent in with its person's own token, makes it that person to awzy.
-Nothing marks its requests as an agent's, it's assumed to have its person at the keyboard, and
-the same token can answer that person's justification challenges in the client portal. Coding
+Nothing marks its requests as an agent's beyond the MCP client's name, and it's assumed to have
+its person at the keyboard. Coding
 agents such as Claude Code often run this way. awzy still decides what passes through an
 enforcement point, and a security key challenge still needs the person, but policies, risk
 scores, and challenges can no longer tell the agent from its person. Use a token exchange

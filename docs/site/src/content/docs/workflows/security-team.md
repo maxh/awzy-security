@@ -32,8 +32,8 @@ Leave **automated containments** in monitor for longer, and switch them separate
 ## Day to day
 
 - **Approvals.** On the Challenges page, under *Waiting for approval*, approve or reject requests,
-  with a note. Only those who administer challenges see that list for now, so a resource's owner
-  who gets a request decides it with you, and you record it. With
+  with a note. You see every request; resource owners see, and approve, the ones for what they
+  own. With
   [Slack connected](/guides/optional-features/#slack-notifications), each request reaches your
   team's channel with a link.
 - **Containments.** Contain a principal yourself when you see something wrong, and lift a
@@ -66,5 +66,6 @@ policies and investigations, and draft policy changes through the portal's
 modes, or contain anyone.
 
 An agent signed in with a person's own token, rather than a token exchange, is that person to
-awzy: the token also works on the portal's GraphQL API, with everything the person may do there.
+awzy. A token for the MCP endpoint doesn't work on the portal's GraphQL API, which takes tokens
+of its own, but within MCP the agent acts with the person's rights.
 See [An agent using a person's own credentials](/concepts/principals-and-delegation/#an-agent-using-a-persons-own-credentials).

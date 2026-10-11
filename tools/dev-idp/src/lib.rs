@@ -7,8 +7,9 @@
 //!   account).
 //! - HTTPS, like a real IdP (see [`tls`]). The demo install (ADR 0032) runs it as plain HTTP behind
 //!   its Gateway, which terminates TLS, under a path prefix: links on its pages are relative.
-//! - Tokens are ES256 JWTs with audience `awzy`, `groups`, and `name`, signed by a fixed key so
-//!   they survive restarts. Keys at `/jwks`, discovery at `/.well-known/openid-configuration`.
+//! - Tokens are ES256 JWTs with `groups` and `name`, signed by a fixed key so they survive
+//!   restarts. Their audience is `awzy`, or the `audience` asked for at `/token`: `awzy-mcp` for
+//!   the portal's MCP endpoint, `awzy-gateway` for awzy-gateway (ADR 0081). Keys at `/jwks`, discovery at `/.well-known/openid-configuration`.
 
 use std::{
     collections::HashMap,
@@ -37,6 +38,8 @@ use tower_http::cors::CorsLayer;
 pub mod tls;
 
 pub const AUDIENCE: &str = "awzy";
+/// The audiences `/token` issues for: the portal, its MCP endpoint, and awzy-gateway.
+pub const AUDIENCES: &[&str] = &[AUDIENCE, "awzy-mcp", "awzy-gateway"];
 const KID: &str = "awzy-dev-1";
 const TOKEN_LIFETIME: Duration = Duration::from_secs(3600);
 
@@ -106,7 +109,7 @@ impl DevIdp {
     fn validate(&self, token: &str) -> Option<Value> {
         let mut v = Validation::new(Algorithm::ES256);
         v.set_issuer(&[&self.0.issuer]);
-        v.set_audience(&[AUDIENCE]);
+        v.set_audience(AUDIENCES);
         decode::<Value>(token, &self.0.decoding, &v).ok().map(|d| d.claims)
     }
 }
@@ -239,6 +242,9 @@ struct TokenParams {
     /// `actor_token`; the dev IdP takes the account ID.)
     #[serde(default)]
     actor: Option<String>,
+    /// One of [`AUDIENCES`]; default `awzy`.
+    #[serde(default)]
+    audience: Option<String>,
 }
 
 fn oauth_error(error: &str, description: &str) -> Response {
@@ -254,6 +260,11 @@ fn token_response(access: String, id_token: Option<String>) -> Response {
 }
 
 async fn token(State(idp): State<DevIdp>, Form(p): Form<TokenParams>) -> Response {
+    let audience = p.audience.clone().unwrap_or_else(|| AUDIENCE.to_string());
+    if !AUDIENCES.contains(&audience.as_str()) {
+        return oauth_error("invalid_target", &format!("audience is one of {AUDIENCES:?}"));
+    }
+    let aud = json!({ "aud": audience });
     match p.grant_type.as_str() {
         "authorization_code" => {
             let (Some(code), Some(verifier)) = (p.code, p.code_verifier) else {
@@ -274,11 +285,13 @@ async fn token(State(idp): State<DevIdp>, Form(p): Form<TokenParams>) -> Respons
                 return oauth_error("invalid_grant", "PKCE code_verifier doesn't match");
             }
             let id_token = idp.token(&pending.user, None, json!({ "nonce": pending.nonce, "azp": pending.client_id }));
-            token_response(idp.token(&pending.user, None, json!({})), Some(id_token))
+            token_response(idp.token(&pending.user, None, aud), Some(id_token))
         }
         "client_credentials" => match p.client_id {
             // RFC 9068: client_id equal to sub marks the application's own token.
-            Some(account) => token_response(idp.token(&account, None, json!({ "client_id": account })), None),
+            Some(account) => {
+                token_response(idp.token(&account, None, json!({ "client_id": account, "aud": audience })), None)
+            }
             None => oauth_error("invalid_request", "client_id (the service account) is required"),
         },
         "urn:ietf:params:oauth:grant-type:token-exchange" => {
@@ -286,7 +299,7 @@ async fn token(State(idp): State<DevIdp>, Form(p): Form<TokenParams>) -> Respons
                 return oauth_error("invalid_request", "subject_token and actor are required");
             };
             match idp.validate(&subject_token).and_then(|c| c["sub"].as_str().map(str::to_string)) {
-                Some(human) => token_response(idp.token(&human, Some(&actor), json!({})), None),
+                Some(human) => token_response(idp.token(&human, Some(&actor), aud), None),
                 None => oauth_error("invalid_grant", "subject_token is not a valid token from this IdP"),
             }
         }
@@ -361,5 +374,18 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         let claims = idp.validate(res["access_token"].as_str().unwrap()).unwrap();
         assert_eq!((claims["sub"].as_str(), claims["act"]["sub"].as_str()), (Some("bob"), Some("sales-genie")));
+    }
+
+    #[tokio::test]
+    async fn tokens_are_for_the_audience_asked_for() {
+        let idp = idp();
+        let app = router(idp.clone());
+        let (_, gateway) =
+            post_form(app.clone(), "grant_type=client_credentials&client_id=bot&audience=awzy-gateway").await;
+        assert_eq!(idp.validate(gateway["access_token"].as_str().unwrap()).unwrap()["aud"], "awzy-gateway");
+        let (_, portal) = post_form(app.clone(), "grant_type=client_credentials&client_id=bot").await;
+        assert_eq!(idp.validate(portal["access_token"].as_str().unwrap()).unwrap()["aud"], "awzy");
+        let (status, other) = post_form(app, "grant_type=client_credentials&client_id=bot&audience=elsewhere").await;
+        assert_eq!((status, other["error"].as_str()), (StatusCode::BAD_REQUEST, Some("invalid_target")));
     }
 }

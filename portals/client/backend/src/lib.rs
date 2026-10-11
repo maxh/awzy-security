@@ -193,20 +193,22 @@ pub fn schema_with(services: Services) -> ClientPortalSchema {
         .finish()
 }
 
-/// GraphQL at `/graphql` and MCP at `/mcp`, both behind sign-in, plus the unauthenticated
-/// sign-in discovery routes. `mcp_allowed_hosts` are the Host headers the MCP endpoint
-/// accepts; empty means loopback only (see AWZY_MCP_ALLOWED_HOSTS in main).
-pub fn router(services: Services, auth: Auth, mcp_allowed_hosts: Vec<String>) -> Router {
+/// GraphQL at `/graphql` and MCP at `/mcp`, each behind sign-in with its own tokens (`auth` and
+/// `mcp_auth`, ADR 0081), plus the unauthenticated sign-in discovery routes. `mcp_allowed_hosts`
+/// are the Host headers the MCP endpoint accepts; empty means loopback only (see
+/// AWZY_MCP_ALLOWED_HOSTS in main).
+pub fn router(services: Services, auth: Auth, mcp_auth: Auth, mcp_allowed_hosts: Vec<String>) -> Router {
     let signed_in = middleware::from_fn_with_state(auth.clone(), access::require_viewer);
+    let mcp_signed_in = middleware::from_fn_with_state(mcp_auth.clone(), access::require_viewer);
     let schema = schema_with(services.clone());
     // GET: subscriptions over a WebSocket (graphql-ws), or GraphiQL in a browser.
     let graphql = get(graphql_get)
         .with_state((schema.clone(), auth.clone()))
-        .merge(post(graphql).layer(signed_in.clone()).with_state(schema));
+        .merge(post(graphql).layer(signed_in).with_state(schema));
     Router::new()
         .route("/graphql", graphql)
-        .merge(mcp::router(services, mcp_allowed_hosts).layer(signed_in))
-        .merge(access::routes(auth))
+        .merge(mcp::router(services, mcp_allowed_hosts).layer(mcp_signed_in))
+        .merge(access::routes(auth, mcp_auth))
 }
 
 /// A WebSocket for subscriptions, signed in by the bearer token in its first message

@@ -22,6 +22,10 @@ pub struct GatewayConfig {
     /// What happens to tool calls while the PDP can't be reached (ADR 0030).
     #[serde(default)]
     pub outage: OutageConfig,
+    /// Where agents reach the gateway, e.g. `https://mcp.example.com`: for the OAuth metadata MCP
+    /// clients find the IdP with (ADR 0081). Unset, the gateway publishes none.
+    #[serde(default)]
+    pub public_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]

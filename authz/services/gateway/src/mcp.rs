@@ -62,6 +62,59 @@ struct Inner {
     allows: AllowCache,
     /// Who is contained, so an outage never replays an allow for them (ADR 0030).
     containments: Arc<Containments>,
+    /// The MCP client each session's `initialize` named, for `context.mcp_client` (ADR 0081).
+    sessions: SessionClients,
+}
+
+/// The client name each MCP session started with, by session ID, for the principal that started
+/// it. It's what the client says it is: a hint for policy, not proof. Bounded like the allows.
+#[derive(Default)]
+struct SessionClients(std::sync::Mutex<std::collections::HashMap<String, (String, String, std::time::Instant)>>);
+
+const SESSION_TTL: std::time::Duration = std::time::Duration::from_secs(24 * 3600);
+const SESSIONS_MAX: usize = 100_000;
+/// The longest client name passed on.
+const CLIENT_NAME_MAX: usize = 64;
+
+impl SessionClients {
+    fn record(&self, session: &str, principal: &Principal, client: &str) {
+        let mut sessions = self.0.lock().expect("sessions lock");
+        if sessions.len() >= SESSIONS_MAX {
+            sessions.retain(|_, (.., at)| at.elapsed() < SESSION_TTL);
+            if sessions.len() >= SESSIONS_MAX {
+                return;
+            }
+        }
+        sessions.insert(session.to_string(), (principal_key(principal), client.to_string(), std::time::Instant::now()));
+    }
+
+    /// The session's client, if it's this principal's session and not too old.
+    fn client(&self, session: &str, principal: &Principal) -> Option<String> {
+        let sessions = self.0.lock().expect("sessions lock");
+        let (owner, client, at) = sessions.get(session)?;
+        (*owner == principal_key(principal) && at.elapsed() < SESSION_TTL).then(|| client.clone())
+    }
+}
+
+/// `Type::id|Type::id`: the principal and the person it acts for.
+fn principal_key(principal: &Principal) -> String {
+    let human = principal.on_behalf_of.as_ref().map(|p| format!("{}::{}", p.kind, p.id)).unwrap_or_default();
+    format!("{}::{}|{human}", principal.subject.kind, principal.subject.id)
+}
+
+/// The client name in an `initialize` request, cut to printable ASCII and [`CLIENT_NAME_MAX`].
+fn initialize_client(msg: &Value) -> Option<String> {
+    if msg.get("method").and_then(Value::as_str) != Some("initialize") {
+        return None;
+    }
+    let name: String = msg
+        .pointer("/params/clientInfo/name")?
+        .as_str()?
+        .chars()
+        .filter(|c| c.is_ascii_graphic() || *c == ' ')
+        .take(CLIENT_NAME_MAX)
+        .collect();
+    Some(name.trim().to_string()).filter(|n| !n.is_empty())
 }
 
 /// Recent allows, keyed by everything that identified the call: principal, the person it acted
@@ -138,6 +191,7 @@ impl GatewayState {
             last_seen_monitor: AtomicBool::new(false),
             allows,
             containments,
+            sessions: SessionClients::default(),
         })))
     }
 
@@ -148,7 +202,28 @@ impl GatewayState {
 }
 
 pub fn router(state: GatewayState) -> Router {
-    Router::new().route("/mcp/{upstream}", any(proxy)).with_state(state)
+    Router::new()
+        .route("/mcp/{upstream}", any(proxy))
+        .route("/.well-known/oauth-protected-resource/mcp/{upstream}", axum::routing::get(resource_metadata))
+        .with_state(state)
+}
+
+/// OAuth protected resource metadata (RFC 9728) for one upstream, so an MCP client can find the
+/// IdP to sign in with on its own (ADR 0081). Only when the gateway knows its public URL.
+async fn resource_metadata(State(state): State<GatewayState>, Path(upstream): Path<String>) -> Response<Body> {
+    let (Some(_), Some(resource)) = (state.0.config.upstream(&upstream), resource_url(&state, &upstream)) else {
+        return plain(StatusCode::NOT_FOUND, format!("no sign-in metadata for {upstream:?}"));
+    };
+    json_response(json!({
+        "resource": resource,
+        "authorization_servers": [state.0.config.token.issuer],
+        "bearer_methods_supported": ["header"],
+    }))
+}
+
+/// `https://<gateway>/mcp/<upstream>`, when the gateway knows its public URL.
+fn resource_url(state: &GatewayState, upstream: &str) -> Option<String> {
+    state.0.config.public_url.as_ref().map(|u| format!("{}/mcp/{upstream}", u.trim_end_matches('/')))
 }
 
 async fn proxy(State(state): State<GatewayState>, Path(upstream): Path<String>, req: Request<Body>) -> Response<Body> {
@@ -166,7 +241,16 @@ async fn proxy(State(state): State<GatewayState>, Path(upstream): Path<String>, 
         Err(e @ IdentityError::UnregisteredServiceAccount(_)) => return plain(StatusCode::FORBIDDEN, e.to_string()),
         Err(e) => {
             let mut res = plain(StatusCode::UNAUTHORIZED, e.to_string());
-            res.headers_mut().insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
+            let challenge = match resource_url(&state, &upstream) {
+                Some(resource) => {
+                    let metadata = resource.replacen("/mcp/", "/.well-known/oauth-protected-resource/mcp/", 1);
+                    format!(r#"Bearer error="invalid_token", resource_metadata="{metadata}""#)
+                }
+                None => "Bearer".to_string(),
+            };
+            if let Ok(v) = HeaderValue::from_str(&challenge) {
+                res.headers_mut().insert(header::WWW_AUTHENTICATE, v);
+            }
             return res;
         }
     };
@@ -179,23 +263,34 @@ async fn proxy(State(state): State<GatewayState>, Path(upstream): Path<String>, 
         return plain(StatusCode::PAYLOAD_TOO_LARGE, "request body too large".into());
     };
 
+    let session = parts.headers.get("mcp-session-id").and_then(|v| v.to_str().ok()).map(str::to_string);
+    let mut initializing = None;
     if parts.method == Method::POST {
         match serde_json::from_slice::<Value>(&body) {
             Ok(Value::Array(batch)) if batch.iter().any(is_tool_call) => {
                 return jsonrpc_error(&Value::Null, -32600, "batched tools/call isn't supported by awzy-gateway");
             }
             Ok(msg) if is_tool_call(&msg) => {
-                if let Some(blocked) = authorize(&state, &up, &principal, &msg).await {
+                let client = session.as_deref().and_then(|s| state.0.sessions.client(s, &principal));
+                if let Some(blocked) = authorize(&state, &up, &principal, &msg, client.as_deref()).await {
                     return blocked;
                 }
             }
-            Ok(Value::Object(_) | Value::Array(_)) => {}
+            Ok(msg @ Value::Object(_)) => initializing = initialize_client(&msg),
+            Ok(Value::Array(_)) => {}
             // Fails closed: a body this parser refuses (nesting past its limit, a lone surrogate)
             // may still parse upstream, as a tools/call that was never checked.
             _ => return unreadable(),
         }
     }
-    forward(&state, &up, parts, body).await
+    let res = forward(&state, &up, parts, body).await;
+    // The upstream names the session in its answer to `initialize`.
+    if let Some(client) = initializing {
+        if let Some(id) = res.headers().get("mcp-session-id").and_then(|v| v.to_str().ok()) {
+            state.0.sessions.record(id, &principal, &client);
+        }
+    }
+    res
 }
 
 fn is_tool_call(msg: &Value) -> bool {
@@ -208,6 +303,7 @@ async fn authorize(
     up: &UpstreamConfig,
     principal: &Principal,
     msg: &Value,
+    client: Option<&str>,
 ) -> Option<Response<Body>> {
     let id = msg.get("id").cloned().unwrap_or(Value::Null);
     let Some(tool) = msg.pointer("/params/name").and_then(Value::as_str) else {
@@ -225,6 +321,7 @@ async fn authorize(
         resource: WireRef { r#type: entity_type::MCP_TOOL.into(), id: tool_id.clone() },
         what: format!("the call to `{tool_id}`"),
         cache_key: AllowCache::key(principal, &tool_id),
+        client,
     };
     if let Some(blocked) = check(state, up, principal, tool, &id, call, entities).await {
         return Some(blocked);
@@ -241,6 +338,7 @@ async fn authorize(
         resource: WireRef { r#type: entity_type::RESOURCE.into(), id: resource.into() },
         what: format!("`{}` on `{resource}` through `{tool_id}`", rt.action),
         cache_key: format!("{}|{}|{resource}", AllowCache::key(principal, &tool_id), rt.action),
+        client,
     };
     let entities = principal.entities.iter().map(entity_from_json).collect();
     check(state, up, principal, tool, &id, on_resource, entities).await
@@ -254,6 +352,19 @@ struct ToolCheck<'a> {
     what: String,
     /// What a recent allow is remembered under, for replay during an outage.
     cache_key: String,
+    /// The MCP client's name from its session's `initialize`, if the gateway saw it.
+    client: Option<&'a str>,
+}
+
+/// `client` is `mcp` for every call through the gateway; `mcp_client` names the MCP client, as
+/// its session's `initialize` did (ADR 0081).
+fn check_context(client: Option<&str>) -> serde_json::Map<String, Value> {
+    let mut context = serde_json::Map::new();
+    context.insert("client".into(), json!("mcp"));
+    if let Some(name) = client {
+        context.insert("mcp_client".into(), json!(name));
+    }
+    context
 }
 
 /// Asks the PDP and applies the mode. Returns the response to send instead of forwarding, if
@@ -271,7 +382,7 @@ async fn check(
         principal: Some(wire_ref(&principal.subject)),
         action: c.action.into(),
         resource: Some(c.resource.clone()),
-        context: Some(json_to_struct(json!({ "client": "mcp" }).as_object().unwrap().clone())),
+        context: Some(json_to_struct(check_context(c.client))),
         on_behalf_of: principal.on_behalf_of.as_ref().map(wire_ref),
         entities,
         human_present: principal.human_present,
@@ -518,6 +629,13 @@ mod tests {
                         seen.1.store(true, Ordering::Release);
                     }
                     let msg: Value = serde_json::from_str(&body).unwrap();
+                    if msg["method"] == "initialize" {
+                        let result = json!({ "protocolVersion": "2025-06-18", "capabilities": {} });
+                        return axum::response::IntoResponse::into_response((
+                            [("mcp-session-id", "session-1")],
+                            axum::Json(json!({ "jsonrpc": "2.0", "id": msg["id"], "result": result })),
+                        ));
+                    }
                     let result = match msg["params"]["name"].as_str() {
                         Some(tool) => {
                             seen.0.lock().unwrap().push(tool.to_string());
@@ -525,7 +643,9 @@ mod tests {
                         }
                         None => json!({ "tools": [] }),
                     };
-                    axum::Json(json!({ "jsonrpc": "2.0", "id": msg["id"], "result": result }))
+                    axum::response::IntoResponse::into_response(axum::Json(
+                        json!({ "jsonrpc": "2.0", "id": msg["id"], "result": result }),
+                    ))
                 }
             }),
         );
@@ -623,6 +743,7 @@ mod tests {
                 cached_allow_ttl_secs: 300,
             },
             service_account_registry: crate::config::Registry::Config,
+            public_url: Some("https://mcp.test".into()),
         };
         let state = GatewayState::with_containments(config, pdp, containments).unwrap();
         (router(state.clone()), down, state)
@@ -749,6 +870,55 @@ mod tests {
         let put = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"delete_file"}}"#;
         assert_eq!(send(Method::PUT, put.into()).await, StatusCode::METHOD_NOT_ALLOWED);
         assert!(seen.0.lock().unwrap().is_empty(), "nothing reached the upstream");
+    }
+
+    #[tokio::test]
+    async fn a_session_is_known_by_the_client_its_initialize_named_for_whoever_started_it() {
+        let (app, _, state) = gateway_with_containments(
+            awzy_model::EnforcementMode::Enforce,
+            start_upstream(Upstream::default()).await,
+            Arc::new(Containments::none()),
+        )
+        .await;
+        let init = json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": { "name": "claude-code\n", "version": "2" } } });
+        let req = Request::post("/mcp/drive")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {}", token("bob", None, &["engineering"])))
+            .body(Body::from(init.to_string()))
+            .unwrap();
+        assert_eq!(app.clone().oneshot(req).await.unwrap().status(), StatusCode::OK);
+
+        let bob = state.0.verifier.principal(Some(&format!("Bearer {}", token("bob", None, &[]))), &Vec::new()).await;
+        let alice =
+            state.0.verifier.principal(Some(&format!("Bearer {}", token("alice", None, &[]))), &Vec::new()).await;
+        assert_eq!(state.0.sessions.client("session-1", &bob.unwrap()).as_deref(), Some("claude-code"));
+        assert_eq!(state.0.sessions.client("session-1", &alice.unwrap()), None, "someone else's session");
+        assert_eq!(
+            check_context(Some("claude-code")),
+            json!({ "client": "mcp", "mcp_client": "claude-code" }).as_object().unwrap().clone()
+        );
+    }
+
+    #[tokio::test]
+    async fn an_mcp_client_finds_where_to_sign_in() {
+        let app = gateway(awzy_model::EnforcementMode::Enforce, start_upstream(Upstream::default()).await).await;
+        let res = app.clone().oneshot(Request::post("/mcp/drive").body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            res.headers()[header::WWW_AUTHENTICATE],
+            r#"Bearer error="invalid_token", resource_metadata="https://mcp.test/.well-known/oauth-protected-resource/mcp/drive""#
+        );
+        let get = |path: &'static str| {
+            let app = app.clone();
+            async move { app.oneshot(Request::get(path).body(Body::empty()).unwrap()).await.unwrap() }
+        };
+        let res = get("/.well-known/oauth-protected-resource/mcp/drive").await;
+        let metadata: Value =
+            serde_json::from_slice(&axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap()).unwrap();
+        assert_eq!(metadata["resource"], "https://mcp.test/mcp/drive");
+        assert_eq!(metadata["authorization_servers"], json!(["https://idp.test"]));
+        assert_eq!(get("/.well-known/oauth-protected-resource/mcp/nope").await.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]

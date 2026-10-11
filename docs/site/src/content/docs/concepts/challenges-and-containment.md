@@ -17,27 +17,25 @@ The person is whoever the request is for: the signed-in human, the person an age
 unattended service account's owner. An approval never comes from the request's own principal or
 the person it's for.
 
-Today the client portal lists requests waiting for approval only to those who may `administer`
-the challenges area: your security team, under the base policies. Someone else whom policy lets
-approve, such as a resource's owner, is told about the request when Slack is connected, but
-can't open it in the portal yet; they ask the security team, who can approve it.
+Each approver finds the requests they may approve on the client portal's Challenges page, under
+*Waiting for your approval*: a resource's owner sees requests for what they own, and the security
+team sees every request.
 
 ### Agents as approvers
 
 As agents take on more work, you may want an overseer agent to approve routine requests instead
-of asking a person each time. Name it in two policies: one lets it find what's waiting, the other
-lets it approve.
+of asking a person each time. Name it in two policies: one lets it use the challenges area, the
+other lets it approve.
 
 ```cedar
-permit (principal == ServiceAccount::"overseer", action == Action::"administer",
+permit (principal == ServiceAccount::"overseer", action == Action::"view",
         resource == PortalArea::"challenges");
 permit (principal == ServiceAccount::"overseer", action == Action::"approve", resource)
 when { resource.sensitivity == "internal" };
 ```
 
-Finding waiting requests takes `administer` on the challenges area, which also lets it see every
-challenge and contain or lift principals. Grant it only to an agent you'd trust with that, or give
-it challenge QIDs another way and grant only `approve`.
+It finds what it may approve with the portal's `challengesToApprove` query, which lists only
+requests its policies let it approve.
 
 It approves through the client portal's API with its own token, and the decision records it as the
 approver. Two limits hold whatever your policies say: an agent never approves a request its own

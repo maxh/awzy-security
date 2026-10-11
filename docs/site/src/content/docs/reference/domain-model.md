@@ -84,7 +84,8 @@ claimed; the first two come from the request's own fields and its validated toke
 | `human_present` | `Bool` | awzy | Whether a person is there to answer a challenge now: yes for a `Human`, no for a service account unless the enforcement point says so |
 | `on_behalf_of` | `Human`, optional | awzy | The person a service account acts for, from its validated token. Absent when it acts on its own authority |
 | `assigned` | `Bool`, optional | awzy | Whether the principal is on open work that links the resource. Absent when awzy doesn't know |
-| `client` | `String`, optional | The enforcement point | The calling software, such as `browser`, `cli`, or `mcp` (awzy-gateway sets `mcp`). A hint that an agent may be using a person's own credentials |
+| `client` | `String`, optional | The enforcement point | The calling software, such as `browser`, `cli`, or `mcp` (awzy-gateway sets `mcp`). A `Human` arriving through `mcp` is software holding a person's own token |
+| `mcp_client` | `String`, optional | awzy-gateway | The MCP client's name, as its session's `initialize` gave it, such as `claude-code`. What the client says it is: a hint, not proof |
 | `approving_for` | `Human`, optional | awzy-challenge | Only on an `approve` check: the person who answers for the challenged request. An agent never approves for its own owner, and without this field it can't approve at all |
 
 When an agent acts for a person, the check runs twice, once as each, and each sees its own

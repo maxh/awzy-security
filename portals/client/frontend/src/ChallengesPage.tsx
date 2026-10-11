@@ -47,6 +47,13 @@ import type { ChallengesPageResetKeyMutation } from "./__generated__/ChallengesP
 import { entityLabel, formatTime } from "./format";
 import { createCredential, getAssertion, webAuthnAvailable, webAuthnMessage } from "./webauthn";
 
+/** The challenge a notification linked to (`/challenges?challenge=<qid>`), highlighted. Read as
+ * the page renders, since signing in restores the link only after the app loads. */
+function linkedChallenge(): string | null {
+  return new URLSearchParams(window.location.search).get("challenge");
+}
+const LINKED = { outline: "2px solid var(--mantine-color-yellow-5)", borderRadius: 4 };
+
 /** The shortest justification awzy-challenge accepts. */
 const MIN_JUSTIFICATION = 20;
 
@@ -353,11 +360,39 @@ function Challenges({
           createdAt
           lastUsedAt
         }
+        toApprove: challengesToApprove {
+          id
+          principal {
+            type
+            id
+          }
+          onBehalfOf {
+            type
+            id
+          }
+          action
+          resource {
+            type
+            id
+          }
+          kinds
+          passed
+          answererId
+          justification
+          createdAt
+        }
       }
     `,
     {},
     { fetchKey, fetchPolicy: "store-and-network" },
   );
+  // A notification's link names one challenge: bring it into view once it's on the page.
+  const linked = linkedChallenge();
+  const linkedShown =
+    linked !== null && (data.pending.some((c) => c.id === linked) || data.toApprove.some((c) => c.id === linked));
+  useEffect(() => {
+    if (linked && linkedShown) document.getElementById(linked)?.scrollIntoView({ block: "center" });
+  }, [linked, linkedShown]);
   const recent = data.recent.filter((c) => c.status !== "PENDING");
   const hasKeys = data.mySecurityKeys.length > 0;
   // When the page loaded: a pass that has since run out no longer invites a retry.
@@ -374,10 +409,26 @@ function Challenges({
           </Text>
         ) : (
           data.pending.map((c) => (
-            <PendingChallenge key={c.id} challenge={c} hasKeys={hasKeys} onAnswered={onAnswered} />
+            <div key={c.id} id={c.id} style={c.id === linkedChallenge() ? LINKED : undefined}>
+              <PendingChallenge challenge={c} hasKeys={hasKeys} onAnswered={onAnswered} />
+            </div>
           ))
         )}
       </Stack>
+
+      {/* Those who administer challenges see every approval below; others, the ones policy lets them give. */}
+      {!data.canAdminister && data.toApprove.length > 0 && (
+        <Stack gap="xs">
+          <Title order={4}>Waiting for your approval</Title>
+          <Table>
+            <Table.Tbody>
+              {data.toApprove.map((c) => (
+                <Approval key={c.id} challenge={c} onChanged={onChanged} />
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Stack>
+      )}
 
       {recent.length > 0 && (
         <Stack gap="xs">
@@ -815,8 +866,9 @@ function Admin({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => voi
 }
 
 type AdminPending = ChallengesPageAdminQuery["response"]["pending"][number];
+type ToApprove = ChallengesPageQuery["response"]["toApprove"][number];
 
-function Approval({ challenge: c, onChanged }: { challenge: AdminPending; onChanged: () => void }) {
+function Approval({ challenge: c, onChanged }: { challenge: AdminPending | ToApprove; onChanged: () => void }) {
   const [commit, isSaving] = useMutation<ChallengesPageDecideMutation>(graphql`
     mutation ChallengesPageDecideMutation($input: DecideChallengeInput!) {
       decideChallenge(input: $input) {
@@ -840,7 +892,7 @@ function Approval({ challenge: c, onChanged }: { challenge: AdminPending; onChan
     });
 
   return (
-    <Table.Tr>
+    <Table.Tr id={c.id} style={c.id === linkedChallenge() ? LINKED : undefined}>
       <Table.Td style={{ whiteSpace: "nowrap" }}>{c.createdAt ? formatTime(c.createdAt) : ""}</Table.Td>
       <Table.Td>
         <Stack gap={4}>

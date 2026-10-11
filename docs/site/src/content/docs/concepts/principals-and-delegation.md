@@ -52,10 +52,11 @@ What follows from that:
 - **Only what passes an enforcement point is checked.** Tool calls through awzy-gateway, and calls
   to your apps that ask the PDP, are decided. The agent's shell commands, git pushes, and cloud
   CLI calls never reach awzy.
-- **A justification doesn't prove a person answered.** The client portal accepts the person's
-  token, and in a standard install awzy-gateway and the portal accept the same tokens. An agent
-  holding that token can answer a justification challenge, or approve a request the person may
-  approve, through the portal's API.
+- **A justification doesn't prove a person answered.** The client portal's API, its MCP
+  endpoint, and awzy-gateway each take tokens for an audience of their own, so a token the person
+  gets for the gateway or for MCP doesn't work on the portal's API. But an agent holding the
+  person's token for the portal itself can answer a justification challenge, or approve a request
+  the person may approve, as them.
 
 What still holds:
 
@@ -67,8 +68,9 @@ What still holds:
   challenges.
 - **Calls through awzy-gateway say so.** Every check from awzy-gateway carries
   `context.client == "mcp"`, so a `Human` principal arriving that way is software holding the
-  person's token. A policy can use that, for example to ask for a security key for anything
-  sensitive:
+  person's token, and `context.mcp_client` names the MCP client as its session introduced itself,
+  such as `claude-code`. The name is what the client says it is, so treat it as a hint. A policy
+  can use either, for example to ask for a security key for anything sensitive:
 
   ```cedar
   @id("agents-with-human-credentials-verify")
@@ -78,7 +80,6 @@ What still holds:
          (resource.sensitivity == "confidential" || resource.sensitivity == "crown_jewels") };
   ```
 
-  awzy-gateway doesn't tell MCP clients apart yet: every one is `mcp`.
 
 Where you can, give agents their own identity and a token exchange instead, so policies, risk, and
 challenges can tell them from their people. See [Agent builders](/workflows/agent-builders/).
