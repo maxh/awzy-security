@@ -84,6 +84,13 @@ resource "aws_eks_pod_identity_association" "collector" {
   role_arn        = aws_iam_role.collector.arn
 }
 
+# EKS takes a few seconds to apply a new association, and a pod started sooner never gets its
+# credentials: on the example install, the collector's first pod couldn't write to X-Ray.
+resource "time_sleep" "collector_identity" {
+  create_duration = "30s"
+  depends_on      = [aws_eks_pod_identity_association.collector]
+}
+
 resource "kubernetes_config_map_v1" "collector" {
   metadata {
     name      = local.collector
@@ -161,7 +168,7 @@ resource "kubernetes_deployment_v1" "collector" {
       }
     }
   }
-  depends_on = [aws_eks_pod_identity_association.collector]
+  depends_on = [time_sleep.collector_identity]
 }
 
 resource "kubernetes_service_v1" "collector" {

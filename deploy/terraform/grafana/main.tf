@@ -20,19 +20,19 @@ variable "prometheus_url" {
 
 variable "prometheus_json_data" {
   description = "Extra jsonData for the Prometheus data source, e.g. SigV4 for AMP"
-  type        = map(any)
+  type        = any
   default     = {}
 }
 
 variable "xray_json_data" {
   description = "jsonData for an X-Ray data source, for traces (ADR 0097); null for none"
-  type        = map(any)
+  type        = any
   default     = null
 }
 
 variable "cloudwatch_json_data" {
   description = "jsonData for a CloudWatch data source (Aurora, MSK, ElastiCache); null for none"
-  type        = map(any)
+  type        = any
   default     = null
 }
 
