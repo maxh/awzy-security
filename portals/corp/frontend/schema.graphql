@@ -226,6 +226,11 @@ type Mutation {
 	"""
 	registerInstall(input: RegisterInstallInput!): RegisterInstallPayload!
 	"""
+	Moves an install to another channel, or pins it to a chart version. It upgrades or rolls
+	back the next time it pulls.
+	"""
+	setInstallRelease(input: SetInstallReleaseInput!): SetInstallReleasePayload!
+	"""
 	Retires an install: its reporting and pull tokens stop working at once, it leaves the
 	fleet views, and its client and environment can be registered again.
 	"""
@@ -235,11 +240,6 @@ type Mutation {
 	tools, for 30 days, and nothing else here. Shown once.
 	"""
 	mcpToken: String!
-	"""
-	Moves an install to another channel, or pins it to a chart version. It upgrades or rolls
-	back the next time it pulls.
-	"""
-	setInstallRelease(input: SetInstallReleaseInput!): SetInstallReleasePayload!
 }
 
 interface Node {
