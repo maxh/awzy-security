@@ -125,6 +125,7 @@ it acts for; with the person's own token, as the person.
 | `propose_policy` | Save a draft, for a person to publish in the portal |
 | `get_principal` | A person or service account as the PDPs see it: attributes, every group above it, and its risk score |
 | `get_resource` | A resource as the PDPs see it: sensitivity, owner, sharing, the folders above it, and who is assigned to work on it |
+| `principal_activity` | What one principal did recently: decisions by verdict and action, resources touched, agents that acted for it, and events |
 | `get_enforcement` | The mode, and the last 24 hours' would-deny and would-challenge counts |
 | `list_investigations` | Investigations, by status |
 | `get_investigation` | One investigation, with its evidence and what the checks changed |

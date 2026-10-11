@@ -394,6 +394,100 @@ pub async fn mode_counts(
     ))
 }
 
+/// What one principal did over a window: its decisions by verdict and action, the resources they
+/// touched, the agents that acted for it, and its events.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct PrincipalActivity {
+    pub since: String,
+    pub decisions: u64,
+    pub allowed: u64,
+    pub denied: u64,
+    pub challenged: u64,
+    pub distinct_resources: u64,
+    /// Its most frequent actions in decisions, most first.
+    pub actions: Vec<(String, u64)>,
+    /// Service accounts that acted for it, by how many decisions.
+    pub agents_acting_for_it: Vec<(String, u64)>,
+    pub events: u64,
+    /// Its most frequent actions in events (apps, audit logs, awzy's own surfaces), most first.
+    pub event_actions: Vec<(String, u64)>,
+}
+
+/// [`PrincipalActivity`] for `kind::id` since `since`. Top lists hold at most ten.
+pub async fn principal_activity(
+    ch: &::clickhouse::Client,
+    kind: &str,
+    id: &str,
+    since: DateTime<Utc>,
+) -> anyhow::Result<PrincipalActivity> {
+    #[derive(::clickhouse::Row, serde::Deserialize)]
+    struct Summary {
+        decisions: u64,
+        allowed: u64,
+        denied: u64,
+        challenged: u64,
+        distinct_resources: u64,
+    }
+    #[derive(::clickhouse::Row, serde::Deserialize)]
+    struct Count {
+        key: String,
+        n: u64,
+    }
+    let at = since.timestamp_millis();
+    let window = "at >= fromUnixTimestamp64Milli(?, 'UTC')";
+    let summary: Summary = ch
+        .query(&format!(
+            "SELECT count() AS decisions, countIf(verdict = 'allow') AS allowed, countIf(verdict = 'deny') AS denied,
+                    countIf(verdict = 'challenge') AS challenged, uniqExact(resource_id) AS distinct_resources
+             FROM decisions WHERE principal_type = ? AND principal_id = ? AND {window}"
+        ))
+        .bind(kind)
+        .bind(id)
+        .bind(at)
+        .fetch_one()
+        .await?;
+    let top = |sql: String| {
+        let q = ch.query(&sql).bind(kind).bind(id).bind(at);
+        async move {
+            let rows: Vec<Count> = q.fetch_all().await?;
+            anyhow::Ok(rows.into_iter().map(|c| (c.key, c.n)).collect::<Vec<_>>())
+        }
+    };
+    let actions = top(format!(
+        "SELECT action AS key, count() AS n FROM decisions WHERE principal_type = ? AND principal_id = ? AND {window}
+         GROUP BY key ORDER BY n DESC LIMIT 10"
+    ))
+    .await?;
+    let agents = top(format!(
+        "SELECT principal_id AS key, count() AS n FROM decisions
+         WHERE on_behalf_of_type = ? AND on_behalf_of_id = ? AND {window} GROUP BY key ORDER BY n DESC LIMIT 10"
+    ))
+    .await?;
+    let event_actions = top(format!(
+        "SELECT action AS key, count() AS n FROM events WHERE principal_type = ? AND principal_id = ? AND {window}
+         GROUP BY key ORDER BY n DESC LIMIT 10"
+    ))
+    .await?;
+    let events = top(format!(
+        "SELECT '' AS key, count() AS n FROM events WHERE principal_type = ? AND principal_id = ? AND {window}"
+    ))
+    .await?
+    .first()
+    .map_or(0, |(_, n)| *n);
+    Ok(PrincipalActivity {
+        since: since.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        decisions: summary.decisions,
+        allowed: summary.allowed,
+        denied: summary.denied,
+        challenged: summary.challenged,
+        distinct_resources: summary.distinct_resources,
+        actions,
+        agents_acting_for_it: agents,
+        events,
+        event_actions,
+    })
+}
+
 /// The decision log stores challenge kinds comma-separated.
 pub fn split_challenges(s: &str) -> Vec<&str> {
     s.split(',').filter(|k| !k.is_empty()).collect()
@@ -544,6 +638,21 @@ mod tests {
             summary["enforcementSummary"],
             serde_json::json!({ "total": 5, "monitored": 5, "wouldDeny": 2, "wouldChallenge": 0, "enforcedDeny": 0 })
         );
+
+        let since = Utc::now() - chrono::Duration::hours(1);
+        let alice_did = principal_activity(
+            schema.data::<Services>().unwrap().clickhouse.as_ref().unwrap(),
+            "Human",
+            "alice",
+            since,
+        );
+        let alice_did = alice_did.await.unwrap();
+        assert_eq!(
+            (alice_did.decisions, alice_did.allowed, alice_did.denied, alice_did.distinct_resources),
+            (3, 3, 0, 3)
+        );
+        assert_eq!(alice_did.actions, [("read".to_string(), 3)]);
+        assert_eq!((alice_did.events, alice_did.agents_acting_for_it.len()), (0, 0));
         let enforced = run(r#"{ decisions(filter: { mode: ENFORCE }) { edges { node { id } } } }"#).await;
         assert!(enforced["decisions"]["edges"].as_array().unwrap().is_empty());
 
