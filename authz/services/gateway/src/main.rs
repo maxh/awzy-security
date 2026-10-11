@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
         "awzy-pdp",
     ));
     // Containments from awzy-challenge, so a PDP outage never replays an allow for a contained
-    // accessor (ADR 0030). Without it, outages replay as before.
+    // principal (ADR 0030). Without it, outages replay as before.
     let state = match std::env::var("AWZY_CHALLENGE_ADDR") {
         Ok(addr) => {
             let containments = Arc::new(Containments::awaiting_feed());

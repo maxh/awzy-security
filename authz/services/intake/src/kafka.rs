@@ -4,7 +4,7 @@
 //! Unlike the PDP's decision log, which drops records rather than slow a decision, intake
 //! answers only after Kafka has every event in the request: a log shipper retries on an error,
 //! so nothing is lost when Kafka is down, at the cost of occasional duplicates. Events are
-//! partitioned by subject so one accessor's events stay in order.
+//! partitioned by subject so one principal's events stay in order.
 
 use std::{collections::BTreeMap, time::Duration};
 

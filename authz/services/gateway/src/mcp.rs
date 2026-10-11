@@ -36,7 +36,7 @@ use hyper_util::{
 };
 use serde_json::{json, Value};
 
-use awzy_identity::{Accessor, IdentityError, Verifier};
+use awzy_identity::{IdentityError, Principal, Verifier};
 
 use crate::{
     containments::{Containments, Replay},
@@ -74,9 +74,9 @@ struct AllowCache {
 const ALLOW_CACHE_MAX: usize = 100_000;
 
 impl AllowCache {
-    fn key(accessor: &Accessor, tool_id: &str) -> String {
-        let human = accessor.on_behalf_of.as_ref().map(|p| format!("{}::{}", p.kind, p.id)).unwrap_or_default();
-        format!("{}::{}|{human}|{tool_id}", accessor.subject.kind, accessor.subject.id)
+    fn key(principal: &Principal, tool_id: &str) -> String {
+        let human = principal.on_behalf_of.as_ref().map(|p| format!("{}::{}", p.kind, p.id)).unwrap_or_default();
+        format!("{}::{}|{human}|{tool_id}", principal.subject.kind, principal.subject.id)
     }
 
     fn record(&self, key: String) {
@@ -141,7 +141,7 @@ impl GatewayState {
         })))
     }
 
-    /// Drops cached allows for calls by, or for, the contained accessors (`Type::id`).
+    /// Drops cached allows for calls by, or for, the contained principals (`Type::id`).
     pub fn forget_allows(&self, contained: &std::collections::HashSet<String>) {
         self.0.allows.forget(contained);
     }
@@ -161,7 +161,7 @@ async fn proxy(State(state): State<GatewayState>, Path(upstream): Path<String>, 
         crate::config::Registry::Config => &state.0.config.service_accounts,
         crate::config::Registry::AwzyContext => &awzy_identity::DeferToPdp,
     };
-    let accessor = match state.0.verifier.accessor(authorization, registry).await {
+    let principal = match state.0.verifier.principal(authorization, registry).await {
         Ok(a) => a,
         Err(e @ IdentityError::UnregisteredServiceAccount(_)) => return plain(StatusCode::FORBIDDEN, e.to_string()),
         Err(e) => {
@@ -180,7 +180,7 @@ async fn proxy(State(state): State<GatewayState>, Path(upstream): Path<String>, 
                 return jsonrpc_error(&Value::Null, -32600, "batched tools/call isn't supported by awzy-gateway");
             }
             Ok(msg) if is_tool_call(&msg) => {
-                if let Some(blocked) = authorize(&state, &up, &accessor, &msg).await {
+                if let Some(blocked) = authorize(&state, &up, &principal, &msg).await {
                     return blocked;
                 }
             }
@@ -198,7 +198,7 @@ fn is_tool_call(msg: &Value) -> bool {
 async fn authorize(
     state: &GatewayState,
     up: &UpstreamConfig,
-    accessor: &Accessor,
+    principal: &Principal,
     msg: &Value,
 ) -> Option<Response<Body>> {
     let id = msg.get("id").cloned().unwrap_or(Value::Null);
@@ -206,7 +206,7 @@ async fn authorize(
         return Some(jsonrpc_error(&id, -32602, "tools/call needs params.name"));
     };
     let tool_id = format!("{}/{}", up.name, tool);
-    let mut entities: Vec<Entity> = accessor.entities.iter().map(entity_from_json).collect();
+    let mut entities: Vec<Entity> = principal.entities.iter().map(entity_from_json).collect();
     entities.push(entity_from_json(&json!({
         "uid": { "type": entity_type::MCP_TOOL, "id": tool_id },
         "attrs": { "sensitivity": up.sensitivity(tool) },
@@ -216,9 +216,9 @@ async fn authorize(
         action: "call",
         resource: WireRef { r#type: entity_type::MCP_TOOL.into(), id: tool_id.clone() },
         what: format!("the call to `{tool_id}`"),
-        cache_key: AllowCache::key(accessor, &tool_id),
+        cache_key: AllowCache::key(principal, &tool_id),
     };
-    if let Some(blocked) = check(state, up, accessor, tool, &id, call, entities).await {
+    if let Some(blocked) = check(state, up, principal, tool, &id, call, entities).await {
         return Some(blocked);
     }
 
@@ -232,10 +232,10 @@ async fn authorize(
         action: &rt.action,
         resource: WireRef { r#type: entity_type::RESOURCE.into(), id: resource.into() },
         what: format!("`{}` on `{resource}` through `{tool_id}`", rt.action),
-        cache_key: format!("{}|{}|{resource}", AllowCache::key(accessor, &tool_id), rt.action),
+        cache_key: format!("{}|{}|{resource}", AllowCache::key(principal, &tool_id), rt.action),
     };
-    let entities = accessor.entities.iter().map(entity_from_json).collect();
-    check(state, up, accessor, tool, &id, on_resource, entities).await
+    let entities = principal.entities.iter().map(entity_from_json).collect();
+    check(state, up, principal, tool, &id, on_resource, entities).await
 }
 
 /// One PDP check for a tool call.
@@ -253,20 +253,20 @@ struct Check<'a> {
 async fn check(
     state: &GatewayState,
     up: &UpstreamConfig,
-    accessor: &Accessor,
+    principal: &Principal,
     tool: &str,
     id: &Value,
     c: Check<'_>,
     entities: Vec<Entity>,
 ) -> Option<Response<Body>> {
     let req = CheckRequest {
-        subject: Some(wire_ref(&accessor.subject)),
+        subject: Some(wire_ref(&principal.subject)),
         action: c.action.into(),
         resource: Some(c.resource.clone()),
         context: Some(json_to_struct(json!({ "client": "mcp" }).as_object().unwrap().clone())),
-        on_behalf_of: accessor.on_behalf_of.as_ref().map(wire_ref),
+        on_behalf_of: principal.on_behalf_of.as_ref().map(wire_ref),
         entities,
-        human_present: accessor.human_present,
+        human_present: principal.human_present,
         always_enforced: false,
     };
     match state.0.pdp.clone().check(req).await {
@@ -297,7 +297,7 @@ async fn check(
             tracing::warn!(%status, what = %c.what, "awzy-pdp unreachable; install was monitoring, forwarding");
             None
         }
-        Err(status) => outage(state, up, accessor, tool, &c, id, &status),
+        Err(status) => outage(state, up, principal, tool, &c, id, &status),
     }
 }
 
@@ -307,7 +307,7 @@ async fn check(
 fn outage(
     state: &GatewayState,
     up: &UpstreamConfig,
-    accessor: &Accessor,
+    principal: &Principal,
     tool: &str,
     c: &Check<'_>,
     id: &Value,
@@ -319,7 +319,7 @@ fn outage(
         outage.fail_open_tiers.iter().any(|f| f == t) && !crate::config::ALWAYS_FAIL_CLOSED.contains(&t)
     });
     let who: Vec<&awzy_model::EntityRef> =
-        std::iter::once(&accessor.subject).chain(accessor.on_behalf_of.as_ref()).collect();
+        std::iter::once(&principal.subject).chain(principal.on_behalf_of.as_ref()).collect();
     let containment = state.0.containments.replay(&who);
     let replay = match containment {
         Replay::Allowed if fail_open => state.0.allows.recent(&c.cache_key),
@@ -746,7 +746,7 @@ mod tests {
     }
 
     /// The drill from the platform plan's Phase 3: an outage never replays an allow for an
-    /// accessor contained before it.
+    /// principal contained before it.
     #[tokio::test]
     async fn an_outage_never_replays_an_allow_for_someone_contained_before_it() {
         let seen = Upstream::default();

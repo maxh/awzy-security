@@ -78,7 +78,7 @@ impl Driver {
         }
     }
 
-    /// The bearer token the accessor in `a` would present.
+    /// The bearer token the principal in `a` would present.
     pub fn token(&self, a: &Access) -> anyhow::Result<String> {
         let exp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() + 300;
         let mut claims = json!({

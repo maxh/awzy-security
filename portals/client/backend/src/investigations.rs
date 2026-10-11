@@ -1,4 +1,4 @@
-//! awzy-reasoner's investigations (ADR 0071): what a model found about an accessor the reasoner
+//! awzy-reasoner's investigations (ADR 0071): what a model found about a principal the reasoner
 //! flagged, after awzy's checks decided what it may do (ADR 0067). Read from awzy-context; a
 //! person closes one here once they've reviewed it.
 
@@ -162,7 +162,7 @@ pub enum InvestigationVerdict {
 pub enum InvestigationContainment {
     /// None was recommended, or awzy's checks dropped it.
     None,
-    /// For a person to decide: the accessor is privileged.
+    /// For a person to decide: the principal is privileged.
     Propose,
     /// Sent to automated containments, which apply it only when enforcing.
     Recommend,

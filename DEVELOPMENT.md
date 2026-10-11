@@ -363,7 +363,7 @@ If the PDP can't be reached in enforce mode, the gateway replays only a recent a
 listed by name in a fail-open tier; everything else fails closed, and `confidential` and
 `crown_jewels` always do ([ADR 0030](docs/adr/0030-gateway-outage-fallback.md)). Without `outage`
 nothing fails open. With `AWZY_CHALLENGE_ADDR`, the gateway follows awzy-challenge's containments:
-it forgets a contained accessor's recent allows and never replays one for them, and until the first
+it forgets a contained principal's recent allows and never replays one for them, and until the first
 list arrives it replays nothing.
 
 Installs use `"rs256_public_key_file"` with the IdP's key instead of the HS256 dev secret.
@@ -604,7 +604,7 @@ open http://localhost:3000   # Grafana, dashboard "awzy: operator"; Prometheus i
 
 The dashboards and alert rules are in `deploy/observability/`. A new metric goes in the service
 as an `awzy_server::metrics::Source`, named `awzy_<service>_<what>_<unit>`, and never with an
-accessor's, resource's, or policy's ID as a label.
+principal's, resource's, or policy's ID as a label.
 
 ### Corp portal (demos and testing only)
 

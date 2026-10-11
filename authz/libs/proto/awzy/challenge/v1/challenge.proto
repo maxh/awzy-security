@@ -20,8 +20,8 @@ service ChallengeService {
   // allows to `approve` the resource.
   rpc Decide(DecideRequest) returns (DecideResponse);
 
-  // Revokes an accessor's access until the containment is lifted, or with `monitor` records that
-  // it would have (ADR 0066). Idempotent: containing an accessor who is already contained in
+  // Revokes a principal's access until the containment is lifted, or with `monitor` records that
+  // it would have (ADR 0066). Idempotent: containing a principal who is already contained in
   // that mode returns the active containment.
   rpc Contain(ContainRequest) returns (ContainResponse);
   rpc Lift(LiftRequest) returns (LiftResponse);
@@ -204,7 +204,7 @@ message ContainRequest {
   string created_by = 3;
   // Who created it (ADR 0060).
   awzy.authz.v1.Actor created_by_actor = 4;
-  // Record it without applying it (ADR 0066). An accessor may have one monitored and one
+  // Record it without applying it (ADR 0066). A principal may have one monitored and one
   // enforced containment active at once.
   bool monitor = 5;
 }
@@ -229,7 +229,7 @@ message LiftResponse {
 message ListContainmentsRequest {
   // Only containments still in force.
   bool active_only = 1;
-  // Only this accessor's.
+  // Only this principal's.
   awzy.authz.v1.EntityRef subject = 2;
   // Default 50, at most 500.
   int32 limit = 3;

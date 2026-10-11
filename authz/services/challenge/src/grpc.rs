@@ -45,7 +45,7 @@ pub struct Access {
     humans: Allowed,
     /// Containing and lifting: the client portal, and later awzy-reasoner.
     containers: Allowed,
-    /// Following containments, so an outage never replays an allow for a contained accessor:
+    /// Following containments, so an outage never replays an allow for a contained principal:
     /// the MCP gateways (ADR 0030).
     gateways: Allowed,
 }
@@ -252,9 +252,9 @@ impl ChallengeService for Service {
             }
         }
         if created && c.monitor {
-            tracing::info!(containment_id = %c.id, subject = ?c.subject, created_by = %c.created_by, reason = %c.reason, "accessor would be contained (monitor)");
+            tracing::info!(containment_id = %c.id, subject = ?c.subject, created_by = %c.created_by, reason = %c.reason, "principal would be contained (monitor)");
         } else if created {
-            tracing::warn!(containment_id = %c.id, subject = ?c.subject, created_by = %c.created_by, reason = %c.reason, "accessor contained");
+            tracing::warn!(containment_id = %c.id, subject = ?c.subject, created_by = %c.created_by, reason = %c.reason, "principal contained");
             self.refresh_feed().await;
         }
         Ok(Response::new(ContainResponse { containment: Some(containment_to_wire(c)) }))

@@ -1,4 +1,4 @@
-//! Who did something: published a policy bundle, contained an accessor, answered a challenge
+//! Who did something: published a policy bundle, contained a principal, answered a challenge
 //! (ADR 0060). An entity, and the person it acted for when it acted for one, never a free-form
 //! string, so a reader can tell a person from a service and look either up.
 

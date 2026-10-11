@@ -16,7 +16,7 @@ at 100:
 
 A few guards keep the comparisons fair. Their own baseline counts only after 5 active days, a team
 needs 3 other active members to be compared with, and "usual" is never taken as fewer than 5
-resources a day, so a quiet day that doubles is still quiet. A resource more than 100 accessors
+resources a day, so a quiet day that doubles is still quiet. A resource more than 100 principals
 have opened is familiar to everyone.
 
 No signal alone can reach 80, the score where everything is challenged, though unfamiliar
@@ -26,7 +26,7 @@ last day; usually 4 a day".
 
 ## How policy uses it
 
-The scores travel with the directory to every PDP, and each check uses its own accessor's score
+The scores travel with the directory to every PDP, and each check uses its own principal's score
 as `context.risk_score`. When an agent acts for a person, the agent and the person are each
 judged on their own score. The base policies:
 

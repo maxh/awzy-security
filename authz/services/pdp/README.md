@@ -1,11 +1,11 @@
 # awzy-pdp · hot path
 
-The policy decision point: every enforcement point asks it whether one accessor may take one
+The policy decision point: every enforcement point asks it whether one principal may take one
 action on one resource, and it answers allow, deny, or challenge. Part of
 [awzy-authz](../../README.md).
 
 Embeds `cedar-policy` for static policy. Before evaluating policy it checks the active
-containment list, which it holds in memory and keeps current from a push feed. Accessor
+containment list, which it holds in memory and keeps current from a push feed. Principal
 entities live in an in-process snapshot. Resource entities are loaded by ID from awzy-context
 into a local cache ([ADR 0044](../../../docs/adr/0044-pdp-loads-resources-from-awzy-context.md));
 Valkey joins as a shared tier when scale requires it (see

@@ -266,7 +266,7 @@ pub struct InvestigationOut {
 impl ClientPortalMcp {
     #[tool(
         name = "list_investigations",
-        description = "awzy-reasoner's investigations of accessors it flagged, newest first: what the model found, the evidence it cited, and what awzy's checks let it do. Filter by status: needs_review, done, or closed. Read-only."
+        description = "awzy-reasoner's investigations of principals it flagged, newest first: what the model found, the evidence it cited, and what awzy's checks let it do. Filter by status: needs_review, done, or closed. Read-only."
     )]
     async fn list_investigations(
         &self,

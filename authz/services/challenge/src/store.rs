@@ -421,7 +421,7 @@ impl ChallengeStore {
     }
 
     /// Contains `subject`, or with `monitor` records that it would have (ADR 0066). Returns the
-    /// containment and whether it is new: an accessor already contained in that mode keeps their
+    /// containment and whether it is new: a principal already contained in that mode keeps their
     /// active containment.
     pub async fn contain(
         &self,

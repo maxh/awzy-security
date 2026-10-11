@@ -1,12 +1,12 @@
 ---
 title: Investigations
-description: A model looks into the accessors awzy flags, and code decides what its findings may do.
+description: A model looks into the principals awzy flags, and code decides what its findings may do.
 ---
 
 awzy's [risk scores](/concepts/risk/) and [automated containments](/concepts/challenges-and-containment/#automated-containments)
 follow fixed rules. They're cheap and can't be talked out of anything, but they can't weigh
 context, such as whether an export at quarter end is routine. Investigations add that judgment:
-a model, on your cloud's own model service, looks over what an accessor did and says what it
+a model, on your cloud's own model service, looks over what a principal did and says what it
 makes of it.
 
 Investigations are off until you [turn them on](/guides/optional-features/#investigations).
@@ -19,7 +19,7 @@ the highest score, and investigates nobody twice in 24 hours.
 
 ## What the model sees
 
-The last 24 hours of awzy's own records about that accessor:
+The last 24 hours of awzy's own records about that principal:
 
 - their latest decisions and events, as awzy recorded them;
 - the challenges sent to them, and how they were answered;
@@ -35,7 +35,7 @@ The model ends with a finding: a verdict (malicious, suspicious, benign, or inco
 score, a summary, and the evidence it relied on. Then code, not the model, decides what that
 finding may do:
 
-- **It's about this accessor.** A finding about anyone else, such as one an injected instruction
+- **It's about this principal.** A finding about anyone else, such as one an injected instruction
   steered, is thrown away.
 - **Its evidence is real.** Evidence the tools never returned is dropped. A finding left with none
   is inconclusive.
@@ -46,7 +46,7 @@ finding may do:
   recommended containment needs a malicious verdict, a score already above 40, and evidence from
   decisions, challenges, or system and cloud audit logs, not from documents or agent traces alone.
   It then goes through the automated-containments mode, so in monitor it's only recorded.
-- **Privileged accessors are only proposed.** For members of your `it` and `security` groups (you
+- **Privileged principals are only proposed.** For members of your `it` and `security` groups (you
   can change which), a containment is proposed for a person to decide, never applied.
 
 Every investigation is kept with what the checks changed, so you can see where the model and the
@@ -56,7 +56,7 @@ rules disagreed.
 
 awzy's CI runs the investigations against a model scripted to do whatever the evidence tells it.
 The test cases come from a synthetic company with known attacks and ordinary days, and plant text
-telling the model to contain someone else, to call an attack routine, or to contain the accessor
+telling the model to contain someone else, to call an attack routine, or to contain the principal
 on the planted text alone. Even that model gets none of it past the checks, on every change to
 awzy. Real models are measured separately, for how many attacks they catch and how often they
 follow an injection.
@@ -73,4 +73,4 @@ tools `list_investigations` and `get_investigation`.
 
 Each investigation is a call to your model service, billed to your cloud account. A monthly token
 budget, two million by default, caps them. When it's spent, no new investigation starts until the
-next month, and the riskiest accessors are the ones that got investigated first.
+next month, and the riskiest principals are the ones that got investigated first.

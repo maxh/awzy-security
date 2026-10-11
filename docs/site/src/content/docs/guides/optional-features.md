@@ -34,7 +34,7 @@ awzy_bot = true
 
 ### Investigations
 
-A model looks into the accessors awzy-reasoner flags. See [Investigations](/concepts/investigations/).
+A model looks into the principals awzy-reasoner flags. See [Investigations](/concepts/investigations/).
 
 ```hcl
 investigations = true

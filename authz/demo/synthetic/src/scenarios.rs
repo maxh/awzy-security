@@ -250,11 +250,11 @@ pub struct Detection {
     /// Scenario steps whose outcome was the expected one, and all of them.
     pub caught: usize,
     pub steps: usize,
-    /// Ordinary accesses (assigned work, the accessor's team, and IT's operations) that were
+    /// Ordinary accesses (assigned work, the principal's team, and IT's operations) that were
     /// challenged: false positives. Noise is out of pattern and not counted either way.
     pub ordinary_challenged: usize,
     pub ordinary: usize,
-    /// Whose accesses aren't ordinary on the day: the scenarios' accessors.
+    /// Whose accesses aren't ordinary on the day: the scenarios' principals.
     pub actors: BTreeSet<String>,
 }
 
@@ -271,7 +271,7 @@ impl Detection {
         }
     }
 
-    /// Counts `access` if it's ordinary work. The scenarios' own accessors don't count on the day:
+    /// Counts `access` if it's ordinary work. The scenarios' own principals don't count on the day:
     /// once awzy flags the foolish administrator, his routine operations ask for his key too.
     pub fn add_ordinary(&mut self, access: &Access, outcome: &Outcome) {
         if self.actors.contains(&access.subject) {
@@ -304,7 +304,7 @@ mod tests {
     };
 
     #[test]
-    fn scenario_steps_reach_documents_outside_the_accessors_work() {
+    fn scenario_steps_reach_documents_outside_the_principals_work() {
         let c = generate(Profile::Demo, 1);
         let docs: Vec<String> = scenario_resources(&c).into_iter().map(|r| r.id).collect();
         let work = work_items(&c, Profile::Demo, c.seed);
@@ -342,7 +342,7 @@ mod tests {
         ordinary.why = Why::Noise;
         d.add_ordinary(&ordinary, &Outcome::Blocked("challenge".into()));
         assert_eq!((d.caught, d.steps, d.ordinary_challenged, d.ordinary), (1, 2, 1, 2));
-        // The scenarios' own accessors aren't ordinary on the day.
+        // The scenarios' own principals aren't ordinary on the day.
         d.add_ordinary(&steps[0].access, &Outcome::Ran);
         assert_eq!(d.ordinary, 2);
     }
@@ -409,7 +409,7 @@ mod tests {
     const ELEVATED: i32 = 40;
 
     #[test]
-    fn the_scenarios_raise_their_accessors_risk_and_nobody_elses() {
+    fn the_scenarios_raise_their_principals_risk_and_nobody_elses() {
         let c = generate(Profile::Demo, 1);
         let (history, opened) = reasoner_view(&c, 20, REASONER_RUNS_AT, true);
         let human = |team: &str| ("Human".to_string(), cast(team).unwrap());

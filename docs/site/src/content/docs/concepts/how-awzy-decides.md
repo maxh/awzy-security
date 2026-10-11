@@ -1,6 +1,6 @@
 ---
 title: How awzy decides
-description: One check per action, against Cedar policy, the accessor, and the resource.
+description: One check per action, against Cedar policy, the principal, and the resource.
 ---
 
 Every request an enforcement point sends is one **check**: a *subject* (who), an *action* (what),
@@ -14,7 +14,7 @@ context:  { "human_present": false }
 ```
 
 awzy-pdp fills in what it knows: the person's groups and status from your IdP, the resource's
-sensitivity and owner from awzy-context, the accessor's current risk score, and whether there's
+sensitivity and owner from awzy-context, the principal's current risk score, and whether there's
 open work assigned to them on that resource. Then it evaluates your Cedar policies.
 
 ## Verdicts

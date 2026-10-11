@@ -3,7 +3,7 @@ title: What awzy is
 description: Beyond Zero authorization for people and AI agents.
 ---
 
-awzy decides whether one accessor may take one action on one resource, every time it happens. It
+awzy decides whether one principal may take one action on one resource, every time it happens. It
 implements the "Beyond Zero" model from Google's paper of that name: zero trust stops at the front
 door, so authorization has to follow every action after it, for people and for the AI agents
 that now act on their behalf.

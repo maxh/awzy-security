@@ -1,9 +1,9 @@
-//! Contained accessors, for the outage fallback (ADR 0030, ADR 0054).
+//! Contained principals, for the outage fallback (ADR 0030, ADR 0054).
 //!
-//! The PDP denies contained accessors itself, so this matters only while the PDP is down, when
+//! The PDP denies contained principals itself, so this matters only while the PDP is down, when
 //! the gateway replays recent allows. The gateway follows awzy-challenge's containment feed,
-//! forgets a contained accessor's cached allows as soon as the list names them, and never replays
-//! one for anyone on its last-known list. So an accessor contained before an outage is never
+//! forgets a contained principal's cached allows as soon as the list names them, and never replays
+//! one for anyone on its last-known list. So a principal contained before an outage is never
 //! replayed.
 //!
 //! The last-known list keeps counting while the feed is down. A containment issued during an
@@ -20,7 +20,7 @@ use awzy_authz_proto::challenge::v1::{challenge_service_client::ChallengeService
 use awzy_model::EntityRef;
 use awzy_service_auth::AuthChannel;
 
-/// `Type::id`, as the allow cache writes accessors.
+/// `Type::id`, as the allow cache writes principals.
 pub(crate) fn key(r: &EntityRef) -> String {
     format!("{}::{}", r.kind, r.id)
 }
@@ -32,11 +32,11 @@ pub struct Containments {
     configured: bool,
 }
 
-/// Whether a recent allow may be replayed for an accessor.
+/// Whether a recent allow may be replayed for a principal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Replay {
     Allowed,
-    /// The accessor, or the person it acts for, is contained.
+    /// The principal, or the person it acts for, is contained.
     Contained,
     /// No containment list has arrived yet, so the gateway can't tell.
     Unknown,
@@ -73,7 +73,7 @@ impl Containments {
 }
 
 /// Follows the feed forever, reconnecting after errors. `forget` drops cached allows for the
-/// accessors in each new list.
+/// principals in each new list.
 pub async fn follow(
     containments: Arc<Containments>,
     client: ChallengeServiceClient<AuthChannel>,

@@ -92,12 +92,12 @@ qid!(
     "event"
 );
 qid!(
-    /// One challenge awzy-challenge opened for a request: what the accessor must pass first.
+    /// One challenge awzy-challenge opened for a request: what the principal must pass first.
     ChallengeId,
     "challenge"
 );
 qid!(
-    /// One containment: an accessor whose access awzy-challenge revoked until it's lifted.
+    /// One containment: a principal whose access awzy-challenge revoked until it's lifted.
     ContainmentId,
     "containment"
 );

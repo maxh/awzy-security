@@ -81,7 +81,7 @@ What's waiting for people. See [Challenges and containment](/concepts/challenges
 - **Waiting for you:** challenges sent to you. Give a reason, or touch your security key.
 - **Waiting for approval,** for those who may approve: approve or reject someone else's request,
   with a note.
-- **Containments:** who is contained, and why. Contain an accessor yourself, or lift a
+- **Containments:** who is contained, and why. Contain a principal yourself, or lift a
   containment with a reason. While automated containments are in monitor, the ones awzy-reasoner
   would have made appear as "would contain": contain the person, or dismiss the record.
 - **Your security keys:** add and remove the keys you use for verification. Your first key needs
@@ -93,13 +93,13 @@ a link.
 
 ### Investigations
 
-What awzy-reasoner found when it looked into accessors it flagged, when your install has
+What awzy-reasoner found when it looked into principals it flagged, when your install has
 investigations turned on.
 
 Each one shows its verdict, its risk next to what the deterministic score said, the evidence it
 cited, what awzy's checks changed in the model's finding, and what became of any containment it
 recommended. **Needs review** lists those a person has to decide: a proposed containment of a
-privileged accessor, or a benign finding about someone the scores flag. Close an investigation
+privileged principal, or a benign finding about someone the scores flag. Close an investigation
 once you've reviewed it, with what you found. It stays, as the record of that review.
 
 ## MCP for your own agents

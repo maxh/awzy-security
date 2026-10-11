@@ -1,6 +1,6 @@
 ---
 title: Challenges and containment
-description: Asking for more than a yes or no, and stopping an accessor everywhere at once.
+description: Asking for more than a yes or no, and stopping a principal everywhere at once.
 ---
 
 ## Challenges
@@ -44,7 +44,7 @@ short window; a rejected or expired one becomes a deny.
 
 A containment revokes one person's or agent's access everywhere, until someone lifts it. Every
 PDP applies it within seconds, and enforcement points that are cut off from the PDP never replay
-a cached allow for a contained accessor. Each containment records who made it and why.
+a cached allow for a contained principal. Each containment records who made it and why.
 
 A contained person's agents are stopped with them: a request an agent makes for someone who is
 contained is denied too.

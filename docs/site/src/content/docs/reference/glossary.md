@@ -3,14 +3,13 @@ title: Glossary
 description: The words awzy uses, in one place, with where to read more.
 ---
 
-**Accessor.** Whoever a check is about: a `Human` or a `ServiceAccount`. Also called the
-*subject*. See [People, agents, and delegation](/concepts/principals-and-delegation/).
+**Accessor.** See *principal*. It's the Beyond Zero paper's word for one.
 
 **Acting for someone.** A service account working for a person, such as an AI agent prompted by
 them. Both are checked, and the stricter verdict wins, so an agent never gets more than both of
 them could. See [People, agents, and delegation](/concepts/principals-and-delegation/).
 
-**Action.** What an accessor wants to do: `read` and `write` on a resource, `call` on an MCP tool,
+**Action.** What a principal wants to do: `read` and `write` on a resource, `call` on an MCP tool,
 `view` and `administer` on a portal area, and `approve` on someone else's challenged request.
 
 **Actor.** Who did something that awzy records, such as publishing a bundle or lifting a
@@ -21,7 +20,7 @@ containment: an entity, and the person it acted for, if any. See the
 resource, such as its owner or the security team, or an agent you name. See
 [Challenges and containment](/concepts/challenges-and-containment/).
 
-**Assigned work.** Whether the accessor has open work, such as a ticket, an account, or a
+**Assigned work.** Whether the principal has open work, such as a ticket, an account, or a
 statement of work, that links the resource or a folder above it. Policies see it as
 `context.assigned`. See [work items](/reference/domain-model/#work-items).
 
@@ -72,7 +71,7 @@ MCP endpoint for your own agents.
 **Connector.** What brings resources and work items into awzy-context from your systems, such as
 Google Drive and Jira.
 
-**Containment.** A stop on everything an accessor does, until someone lifts it. A contained
+**Containment.** A stop on everything a principal does, until someone lifts it. A contained
 person's agents are stopped too. See
 [Challenges and containment](/concepts/challenges-and-containment/).
 
@@ -91,7 +90,7 @@ such as asking for a security key before a high-risk operation. See [Risk scores
 **Enforcement point.** Software that sends checks to awzy-pdp and applies the verdict: awzy-gateway
 for MCP, or your own code through the [decision API](/reference/decision-api/).
 
-**Event.** One thing an accessor did, as an app or your cloud's audit log recorded it, taken in by
+**Event.** One thing a principal did, as an app or your cloud's audit log recorded it, taken in by
 awzy-intake.
 
 **Explain.** How the client portal shows why a decision came out the way it did: the policies that
@@ -107,9 +106,9 @@ directory. Someone at elevated risk touches their security key before running on
 **Install.** One copy of awzy, in your own cloud account, that only your organization uses. See
 [Installing awzy](/guides/install/).
 
-**Investigation.** A model's look at one accessor that awzy-reasoner flagged. It ends in a finding,
+**Investigation.** A model's look at one principal that awzy-reasoner flagged. It ends in a finding,
 and awzy's checks, in code, decide what the finding may do: it can't lower a score, can't
-contain anyone the scores don't flag, and can't contain on evidence the accessor could have
+contain anyone the scores don't flag, and can't contain on evidence the principal could have
 written. Off until you turn it on.
 
 **Justification.** A challenge the person answers by saying why they need the access.
@@ -136,6 +135,10 @@ at a time. See [Writing policies](/guides/writing-policies/).
 **Portal area.** A part of the client portal that policy controls: `decisions`, `policies`,
 `enforcement`, `directory`, `challenges`, and `investigations`.
 
+**Principal.** Who a check is about: a `Human` or a `ServiceAccount`, written `principal` in your
+policies (`principal is Human`). The decision API calls it the *subject*. See
+[People, agents, and delegation](/concepts/principals-and-delegation/).
+
 **QID.** The ID awzy gives its own records: the record's type, an underscore, and a UUID, such as
 `decision_0199a8f2-…`. See the [domain model](/reference/domain-model/#qids).
 
@@ -159,12 +162,12 @@ pass a verification challenge.
 **Service account.** Anything non-human with its own credentials: a backend service, a scheduled
 job, an AI agent. It has an accountable owner, and one that isn't registered is denied.
 
-**Subject.** See *accessor*.
+**Subject.** See *principal*.
 
 **Unclassified.** A resource that no label or classifier has placed yet. It gets your default tier,
 and policies can challenge it.
 
-**Unfamiliar territory.** Resources an accessor opened that neither they nor anyone on their team
+**Unfamiliar territory.** Resources a principal opened that neither they nor anyone on their team
 had opened in the 30 days before. A few are ordinary; more raise their risk score. See
 [Risk scores](/concepts/risk/).
 

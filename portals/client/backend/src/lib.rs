@@ -269,7 +269,7 @@ pub(crate) mod testing {
     }
 
     pub(crate) fn human(id: &str, group: &str) -> Viewer {
-        Viewer(Arc::new(awzy_identity::Accessor::human(id, None, &[group.to_string()])))
+        Viewer(Arc::new(awzy_identity::Principal::human(id, None, &[group.to_string()])))
     }
 
     /// Runs `query` as `viewer`; panics on GraphQL errors.

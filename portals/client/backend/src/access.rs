@@ -17,7 +17,7 @@ use awzy_authz_proto::{
     authz::v1::{CheckRequest, EntityRef as WireRef, Verdict},
     entity_from_json, json_to_struct,
 };
-use awzy_identity::{Accessor, ServiceAccountConfig, TokenConfig, TokenKey, Verifier};
+use awzy_identity::{Principal, ServiceAccountConfig, TokenConfig, TokenKey, Verifier};
 use awzy_model::entity_type;
 use axum::{
     extract::{Request, State},
@@ -33,12 +33,12 @@ use crate::Services;
 
 /// The signed-in caller of one request.
 #[derive(Clone, Debug)]
-pub struct Viewer(pub Arc<Accessor>);
+pub struct Viewer(pub Arc<Principal>);
 
 impl std::ops::Deref for Viewer {
-    type Target = Accessor;
+    type Target = Principal;
 
-    fn deref(&self) -> &Accessor {
+    fn deref(&self) -> &Principal {
         &self.0
     }
 }
@@ -239,7 +239,7 @@ impl Auth {
     pub async fn viewer(&self, authorization: Option<&str>) -> Result<Viewer, String> {
         let registry: &dyn awzy_identity::ServiceAccounts =
             if self.0.defer_registry { &awzy_identity::DeferToPdp } else { &self.0.service_accounts };
-        self.0.verifier.accessor(authorization, registry).await.map(|a| Viewer(Arc::new(a))).map_err(|e| e.to_string())
+        self.0.verifier.principal(authorization, registry).await.map(|a| Viewer(Arc::new(a))).map_err(|e| e.to_string())
     }
 }
 

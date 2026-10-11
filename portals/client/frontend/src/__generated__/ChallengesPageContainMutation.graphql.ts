@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<563e616a6a3749b83ea6f176fbbb3f0e>>
+ * @generated SignedSource<<263043374d6274ae1571d19a9f9b744e>>
  * @lightSyntaxTransform
  */
 
@@ -8,7 +8,7 @@
 // @ts-nocheck
 
 import { ConcreteRequest } from 'relay-runtime';
-export type ContainAccessorInput = {
+export type ContainPrincipalInput = {
   reason: string;
   subject: EntityRefInput;
 };
@@ -17,10 +17,10 @@ export type EntityRefInput = {
   type: string;
 };
 export type ChallengesPageContainMutation$variables = {
-  input: ContainAccessorInput;
+  input: ContainPrincipalInput;
 };
 export type ChallengesPageContainMutation$data = {
-  readonly containAccessor: {
+  readonly containPrincipal: {
     readonly containment: {
       readonly id: string;
     };
@@ -51,7 +51,7 @@ v1 = [
     ],
     "concreteType": "ContainmentPayload",
     "kind": "LinkedField",
-    "name": "containAccessor",
+    "name": "containPrincipal",
     "plural": false,
     "selections": [
       {
@@ -94,16 +94,16 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "645215a24e5d2f3d248e273866b627c8",
+    "cacheID": "6a7e349057284fced35207ad4bcee167",
     "id": null,
     "metadata": {},
     "name": "ChallengesPageContainMutation",
     "operationKind": "mutation",
-    "text": "mutation ChallengesPageContainMutation(\n  $input: ContainAccessorInput!\n) {\n  containAccessor(input: $input) {\n    containment {\n      id\n    }\n  }\n}\n"
+    "text": "mutation ChallengesPageContainMutation(\n  $input: ContainPrincipalInput!\n) {\n  containPrincipal(input: $input) {\n    containment {\n      id\n    }\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "bd86084bdfdf8f4f93c195ca7b2f8b48";
+(node as any).hash = "ea3644a9c475df369e2531b6c6467af2";
 
 export default node;

@@ -2,7 +2,7 @@
 //!
 //! - Anyone who may `view` the challenges area answers the challenges sent to them, and may
 //!   approve someone else's request where policy lets them (awzy-challenge asks the PDP).
-//! - Those who may `administer` it see every challenge and contain or lift accessors.
+//! - Those who may `administer` it see every challenge and contain or lift principals.
 //!
 //! Only a person answers or approves: a service account signed in, or acting for someone, is
 //! refused, so an agent can never pass its own challenge.
@@ -197,7 +197,7 @@ impl Challenge {
     }
 }
 
-/// An accessor whose access is revoked until a person lifts it.
+/// A principal whose access is revoked until a person lifts it.
 pub struct Containment(pub WireContainment);
 
 #[Object]
@@ -235,7 +235,7 @@ impl Containment {
     async fn lift_reason(&self) -> Option<&str> {
         Some(self.0.lift_reason.as_str()).filter(|s| !s.is_empty())
     }
-    /// Recorded but not applied: awzy-reasoner would have contained this accessor, and automated
+    /// Recorded but not applied: awzy-reasoner would have contained this principal, and automated
     /// containments are in monitor (ADR 0066). Lifting it dismisses it.
     async fn monitor(&self) -> bool {
         self.0.monitor
@@ -345,7 +345,7 @@ pub struct EntityRefInput {
 }
 
 #[derive(InputObject)]
-pub struct ContainAccessorInput {
+pub struct ContainPrincipalInput {
     pub subject: EntityRefInput,
     pub reason: String,
 }
@@ -403,8 +403,8 @@ impl ChallengeMutation {
         Ok(ChallengePayload { challenge: Challenge(c.ok_or("awzy-challenge returned no challenge")?) })
     }
 
-    /// Revokes an accessor's access until it's lifted. Every PDP applies it within seconds.
-    async fn contain_accessor(&self, ctx: &Context<'_>, input: ContainAccessorInput) -> Result<ContainmentPayload> {
+    /// Revokes a principal's access until it's lifted. Every PDP applies it within seconds.
+    async fn contain_principal(&self, ctx: &Context<'_>, input: ContainPrincipalInput) -> Result<ContainmentPayload> {
         let viewer = require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
         let req = ContainRequest {
             subject: Some(awzy_authz_proto::authz::v1::EntityRef { r#type: input.subject.kind, id: input.subject.id }),
@@ -546,10 +546,10 @@ mod tests {
             json!({ "status": "PASSED", "decidedBy": { "id": "alice" } })
         );
 
-        let contain = r#"mutation { containAccessor(input: { subject: { type: "ServiceAccount", id: "sales-genie" },
+        let contain = r#"mutation { containPrincipal(input: { subject: { type: "ServiceAccount", id: "sales-genie" },
             reason: "bulk export of the pipeline" }) { containment { id createdBy { type id } liftedAt } } }"#;
         assert!(run_err(&schema, &bob, contain).await.contains("may not administer challenges"));
-        let c = run(&schema, &alice, contain).await["containAccessor"]["containment"].clone();
+        let c = run(&schema, &alice, contain).await["containPrincipal"]["containment"].clone();
         assert_eq!((&c["createdBy"], &c["liftedAt"]), (&json!({ "type": "Human", "id": "alice" }), &json!(null)));
         let active = run(&schema, &alice, "{ containments { id subject { type id } } }").await;
         assert_eq!(
@@ -598,7 +598,7 @@ mod tests {
 
     #[test]
     fn only_a_person_answers() {
-        let mut agent = awzy_identity::Accessor::human("bob", None, &[]);
+        let mut agent = awzy_identity::Principal::human("bob", None, &[]);
         agent.subject = awzy_model::EntityRef::new("ServiceAccount", "sales-genie");
         agent.on_behalf_of = Some(awzy_model::EntityRef::new("Human", "bob"));
         let err = answering_human(&Viewer(Arc::new(agent))).unwrap_err();

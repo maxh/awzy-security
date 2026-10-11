@@ -130,7 +130,7 @@ struct Actor {
 
 /// The validated caller, as the PDP needs it.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Accessor {
+pub struct Principal {
     pub subject: EntityRef,
     pub on_behalf_of: Option<EntityRef>,
     pub human_present: Option<bool>,
@@ -140,10 +140,10 @@ pub struct Accessor {
     pub entities: Vec<Value>,
 }
 
-impl Accessor {
+impl Principal {
     /// A person acting for themselves, in `groups`.
     pub fn human(id: &str, name: Option<String>, groups: &[String]) -> Self {
-        Accessor {
+        Principal {
             subject: EntityRef::new(entity_type::HUMAN, id),
             on_behalf_of: None,
             human_present: None,
@@ -198,11 +198,11 @@ impl Verifier {
         validation
     }
 
-    pub async fn accessor<R: ServiceAccounts + ?Sized>(
+    pub async fn principal<R: ServiceAccounts + ?Sized>(
         &self,
         authorization: Option<&str>,
         registry: &R,
-    ) -> Result<Accessor, IdentityError> {
+    ) -> Result<Principal, IdentityError> {
         let token = authorization.and_then(|h| h.strip_prefix("Bearer ")).ok_or(IdentityError::Missing)?;
         let invalid = |e: jsonwebtoken::errors::Error| IdentityError::Invalid(e.to_string());
         let claims = match &self.keys {
@@ -228,11 +228,14 @@ impl Verifier {
                 }
             }
         }
-        accessor_from_claims(claims, registry)
+        principal_from_claims(claims, registry)
     }
 }
 
-fn accessor_from_claims<R: ServiceAccounts + ?Sized>(claims: Claims, registry: &R) -> Result<Accessor, IdentityError> {
+fn principal_from_claims<R: ServiceAccounts + ?Sized>(
+    claims: Claims,
+    registry: &R,
+) -> Result<Principal, IdentityError> {
     let human = |id: &str, groups: &[String]| entity(entity_type::HUMAN, id, json!({}), groups);
     let service_account = |id: &str| {
         if registry.defers_to_pdp() {
@@ -245,7 +248,7 @@ fn accessor_from_claims<R: ServiceAccounts + ?Sized>(claims: Claims, registry: &
     };
 
     Ok(match claims.act {
-        Some(actor) => Accessor {
+        Some(actor) => Principal {
             subject: EntityRef::new(entity_type::SERVICE_ACCOUNT, &actor.sub),
             on_behalf_of: Some(EntityRef::new(entity_type::HUMAN, &claims.sub)),
             human_present: claims.awzy_human_present,
@@ -255,7 +258,7 @@ fn accessor_from_claims<R: ServiceAccounts + ?Sized>(claims: Claims, registry: &
         None if registry.service_account(&claims.sub).is_some()
             || (registry.defers_to_pdp() && is_client_credentials(&claims)) =>
         {
-            Accessor {
+            Principal {
                 subject: EntityRef::new(entity_type::SERVICE_ACCOUNT, &claims.sub),
                 on_behalf_of: None,
                 human_present: claims.awzy_human_present,
@@ -263,7 +266,7 @@ fn accessor_from_claims<R: ServiceAccounts + ?Sized>(claims: Claims, registry: &
                 entities: vec![service_account(&claims.sub)?],
             }
         }
-        None => Accessor {
+        None => Principal {
             subject: EntityRef::new(entity_type::HUMAN, &claims.sub),
             on_behalf_of: None,
             human_present: claims.awzy_human_present,
@@ -345,7 +348,7 @@ mod tests {
         let bearer = |t: String| format!("Bearer {t}");
 
         let alice = token(&key, "k1", claims("alice", json!({ "groups": ["security"], "name": "Alice" })));
-        let a = verifier.accessor(Some(&bearer(alice)), &registry).await.unwrap();
+        let a = verifier.principal(Some(&bearer(alice)), &registry).await.unwrap();
         assert_eq!(
             (a.subject.kind.as_str(), a.subject.id.as_str(), a.actor()),
             ("Human", "alice", awzy_model::Actor::human("alice"))
@@ -354,19 +357,25 @@ mod tests {
         assert_eq!(a.entities[0]["parents"][0]["id"], "security");
 
         let delegated = token(&key, "k1", claims("alice", json!({ "act": { "sub": "sales-genie" } })));
-        let d = verifier.accessor(Some(&bearer(delegated)), &registry).await.unwrap();
+        let d = verifier.principal(Some(&bearer(delegated)), &registry).await.unwrap();
         assert_eq!(d.subject, EntityRef::new("ServiceAccount", "sales-genie"));
         assert_eq!(d.actor().to_string(), "ServiceAccount::sales-genie for Human::alice");
 
         let wrong_kid = token(&key, "k2", claims("alice", json!({})));
-        assert!(matches!(verifier.accessor(Some(&bearer(wrong_kid)), &registry).await, Err(IdentityError::Invalid(_))));
+        assert!(matches!(
+            verifier.principal(Some(&bearer(wrong_kid)), &registry).await,
+            Err(IdentityError::Invalid(_))
+        ));
         let wrong_aud = token(
             &key,
             "k1",
             json!({ "iss": "https://idp.test", "aud": "other", "sub": "alice", "exp": 4_000_000_000_u64 }),
         );
-        assert!(matches!(verifier.accessor(Some(&bearer(wrong_aud)), &registry).await, Err(IdentityError::Invalid(_))));
-        assert!(matches!(verifier.accessor(None, &registry).await, Err(IdentityError::Missing)));
+        assert!(matches!(
+            verifier.principal(Some(&bearer(wrong_aud)), &registry).await,
+            Err(IdentityError::Invalid(_))
+        ));
+        assert!(matches!(verifier.principal(None, &registry).await, Err(IdentityError::Missing)));
 
         // Okta-style: an opaque sub, the person identified by email as awzy-context knows them.
         let by_email = Verifier::new(&TokenConfig {
@@ -378,30 +387,30 @@ mod tests {
         })
         .unwrap();
         let okta = token(&key, "k1", claims("00u1abc", json!({ "email": "alice@acme.com" })));
-        let a = by_email.accessor(Some(&bearer(okta)), &registry).await.unwrap();
+        let a = by_email.principal(Some(&bearer(okta)), &registry).await.unwrap();
         assert_eq!(a.subject, EntityRef::new("Human", "alice@acme.com"));
         let no_email = token(&key, "k1", claims("00u1abc", json!({})));
-        assert!(matches!(by_email.accessor(Some(&bearer(no_email)), &registry).await, Err(IdentityError::Invalid(_))));
+        assert!(matches!(by_email.principal(Some(&bearer(no_email)), &registry).await, Err(IdentityError::Invalid(_))));
 
         // With the registry deferred to the PDP: accounts pass through as bare entities, and an
         // application's own token is recognized as a service account, not a person.
         let delegated = token(&key, "k1", claims("alice", json!({ "act": { "sub": "anything-bot" } })));
-        let d = verifier.accessor(Some(&bearer(delegated)), &DeferToPdp).await.unwrap();
+        let d = verifier.principal(Some(&bearer(delegated)), &DeferToPdp).await.unwrap();
         assert_eq!(d.subject, EntityRef::new("ServiceAccount", "anything-bot"));
         assert_eq!(d.entities[0]["attrs"], json!({}), "the PDP fills it in from awzy-context, or denies it");
         let app = token(&key, "k1", claims("nightly-sync", json!({ "client_id": "nightly-sync" })));
         assert_eq!(
-            verifier.accessor(Some(&bearer(app)), &DeferToPdp).await.unwrap().subject,
+            verifier.principal(Some(&bearer(app)), &DeferToPdp).await.unwrap().subject,
             EntityRef::new("ServiceAccount", "nightly-sync")
         );
         let entra_app = token(&key, "k1", claims("5f1c-app", json!({ "idtyp": "app" })));
         assert_eq!(
-            verifier.accessor(Some(&bearer(entra_app)), &DeferToPdp).await.unwrap().subject.kind,
+            verifier.principal(Some(&bearer(entra_app)), &DeferToPdp).await.unwrap().subject.kind,
             "ServiceAccount"
         );
         let human = token(&key, "k1", claims("bob", json!({ "client_id": "portal" })));
         assert_eq!(
-            verifier.accessor(Some(&bearer(human)), &DeferToPdp).await.unwrap().subject,
+            verifier.principal(Some(&bearer(human)), &DeferToPdp).await.unwrap().subject,
             EntityRef::new("Human", "bob")
         );
     }
