@@ -58,11 +58,11 @@ if [ -n "$missing" ]; then
   exit 1
 fi
 
-# Build every image in one command, as top-level targets so their files are local even with
-# a remote cache, and find each one's OCI layout.
+# Build every image in one command, optimized (--config=release), as top-level targets so their
+# files are local even with a remote cache, and find each one's OCI layout.
 pkgs=$(cut -d' ' -f1 <<< "$targets")
-bazel build --config=ci $(sed 's/$/:image_index/' <<< "$pkgs") $(sed 's/$/:image_push/' <<< "$pkgs") </dev/null
-layouts=$(bazel cquery --config=ci "set($(sed 's/$/:image_index/' <<< "$pkgs" | tr '\n' ' '))" \
+bazel build --config=ci --config=release $(sed 's/$/:image_index/' <<< "$pkgs") $(sed 's/$/:image_push/' <<< "$pkgs") </dev/null
+layouts=$(bazel cquery --config=ci --config=release "set($(sed 's/$/:image_index/' <<< "$pkgs" | tr '\n' ' '))" \
   --output=starlark --starlark:expr='str(target.label).removeprefix("@@") + " " + target.files.to_list()[0].path' \
   2>/dev/null </dev/null)
 
@@ -72,7 +72,7 @@ scripts=$(mktemp -d)
 trap 'rm -rf "$scripts"' EXIT
 while read -r pkg repo; do
   name=$(tr '/:' '__' <<< "${pkg#//}")
-  bazel run --config=ci --script_path="$scripts/$name.sh" "$pkg:image_push" </dev/null >&2
+  bazel run --config=ci --config=release --script_path="$scripts/$name.sh" "$pkg:image_push" </dev/null >&2
   layout=$(awk -v l="$pkg:image_index" '$1 == l { print $2 }' <<< "$layouts")
   digest=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1] + "/index.json"))["manifests"][0]["digest"])' "$layout")
   echo "$name $repo $digest"

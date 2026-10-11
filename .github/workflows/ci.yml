@@ -98,8 +98,8 @@ jobs:
         if: always()
         run: df -h /
 
-  # Tests everything, and on main publishes from the same Bazel output instead of
-  # rebuilding on another runner.
+  # Tests everything, and on main publishes on the same runner. Images are optimized builds
+  # (--config=release), so publishing compiles again; the remote cache keeps that to what changed.
   bazel:
     needs: changes
     if: needs.changes.outputs.code == 'true'
