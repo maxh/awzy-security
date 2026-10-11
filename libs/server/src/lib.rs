@@ -185,7 +185,9 @@ fn jittered(age: Duration) -> Duration {
 /// enforcement point's check, through the PDP, to awzy-context and awzy-challenge.
 async fn traced(req: axum::extract::Request, next: axum::middleware::Next) -> axum::response::Response {
     use tracing::Instrument;
-    let span = tracing::info_span!("request", method = %req.method(), path = %req.uri().path());
+    // A server span, so trace backends show each service's part of a call as its own (X-Ray makes
+    // one segment per service instead of nesting the PDP's check inside the gateway's).
+    let span = tracing::info_span!("request", otel.kind = "server", method = %req.method(), path = %req.uri().path());
     awzy_telemetry::continue_trace(&span, |k| req.headers().get(k).and_then(|v| v.to_str().ok()).map(str::to_string));
     next.run(req).instrument(span).await
 }

@@ -1,6 +1,5 @@
 # AMP's managed scraper: agentless, so nothing more runs in the cluster. It finds pods through the
-# Kubernetes API, with the access entry and read-only role below, and scrapes them from the
-# cluster's own subnets.
+# Kubernetes API, with the read-only role below, and scrapes them from the cluster's own subnets.
 resource "aws_prometheus_scraper" "awzy" {
   alias                = var.name
   scrape_configuration = templatefile("${path.module}/scrape.yaml.tftpl", { namespaces = var.namespaces })
@@ -20,16 +19,11 @@ resource "aws_prometheus_scraper" "awzy" {
   }
 }
 
+# Creating the scraper gives its service-linked role an EKS access entry of its own; making
+# another fails ("invalid principal"). The role below is bound to the user name AMP's
+# documentation gives the scraper.
 locals {
-  # The scraper's service-linked role, without its path, as an EKS access entry takes it.
-  scraper_role = replace(aws_prometheus_scraper.awzy.role_arn, "/role\\/aws-service-role\\/[^/]+\\//", "role/")
   scraper_user = "aps-collector-user"
-}
-
-resource "aws_eks_access_entry" "scraper" {
-  cluster_name  = var.network.cluster_name
-  principal_arn = local.scraper_role
-  user_name     = local.scraper_user
 }
 
 resource "kubernetes_cluster_role_v1" "scraper" {
