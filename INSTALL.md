@@ -201,7 +201,10 @@ the cluster on it.
   version the channel names within minutes of awzy moving it. `fast` gets every release as it's
   published; a release reaches `stable` after it has run on `fast` for at least a day and awzy
   promotes it. A pinned install stays on its version. Setting `chart_version`
-  to an exact version and applying bootstrap again holds any install there. If a sync failed (a hook
+  to an exact version and applying bootstrap again holds any install there, and setting an earlier
+  one rolls it back. Apply bootstrap from the same awzy commit as the chart: a release can change
+  what bootstrap makes for it (the policy signing key moved to KMS this way). Upgrades and
+  rollbacks were tested on the example install under load (the deployment plan's step 4). If a sync failed (a hook
   Job that kept failing, say), Argo CD keeps retrying that revision after you move on; stop it
   with `kubectl -n awzy-ops patch application awzy --type merge -p
   '{"status":{"operationState":{"phase":"Terminating"}}}'` and the next sync takes the new one.
