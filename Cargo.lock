@@ -703,6 +703,7 @@ dependencies = [
 name = "awzy-activity"
 version = "0.1.0"
 dependencies = [
+ "awzy-http",
  "awzy-model",
  "axum",
  "bytes",
@@ -736,6 +737,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "awzy-authz-proto",
+ "awzy-http",
  "awzy-migrations",
  "awzy-model",
  "awzy-pdp",
@@ -892,6 +894,7 @@ dependencies = [
  "async-graphql",
  "async-graphql-axum",
  "awzy-heartbeat",
+ "awzy-http",
  "awzy-migrations",
  "awzy-model",
  "awzy-portal",
@@ -968,6 +971,7 @@ dependencies = [
  "awzy-activity",
  "awzy-authz-proto",
  "awzy-challenge",
+ "awzy-http",
  "awzy-identity",
  "awzy-model",
  "awzy-pdp",
@@ -1023,6 +1027,7 @@ name = "awzy-identity"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "awzy-http",
  "awzy-model",
  "axum",
  "base64 0.22.1",
@@ -1134,6 +1139,7 @@ dependencies = [
  "anyhow",
  "arc-swap",
  "awzy-authz-proto",
+ "awzy-http",
  "awzy-kafka",
  "awzy-model",
  "awzy-server",
@@ -1209,6 +1215,7 @@ dependencies = [
  "anyhow",
  "awzy-authz-proto",
  "awzy-clickhouse",
+ "awzy-http",
  "awzy-llm",
  "awzy-model",
  "awzy-server",
@@ -1234,6 +1241,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "argon2",
+ "awzy-http",
  "awzy-migrations",
  "awzy-model",
  "awzy-server",
@@ -1372,6 +1380,7 @@ dependencies = [
  "awzy-context",
  "awzy-dev-idp",
  "awzy-gateway",
+ "awzy-http",
  "awzy-model",
  "awzy-pdp",
  "awzy-reasoner",
