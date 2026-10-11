@@ -13,10 +13,6 @@ use anyhow::Context;
 use bytes::Bytes;
 use chrono::{DateTime, Duration, Utc};
 use http_body_util::{BodyExt, Full};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
 
 use crate::fleet::{FleetStore, Health, InstallRecord};
 
@@ -34,7 +30,7 @@ pub trait Notifier: Send + Sync + 'static {
 /// A Slack incoming webhook (AWZY_CORP_PORTAL_ALERTS_SLACK_WEBHOOK_URL).
 pub struct SlackWebhook {
     url: String,
-    client: Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>,
+    client: awzy_http::Client,
 }
 
 impl SlackWebhook {
@@ -44,9 +40,7 @@ impl SlackWebhook {
         if !url.starts_with("https://hooks.slack.com/") {
             return None;
         }
-        let _ = rustls::crypto::ring::default_provider().install_default();
-        let https = hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_only().enable_http1().build();
-        Some(Self { url: url.to_string(), client: Client::builder(TokioExecutor::new()).build(https) })
+        Some(Self { url: url.to_string(), client: awzy_http::client() })
     }
 }
 

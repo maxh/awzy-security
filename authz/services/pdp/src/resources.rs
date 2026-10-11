@@ -30,11 +30,7 @@ use std::{
 
 use awzy_model::{entity_type, EntityRef};
 use bytes::Bytes;
-use http_body_util::{BodyExt, Empty};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
+use http_body_util::{BodyExt, Full};
 use serde_json::{json, Value};
 
 /// The tier a resource awzy-context doesn't know gets. Matches awzy-context's default for one
@@ -86,7 +82,7 @@ impl Cached {
 pub struct Resources {
     /// awzy-context's base URL; `None` when the PDP runs without it.
     endpoint: Option<String>,
-    client: Client<HttpConnector, Empty<Bytes>>,
+    client: awzy_http::Client,
     /// This process's service token for awzy-context (ADR 0055).
     tokens: awzy_service_auth::TokenSource,
     cache: RwLock<HashMap<String, Cached>>,
@@ -110,7 +106,7 @@ impl Resources {
     fn new(endpoint: Option<String>, ttl: Duration, unknown_ttl: Duration) -> Self {
         Self {
             endpoint: endpoint.map(|e| e.trim_end_matches('/').to_string()),
-            client: Client::builder(TokioExecutor::new()).build_http(),
+            client: awzy_http::client(),
             tokens: awzy_service_auth::TokenSource::from_env(),
             cache: RwLock::default(),
             ttl,

@@ -10,10 +10,6 @@ use anyhow::{bail, Context};
 use axum::http::{header, Method, Request};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
 use serde_json::{json, Value};
 
 use crate::{activity::Principal, Scored};
@@ -24,17 +20,13 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 
 pub struct ContextClient {
     base_url: String,
-    http: Client<HttpConnector, Full<Bytes>>,
+    http: awzy_http::Client,
     tokens: awzy_service_auth::TokenSource,
 }
 
 impl ContextClient {
     pub fn new(base_url: &str, tokens: awzy_service_auth::TokenSource) -> Self {
-        Self {
-            base_url: base_url.trim_end_matches('/').to_string(),
-            http: Client::builder(TokioExecutor::new()).build_http(),
-            tokens,
-        }
+        Self { base_url: base_url.trim_end_matches('/').to_string(), http: awzy_http::client(), tokens }
     }
 
     async fn send(&self, method: Method, path: &str, body: Option<Value>) -> anyhow::Result<Value> {

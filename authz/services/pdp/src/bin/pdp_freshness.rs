@@ -24,10 +24,6 @@ use awzy_authz_proto::{
 use awzy_service_auth::{grpc_channel, AuthChannel};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
 use serde_json::{json, Value};
 use tonic::transport::Channel;
 
@@ -142,7 +138,7 @@ fn verdict(v: Verdict) -> impl Fn(&CheckResponse) -> bool {
 struct Scim {
     base: String,
     token: String,
-    http: Client<HttpConnector, Full<Bytes>>,
+    http: awzy_http::Client,
 }
 
 impl Scim {
@@ -278,7 +274,7 @@ async fn main() -> anyhow::Result<()> {
     let scim = Scim {
         base: var("AWZY_CONTEXT_URL")?.trim_end_matches('/').to_string(),
         token: var("AWZY_SCIM_TOKEN")?,
-        http: Client::builder(TokioExecutor::new()).build_http(),
+        http: awzy_http::client(),
     };
 
     // The probe person and group, the person not yet in the group; then wait until the PDP's
