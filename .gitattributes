@@ -2,3 +2,4 @@
 # afterwards instead of merging by hand (tools/git-merge-lockfile; registered by tools/git-setup).
 MODULE.bazel.lock merge=awzy-lockfile
 Cargo.lock merge=awzy-lockfile
+cargo-bazel-lock.json merge=awzy-lockfile

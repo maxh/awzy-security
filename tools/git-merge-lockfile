@@ -1,6 +1,6 @@
 #!/bin/sh
-# Git merge driver for the lockfiles Bazel's crate_universe generates (MODULE.bazel.lock,
-# Cargo.lock). Merging them by hand is error-prone and both are reproducible, so on a conflict it
+# Git merge driver for the lockfiles Bazel and its crate_universe generate (MODULE.bazel.lock,
+# Cargo.lock, cargo-bazel-lock.json). Merging them by hand is error-prone and both are reproducible, so on a conflict it
 # keeps the side being merged onto (main, during a rebase) and leaves a note; the post-rewrite and
 # post-merge hooks then re-pin from every Cargo.toml and commit the result.
 #

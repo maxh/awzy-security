@@ -11,6 +11,7 @@ on:
       - "**/*.rs"
       - "**/Cargo.toml"
       - "Cargo.lock"
+      - "cargo-bazel-lock.json"
       - "MODULE.bazel"
       - "libs/model/**"
       - "libs/portal/**"
