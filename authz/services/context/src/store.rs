@@ -259,6 +259,12 @@ impl ContextStore {
         migrator().run(&self.pool).await
     }
 
+    /// At startup: apply the migrations, or with `AWZY_POSTGRES_MIGRATE=check` (an install, whose
+    /// release Job applied them) only check they're applied (ADR 0083).
+    pub async fn migrate_on_start(&self) -> anyhow::Result<()> {
+        awzy_store::migrations::on_start(&migrator(), &self.pool).await
+    }
+
     // ---- People
 
     pub async fn create_user(&self, input: &UserInput) -> Result<User, StoreError> {

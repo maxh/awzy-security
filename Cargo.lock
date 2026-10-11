@@ -674,6 +674,7 @@ dependencies = [
  "awzy-pdp",
  "awzy-server",
  "awzy-service-auth",
+ "awzy-store",
  "awzy-telemetry",
  "axum",
  "base64 0.22.1",

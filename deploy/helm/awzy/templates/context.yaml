@@ -11,6 +11,7 @@
     (dict "name" "AWZY_CONTEXT_READERS" "value" (printf "%s,%s" $backend $portal))
     (dict "name" "AWZY_CONTEXT_WRITERS" "value" $backend)
     (dict "name" "AWZY_POSTGRES_URL" "valueFrom" (dict "secretKeyRef" (dict "name" "awzy-postgres" "key" "context_url")))
+    (dict "name" "AWZY_POSTGRES_MIGRATE" "value" "check")
     (dict "name" "AWZY_SCIM_TOKEN" "valueFrom" (dict "secretKeyRef" (dict "name" .Values.context.scimTokenSecret "key" "token")))
   )) }}
 {{- if .Values.clientPortal.hostname }}

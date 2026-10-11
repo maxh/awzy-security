@@ -21,8 +21,10 @@ Argo CD applies the new chart, and Kubernetes replaces each service's pods one a
    reconnect elsewhere instead of failing.
 3. **Repeat** until every pod runs the new version.
 
-Services that change their database schema do so as their first new pod starts. During the
-rollout the old version runs against the new schema, so a release only ever adds to a schema:
+Before any pod is replaced, a Job for each service applies its database migrations. If one
+fails, the upgrade stops there, with the old version still serving, and Argo CD shows the failed
+Job. A service checks on start that the schema has what it needs. During the rollout the old
+version runs against the new schema, so a release only ever adds to a schema:
 anything removed was stopped being used a release earlier. That's also why you can roll back an
 upgrade by pinning the previous `chart_version`: the version you return to still works with the
 schema it finds.

@@ -9,6 +9,12 @@ async fn main() -> anyhow::Result<()> {
     let url = std::env::var("AWZY_POSTGRES_URL").context("AWZY_POSTGRES_URL is not set")?;
     let pool = PgPoolOptions::new().max_connections(6).connect(&url).await?;
     let mut store = awzy_policy::PolicyStore::new(pool);
+    // `awzy-policy migrate`: the release Job (ADR 0083).
+    if awzy_store::migrations::requested() {
+        store.migrate().await?;
+        tracing::info!("migrations applied");
+        return Ok(());
+    }
     match std::env::var("AWZY_POLICY_SIGNING_KEY_FILE") {
         Ok(path) => {
             let pem = std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?;
@@ -19,8 +25,7 @@ async fn main() -> anyhow::Result<()> {
         // TODO: a KMS-backed signer per cloud.
         Err(_) => tracing::warn!("AWZY_POLICY_SIGNING_KEY_FILE is not set; published bundles are unsigned"),
     }
-    // TODO: run migrations from a release Job instead of at startup.
-    store.migrate().await?;
+    store.migrate_on_start().await?;
     let break_glass = match std::env::var("AWZY_POLICY_BREAK_GLASS_KEYS_FILE") {
         Ok(path) => {
             let keys = awzy_signing::BundleVerifier::from_pem_bundle(

@@ -239,6 +239,12 @@ impl ChallengeStore {
         migrator().run(&self.pool).await
     }
 
+    /// At startup: apply the migrations, or with `AWZY_POSTGRES_MIGRATE=check` (an install, whose
+    /// release Job applied them) only check they're applied (ADR 0083).
+    pub async fn migrate_on_start(&self) -> anyhow::Result<()> {
+        awzy_store::migrations::on_start(&migrator(), &self.pool).await
+    }
+
     /// [`Self::resolve_policies`] for a caller that names only kinds: each counts as a policy of
     /// its own, so a grant covers that kind for the request, as before policies were recorded.
     pub async fn resolve(
