@@ -5,5 +5,8 @@ awzy_rust_library(
     name = "identity",
     crate_name = "awzy_identity",
     visibility = ["//tools:client_side"],
-    deps = ["//libs/model"],
+    deps = [
+        "//libs/http",
+        "//libs/model",
+    ],
 )

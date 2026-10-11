@@ -10,10 +10,6 @@ use anyhow::{bail, Context};
 use axum::http::{header, Method, Request, StatusCode};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
 use serde_json::{json, Value};
 
 use crate::{
@@ -25,7 +21,7 @@ use crate::{
 /// The most items one batch request carries: awzy-context's limit.
 pub const BATCH: usize = 1000;
 
-type HttpClient = Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>;
+type HttpClient = awzy_http::Client;
 
 const TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -52,13 +48,10 @@ pub struct WorldSummary {
 
 impl ContextClient {
     pub fn new(base_url: &str, scim_token: &str) -> Self {
-        let _ = rustls::crypto::ring::default_provider().install_default();
-        let https =
-            hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_or_http().enable_http1().build();
         Self {
             base_url: base_url.trim_end_matches('/').to_string(),
             scim_token: scim_token.to_string(),
-            http: Client::builder(TokioExecutor::new()).build(https),
+            http: awzy_http::client(),
             tokens: awzy_service_auth::TokenSource::from_env(),
         }
     }

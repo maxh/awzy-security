@@ -13,10 +13,6 @@ use axum::http::{header, Method, Request};
 use bytes::Bytes;
 use chrono::{DateTime, Datelike, Days, NaiveDate, TimeZone, Utc, Weekday};
 use http_body_util::{BodyExt, Full};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
 use serde_json::{json, Value};
 
 use crate::{
@@ -99,18 +95,15 @@ pub fn days(
 pub struct Intake {
     endpoint: String,
     token: String,
-    http: Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>,
+    http: awzy_http::Client,
 }
 
 impl Intake {
     pub fn new(base_url: &str, token: &str) -> Self {
-        let _ = rustls::crypto::ring::default_provider().install_default();
-        let https =
-            hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_or_http().enable_http1().build();
         Self {
             endpoint: format!("{}/v1/events", base_url.trim_end_matches('/')),
             token: token.to_string(),
-            http: Client::builder(TokioExecutor::new()).build(https),
+            http: awzy_http::client(),
         }
     }
 

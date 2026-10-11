@@ -7,12 +7,6 @@
 use std::{collections::HashSet, sync::Arc};
 
 use awzy_model::{Check, Decision, DecisionId, EnforcementMode, Verdict};
-use bytes::Bytes;
-use http_body_util::Empty;
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
 use serde_json::Value;
 
 use crate::{
@@ -92,7 +86,7 @@ impl Replayer {
     pub async fn from_context(endpoint: &str) -> anyhow::Result<Self> {
         let endpoint = endpoint.trim_end_matches('/');
         let principals = Arc::new(Principals::awaiting_sync());
-        let client: Client<HttpConnector, Empty<Bytes>> = Client::builder(TokioExecutor::new()).build_http();
+        let client: awzy_http::Client = awzy_http::client();
         principals::sync_once(&principals, endpoint, &client, &awzy_service_auth::TokenSource::from_env()).await?;
         Ok(Self::new(principals, Arc::new(Resources::from_context(endpoint.to_string()))))
     }

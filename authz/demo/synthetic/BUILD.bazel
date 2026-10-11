@@ -12,6 +12,7 @@ awzy_service(
     test_size = "medium",
     visibility = ["//tools:demo_only"],
     deps = [
+        "//libs/http",
         "//authz/libs/proto",
         "//authz/libs/service-auth",
         "//libs/model",

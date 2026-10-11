@@ -8,15 +8,11 @@ use std::time::Duration;
 use anyhow::{bail, Context};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
 use serde_json::{json, Value};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
-type HttpClient = Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>;
+type HttpClient = awzy_http::Client;
 
 pub struct Slack {
     /// `https://slack.com/api`, or a stand-in in tests.
@@ -29,14 +25,11 @@ pub struct Slack {
 
 impl Slack {
     pub fn new(api: &str, token: &str, security_channel: &str) -> Self {
-        let _ = rustls::crypto::ring::default_provider().install_default();
-        let https =
-            hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_or_http().enable_http1().build();
         Self {
             api: api.trim_end_matches('/').to_string(),
             token: token.to_string(),
             security_channel: security_channel.to_string(),
-            http: Client::builder(TokioExecutor::new()).build(https),
+            http: awzy_http::client(),
         }
     }
 
