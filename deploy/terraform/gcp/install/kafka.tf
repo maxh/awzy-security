@@ -18,7 +18,7 @@ resource "helm_release" "strimzi" {
   create_namespace = true
   repository       = "https://strimzi.io/charts/"
   chart            = "strimzi-kafka-operator"
-  version          = "1.6.1"
+  version          = "1.2.0"
   depends_on       = [google_container_node_pool.general]
 }
 
