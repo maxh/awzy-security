@@ -1,5 +1,5 @@
 {
-  "checksum": "35ecf6677c3ac613235f31d2328e3930e42026b187f527f1bcd3027e52109615",
+  "checksum": "e38dda4c80e933b01665136c690c8fb3110ababbdba58fa800e7714a8ad5eb10",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -3359,6 +3359,10 @@
             "target": "hyper_util"
           },
           {
+            "id": "jsonwebtoken 11.1.0",
+            "target": "jsonwebtoken"
+          },
+          {
             "id": "rmcp 3.5.1",
             "target": "rmcp"
           },
@@ -3393,10 +3397,6 @@
         ],
         "deps_dev": [
           {
-            "id": "jsonwebtoken 11.1.0",
-            "target": "jsonwebtoken"
-          },
-          {
             "id": "sqlx 0.8.6",
             "target": "sqlx"
           },
@@ -3405,7 +3405,13 @@
             "target": "tower"
           }
         ],
-        "edition": "2021"
+        "edition": "2021",
+        "proc_macro_deps": [
+          {
+            "id": "async-trait 0.1.92",
+            "target": "async_trait"
+          }
+        ]
       },
       "library_target_name": "awzy_client_portal",
       "license": "UNLICENSED",
