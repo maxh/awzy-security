@@ -1,6 +1,6 @@
 {{- $ch := .Values.clickhouse }}
 {{- if and $ch.enabled $ch.backup.url }}
-# Backs up decisions and events to the install's bucket (ADR 0104). ClickHouse runs the backup and
+# Backs up decisions and events to the install's bucket (ADR 0105). ClickHouse runs the backup and
 # writes it with its own workload identity; this Job only asks. The Kafka queues and views aren't
 # backed up: the migrate Job recreates them, and a restore rewinds their consumer group instead
 # (docs site, "Data retention and backups").

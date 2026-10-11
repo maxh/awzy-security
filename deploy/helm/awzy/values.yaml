@@ -64,7 +64,7 @@ clickhouse:
   # How many days decisions and events are kept before they expire; 0 keeps them all. Applied on
   # every sync, so it can change after install.
   retentionDays: 0
-  # Backups of decisions and events with ClickHouse's own BACKUP (ADR 0104), to an S3-compatible
+  # Backups of decisions and events with ClickHouse's own BACKUP (ADR 0105), to an S3-compatible
   # URL ClickHouse's own workload identity may write (bootstrap sets the install's bucket). Each
   # run backs up in full if its week (ISO, UTC) has no full backup yet, and otherwise only what
   # changed since that one. The bucket expires them. Empty: no backups.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Restores ClickHouse's decisions and events from a backup (ADR 0104), then has Kafka refill
+# Restores ClickHouse's decisions and events from a backup (ADR 0105), then has Kafka refill
 # everything after it, so nothing between the backup and now is lost while Kafka still holds it
 # (7 days).
 #

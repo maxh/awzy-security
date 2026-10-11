@@ -44,7 +44,7 @@ variable "deletion_protection" {
 }
 
 variable "backup_retention_days" {
-  description = "How long ClickHouse's backups are kept in the data bucket (ADR 0104); a restore point is always available from the last backup_retention_days minus 7 days"
+  description = "How long ClickHouse's backups are kept in the data bucket (ADR 0105); a restore point is always available from the last backup_retention_days minus 7 days"
   type        = number
   default     = 35
   validation {

@@ -1,4 +1,4 @@
-# 0104. ClickHouse backs up with its own BACKUP to the install's bucket
+# 0105. ClickHouse backs up with its own BACKUP to the install's bucket
 
 - Status: Accepted
 - Date: 2026-10-11

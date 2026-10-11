@@ -13,7 +13,7 @@ variable "install_contract" {
       provisioner = string
       parameters  = map(string)
     })
-    # The install's bucket, as an S3-compatible URL for ClickHouse's backups (ADR 0104); without
+    # The install's bucket, as an S3-compatible URL for ClickHouse's backups (ADR 0105); without
     # one, ClickHouse isn't backed up.
     object_store    = optional(object({ bucket = string, url = optional(string, "") }), { bucket = "", url = "" })
     secret_store    = any # External Secrets provider block, passed through as-is
