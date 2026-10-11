@@ -76,7 +76,7 @@ when { context has assigned && !context.assigned };
 ## Request context
 
 Every check carries a context. Most of it awzy sets from what it knows. A caller that puts
-`human_present`, `on_behalf_of`, or `assigned` in the context is rejected, so they can't be
+`human_present`, `on_behalf_of`, `assigned`, or `automation_score` in the context is rejected, so they can't be
 claimed; the first two come from the request's own fields and its validated token.
 
 | Field | Type | Set by | What it is |
@@ -84,6 +84,7 @@ claimed; the first two come from the request's own fields and its validated toke
 | `risk_score` | `Long` | awzy | The principal's risk, 0 to 100. awzy-reasoner's score replaces whatever the caller sent; before it has scored the principal, the caller's value or `0` |
 | `human_present` | `Bool` | awzy | Whether a person is there to answer a challenge now: yes for a `Human`, no for a service account unless the enforcement point says so |
 | `on_behalf_of` | `Human`, optional | awzy | The person a service account acts for, from its validated token. Absent when it acts on its own authority |
+| `automation_score` | `Long`, optional | awzy | For a person: 0 to 100, how much their recent requests look like software using their credentials. Absent until awzy-reasoner has scored them |
 | `assigned` | `Bool`, optional | awzy | Whether the principal is on open work that links the resource. Absent when awzy doesn't know |
 | `client` | `String`, optional | The enforcement point | The calling software, such as `browser`, `cli`, or `mcp` (awzy-gateway sets `mcp`). A `Human` arriving through `mcp` is software holding a person's own token |
 | `mcp_client` | `String`, optional | awzy-gateway | The MCP client's name, as its session's `initialize` gave it, such as `claude-code`. What the client says it is: a hint, not proof |

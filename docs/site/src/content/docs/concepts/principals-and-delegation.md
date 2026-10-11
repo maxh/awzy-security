@@ -65,7 +65,9 @@ What still holds:
   risk is elevated, and before everything when risk is high.
 - **The agent's activity counts against the person.** It feeds their [risk score](/concepts/risk/),
   so an agent reading far more than its person usually does raises the score that triggers those
-  challenges.
+  challenges. And awzy-reasoner gives each person an
+  [automation score](/concepts/risk/#automation-scores): when their day looks like software's,
+  sensitive data needs their security key.
 - **Calls through awzy-gateway say so.** Every check from awzy-gateway carries
   `context.client == "mcp"`, so a `Human` principal arriving that way is software holding the
   person's token, and `context.mcp_client` names the MCP client as its session introduced itself,

@@ -39,5 +39,21 @@ judged on their own score. The base policies:
 The 40 threshold catches the paper's "suddenly foolish administrator": someone opening other
 teams' material more than usual, whose risky operations then need proof that it's really them.
 
+## Automation scores
+
+Beside each person's risk score, awzy-reasoner scores how much their last day looks like software
+working with their credentials, such as a coding agent signed in as them, from 0 to 100:
+
+| Signal | Points | At most |
+| --- | --- | --- |
+| The share of their requests that came through MCP, which only software calls | 60 for all of them | 60 |
+| Requests in their busiest minute beyond 20, which a person rarely passes | 2 each | 40 |
+
+A day with fewer than 10 requests isn't scored, and service accounts aren't scored at all. A check
+sees the person's score as `context.automation_score`. Above 80, the base policies ask for their
+security key before they read, write, or call anything `confidential` or `crown_jewels`
+(`automated-people-verify`): an agent can't touch it for them. See
+[An agent using a person's own credentials](/concepts/principals-and-delegation/#an-agent-using-a-persons-own-credentials).
+
 The scores are deterministic: the same activity always gives the same score. Later LLM-driven
 investigations may raise a score, never lower it below this one.

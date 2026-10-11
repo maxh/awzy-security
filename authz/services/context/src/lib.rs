@@ -69,7 +69,8 @@ async fn principals(
     // Read after the snapshot: a score written in between moves the version, so the PDP comes
     // back for it.
     let risk = store.risk_scores().await.map_err(fail)?;
-    Ok(Json(json!({ "version": version, "entities": entities, "risk": risk })))
+    let automation = store.automation_scores().await.map_err(fail)?;
+    Ok(Json(json!({ "version": version, "entities": entities, "risk": risk, "automation": automation })))
 }
 
 fn internal(e: impl std::fmt::Display) -> Response {

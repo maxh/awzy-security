@@ -48,6 +48,7 @@ when { context has on_behalf_of && !context.human_present && context.risk_score 
 | `on_behalf_of` | The person an agent acts for, when it acts for one. |
 | `human_present` | Whether someone is there to answer a challenge. |
 | `assigned` | Whether the principal has open work on this resource. |
+| `automation_score` | For a person, how much their recent requests look like software, 0 to 100. Optional. |
 | `client` | The calling software, such as `browser`, `cli`, or `mcp`, as the enforcement point saw it. Optional. |
 | `mcp_client` | The MCP client's name, such as `claude-code`, from awzy-gateway. Optional, and only a hint. |
 

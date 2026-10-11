@@ -199,6 +199,7 @@ mod tests {
         Scored {
             principal: (kind.into(), id.into()),
             score: Score { score, reasons: vec!["opened 7 resources that neither it nor its team had".into()] },
+            automation: None,
         }
     }
 

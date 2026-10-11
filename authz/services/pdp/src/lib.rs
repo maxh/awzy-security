@@ -48,6 +48,8 @@ pub struct Facts<'a> {
     /// awzy-reasoner's scores for the principal and the person it acts for, keyed `Type::id`
     /// (ADR 0056), for `context.risk_score`.
     pub risk: Option<&'a std::collections::HashMap<String, i64>>,
+    /// People's automation scores, keyed the same way (ADR 0085), for `context.automation_score`.
+    pub automation: Option<&'a std::collections::HashMap<String, i64>>,
 }
 
 /// `Resource` attributes added after the first schema, each with a value of its type: a bundle's
@@ -82,6 +84,8 @@ pub struct Pdp {
     /// Whether the schema declares `context.mcp_client` for `call` (ADR 0081). Same reason: a
     /// bundle published before it existed doesn't, and the gateway sends it anyway.
     knows_mcp_client: bool,
+    /// Whether the schema declares `context.automation_score` (ADR 0085). Same reason.
+    knows_automation: bool,
 }
 
 /// The PDP every request reads. Policy sync swaps in a new one without blocking readers.
@@ -136,6 +140,8 @@ impl Pdp {
         let call = EntityUid::from_type_name_and_id(EntityTypeName::from_str("Action")?, EntityId::new("call"));
         let probe = serde_json::json!({ "risk_score": 0, "human_present": true, "mcp_client": "probe" });
         let knows_mcp_client = Context::from_json_value(probe, Some((&schema, &call))).is_ok();
+        let probe = serde_json::json!({ "risk_score": 0, "human_present": true, "automation_score": 0 });
+        let knows_automation = Context::from_json_value(probe, Some((&schema, &read))).is_ok();
         Ok(Self {
             schema,
             policies,
@@ -144,6 +150,7 @@ impl Pdp {
             unknown_resource_attrs,
             knows_assigned,
             knows_mcp_client,
+            knows_automation,
         })
     }
 
@@ -205,7 +212,7 @@ impl Pdp {
         assignees: Option<&HashSet<String>>,
         passed: &HashSet<String>,
     ) -> anyhow::Result<Decision> {
-        self.decide_with(req, entities, &Facts { assignees, risk: None }, passed)
+        self.decide_with(req, entities, &Facts { assignees, ..Facts::default() }, passed)
     }
 
     /// The general form: what awzy knows beyond the entities (`facts`), and the `@challenge`
@@ -217,7 +224,7 @@ impl Pdp {
         facts: &Facts<'_>,
         passed: &HashSet<String>,
     ) -> anyhow::Result<Decision> {
-        for key in ["on_behalf_of", "human_present", "assigned"] {
+        for key in ["on_behalf_of", "human_present", "assigned", "automation_score"] {
             anyhow::ensure!(
                 !req.context.contains_key(key),
                 "context key {key:?} is set by the PDP; use the request field"
@@ -235,7 +242,11 @@ impl Pdp {
             context.insert("on_behalf_of".into(), serde_json::json!({ "__entity": { "type": h.kind, "id": h.id } }));
         }
 
-        let facts = Facts { assignees: facts.assignees.filter(|_| self.knows_assigned), risk: facts.risk };
+        let facts = Facts {
+            assignees: facts.assignees.filter(|_| self.knows_assigned),
+            risk: facts.risk,
+            automation: facts.automation.filter(|_| self.knows_automation),
+        };
         let without_passed;
         let policy_set = if passed.is_empty() {
             &self.policies
@@ -283,8 +294,12 @@ impl Pdp {
         if let Some(assignees) = facts.assignees {
             context.insert("assigned".into(), serde_json::Value::Bool(assignees.contains(&principal.id)));
         }
-        if let Some(score) = facts.risk.and_then(|r| r.get(&format!("{}::{}", principal.kind, principal.id))) {
+        let key = format!("{}::{}", principal.kind, principal.id);
+        if let Some(score) = facts.risk.and_then(|r| r.get(&key)) {
             context.insert("risk_score".into(), serde_json::Value::from(*score));
+        }
+        if let Some(score) = facts.automation.and_then(|a| a.get(&key)) {
+            context.insert("automation_score".into(), serde_json::Value::from(*score));
         }
         let context = Context::from_json_value(serde_json::Value::Object(context), Some((&self.schema, &action)))?;
         let request = Request::new(uid(principal)?, action, uid(&req.resource)?, context, Some(&self.schema))?;
@@ -491,10 +506,10 @@ impl AppState {
             // before any policy is evaluated. The containment IDs explain it.
             None => Decision { policies: contained, ..replay::unregistered() },
             Some(replay::Assembled::Unregistered) => replay::unregistered(),
-            Some(replay::Assembled::Ready { entities, assignees, risk }) => {
+            Some(replay::Assembled::Ready { entities, assignees, risk, automation }) => {
                 let parties = challenges::parties(req, &entities);
                 let entities = pdp.entities(entities)?;
-                let facts = Facts { assignees: assignees.as_deref(), risk: Some(&risk) };
+                let facts = Facts { assignees: assignees.as_deref(), risk: Some(&risk), automation: Some(&automation) };
                 let decision = pdp.decide_with(req, &entities, &facts, &HashSet::new())?;
                 match decision.verdict {
                     // In monitor nothing is sent, so there's nothing to resolve (ADR 0007).
@@ -762,6 +777,37 @@ mod tests {
     }
 
     #[test]
+    fn a_person_scored_as_software_touches_their_key_for_sensitive_data() {
+        let pdp = Pdp::with_defaults().unwrap();
+        let entities = fixtures(&pdp);
+        let automation =
+            |score: i64| -> std::collections::HashMap<String, i64> { [("Human::alice".to_string(), score)].into() };
+        let decide = |what: &str, score: i64| {
+            let scores = automation(score);
+            let facts = Facts { automation: Some(&scores), ..Facts::default() };
+            pdp.decide_with(&read("alice", what, 10), &entities, &facts, &HashSet::new()).unwrap()
+        };
+        let verify = Verdict::Challenge { challenges: Challenges::of(ChallengeKind::Verification) };
+        let d = decide("board-deck", 95);
+        assert_eq!((d.verdict, d.policies), (verify, vec!["automated-people-verify".to_string()]));
+        assert_eq!(decide("board-deck", 30).verdict, Verdict::Allow, "a person at the keyboard");
+        assert_eq!(decide("design-doc", 95).verdict, Verdict::Allow, "internal data asks nothing");
+
+        let older = DEFAULT_SCHEMA.replace("  automation_score?: Long,\n", "");
+        assert_ne!(older, DEFAULT_SCHEMA);
+        assert!(DEFAULT_POLICIES.contains(AUTOMATED_POLICY));
+        let without = DEFAULT_POLICIES.replace(AUTOMATED_POLICY, "");
+        let pdp = Pdp::new(&older, &without).unwrap();
+        let scores = automation(95);
+        let facts = Facts { automation: Some(&scores), ..Facts::default() };
+        let d = pdp.decide_with(&read("alice", "board-deck", 10), &fixtures(&pdp), &facts, &HashSet::new());
+        assert_eq!(d.unwrap().verdict, Verdict::Allow, "a schema without it still decides");
+    }
+
+    /// The base policy that reads `automation_score`, for a bundle whose schema predates it.
+    const AUTOMATED_POLICY: &str = "@id(\"automated-people-verify\")\n@challenge(\"verification\")\nforbid (\n  principal is Human,\n  action in [Action::\"read\", Action::\"write\", Action::\"call\"],\n  resource\n)\nwhen {\n  context has automation_score && context.automation_score > 80 &&\n  (resource.sensitivity == \"confidential\" || resource.sensitivity == \"crown_jewels\")\n};\n";
+
+    #[test]
     fn switching_enforcement_takes_the_security_teams_key_and_never_an_agent() {
         let pdp = Pdp::with_defaults().unwrap();
         let switch = |check: Check| Check {
@@ -1022,7 +1068,7 @@ mod tests {
     #[test]
     fn callers_cannot_set_delegation_in_the_context() {
         let pdp = Pdp::with_defaults().unwrap();
-        for key in ["on_behalf_of", "human_present", "assigned"] {
+        for key in ["on_behalf_of", "human_present", "assigned", "automation_score"] {
             let mut req = read("bob", "design-doc", 10);
             req.context.insert(key.into(), json!(true));
             let err = pdp.decide(&req, &fixtures(&pdp)).unwrap_err();

@@ -5,6 +5,7 @@
 //! findings are checked in code ([`investigate`], ADR 0067; [`runs`], ADR 0071).
 
 pub mod activity;
+pub mod automation;
 pub mod contain;
 pub mod context;
 pub mod investigate;
@@ -32,6 +33,9 @@ pub fn router() -> Router {
 pub struct Scored {
     pub principal: Principal,
     pub score: Score,
+    /// For a person: how much their requests look like software using their credentials (ADR
+    /// 0085). None for a service account, or too little to tell.
+    pub automation: Option<Score>,
 }
 
 /// awzy-context takes IDs up to this long.
@@ -87,7 +91,7 @@ pub fn score_all(history: &History, opened: &Opened, teams: &HashMap<Principal, 
                 .filter(|(other, _)| *other != p)
                 .map(|(_, d)| *d)
                 .collect();
-            Scored { principal: p.clone(), score: score::score(last_day, &baseline, &peers) }
+            Scored { principal: p.clone(), score: score::score(last_day, &baseline, &peers), automation: None }
         })
         .collect()
 }
@@ -108,7 +112,11 @@ impl Reasoner {
         let history = activity::load(&self.clickhouse, as_of).await?;
         let opened = activity::load_opened(&self.clickhouse, as_of).await?;
         let teams = self.context.teams().await?;
-        let scores = score_all(&history, &opened, &teams);
+        let mut scores = score_all(&history, &opened, &teams);
+        let automation = automation::load(&self.clickhouse, as_of).await?;
+        for s in &mut scores {
+            s.automation = automation.get(&s.principal).copied().and_then(automation::score);
+        }
         self.context.put(&scores).await?;
         // Scores are written whatever happens below; a failed step waits for the next run.
         let mut rejected = std::collections::BTreeMap::new();

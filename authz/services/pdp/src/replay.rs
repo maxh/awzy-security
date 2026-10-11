@@ -30,6 +30,8 @@ pub(crate) enum Assembled {
         assignees: Option<Arc<HashSet<String>>>,
         /// awzy-reasoner's scores for the principal and the person it acts for (ADR 0056).
         risk: std::collections::HashMap<String, i64>,
+        /// And their automation scores (ADR 0085).
+        automation: std::collections::HashMap<String, i64>,
     },
 }
 
@@ -48,7 +50,8 @@ pub(crate) async fn assemble(
     let entities = principals.merge(inline, &who);
     let merged = resources.merge(entities, &req.resource).await?;
     let risk = principals.risk_of(&who);
-    Ok(Assembled::Ready { entities: merged.entities, assignees: merged.assignees, risk })
+    let automation = principals.automation_of(&who);
+    Ok(Assembled::Ready { entities: merged.entities, assignees: merged.assignees, risk, automation })
 }
 
 /// The decision for a service account awzy-context doesn't know.
@@ -66,8 +69,9 @@ pub(crate) fn unregistered() -> Decision {
 fn evaluate(pdp: &Pdp, req: &Check, assembled: &Assembled) -> anyhow::Result<Decision> {
     match assembled {
         Assembled::Unregistered => Ok(unregistered()),
-        Assembled::Ready { entities, assignees, risk } => {
-            let facts = crate::Facts { assignees: assignees.as_deref(), risk: Some(risk) };
+        Assembled::Ready { entities, assignees, risk, automation } => {
+            let facts =
+                crate::Facts { assignees: assignees.as_deref(), risk: Some(risk), automation: Some(automation) };
             pdp.decide_with(req, &pdp.entities(entities.clone())?, &facts, &Default::default())
         }
     }

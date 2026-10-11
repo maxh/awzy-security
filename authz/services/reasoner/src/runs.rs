@@ -339,7 +339,11 @@ mod tests {
     };
 
     fn scored(kind: &str, id: &str, score: i32) -> Scored {
-        Scored { principal: (kind.into(), id.into()), score: Score { score, reasons: vec!["r".into()] } }
+        Scored {
+            principal: (kind.into(), id.into()),
+            score: Score { score, reasons: vec!["r".into()] },
+            automation: None,
+        }
     }
 
     #[test]
