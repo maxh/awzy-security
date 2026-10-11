@@ -130,6 +130,13 @@ jobs:
           helm lint --strict deploy/helm/awzy -f deploy/helm/awzy/values-example.yaml
           helm template awzy deploy/helm/awzy -f deploy/helm/awzy/values-example.yaml > /dev/null
           helm lint --strict deploy/terraform/bootstrap/charts/awzy-config -f deploy/terraform/bootstrap/charts/awzy-config/values-example.yaml
+      # Every Terraform directory is formatted and valid, and root modules' lock files are current.
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.13.1
+          tofu_wrapper: false
+      - name: Terraform is valid
+        run: tools/ci/check-terraform.sh
       # Every image the chart runs is awzy's or a listed, mirrored one (ADR 0057).
       - name: Chart images are mirrored
         run: tools/ci/mirror-images.sh --check
