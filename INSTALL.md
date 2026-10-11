@@ -195,6 +195,21 @@ the cluster on it.
   no `heartbeat not delivered`.
 - **The portal:** `https://<hostname>` signs you in through your IdP.
 
+## 8. Monitoring (optional)
+
+Every awzy service serves Prometheus metrics. On AWS, two more modules watch them for you:
+
+- [`deploy/terraform/aws/monitoring`](deploy/terraform/aws/monitoring): Amazon Managed Service for
+  Prometheus, fed by its managed scraper (nothing more runs in your cluster), with awzy's alert
+  rules routed to an SNS topic and the `alert_emails` you give it; and an Amazon Managed Grafana
+  workspace, signed in to through your IAM Identity Center, that reads Prometheus and CloudWatch
+  (Aurora, MSK, ElastiCache). Pass it the cloud layer's `monitoring` output.
+- [`deploy/terraform/grafana`](deploy/terraform/grafana): awzy's dashboards and data sources, in
+  that workspace or any Grafana of yours. Apply it after the first, with the `grafana` output.
+
+You can use your own monitoring instead: scrape each awzy pod's `/metrics` (port `http`), and load
+[`deploy/observability`](deploy/observability)'s alert rules and dashboards into it.
+
 ## Operating an install
 
 - **Upgrades** follow the release channel the install was registered with: Argo CD moves to the

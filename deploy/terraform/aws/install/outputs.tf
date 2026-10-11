@@ -61,3 +61,12 @@ output "install_contract" {
     registry_prefix = var.registry_prefix
   }
 }
+
+# For deploy/terraform/aws/monitoring: where its managed scraper reaches the cluster's pods.
+output "monitoring" {
+  value = {
+    cluster_name       = module.eks.cluster_name
+    subnet_ids         = module.vpc.private_subnets
+    security_group_ids = [module.eks.node_security_group_id]
+  }
+}

@@ -53,3 +53,15 @@ variable "state_bucket" {
   description = "S3 bucket for the example client's Terraform state, in its management account"
   type        = string
 }
+
+variable "alert_emails" {
+  description = "Who the install's alerts reach (monitoring); each confirms an SNS subscription"
+  type        = list(string)
+  default     = []
+}
+
+variable "grafana_admin_user_ids" {
+  description = "IAM Identity Center user IDs who administer the install's Grafana (monitoring)"
+  type        = list(string)
+  default     = []
+}
