@@ -46,8 +46,10 @@ resource "helm_release" "clickhouse_operator" {
   version    = var.versions.clickhouse_operator
   values = [yamlencode({
     imagePullSecrets = [{ name = "awzy-registry" }]
-    operator         = { image = local.mirrored["clickhouse-operator"] }
-    metrics          = { image = local.mirrored["metrics-exporter"] }
+    # The operator runs in ops but ClickHouse is in data; by default it watches only its own namespace.
+    configs  = { files = { "config.yaml" = { watch = { namespaces = { include = [local.namespaces.data] } } } } }
+    operator = { image = local.mirrored["clickhouse-operator"] }
+    metrics  = { image = local.mirrored["metrics-exporter"] }
     # The CRD hook needs a shell and kubectl; alpine/k8s has both (the chart's default,
     # bitnami/kubectl:latest, is unpinned and no longer maintained).
     crdHook = {
