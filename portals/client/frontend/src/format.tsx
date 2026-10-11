@@ -12,6 +12,15 @@ export function verdictLabel(verdict: string, mode: string, challenges: Readonly
   return challenges.length > 0 ? `${label}: ${challenges.join(" + ")}` : label;
 }
 
+/** In place of a field a policy hides from the viewer (ADR 0103). */
+export function Hidden() {
+  return (
+    <Text size="sm" c="dimmed" fs="italic">
+      Hidden by a policy
+    </Text>
+  );
+}
+
 /** A UtcTimestamp in the viewer's locale and time zone. */
 export function formatTime(utc: string): string {
   return new Date(utc).toLocaleString();

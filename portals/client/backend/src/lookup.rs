@@ -30,11 +30,12 @@ impl PrincipalType {
 pub struct PrincipalDetail {
     /// Whether awzy knows it at all: provisioned by the IdP, or a registered service account.
     pub known: bool,
-    /// Its Cedar attributes, as JSON: `active`, a service account's `owner` and `ai`.
+    /// Its Cedar attributes, as JSON: `active`, a service account's `owner` and `ai`. Null when a
+    /// policy hides them (ADR 0103).
     pub attributes: Option<String>,
     /// Every group above it, nested groups included.
     pub groups: Vec<String>,
-    /// awzy-reasoner's risk score, 0 to 100, when it has one.
+    /// awzy-reasoner's risk score, 0 to 100, when it has one and no policy hides it (ADR 0103).
     pub risk_score: Option<i64>,
 }
 
@@ -71,8 +72,9 @@ pub struct ResourceDetail {
     /// The connector's tier.
     pub sensitivity: Option<String>,
     pub classification: Option<ResourceClassification>,
-    /// Who it's shared with, as JSON (the connector's sharing entries).
-    pub sharing: String,
+    /// Who it's shared with, as JSON (the connector's sharing entries). Null when a policy hides
+    /// it (ADR 0103).
+    pub sharing: Option<String>,
     pub labels: Vec<String>,
     pub url: Option<String>,
     /// The folders above it, nearest first, by ID.
@@ -177,7 +179,7 @@ impl LookupQuery {
                 by: text(&c["by"]),
                 reason: text(&c["reason"]).unwrap_or_default(),
             }),
-            sharing: r["sharing"].to_string(),
+            sharing: Some(r["sharing"].to_string()),
             labels: strings(&r["labels"]),
             url: text(&r["url"]),
             folders,

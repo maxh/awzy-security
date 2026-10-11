@@ -139,6 +139,35 @@ pub async fn authorize_action(
     action: &'static str,
     area: PortalArea,
 ) -> Result<(), AccessError> {
+    check(services, viewer, surface, action, area, None).await
+}
+
+/// Whether the viewer may see `field` (`Decision.context`), one of the sensitive fields in `area`
+/// (ADR 0103). Ask only once they may view the area: a field's policies decide it, not the area's.
+/// Unavailable or misconfigured is an error, not a no, so a page fails rather than quietly hiding.
+pub async fn field_visible(
+    services: &Services,
+    viewer: &Viewer,
+    surface: Surface,
+    area: PortalArea,
+    field: &str,
+) -> Result<bool, AccessError> {
+    match check(services, viewer, surface, PortalAction::View.as_str(), area, Some(field)).await {
+        Ok(()) => Ok(true),
+        Err(AccessError::Denied { .. } | AccessError::Challenged { .. }) => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
+/// One check of `action` on `area`, or on `field` within it.
+async fn check(
+    services: &Services,
+    viewer: &Viewer,
+    surface: Surface,
+    action: &'static str,
+    area: PortalArea,
+    field: Option<&str>,
+) -> Result<(), AccessError> {
     let mut context = json!({ "client": match surface {
         Surface::Portal => "portal",
         Surface::Mcp => "mcp",
@@ -166,10 +195,21 @@ pub async fn authorize_action(
         "uid": { "type": entity_type::PORTAL_AREA, "id": area.as_str() },
         "attrs": { "sensitivity": "confidential" },
     })));
+    let resource = match field {
+        Some(field) => {
+            entities.push(entity_from_json(&json!({
+                "uid": { "type": entity_type::PORTAL_FIELD, "id": field },
+                "attrs": { "sensitivity": "confidential" },
+                "parents": [{ "type": entity_type::PORTAL_AREA, "id": area.as_str() }],
+            })));
+            WireRef { r#type: entity_type::PORTAL_FIELD.into(), id: field.into() }
+        }
+        None => WireRef { r#type: entity_type::PORTAL_AREA.into(), id: area.as_str().into() },
+    };
     let req = CheckRequest {
         principal: Some(wire(&viewer.subject)),
         action: action.into(),
-        resource: Some(WireRef { r#type: entity_type::PORTAL_AREA.into(), id: area.as_str().into() }),
+        resource: Some(resource),
         context: Some(json_to_struct(context.as_object().expect("object").clone())),
         on_behalf_of: viewer.on_behalf_of.as_ref().map(wire),
         entities,

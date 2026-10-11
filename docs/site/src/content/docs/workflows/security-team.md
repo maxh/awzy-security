@@ -59,6 +59,16 @@ permit (principal in Group::"auditors", action == Action::"view",
         resource == PortalArea::"decisions");
 ```
 
+Within an area, a few sensitive fields are checked on their own: a decision's request context, a
+person's attributes and risk score, a resource's sharing, and a challenge's justification.
+Whoever can view the area sees them unless a policy forbids it, and the portal, and its MCP server,
+show a hidden field as hidden. To keep decisions' request context to your privacy team:
+
+```cedar
+forbid (principal, action == Action::"view", resource == PortalField::"Decision.context")
+unless { principal in Group::"privacy" };
+```
+
 ## With your own agents
 
 Your team's agents, such as Claude or an internal copilot, can search and explain decisions, read

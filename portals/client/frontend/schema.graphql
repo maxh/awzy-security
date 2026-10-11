@@ -381,9 +381,9 @@ type Decision implements Node {
 	"""
 	policyVersion: Int!
 	"""
-	The request context, as JSON text.
+	The request context, as JSON text. Null when a policy hides it (ADR 0103).
 	"""
-	context: String!
+	context: String
 	"""
 	Explain the principal's check: the source of each determining policy, from the bundle the
 	decision was made under.
@@ -1250,7 +1250,7 @@ type ResourceDetail {
 	"""
 	Who it's shared with, as JSON (the connector's sharing entries).
 	"""
-	sharing: String!
+	sharing: String
 	labels: [String!]!
 	url: String
 	"""

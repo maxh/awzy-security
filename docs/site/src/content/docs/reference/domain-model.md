@@ -24,6 +24,7 @@ IdP (over SCIM) and from connectors to your apps.
 | `Resource` | Something people access: a document, a folder, a project. Resources nest | `sensitivity`, `unclassified`, `owner`, and sharing: `shared_humans`, `shared_groups` (can read), `writer_humans`, `writer_groups` (can also change), `shared_with_everyone` |
 | `McpServer`, `McpTool` | An MCP server behind awzy-gateway, and its tools (`<server>/<tool>`) | `sensitivity` |
 | `PortalArea` | An area of the client portal: `decisions`, `policies`, `enforcement`, `directory`, `challenges`, `investigations` | `sensitivity` |
+| `PortalField` | A sensitive field the portal shows, inside its area: `Decision.context`, `PrincipalDetail.attributes`, `PrincipalDetail.riskScore`, `ResourceDetail.sharing`, `Challenge.justification` | `sensitivity` |
 
 `Human` and `ServiceAccount` are the **principals**: who every check is about. See
 [People, agents, and delegation](/concepts/principals-and-delegation/). A resource's sharing
@@ -31,7 +32,7 @@ attributes include what it inherits from the folders above it, and every attribu
 optional in the schema may be missing, so test it with `has` first.
 
 **Actions** are `read` and `write` on a `Resource`, `call` on an `McpTool`, `view` and
-`administer` on a `PortalArea`, `switch_enforcement` for switching an enforcement mode (asked
+`administer` on a `PortalArea`, `view` on a `PortalField`, `switch_enforcement` for switching an enforcement mode (asked
 besides `administer` on `enforcement`, so policy can challenge the switch itself), and `approve`
 for approving someone else's challenged request, by a person or an agent you name in a policy.
 

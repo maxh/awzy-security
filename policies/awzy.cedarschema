@@ -51,6 +51,15 @@ entity PortalArea {
   sensitivity: String,
 };
 
+// One sensitive field the portal shows, within its area: "Decision.context",
+// "PrincipalDetail.attributes", "PrincipalDetail.riskScore", "ResourceDetail.sharing", or
+// "Challenge.justification" (ADR 0103). Seeing the area is checked first; a forbid on a field
+// hides it, and the portal shows it as hidden.
+entity PortalField in [PortalArea] {
+  // Set by the portal; "confidential" for every field.
+  sensitivity: String,
+};
+
 // What every check carries. Shared by all actions.
 type RequestContext = {
   // 0-100. Set by the PDP (0 until awzy-reasoner writes risk attributes).
@@ -99,7 +108,13 @@ action call appliesTo {
 
 // Using the client portal or its MCP server: reading an area, or changing what it controls
 // (publishing policy, switching enforcement).
-action view, administer appliesTo {
+action view appliesTo {
+  principal: [Human, ServiceAccount],
+  resource: [PortalArea, PortalField],
+  context: RequestContext,
+};
+
+action administer appliesTo {
   principal: [Human, ServiceAccount],
   resource: [PortalArea],
   context: RequestContext,

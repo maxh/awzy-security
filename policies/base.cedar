@@ -57,6 +57,14 @@ permit (
   resource is PortalArea
 );
 
+// Sensitive fields (ADR 0103): whoever sees an area sees its fields, which the portal checks
+// only after the area. A client hides one with a forbid, e.g. decisions' request context for all
+// but its privacy team:
+//   forbid (principal, action == Action::"view", resource == PortalField::"Decision.context")
+//   unless { principal in Group::"privacy" };
+@id("fields-follow-their-area")
+permit (principal, action == Action::"view", resource is PortalField);
+
 // Switching between monitor and enforce changes what awzy blocks for everyone. The security team's
 // people switch it, each time with a touch of their security key, so neither a stolen session nor
 // an agent working with someone's credentials can.

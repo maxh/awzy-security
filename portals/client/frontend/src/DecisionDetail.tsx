@@ -4,7 +4,7 @@ import { graphql, useFragment, useLazyLoadQuery } from "react-relay";
 
 import type { DecisionDetail_decision$key } from "./__generated__/DecisionDetail_decision.graphql";
 import type { DecisionDetailQuery } from "./__generated__/DecisionDetailQuery.graphql";
-import { entityLabel, formatTime, prettyJson, VerdictBadge } from "./format";
+import { entityLabel, formatTime, Hidden, prettyJson, VerdictBadge } from "./format";
 
 /** Explains one decision: what was asked, the verdict, and the policies that produced it. */
 export function DecisionDetail({ id }: { id: string }) {
@@ -92,7 +92,7 @@ function DecisionView({ decision }: { decision: DecisionDetail_decision$key }) {
       <Divider />
       <Stack gap={6}>
         <Heading>Context</Heading>
-        <Code block>{prettyJson(d.context)}</Code>
+        {d.context == null ? <Hidden /> : <Code block>{prettyJson(d.context)}</Code>}
       </Stack>
 
       <Stack gap={6}>
