@@ -20,6 +20,10 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
+    tls = {
+      source  = "hashicorp/tls"
+      version = ">= 4.0.0"
+    }
   }
 }
 
@@ -201,6 +205,41 @@ output "scim" {
     token = random_password.scim.result
   }
   sensitive = true
+}
+
+# awzy-policy signs every bundle it publishes and every enforcement mode change with this key, and
+# the PDPs apply only what verifies against its public key (ADR 0021, 0080), so writing to
+# awzy-policy's database doesn't change what's enforced. The private key is in this state, like
+# the other secrets here, until a KMS-backed signer replaces it.
+resource "tls_private_key" "policy_signing" {
+  algorithm   = "ECDSA"
+  ecdsa_curve = "P256"
+}
+
+resource "kubernetes_secret_v1" "policy_signing" {
+  metadata {
+    name      = "awzy-policy-signing"
+    namespace = kubernetes_namespace_v1.awzy["system"].metadata[0].name
+  }
+  data = { "signing.pem" = tls_private_key.policy_signing.private_key_pem_pkcs8 }
+}
+
+resource "kubernetes_secret_v1" "policy_verify" {
+  metadata {
+    name      = "awzy-policy-verify"
+    namespace = kubernetes_namespace_v1.awzy["system"].metadata[0].name
+  }
+  data = { "verify.pem" = tls_private_key.policy_signing.public_key_pem }
+}
+
+# The public keys of the admins enrolled for break-glass rollback (ADR 0022).
+resource "kubernetes_secret_v1" "break_glass" {
+  count = var.break_glass_public_keys == null ? 0 : 1
+  metadata {
+    name      = "awzy-policy-break-glass"
+    namespace = kubernetes_namespace_v1.awzy["system"].metadata[0].name
+  }
+  data = { "keys.pem" = var.break_glass_public_keys }
 }
 
 # Pull credentials for registry.awzysecurity.com (ADR 0028): one static, revocable token per

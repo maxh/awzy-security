@@ -27,8 +27,7 @@ use std::{collections::HashSet, str::FromStr, sync::Arc};
 use arc_swap::ArcSwap;
 
 use awzy_model::{
-    ChallengeKind, Challenges, Check, Decision, DecisionId, DecisionRecord, DelegationCheck, EnforcementMode,
-    EntityRef, Verdict,
+    ChallengeKind, Check, Decision, DecisionId, DecisionRecord, DelegationCheck, EnforcementMode, EntityRef, Verdict,
 };
 use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use cedar_policy::{
@@ -179,30 +178,30 @@ impl Pdp {
         entities: &Entities,
         assignees: Option<&HashSet<String>>,
     ) -> anyhow::Result<Decision> {
-        self.decide_passed(req, entities, assignees, Challenges::default())
+        self.decide_passed(req, entities, assignees, &HashSet::new())
     }
 
-    /// [`Self::decide_assigned`] for a request that has passed `passed` challenges: `forbid`
-    /// policies that ask only for one of those are set aside, so a passed challenge never lifts
-    /// a plain deny or a challenge of another kind.
+    /// [`Self::decide_assigned`] for a request whose challenges from the `@challenge` policies in
+    /// `passed` (by ID) it has passed: those are set aside, and only those, so a passed challenge
+    /// never lifts a plain deny, or a challenge another policy asks for (ADR 0080).
     pub fn decide_passed(
         &self,
         req: &Check,
         entities: &Entities,
         assignees: Option<&HashSet<String>>,
-        passed: Challenges,
+        passed: &HashSet<String>,
     ) -> anyhow::Result<Decision> {
         self.decide_with(req, entities, &Facts { assignees, risk: None }, passed)
     }
 
-    /// The general form: what awzy knows beyond the entities (`facts`), and the challenges the
-    /// request has passed.
+    /// The general form: what awzy knows beyond the entities (`facts`), and the `@challenge`
+    /// policies whose challenges the request has passed.
     pub fn decide_with(
         &self,
         req: &Check,
         entities: &Entities,
         facts: &Facts<'_>,
-        passed: Challenges,
+        passed: &HashSet<String>,
     ) -> anyhow::Result<Decision> {
         for key in ["on_behalf_of", "human_present", "assigned"] {
             anyhow::ensure!(
@@ -227,10 +226,7 @@ impl Pdp {
             without_passed = PolicySet::from_policies(
                 self.policies
                     .policies()
-                    .filter(|p| {
-                        let kind = p.annotation("challenge").and_then(ChallengeKind::parse);
-                        !kind.is_some_and(|k| passed.contains(k))
-                    })
+                    .filter(|p| !(p.annotation("challenge").is_some() && passed.contains(&policy_id(p))))
                     .cloned(),
             )?;
             &without_passed
@@ -281,10 +277,7 @@ impl Pdp {
 
         let determining: Vec<_> = response.diagnostics().reason().filter_map(|id| policy_set.policy(id)).collect();
         // Cedar reports them in no particular order; sort so explanations are stable.
-        let mut policies: Vec<String> = determining
-            .iter()
-            .map(|p| p.annotation("id").map(str::to_string).unwrap_or_else(|| p.id().to_string()))
-            .collect();
+        let mut policies: Vec<String> = determining.iter().map(|p| policy_id(p)).collect();
         policies.sort();
         let verdict = match response.decision() {
             cedar_policy::Decision::Allow => Verdict::Allow,
@@ -324,6 +317,32 @@ impl Pdp {
         metrics::CEDAR_EVALUATION.observe(evaluating.elapsed());
         Ok(allowed)
     }
+}
+
+impl Pdp {
+    /// The `@challenge` policies behind a challenge verdict, with the kind each asks for: for the
+    /// principal and for the person it acts for. A grant is recorded against these (ADR 0080).
+    pub fn asking_policies(&self, decision: &Decision) -> Vec<(String, ChallengeKind)> {
+        let ids: HashSet<&String> =
+            decision.policies.iter().chain(decision.on_behalf_of.iter().flat_map(|d| &d.policies)).collect();
+        let mut asking: Vec<(String, ChallengeKind)> = self
+            .policies
+            .policies()
+            .filter_map(|p| {
+                let kind = p.annotation("challenge").and_then(ChallengeKind::parse)?;
+                let id = policy_id(p);
+                ids.contains(&id).then_some((id, kind))
+            })
+            .collect();
+        asking.sort_by(|a, b| a.0.cmp(&b.0));
+        asking.dedup();
+        asking
+    }
+}
+
+/// A policy's ID as decisions report it: its `@id` annotation, else Cedar's.
+fn policy_id(p: &cedar_policy::Policy) -> String {
+    p.annotation("id").map(str::to_string).unwrap_or_else(|| p.id().to_string())
 }
 
 fn uid(e: &EntityRef) -> anyhow::Result<EntityUid> {
@@ -459,7 +478,7 @@ impl AppState {
                 let parties = challenges::parties(req, &entities);
                 let entities = pdp.entities(entities)?;
                 let facts = Facts { assignees: assignees.as_deref(), risk: Some(&risk) };
-                let decision = pdp.decide_with(req, &entities, &facts, Challenges::default())?;
+                let decision = pdp.decide_with(req, &entities, &facts, &HashSet::new())?;
                 match decision.verdict {
                     // In monitor nothing is sent, so there's nothing to resolve (ADR 0007).
                     Verdict::Challenge { challenges } if mode == EnforcementMode::Enforce => {
@@ -492,7 +511,8 @@ impl AppState {
         if !self.challenges.is_configured() {
             return Ok(decision);
         }
-        let resolution = match self.challenges.resolve(decision.id, req, required, &parties).await {
+        let asking = pdp.asking_policies(&decision);
+        let resolution = match self.challenges.resolve(decision.id, req, required, &asking, &parties).await {
             Ok(r) => r,
             Err(error) => {
                 tracing::warn!(%error, decision_id = %decision.id, "couldn't open a challenge; the verdict stands");
@@ -504,9 +524,9 @@ impl AppState {
             decision.policies.push(challenges::CHALLENGE_REJECTED.to_string());
             return Ok(decision);
         }
-        if !resolution.passed.is_empty() {
+        if !resolution.passed_policies.is_empty() {
             let id = decision.id;
-            decision = pdp.decide_with(req, entities, facts, resolution.passed)?;
+            decision = pdp.decide_with(req, entities, facts, &resolution.passed_policies)?;
             decision.id = id;
         }
         if matches!(decision.verdict, Verdict::Challenge { .. }) {
@@ -674,21 +694,35 @@ mod tests {
     }
 
     #[test]
-    fn a_passed_challenge_lifts_only_its_own_kind() {
+    fn a_passed_challenge_lifts_only_the_policies_that_asked_for_it() {
         let pdp = Pdp::with_defaults().unwrap();
         let entities = fixtures(&pdp);
-        let verified = Challenges::of(ChallengeKind::Verification);
+        let passed = |ids: &[&str]| ids.iter().map(|i| i.to_string()).collect::<HashSet<_>>();
+        let verify = Verdict::Challenge { challenges: Challenges::of(ChallengeKind::Verification) };
 
-        let d = pdp.decide_passed(&read("bob", "design-doc", 90), &entities, None, verified).unwrap();
+        let challenged = pdp.decide(&read("bob", "design-doc", 90), &entities).unwrap();
+        assert_eq!(pdp.asking_policies(&challenged), [("high-risk-verify".to_string(), ChallengeKind::Verification)]);
+        let d = pdp.decide_passed(&read("bob", "design-doc", 90), &entities, None, &passed(&["high-risk-verify"]));
+        let d = d.unwrap();
         assert_eq!((d.verdict, d.policies), (Verdict::Allow, vec!["engineering-read-internal".to_string()]));
 
-        let approved = Challenges::of(ChallengeKind::Approval);
-        let d = pdp.decide_passed(&read("bob", "design-doc", 90), &entities, None, approved).unwrap();
-        assert_eq!(d.verdict, Verdict::Challenge { challenges: verified }, "approval isn't verification");
+        let other = passed(&["absent-human-approval"]);
+        let d = pdp.decide_passed(&read("bob", "design-doc", 90), &entities, None, &other).unwrap();
+        assert_eq!(d.verdict, verify, "an answer to another policy isn't one to this");
 
         // A challenge sits on top of a permit; passing one never grants what no policy permits.
-        let d = pdp.decide_passed(&read("bob", "board-deck", 90), &entities, None, verified).unwrap();
-        assert_eq!(d.verdict, Verdict::Deny);
+        let d = pdp.decide_passed(&read("bob", "board-deck", 90), &entities, None, &passed(&["high-risk-verify"]));
+        assert_eq!(d.unwrap().verdict, Verdict::Deny);
+        // Nor does it lift a plain forbid named as if it had asked.
+        let deactivated = pdp
+            .entities(json!([
+                { "uid": { "type": "Human", "id": "bob" }, "attrs": { "active": false }, "parents": [{ "type": "Group", "id": "engineering" }] },
+                { "uid": { "type": "Group", "id": "engineering" }, "attrs": {}, "parents": [] },
+                { "uid": { "type": "Resource", "id": "design-doc" }, "attrs": { "sensitivity": "internal" }, "parents": [] },
+            ]))
+            .unwrap();
+        let d = pdp.decide_passed(&read("bob", "design-doc", 10), &deactivated, None, &passed(&["deactivated-humans"]));
+        assert_eq!(d.unwrap().verdict, Verdict::Deny);
     }
 
     #[test]
@@ -767,9 +801,12 @@ mod tests {
         assert_eq!((d.verdict, d.policies), (verify, vec!["elevated-risk-high-risk-operations-verify".to_string()]));
         assert_eq!(pdp.decide(&call("reset_password", 50), &entities).unwrap().verdict, Verdict::Allow);
         // And touching it is what lets the operation run.
-        let passed = Challenges::of(ChallengeKind::Verification);
-        let d = pdp.decide_passed(&call("export_directory", 50), &entities, None, passed).unwrap();
+        let passed: HashSet<String> = ["elevated-risk-high-risk-operations-verify".to_string()].into();
+        let d = pdp.decide_passed(&call("export_directory", 50), &entities, None, &passed).unwrap();
         assert_eq!(d.verdict, Verdict::Allow);
+        // Risk rose past 80 since: high-risk-verify asks too, and that touch wasn't for it.
+        let d = pdp.decide_passed(&call("export_directory", 90), &entities, None, &passed).unwrap();
+        assert_eq!((d.verdict, d.policies), (verify, vec!["high-risk-verify".to_string()]));
     }
 
     /// Larkspur's shapes (ADR 0061): Sam, a Quarry Labs contractor in engineering; Nora in sales;

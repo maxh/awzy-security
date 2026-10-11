@@ -15,6 +15,9 @@
 //! <sha256 of policies, hex>
 //! ```
 //!
+//! awzy-policy signs enforcement mode changes the same way ([`enforcement_payload`]), since
+//! switching an install to monitor changes what's enforced as surely as a bundle does.
+//!
 //! The same keys sign break-glass requests (see [`break_glass_payload`]), which admins enrolled
 //! at install time send with the `awzy-break-glass` tool.
 //!
@@ -53,6 +56,12 @@ pub fn payload(id: &str, version: i64, schema: &str, policies: &str) -> Vec<u8> 
 pub fn break_glass_payload(to_version: i64, requested_at_unix: i64, nonce: &str, reason: &str) -> Vec<u8> {
     let reason = format!("{:x}", Sha256::digest(reason.as_bytes()));
     format!("awzy.break-glass.v1\nrollback\n{to_version}\n{requested_at_unix}\n{nonce}\n{reason}\n").into_bytes()
+}
+
+/// The bytes an enforcement mode change signs (ADR 0080): the scope, the mode, who set it, and
+/// when, in Unix seconds. The time lets a PDP refuse an older change offered as the current one.
+pub fn enforcement_payload(scope: &str, mode: &str, changed_by: &str, changed_at_unix: i64) -> Vec<u8> {
+    format!("awzy.enforcement.v1\n{scope}\n{mode}\n{changed_by}\n{changed_at_unix}\n").into_bytes()
 }
 
 /// `sha256:<first 16 hex>` of the public key's DER encoding.
@@ -219,5 +228,24 @@ mod tests {
     fn payload_is_unambiguous() {
         // Moving text between fields changes the payload.
         assert_ne!(payload("a", 1, "x\ny", "z"), payload("a", 1, "x", "y\nz"));
+    }
+
+    #[test]
+    fn an_enforcement_change_verifies_only_as_signed() {
+        let signer = BundleSigner::from_key(key(7)).unwrap();
+        let verifier = BundleVerifier::from_keys([*key(7).verifying_key()]).unwrap();
+        let sig = signer.sign_payload(&enforcement_payload("install", "enforce", "Human::alice", 1_800_000_000));
+        let id = signer.key_id();
+        assert!(verifier
+            .verify_payload(&enforcement_payload("install", "enforce", "Human::alice", 1_800_000_000), &sig, id)
+            .is_ok());
+        for changed in [
+            enforcement_payload("install", "monitor", "Human::alice", 1_800_000_000),
+            enforcement_payload("automated-containments", "enforce", "Human::alice", 1_800_000_000),
+            enforcement_payload("install", "enforce", "Human::mallory", 1_800_000_000),
+            enforcement_payload("install", "enforce", "Human::alice", 1_800_000_001),
+        ] {
+            assert!(matches!(verifier.verify_payload(&changed, &sig, id), Err(SigningError::BadSignature)));
+        }
     }
 }

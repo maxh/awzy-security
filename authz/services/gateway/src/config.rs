@@ -65,7 +65,8 @@ pub struct UpstreamConfig {
     pub name: String,
     /// The upstream MCP server's streamable HTTP endpoint, e.g. `http://drive-mcp:8080/mcp`.
     pub url: String,
-    /// Sensitivity of tools not listed in `tools`.
+    /// Sensitivity of tools not listed in `tools`. Confidential unless set, so a tool an
+    /// upstream adds isn't open to everyone before someone classifies it.
     #[serde(default = "default_sensitivity")]
     pub default_sensitivity: String,
     /// Sensitivity per tool name.
@@ -104,7 +105,7 @@ impl UpstreamConfig {
 }
 
 fn default_sensitivity() -> String {
-    "internal".into()
+    "confidential".into()
 }
 
 impl GatewayConfig {
@@ -132,5 +133,18 @@ impl GatewayConfig {
             "with service_account_registry awzy-context, service accounts are registered there, not in service_accounts"
         );
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_tool_nobody_classified_is_confidential() {
+        let up: UpstreamConfig =
+            serde_json::from_value(serde_json::json!({ "name": "drive", "url": "http://drive/mcp" })).unwrap();
+        assert_eq!(up.sensitivity("added_last_week"), "confidential");
+        assert_eq!(up.listed_sensitivity("added_last_week"), None);
     }
 }

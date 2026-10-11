@@ -72,6 +72,9 @@ pub struct EnforcementSetting {
     /// None when the scope has never been switched (and so is in monitor).
     pub changed_by: Option<String>,
     pub changed_at: Option<DateTime<Utc>>,
+    /// Set when changed by a store with a signer (ADR 0080).
+    pub signature: Option<Vec<u8>>,
+    pub signing_key_id: Option<String>,
 }
 
 /// A verified break-glass request.
@@ -313,10 +316,13 @@ impl PolicyStore {
             mode: EnforcementMode::Monitor,
             changed_by: None,
             changed_at: None,
+            signature: None,
+            signing_key_id: None,
         }))
     }
 
-    /// Records a switch. Setting the mode a scope already has still records the change.
+    /// Records a switch, signed when the store has a signer (ADR 0080). Setting the mode a scope
+    /// already has still records the change.
     pub async fn set_enforcement(
         &self,
         scope: &str,
@@ -324,24 +330,43 @@ impl PolicyStore {
         changed_by: &str,
     ) -> Result<EnforcementSetting, StoreError> {
         check_scope(scope)?;
+        let id = uuid::Uuid::now_v7();
+        let mut tx = self.pool.begin().await?;
+        // Whole seconds, as signed, so the stored time and the signature agree.
         let row = sqlx::query(
-            "INSERT INTO enforcement_mode_changes (id, scope, mode, changed_by) VALUES ($1, $2, $3, $4)
-             RETURNING scope, mode, changed_by, changed_at",
+            "INSERT INTO enforcement_mode_changes (id, scope, mode, changed_by, changed_at)
+             VALUES ($1, $2, $3, $4, date_trunc('second', now()))
+             RETURNING scope, mode, changed_by, changed_at, signature, signing_key_id",
         )
-        .bind(uuid::Uuid::now_v7())
+        .bind(id)
         .bind(scope)
         .bind(mode.as_str())
         .bind(changed_by)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
-        Ok(setting_from_row(&row)?)
+        let mut setting = setting_from_row(&row)?;
+        if let Some(signer) = &self.signer {
+            let at = setting.changed_at.expect("a stored change has a time").timestamp();
+            let signature =
+                signer.sign_payload(&awzy_signing::enforcement_payload(scope, mode.as_str(), changed_by, at));
+            sqlx::query("UPDATE enforcement_mode_changes SET signature = $2, signing_key_id = $3 WHERE id = $1")
+                .bind(id)
+                .bind(&signature)
+                .bind(signer.key_id())
+                .execute(&mut *tx)
+                .await?;
+            setting.signature = Some(signature);
+            setting.signing_key_id = Some(signer.key_id().to_string());
+        }
+        tx.commit().await?;
+        Ok(setting)
     }
 
     /// Newest first.
     pub async fn enforcement_changes(&self, scope: &str, limit: i64) -> Result<Vec<EnforcementSetting>, StoreError> {
         check_scope(scope)?;
         let rows = sqlx::query(
-            "SELECT scope, mode, changed_by, changed_at FROM enforcement_mode_changes
+            "SELECT scope, mode, changed_by, changed_at, signature, signing_key_id FROM enforcement_mode_changes
              WHERE scope = $1 ORDER BY changed_at DESC, id DESC LIMIT $2",
         )
         .bind(scope)
@@ -378,6 +403,8 @@ fn setting_from_row(row: &PgRow) -> Result<EnforcementSetting, sqlx::Error> {
             .ok_or_else(|| sqlx::Error::Decode(format!("unknown mode {mode:?}").into()))?,
         changed_by: Some(row.try_get("changed_by")?),
         changed_at: Some(row.try_get("changed_at")?),
+        signature: row.try_get("signature")?,
+        signing_key_id: row.try_get("signing_key_id")?,
     })
 }
 
@@ -475,6 +502,19 @@ pub(crate) mod tests {
                 &active.policies,
                 active.signature.as_deref().unwrap(),
                 active.signing_key_id.as_deref().unwrap(),
+            )
+            .unwrap();
+
+        // So is a switch of mode, as stored and as read back (ADR 0080).
+        let set = store.set_enforcement(INSTALL_SCOPE, EnforcementMode::Enforce, "Human::alice").await.unwrap();
+        let read = store.enforcement(INSTALL_SCOPE).await.unwrap();
+        assert_eq!(read, set);
+        let at = read.changed_at.unwrap().timestamp();
+        verifier
+            .verify_payload(
+                &awzy_signing::enforcement_payload(INSTALL_SCOPE, "enforce", "Human::alice", at),
+                read.signature.as_deref().unwrap(),
+                read.signing_key_id.as_deref().unwrap(),
             )
             .unwrap();
     }

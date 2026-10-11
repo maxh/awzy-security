@@ -19,6 +19,6 @@ pub mod webauthn;
 pub use feed::{Feed, HEARTBEAT};
 pub use grpc::{router, Access};
 pub use store::{
-    ActiveContainments, Challenge, ChallengeStatus, ChallengeStore, Containment, Lifetimes, RequestKey, Resolution,
-    StoreError, MIN_JUSTIFICATION_CHARS,
+    ActiveContainments, Challenge, ChallengeStatus, ChallengeStore, ChallengedPolicy, Containment, Lifetimes,
+    RequestKey, Resolution, StoreError, MIN_JUSTIFICATION_CHARS,
 };

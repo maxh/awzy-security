@@ -92,6 +92,11 @@ CREATE TABLE public.investigations (
     CONSTRAINT investigations_verdict_check CHECK ((verdict = ANY (ARRAY['malicious'::text, 'suspicious'::text, 'benign'::text, 'inconclusive'::text])))
 );
 
+CREATE TABLE public.removed_humans (
+    user_name text NOT NULL,
+    removed_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE public.resource_changes (
     seq bigint NOT NULL,
     resource_id text NOT NULL,
@@ -181,6 +186,9 @@ ALTER TABLE ONLY public.humans
 
 ALTER TABLE ONLY public.investigations
     ADD CONSTRAINT investigations_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.removed_humans
+    ADD CONSTRAINT removed_humans_pkey PRIMARY KEY (user_name);
 
 ALTER TABLE ONLY public.resource_changes
     ADD CONSTRAINT resource_changes_pkey PRIMARY KEY (seq);

@@ -147,6 +147,12 @@ variable "reporter" {
   sensitive = true
 }
 
+variable "break_glass_public_keys" {
+  description = "PEM public keys of the admins enrolled for break-glass policy rollback (ADR 0022), concatenated; null turns break-glass off"
+  type        = string
+  default     = null
+}
+
 variable "ingress" {
   description = "Public hostname of the client portal, and the contact Let's Encrypt registers"
   type = object({

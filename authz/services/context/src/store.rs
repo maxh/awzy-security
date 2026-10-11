@@ -175,6 +175,17 @@ pub struct ContextStore {
 /// How long the resource change log keeps a change. A PDP further behind drops its whole cache.
 const KEEP_CHANGES: &str = "1 hour";
 
+/// Remembers that `user_name` no longer names anyone, so the snapshot keeps them, inactive.
+async fn remove_human(tx: &mut Transaction<'_, Postgres>, user_name: &str) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO removed_humans (user_name) VALUES ($1) ON CONFLICT (user_name) DO UPDATE SET removed_at = now()",
+    )
+    .bind(user_name)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
 pub(crate) async fn bump(tx: &mut Transaction<'_, Postgres>) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE snapshot_version SET version = version + 1").execute(&mut **tx).await?;
     Ok(())
@@ -265,6 +276,7 @@ impl ContextStore {
         .fetch_one(&mut *tx)
         .await
         .map_err(|e| conflict(e, format!("userName {:?} is already taken", input.user_name)))?;
+        sqlx::query("DELETE FROM removed_humans WHERE user_name = $1").bind(&input.user_name).execute(&mut *tx).await?;
         bump(&mut tx).await?;
         tx.commit().await?;
         Ok(user_from_row(&row)?)
@@ -305,6 +317,10 @@ impl ContextStore {
 
     pub async fn replace_user(&self, id: Uuid, input: &UserInput) -> Result<Option<User>, StoreError> {
         let mut tx = self.pool.begin().await?;
+        let before: Option<String> = sqlx::query_scalar("SELECT user_name FROM humans WHERE scim_id = $1 FOR UPDATE")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?;
         let row = sqlx::query(&format!(
             "UPDATE humans SET user_name = $2, external_id = $3, display_name = $4, active = $5, resource = $6, updated_at = now()
              WHERE scim_id = $1 RETURNING {USER_COLUMNS}"
@@ -319,6 +335,14 @@ impl ContextStore {
         .await
         .map_err(|e| conflict(e, format!("userName {:?} is already taken", input.user_name)))?;
         if row.is_some() {
+            // The old name stops being anyone, and the new one is someone again.
+            if let Some(old) = before.filter(|old| *old != input.user_name) {
+                remove_human(&mut tx, &old).await?;
+            }
+            sqlx::query("DELETE FROM removed_humans WHERE user_name = $1")
+                .bind(&input.user_name)
+                .execute(&mut *tx)
+                .await?;
             bump(&mut tx).await?;
         }
         tx.commit().await?;
@@ -327,14 +351,17 @@ impl ContextStore {
 
     pub async fn delete_user(&self, id: Uuid) -> Result<bool, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
-        let deleted =
-            sqlx::query("DELETE FROM humans WHERE scim_id = $1").bind(id).execute(&mut *tx).await?.rows_affected() > 0;
+        let deleted: Option<String> = sqlx::query_scalar("DELETE FROM humans WHERE scim_id = $1 RETURNING user_name")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?;
         sqlx::query("DELETE FROM group_members WHERE member_id = $1").bind(id).execute(&mut *tx).await?;
-        if deleted {
+        if let Some(user_name) = &deleted {
+            remove_human(&mut tx, user_name).await?;
             bump(&mut tx).await?;
         }
         tx.commit().await?;
-        Ok(deleted)
+        Ok(deleted.is_some())
     }
 
     // ---- Groups
@@ -657,6 +684,17 @@ impl ContextStore {
                 "parents": if *active { parent_refs(id) } else { vec![] },
             }));
         }
+        // Deleted or renamed in the IdP: inactive, not unknown, so a PDP doesn't fall back to the
+        // groups in a token minted before (ADR 0031).
+        let removed: Vec<String> =
+            sqlx::query_scalar("SELECT user_name FROM removed_humans ORDER BY user_name").fetch_all(&mut *tx).await?;
+        for user_name in removed {
+            entities.push(json!({
+                "uid": { "type": entity_type::HUMAN, "id": user_name },
+                "attrs": { "active": false },
+                "parents": [],
+            }));
+        }
         let accounts: Vec<(String, String, bool, Vec<String>)> =
             sqlx::query_as("SELECT id, owner, ai, groups FROM service_accounts ORDER BY id")
                 .fetch_all(&mut *tx)
@@ -749,8 +787,27 @@ pub(crate) mod tests {
         store.replace_user(alice.scim_id, &deactivated).await.unwrap();
         let (v2, entities) = store.snapshot().await.unwrap();
         assert!(v2 > v1, "every change moves the version");
-        let alice = entities.iter().find(|e| e["uid"]["id"] == "alice@acme.com").unwrap();
-        assert_eq!((alice["attrs"]["active"].clone(), alice["parents"].clone()), (json!(false), json!([])));
+        let alice_entity = entities.iter().find(|e| e["uid"]["id"] == "alice@acme.com").unwrap();
+        assert_eq!(
+            (alice_entity["attrs"]["active"].clone(), alice_entity["parents"].clone()),
+            (json!(false), json!([]))
+        );
+
+        // Deleted or renamed away from: still in the snapshot, inactive, so a PDP never falls back
+        // to the groups in an older token. Provisioned again, they're active.
+        let removed = |entities: &[Value], id: &str| {
+            entities.iter().find(|e| e["uid"]["id"] == id).map(|e| (e["attrs"]["active"].clone(), e["parents"].clone()))
+        };
+        assert!(store.delete_user(bob.scim_id).await.unwrap());
+        store.replace_user(alice.scim_id, &user("alice.new@acme.com")).await.unwrap();
+        let (_, entities) = store.snapshot().await.unwrap();
+        assert_eq!(removed(&entities, "bob@acme.com"), Some((json!(false), json!([]))));
+        assert_eq!(removed(&entities, "alice@acme.com"), Some((json!(false), json!([]))));
+        assert_eq!(removed(&entities, "alice.new@acme.com").unwrap().0, json!(true));
+        store.create_user(&user("bob@acme.com")).await.unwrap();
+        let (_, entities) = store.snapshot().await.unwrap();
+        let bobs: Vec<_> = entities.iter().filter(|e| e["uid"]["id"] == "bob@acme.com").collect();
+        assert_eq!((bobs.len(), bobs[0]["attrs"]["active"].clone()), (1, json!(true)), "back, and only once");
 
         assert!(
             matches!(store.create_user(&user("BOB@acme.com")).await, Err(StoreError::Conflict(_))),

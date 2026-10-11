@@ -28,6 +28,8 @@ CREATE TABLE public.enforcement_mode_changes (
     mode text NOT NULL,
     changed_by text NOT NULL,
     changed_at timestamp with time zone DEFAULT now() NOT NULL,
+    signature bytea,
+    signing_key_id text,
     CONSTRAINT enforcement_mode_changes_mode_check CHECK ((mode = ANY (ARRAY['monitor'::text, 'enforce'::text])))
 );
 

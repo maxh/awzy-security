@@ -68,7 +68,7 @@ fn evaluate(pdp: &Pdp, req: &Check, assembled: &Assembled) -> anyhow::Result<Dec
         Assembled::Unregistered => Ok(unregistered()),
         Assembled::Ready { entities, assignees, risk } => {
             let facts = crate::Facts { assignees: assignees.as_deref(), risk: Some(risk) };
-            pdp.decide_with(req, &pdp.entities(entities.clone())?, &facts, Default::default())
+            pdp.decide_with(req, &pdp.entities(entities.clone())?, &facts, &Default::default())
         }
     }
 }

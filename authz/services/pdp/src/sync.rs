@@ -8,7 +8,7 @@ use awzy_service_auth::{grpc_channel, AuthChannel};
 use std::{sync::Arc, time::Duration};
 
 use awzy_authz_proto::policy::v1::{
-    policy_service_client::PolicyServiceClient, GetActiveRequest, GetEnforcementRequest,
+    policy_service_client::PolicyServiceClient, EnforcementSetting, GetActiveRequest, GetEnforcementRequest,
 };
 use awzy_model::EnforcementMode;
 use tonic::transport::Channel;
@@ -81,6 +81,14 @@ pub async fn sync_waiting(
     let res = client.get_active(GetActiveRequest { known_version, wait_seconds }).await?.into_inner();
     let loaded = match res.bundle.filter(|_| !res.unchanged) {
         Some(bundle) => {
+            // Versions only go up, break-glass included (it republishes as a new version), so an
+            // older one is a signed bundle replayed from the database (ADR 0080).
+            anyhow::ensure!(
+                bundle.version > known_version,
+                "refusing policy bundle {} (version {}): older than version {known_version}, in force",
+                bundle.qid,
+                bundle.version
+            );
             if let Some(verifier) = verifier {
                 verifier
                     .verify(
@@ -111,10 +119,42 @@ pub async fn sync_waiting(
         .setting
         .ok_or_else(|| anyhow::anyhow!("awzy-policy returned no enforcement setting"))?;
     let mode = EnforcementMode::from(setting.mode());
+    if let Some(verifier) = verifier {
+        verify_setting(verifier, enforcement, &setting, mode)?;
+    }
     if enforcement.synced(mode) {
         tracing::info!(mode = mode.as_str(), changed_by = %setting.changed_by, "enforcement mode");
     }
     Ok(loaded)
+}
+
+/// Applies a mode only if awzy-policy signed it and it's no older than the one in force (ADR
+/// 0080). A scope never switched comes unsigned, and is monitor.
+fn verify_setting(
+    verifier: &BundleVerifier,
+    enforcement: &Enforcement,
+    setting: &EnforcementSetting,
+    mode: EnforcementMode,
+) -> anyhow::Result<()> {
+    let Some(at) = setting.changed_at.as_ref().map(|t| t.seconds) else {
+        anyhow::ensure!(
+            mode == EnforcementMode::Monitor && enforcement.changed_at().is_none(),
+            "refusing an enforcement mode with no change behind it"
+        );
+        return Ok(());
+    };
+    let payload = awzy_signing::enforcement_payload(&setting.scope, mode.as_str(), &setting.changed_by, at);
+    verifier
+        .verify_payload(&payload, &setting.signature, &setting.signing_key_id)
+        .map_err(|e| anyhow::anyhow!("refusing the enforcement mode set at {at}: {e}"))?;
+    if let Some(applied) = enforcement.changed_at() {
+        anyhow::ensure!(
+            at >= applied,
+            "refusing an enforcement mode set at {at}, older than the one in force ({applied})"
+        );
+    }
+    enforcement.set_changed_at(at);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -244,5 +284,44 @@ mod tests {
         let decision = pdp.load().decide(&req, &entities).unwrap();
         assert_eq!(decision.verdict, Verdict::Allow);
         assert_eq!(decision.policies, vec!["everyone-reads"]);
+    }
+
+    #[test]
+    fn only_a_signed_mode_no_older_than_the_one_in_force_applies() {
+        let key = p256::ecdsa::SigningKey::from_bytes(&[5u8; 32].into()).unwrap();
+        let signer = awzy_signing::BundleSigner::from_key(key.clone()).unwrap();
+        let verifier = BundleVerifier::from_keys([*key.verifying_key()]).unwrap();
+        let setting = |mode: EnforcementMode, at: i64| EnforcementSetting {
+            scope: "install".into(),
+            mode: awzy_authz_proto::authz::v1::EnforcementMode::from(mode).into(),
+            changed_by: "Human::alice".into(),
+            changed_at: Some(awzy_authz_proto::prost_types::Timestamp { seconds: at, nanos: 0 }),
+            signature: signer.sign_payload(&awzy_signing::enforcement_payload(
+                "install",
+                mode.as_str(),
+                "Human::alice",
+                at,
+            )),
+            signing_key_id: signer.key_id().into(),
+            ..Default::default()
+        };
+        let enforcement = Enforcement::awaiting_sync();
+        let (monitor, enforce) = (EnforcementMode::Monitor, EnforcementMode::Enforce);
+
+        assert!(
+            verify_setting(&verifier, &enforcement, &EnforcementSetting::default(), monitor).is_ok(),
+            "never switched"
+        );
+        assert!(verify_setting(&verifier, &enforcement, &setting(enforce, 2_000), enforce).is_ok());
+
+        let mut flipped = setting(enforce, 3_000);
+        flipped.mode = awzy_authz_proto::authz::v1::EnforcementMode::Monitor.into();
+        assert!(verify_setting(&verifier, &enforcement, &flipped, monitor).is_err(), "changed in the database");
+        assert!(verify_setting(&verifier, &enforcement, &setting(monitor, 1_000), monitor).is_err(), "an older change");
+        assert!(
+            verify_setting(&verifier, &enforcement, &EnforcementSetting::default(), monitor).is_err(),
+            "every change deleted"
+        );
+        assert!(verify_setting(&verifier, &enforcement, &setting(monitor, 3_000), monitor).is_ok(), "a newer one");
     }
 }

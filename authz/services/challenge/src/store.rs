@@ -105,11 +105,29 @@ impl Challenge {
     }
 }
 
+/// A policy that asked for a challenge: its ID (the `@id` annotation, else Cedar's) and the kind
+/// it asked for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChallengedPolicy {
+    pub id: String,
+    pub kind: ChallengeKind,
+}
+
+impl ChallengedPolicy {
+    /// A stand-in for a caller that names only the kind. No Cedar policy has this ID, so the PDP
+    /// sets nothing aside for it.
+    pub(crate) fn for_kind(kind: ChallengeKind) -> Self {
+        Self { id: format!("challenge:{}", kind.as_str()), kind }
+    }
+}
+
 /// What a request has passed, and what it still has to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Resolution {
-    /// Required kinds with a live grant for this request.
+    /// Required kinds every asking policy of which has a live grant for this request.
     pub passed: Challenges,
+    /// The asking policies a live grant answers: the PDP sets these aside (ADR 0080).
+    pub passed_policies: Vec<String>,
     /// The pending challenge for the rest, when one was opened or already open.
     pub challenge_id: Option<ChallengeId>,
     /// An approver rejected this request and the rejection hasn't expired.
@@ -221,9 +239,8 @@ impl ChallengeStore {
         migrator().run(&self.pool).await
     }
 
-    /// What `request` has passed of `required`, and, with `open`, the pending challenge for the
-    /// rest: an open one is reused, so retries don't pile up challenges. Nothing is opened while
-    /// a rejection stands.
+    /// [`Self::resolve_policies`] for a caller that names only kinds: each counts as a policy of
+    /// its own, so a grant covers that kind for the request, as before policies were recorded.
     pub async fn resolve(
         &self,
         decision_id: DecisionId,
@@ -232,22 +249,47 @@ impl ChallengeStore {
         answerer_id: Option<&str>,
         open: bool,
     ) -> Result<Resolution, StoreError> {
+        let policies: Vec<ChallengedPolicy> = required.iter().map(ChallengedPolicy::for_kind).collect();
+        self.resolve_policies(decision_id, request, &policies, answerer_id, open).await
+    }
+
+    /// What `request` has passed of what `policies` ask, and, with `open`, the pending challenge
+    /// for the rest: an open one is reused, so retries don't pile up challenges. Nothing is opened
+    /// while a rejection stands. A grant answers only the policies it was opened for (ADR 0080),
+    /// so a policy that fires later, even asking for the same kind, needs a challenge of its own.
+    pub async fn resolve_policies(
+        &self,
+        decision_id: DecisionId,
+        request: &RequestKey,
+        policies: &[ChallengedPolicy],
+        answerer_id: Option<&str>,
+        open: bool,
+    ) -> Result<Resolution, StoreError> {
+        let required: Challenges = policies.iter().map(|p| p.kind).collect();
+        if required.is_empty() {
+            return Err(StoreError::Invalid("a challenge needs at least one policy asking for it".into()));
+        }
         let mut tx = self.pool.begin().await?;
         let sql = format!(
-            "SELECT status, passed FROM challenges WHERE {REQUEST_MATCH} AND \
+            "SELECT status, passed, policies FROM challenges WHERE {REQUEST_MATCH} AND \
              ((status = 'passed' AND grant_expires_at > now()) OR (status = 'rejected' AND expires_at > now()))"
         );
         let rows = bind_request(sqlx::query(&sql), request).fetch_all(&mut *tx).await?;
-        let mut passed = Challenges::default();
+        let mut grants: Vec<(Challenges, Vec<String>)> = Vec::new();
         let mut rejected = false;
         for row in &rows {
             match row.try_get::<&str, _>("status")? {
-                "passed" => passed = passed.union(kinds(row.try_get("passed")?)?),
+                "passed" => grants.push((kinds(row.try_get("passed")?)?, row.try_get("policies")?)),
                 _ => rejected = true,
             }
         }
-        let passed = passed.intersection(required);
-        let remaining = required.without(passed);
+        let covered =
+            |p: &ChallengedPolicy| grants.iter().any(|(kinds, ids)| kinds.contains(p.kind) && ids.contains(&p.id));
+        let (answered, unanswered): (Vec<&ChallengedPolicy>, Vec<&ChallengedPolicy>) =
+            policies.iter().partition(|p| covered(p));
+        let remaining: Challenges = unanswered.iter().map(|p| p.kind).collect();
+        let passed = required.without(remaining);
+        let passed_policies: Vec<String> = answered.iter().map(|p| p.id.clone()).collect();
         let mut opened = false;
         let challenge_id = if open && !rejected && !remaining.is_empty() {
             let expire = format!(
@@ -255,13 +297,20 @@ impl ChallengeStore {
                  AND status = 'pending' AND expires_at <= now()"
             );
             bind_request(sqlx::query(&expire), request).execute(&mut *tx).await?;
+            let mut ids: Vec<String> = unanswered.iter().map(|p| p.id.clone()).collect();
+            ids.sort();
+            ids.dedup();
             let insert = "INSERT INTO challenges (principal_type, principal_id, on_behalf_of_type, on_behalf_of_id, \
-                    action, resource_type, resource_id, id, decision_id, kinds, status, answerer_id, expires_at) \
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', $11, now() + make_interval(secs => $12)) \
+                    action, resource_type, resource_id, id, decision_id, kinds, status, answerer_id, expires_at, \
+                    policies) \
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', $11, now() + make_interval(secs => $12), \
+                    $13) \
                  ON CONFLICT (principal_type, principal_id, on_behalf_of_type, on_behalf_of_id, action, resource_type, \
                     resource_id) WHERE status = 'pending' \
                  DO UPDATE SET kinds = ARRAY(SELECT DISTINCT k FROM unnest(challenges.kinds || EXCLUDED.kinds) AS k \
-                    ORDER BY k) \
+                    ORDER BY k), \
+                    policies = ARRAY(SELECT DISTINCT p FROM unnest(challenges.policies || EXCLUDED.policies) AS p \
+                    ORDER BY p) \
                  RETURNING id, (xmax = 0) AS inserted";
             let row = bind_request(sqlx::query(insert), request)
                 .bind(ChallengeId::new().uuid())
@@ -269,6 +318,7 @@ impl ChallengeStore {
                 .bind(kind_names(remaining))
                 .bind(answerer_id.unwrap_or_default())
                 .bind(self.lifetimes.pending.as_secs_f64())
+                .bind(&ids)
                 .fetch_one(&mut *tx)
                 .await?;
             // An inserted row has no xmax; one the conflict updated does.
@@ -278,7 +328,7 @@ impl ChallengeStore {
             None
         };
         tx.commit().await?;
-        Ok(Resolution { passed, challenge_id, rejected, opened })
+        Ok(Resolution { passed, passed_policies, challenge_id, rejected, opened })
     }
 
     pub async fn get(&self, id: ChallengeId) -> Result<Challenge, StoreError> {
@@ -723,7 +773,16 @@ pub(crate) mod tests {
         let Some(store) = test_store(Lifetimes::default()).await else { return };
         let req = request(alice(), None);
         let r = store.resolve(DecisionId::new(), &req, of(&[ChallengeKind::Approval]), None, false).await.unwrap();
-        assert_eq!(r, Resolution { passed: Challenges::default(), challenge_id: None, rejected: false, opened: false });
+        assert_eq!(
+            r,
+            Resolution {
+                passed: Challenges::default(),
+                passed_policies: vec![],
+                challenge_id: None,
+                rejected: false,
+                opened: false
+            }
+        );
         assert!(store.list(None, None, 10).await.unwrap().is_empty());
     }
 
@@ -771,6 +830,28 @@ pub(crate) mod tests {
         assert_eq!((c.status, c.decided_by.as_deref()), (ChallengeStatus::Passed, Some("carol")));
         let r = store.resolve(DecisionId::new(), &req, required, Some("alice"), true).await.unwrap();
         assert_eq!((r.passed, r.challenge_id), (required, None));
+    }
+
+    #[tokio::test]
+    async fn a_grant_answers_only_the_policies_that_asked_for_it() {
+        let Some(store) = test_store(Lifetimes::default()).await else { return };
+        let req = request(alice(), None);
+        let asked = |id: &str| ChallengedPolicy { id: id.into(), kind: ChallengeKind::Justification };
+        let outside = [asked("outside-work")];
+        let first = store.resolve_policies(DecisionId::new(), &req, &outside, Some("alice"), true).await.unwrap();
+        let id = first.challenge_id.unwrap();
+        store.justify(id, "alice", WHY).await.unwrap();
+
+        let retry = store.resolve_policies(DecisionId::new(), &req, &outside, Some("alice"), true).await.unwrap();
+        assert_eq!((retry.passed_policies, retry.challenge_id), (vec!["outside-work".to_string()], None));
+
+        // Risk rose since: another policy asks for the same kind, and the earlier answer isn't one.
+        let both = [asked("outside-work"), asked("risk-went-up")];
+        let r = store.resolve_policies(DecisionId::new(), &req, &both, Some("alice"), true).await.unwrap();
+        assert_eq!(r.passed_policies, ["outside-work"]);
+        assert!(r.passed.is_empty(), "the kind isn't passed while one policy asking it is unanswered");
+        let c = store.get(r.challenge_id.expect("a new challenge")).await.unwrap();
+        assert_ne!(c.id, id);
     }
 
     #[tokio::test]

@@ -111,6 +111,16 @@ message ResolveRequest {
   // The resource's owner, from its entity, when it has one: told about an approval it's asked
   // for (ADR 0073).
   string resource_owner_id = 9;
+  // The policies that asked, each with its kind. A grant answers only the policies it was opened
+  // for (ADR 0080). Without them, each of `kinds` counts as a policy of its own.
+  repeated ChallengedPolicy policies = 10;
+}
+
+// A policy that asked for a challenge.
+message ChallengedPolicy {
+  // The `@id` annotation, or Cedar's own ID.
+  string policy_id = 1;
+  awzy.authz.v1.ChallengeKind kind = 2;
 }
 
 message ResolveResponse {
@@ -120,6 +130,8 @@ message ResolveResponse {
   string challenge_qid = 2;
   // An approver rejected this request recently: the PDP denies it.
   bool rejected = 3;
+  // The asking policies a live grant answers. The PDP sets these aside, and only these.
+  repeated string passed_policies = 4;
 }
 
 message GetChallengeRequest {
