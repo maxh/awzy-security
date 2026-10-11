@@ -62,6 +62,8 @@ pub struct Services {
     pub pdp: Option<AuthorizerClient<AuthChannel>>,
     /// awzy-context, for the directory.
     pub context: Option<directory::ContextClient>,
+    /// awzy-context's API, typed (#222): the areas `awzy_context_api` covers so far.
+    pub context_api: Option<awzy_context_api::ContextApi>,
     /// Awzy Bot's model (ADR 0048); None when the install hasn't turned it on.
     pub bot: Option<awzy_bot::BotModel>,
     /// awzy-challenge, for challenges and containments (ADR 0054).
@@ -94,6 +96,9 @@ impl Services {
                 .with_database(var("AWZY_CLICKHOUSE_DATABASE", "awzy"))
         });
         let context = std::env::var("AWZY_CONTEXT_ADDR").ok().map(directory::ContextClient::new);
+        let context_api = std::env::var("AWZY_CONTEXT_ADDR")
+            .ok()
+            .map(|a| awzy_context_api::ContextApi::new(&a, awzy_service_auth::TokenSource::from_env()));
         let challenge = channel("AWZY_CHALLENGE_ADDR")?.map(|c| {
             awzy_authz_proto::challenge::v1::challenge_service_client::ChallengeServiceClient::new(grpc_channel(
                 c,
@@ -101,7 +106,7 @@ impl Services {
             ))
         });
         let activity = awzy_activity::ActivityLog::from_env("awzy-client-portal");
-        Ok(Self { policy, clickhouse, pdp, context, bot: None, challenge, activity })
+        Ok(Self { policy, clickhouse, pdp, context, context_api, bot: None, challenge, activity })
     }
 }
 

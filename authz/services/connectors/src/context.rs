@@ -76,15 +76,6 @@ impl ContextClient {
         Ok(())
     }
 
-    /// Every connector's settings, as the client portal set them (ADR 0104).
-    pub async fn connector_settings(&self) -> anyhow::Result<Vec<Value>> {
-        let (status, res) = self.send(Method::GET, "/v1/connector-settings", Body::None).await?;
-        if !status.is_success() {
-            bail!("awzy-context refused to give connector settings ({status}): {res}");
-        }
-        Ok(res["connectors"].as_array().cloned().unwrap_or_default())
-    }
-
     /// The IDs of every resource from `source`, page by page.
     pub async fn resource_ids(&self, source: &str) -> anyhow::Result<BTreeSet<String>> {
         self.ids("resources", "resources", source).await

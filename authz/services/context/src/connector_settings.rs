@@ -10,8 +10,6 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::Row;
 
@@ -20,25 +18,7 @@ use crate::store::ContextStore;
 /// The connectors awzy has.
 pub const CONNECTORS: &[&str] = &["drive", "jira"];
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct ConnectorSettings {
-    pub name: String,
-    pub enabled: bool,
-    pub settings: Value,
-    pub credential_set_at: Option<DateTime<Utc>>,
-    pub updated_by: String,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct PutSettings {
-    pub enabled: bool,
-    pub settings: Value,
-    /// The portal wrote a new credential with this change.
-    #[serde(default)]
-    pub credential_set: bool,
-    pub updated_by: String,
-}
+pub use awzy_context_api::model::{ConnectorSettings, PutConnectorSettings as PutSettings};
 
 fn text<'a>(s: &'a Value, key: &str) -> Option<&'a str> {
     s[key].as_str().map(str::trim).filter(|v| !v.is_empty())

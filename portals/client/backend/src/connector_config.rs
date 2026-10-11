@@ -6,14 +6,17 @@
 
 use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject};
 use awzy_cloud::SecretWriter;
+use awzy_context_api::{
+    model::{ConnectorSettings, PutConnectorSettings},
+    ContextError,
+};
 use awzy_model::ChallengeId;
 use awzy_portal::{JsonObject, Qid, UtcTimestamp};
-use chrono::{DateTime, Utc};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use crate::{
     access::{require, PortalAction, PortalArea},
-    directory::context,
+    directory::context_api,
     enforcement::action_challenge,
 };
 
@@ -80,23 +83,21 @@ pub struct ConnectorConfig {
     pub updated_at: UtcTimestamp,
 }
 
-fn time(v: &Value) -> Option<UtcTimestamp> {
-    v.as_str().and_then(|t| t.parse::<DateTime<Utc>>().ok()).map(UtcTimestamp)
-}
-
-fn config(c: &Value) -> Option<ConnectorConfig> {
-    let name = match c["name"].as_str()? {
+/// A connector's settings as awzy-context keeps them, for the portal; None for a connector this
+/// portal doesn't know.
+fn config(c: ConnectorSettings) -> Option<ConnectorConfig> {
+    let name = match c.name.as_str() {
         "drive" => ConnectorName::Drive,
         "jira" => ConnectorName::Jira,
         _ => return None,
     };
     Some(ConnectorConfig {
         name,
-        enabled: c["enabled"].as_bool().unwrap_or(false),
-        settings: JsonObject::from_json(c["settings"].clone()).unwrap_or_default(),
-        credential_set_at: time(&c["credential_set_at"]),
-        updated_by: c["updated_by"].as_str().unwrap_or_default().to_string(),
-        updated_at: time(&c["updated_at"]).unwrap_or(UtcTimestamp(Utc::now())),
+        enabled: c.enabled,
+        settings: JsonObject::from_json(c.settings).unwrap_or_default(),
+        credential_set_at: c.credential_set_at.map(UtcTimestamp),
+        updated_by: c.updated_by,
+        updated_at: UtcTimestamp(c.updated_at),
     })
 }
 
@@ -127,8 +128,7 @@ impl ConnectorConfigQuery {
     /// The connectors configured in the portal. For those who may view the enforcement area.
     async fn connector_configs(&self, ctx: &Context<'_>) -> Result<Vec<ConnectorConfig>> {
         require(ctx, PortalAction::View, PortalArea::Enforcement).await?;
-        let found: Value = context(ctx)?.get("/v1/connector-settings").await?;
-        Ok(found["connectors"].as_array().into_iter().flatten().filter_map(config).collect())
+        Ok(context_api(ctx)?.connector_settings().await?.into_iter().filter_map(config).collect())
     }
 
     /// Whether this install can keep connector credentials (its cloud's secrets manager is set
@@ -151,23 +151,21 @@ async fn save(
     credential_set: bool,
     viewer: &crate::access::Viewer,
 ) -> Result<ConnectorConfig> {
-    let by = viewer.actor().label();
-    let body = json!({
-        "enabled": enabled,
-        "settings": Value::Object(settings.0.clone()),
-        "credential_set": credential_set,
-        "updated_by": by,
-    });
-    let path = format!("/v1/connector-settings/{}", name.as_str());
-    let (status, res) = context(ctx)?.call("PUT", &path, Some(&viewer.actor().to_string()), Some(body)).await?;
-    match status {
-        200 => {
-            let saved: Value = serde_json::from_slice(&res)?;
-            Ok(config(&saved["connector"]).ok_or("awzy-context returned no connector")?)
-        }
-        400 => Err(String::from_utf8_lossy(&res).into_owned().into()),
-        _ => Err(format!("awzy-context answered {status}").into()),
-    }
+    let put = PutConnectorSettings {
+        enabled,
+        settings: Value::Object(settings.0.clone()),
+        credential_set,
+        updated_by: viewer.actor().label(),
+    };
+    let saved = context_api(ctx)?
+        .put_connector_settings(name.as_str(), &put, &viewer.actor().to_string())
+        .await
+        .map_err(|e| match e {
+            // awzy-context's reason, as it gave it: which setting is wrong.
+            ContextError::Invalid(why) => async_graphql::Error::new(why),
+            e => e.into(),
+        })?;
+    Ok(config(saved).ok_or("awzy-context returned a connector this portal doesn't know")?)
 }
 
 #[Object]
@@ -226,13 +224,18 @@ mod tests {
 
     #[test]
     fn a_saved_connector_reads_back_from_awzy_context() {
-        let c = config(&json!({
-            "name": "jira", "enabled": true, "settings": { "url": "https://acme.atlassian.net", "user": "bot" },
-            "credential_set_at": "2026-10-11T12:00:00Z", "updated_by": "Human::alice", "updated_at": "2026-10-11T12:00:00Z",
-        }))
-        .unwrap();
+        let at = "2026-10-11T12:00:00Z".parse().unwrap();
+        let saved = |name: &str| ConnectorSettings {
+            name: name.into(),
+            enabled: true,
+            settings: serde_json::json!({ "url": "https://acme.atlassian.net", "user": "bot" }),
+            credential_set_at: Some(at),
+            updated_by: "alice".into(),
+            updated_at: at,
+        };
+        let c = config(saved("jira")).unwrap();
         assert_eq!((c.name, c.enabled, c.settings.0["user"].as_str()), (ConnectorName::Jira, true, Some("bot")));
         assert!(c.credential_set_at.is_some());
-        assert!(config(&json!({ "name": "slack" })).is_none());
+        assert!(config(saved("slack")).is_none());
     }
 }

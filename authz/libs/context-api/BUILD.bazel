@@ -1,0 +1,13 @@
+load("//tools:rust.bzl", "awzy_rust_library")
+
+# awzy-context's HTTP API as types, and a client for it (#221, #222): what callers use instead of
+# building requests and reading JSON by field name.
+awzy_rust_library(
+    name = "context-api",
+    crate_name = "awzy_context_api",
+    visibility = ["//tools:client_side"],
+    deps = [
+        "//authz/libs/service-auth",
+        "//libs/http",
+    ],
+)

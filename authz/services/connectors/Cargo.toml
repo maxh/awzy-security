@@ -6,6 +6,7 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
+awzy-context-api.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 base64.workspace = true
