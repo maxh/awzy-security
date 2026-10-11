@@ -71,6 +71,10 @@ pdp:
     enabled: true
     maxReplicas: 4
     cpuPercent: 70
+  # Each connection is closed gracefully after about this long, and its client reconnects. A
+  # Service spreads connections, not requests, so this is how enforcement points' checks reach
+  # PDPs the autoscaler adds. 0 keeps connections open.
+  maxConnectionAgeSeconds: 60
   resources:
     requests: { cpu: 250m, memory: 256Mi }
     limits: { memory: 512Mi }

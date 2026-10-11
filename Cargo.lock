@@ -1241,6 +1241,7 @@ dependencies = [
  "anyhow",
  "awzy-telemetry",
  "axum",
+ "hyper-util",
  "serde_json",
  "tokio",
  "tower",

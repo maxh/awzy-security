@@ -6,6 +6,7 @@
     (dict "name" "AWZY_CHALLENGE_ADDR" "value" (printf "http://awzy-challenge.%s.svc:8080" $sys))
     (dict "name" "AWZY_KAFKA_BROKERS" "value" (required "kafka.brokers is required" .Values.kafka.brokers))
     (dict "name" "AWZY_KAFKA_TLS" "value" (toString .Values.kafka.tls))
+    (dict "name" "AWZY_MAX_CONNECTION_AGE_SECS" "value" (toString .Values.pdp.maxConnectionAgeSeconds))
     (dict "name" "AWZY_POLICY_ADDR" "value" (printf "http://awzy-policy.%s.svc:8080" $sys))
     (dict "name" "AWZY_POLICY_VERIFY_KEY_FILE" "value" "/var/run/secrets/awzy/policy-verify/verify.pem")
     (dict "name" "AWZY_CONTEXT_ADDR" "value" (printf "http://awzy-context.%s.svc:8080" $sys))
