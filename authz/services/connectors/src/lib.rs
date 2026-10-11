@@ -9,6 +9,7 @@ pub mod drive;
 pub mod google;
 pub mod http;
 pub mod jira;
+pub mod status;
 
 use axum::Router;
 
@@ -18,7 +19,7 @@ pub trait Connector: Send + Sync {
     fn name(&self) -> &'static str;
 }
 
-/// Webhook receivers for sources that push changes.
+/// Webhook receivers for sources that push changes, and each connector's status.
 pub fn router() -> Router {
-    Router::new()
+    status::router()
 }

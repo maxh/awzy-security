@@ -6,6 +6,7 @@ import {
   IconHeartbeat,
   IconLifebuoy,
   IconListCheck,
+  IconPlugConnected,
   IconSearch,
   IconShieldCheck,
   IconUserSearch,
@@ -21,6 +22,7 @@ import {
 } from "@tanstack/react-router";
 
 import { ChallengesPage } from "./ChallengesPage";
+import { ConnectorsPage } from "./ConnectorsPage";
 import { DecisionsPage } from "./DecisionsPage";
 import { DirectoryPage } from "./DirectoryPage";
 import { EnforcementPage } from "./EnforcementPage";
@@ -77,6 +79,12 @@ function Nav() {
         icon={<IconUserSearch {...icon} />}
         active={pathname.startsWith("/lookup")}
         renderRoot={(props) => <Link to="/lookup" {...props} />}
+      />
+      <ShellNavLink
+        label="Connectors"
+        icon={<IconPlugConnected {...icon} />}
+        active={pathname.startsWith("/connectors")}
+        renderRoot={(props) => <Link to="/connectors" {...props} />}
       />
       <ShellNavLink
         label="Status"
@@ -159,6 +167,12 @@ const lookupRoute = createRoute({
   component: LookupPage,
 });
 
+const connectorsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/connectors",
+  component: ConnectorsPage,
+});
+
 const statusRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/status",
@@ -181,6 +195,7 @@ export const router = createRouter({
     challengesRoute,
     investigationsRoute,
     lookupRoute,
+    connectorsRoute,
     statusRoute,
     supportRoute,
   ]),

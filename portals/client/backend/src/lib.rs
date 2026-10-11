@@ -11,6 +11,7 @@ pub mod access;
 mod audit;
 pub mod awzy_bot;
 mod challenges;
+mod connectors;
 mod decisions;
 mod diagnostics;
 pub mod directory;
@@ -173,6 +174,7 @@ pub struct ClientPortalQuery(
     security_keys::SecurityKeyQuery,
     investigations::InvestigationQuery,
     status::StatusQuery,
+    connectors::ConnectorsQuery,
     outage::OutageQuery,
     support::SupportQuery,
     lookup::LookupQuery,

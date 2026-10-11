@@ -23,7 +23,7 @@ const TIMEOUT: Duration = Duration::from_secs(3);
 /// The docs site's troubleshooting guide, with a section per component.
 const RUNBOOKS: &str = "https://docs.awzysecurity.com/guides/troubleshooting/";
 
-type HttpClient = Client<HttpConnector, Empty<Bytes>>;
+pub(crate) type HttpClient = Client<HttpConnector, Empty<Bytes>>;
 
 /// The services the portal reaches, by the setting that holds each one's address.
 const SERVICES: &[(&str, &str)] = &[
@@ -76,7 +76,7 @@ pub(crate) async fn check(services: &Services) -> Vec<ComponentStatus> {
     status
 }
 
-async fn get(client: &HttpClient, url: &str) -> anyhow::Result<(u16, Bytes)> {
+pub(crate) async fn get(client: &HttpClient, url: &str) -> anyhow::Result<(u16, Bytes)> {
     let req = axum::http::Request::get(url).body(Empty::new())?;
     // The body too: a service that answers and then stalls mustn't hold up the page.
     tokio::time::timeout(TIMEOUT, async {

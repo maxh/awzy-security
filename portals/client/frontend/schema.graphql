@@ -233,6 +233,41 @@ type ComponentStatus {
 	runbookUrl: String!
 }
 
+"""
+A configured connector and how its syncing is going.
+"""
+type Connector {
+	"""
+	drive or jira.
+	"""
+	name: String!
+	"""
+	What it was configured with. Never its credentials.
+	"""
+	settings: [ConnectorSetting!]!
+	intervalSecs: Int!
+	lastSuccessAt: UtcTimestamp
+	lastFailureAt: UtcTimestamp
+	"""
+	Why the last failed round failed; null once a round succeeds.
+	"""
+	lastError: String
+	failures: Int!
+	"""
+	Written to or deleted from awzy's world model since awzy-connectors started.
+	"""
+	written: Int!
+	deleted: Int!
+}
+
+"""
+One of a connector's settings, for display.
+"""
+type ConnectorSetting {
+	name: String!
+	value: String!
+}
+
 input ContainPrincipalInput {
 	principal: EntityRefInput!
 	reason: String!
@@ -1062,6 +1097,11 @@ type Query {
 	those who may view the enforcement area.
 	"""
 	installStatus: [ComponentStatus!]!
+	"""
+	The configured connectors and how their syncing is going. For those who may view the
+	enforcement area.
+	"""
+	connectors: [Connector!]!
 	"""
 	What awzy-gateway does while the PDP is unreachable: each tool's tier, and which tiers
 	fail open.
