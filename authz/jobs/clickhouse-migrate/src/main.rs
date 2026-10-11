@@ -4,12 +4,14 @@ use anyhow::Context;
 async fn main() -> anyhow::Result<()> {
     awzy_telemetry::init("awzy-clickhouse-migrate");
     let env = |k: &str| std::env::var(k).with_context(|| format!("{k} is not set"));
-    let client = clickhouse::Client::default()
+    let server = clickhouse::Client::default()
         .with_url(env("AWZY_CLICKHOUSE_URL")?)
         .with_user(env("AWZY_CLICKHOUSE_USER")?)
-        .with_password(env("AWZY_CLICKHOUSE_PASSWORD")?)
-        .with_database(env("AWZY_CLICKHOUSE_DATABASE")?);
+        .with_password(env("AWZY_CLICKHOUSE_PASSWORD")?);
     let database = env("AWZY_CLICKHOUSE_DATABASE")?;
+    // A new install's ClickHouse has no database yet (the local stack's image makes one).
+    server.query(&format!("CREATE DATABASE IF NOT EXISTS {database}")).execute().await?;
+    let client = server.with_database(&database);
     let settings = awzy_clickhouse::Settings {
         kafka_brokers: env("AWZY_CLICKHOUSE_KAFKA_BROKERS")?,
         decisions_topic: std::env::var("AWZY_DECISIONS_TOPIC").unwrap_or_else(|_| "awzy.decisions.v1".into()),
