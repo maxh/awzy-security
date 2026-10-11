@@ -353,17 +353,26 @@ pub struct FleetQuery;
 impl FleetQuery {
     /// Refetches any object by its ID.
     async fn node(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Node>> {
-        if let Ok(id) = id.parse::<InstallId>() {
-            return Ok(store(ctx)?.get(id).await?.map(|r| Node::Install(Install(r))));
-        }
-        if let Ok(id) = id.parse::<awzy_model::SupportSessionId>() {
-            return match store(ctx)?.support_session(id).await {
-                Ok(s) => Ok(Some(Node::SupportSession(crate::support::SupportSession(s)))),
-                Err(crate::support::SupportError::NotFound(_)) => Ok(None),
-                Err(e) => Err(e.into()),
-            };
-        }
-        Ok(None)
+        use awzy_model::QidEntity as E;
+        let Some(entity) = E::of(&id) else { return Ok(None) };
+        // Exhaustive, so a new entity has to say here whether it's a Node in this portal.
+        Ok(match entity {
+            E::Install => store(ctx)?.get(id.parse()?).await?.map(|r| Node::Install(Install(r))),
+            E::SupportSession => match store(ctx)?.support_session(id.parse()?).await {
+                Ok(s) => Some(Node::SupportSession(crate::support::SupportSession(s))),
+                Err(crate::support::SupportError::NotFound(_)) => None,
+                Err(e) => return Err(e.into()),
+            },
+            // The client's data, or not objects this portal serves (ADR 0009).
+            E::Decision
+            | E::PolicyBundle
+            | E::Event
+            | E::Challenge
+            | E::Containment
+            | E::SecurityKey
+            | E::Ceremony
+            | E::Investigation => None,
+        })
     }
 
     /// Every registered install, in registration order.

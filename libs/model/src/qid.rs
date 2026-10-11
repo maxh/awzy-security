@@ -9,129 +9,157 @@ use std::{fmt, str::FromStr};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("{value:?} is not a {prefix} ID; expected {prefix}_<uuid>")]
+/// A string that isn't a QID of the entity expected. Says which entity's it is, when it's
+/// another of awzy's.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QidError {
-    prefix: &'static str,
+    expected: QidEntity,
     value: String,
+}
+
+impl fmt::Display for QidError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (value, expected) = (&self.value, self.expected);
+        match QidEntity::of(value) {
+            Some(other) => write!(f, "{value:?} is a {other} ID, not a {expected} ID"),
+            None => write!(f, "{value:?} is not a {expected} ID; expected {expected}_<uuid>"),
+        }
+    }
+}
+
+impl std::error::Error for QidError {}
+
+impl QidError {
+    /// The entity the QID should have been of.
+    pub fn expected(&self) -> QidEntity {
+        self.expected
+    }
 }
 
 /// What every typed ID has in common, for code generic over them, like the portals' `Qid` scalar.
 pub trait TypedQid: Copy + fmt::Display + FromStr<Err = QidError> + Send + Sync + 'static {
-    /// The entity type its QIDs start with, e.g. `decision`.
-    const PREFIX: &'static str;
+    /// The entity its QIDs are of.
+    const ENTITY: QidEntity;
 }
 
-macro_rules! qid {
-    ($(#[$doc:meta])* $name:ident, $prefix:literal) => {
-        $(#[$doc])*
+macro_rules! qids {
+    ($($(#[$doc:meta])* $name:ident, $variant:ident, $prefix:literal;)*) => {
+        /// Every kind of entity awzy mints QIDs for, to tell at run time which one a QID is of
+        /// (`node(id)` routes on it). Not Cedar's entity types, which are `entity_type`.
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-        pub struct $name(Uuid);
+        pub enum QidEntity {
+            $($variant),*
+        }
 
-        impl $name {
-            pub const PREFIX: &'static str = $prefix;
+        impl QidEntity {
+            pub const ALL: &'static [QidEntity] = &[$(QidEntity::$variant),*];
 
-            /// A new time-ordered (UUIDv7) ID.
-            #[expect(clippy::new_without_default, reason = "a fresh ID each call isn't a default value")]
-            pub fn new() -> Self {
-                Self(Uuid::now_v7())
-            }
-
-            pub fn from_uuid(uuid: Uuid) -> Self {
-                Self(uuid)
-            }
-
-            pub fn uuid(&self) -> Uuid {
-                self.0
+            /// What its QIDs start with, e.g. `policy_bundle`.
+            pub fn prefix(self) -> &'static str {
+                match self {
+                    $(QidEntity::$variant => $prefix),*
+                }
             }
         }
 
-        impl TypedQid for $name {
-            const PREFIX: &'static str = $prefix;
-        }
+        $(
+            $(#[$doc])*
+            #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+            pub struct $name(Uuid);
 
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(f, "{}_{}", $prefix, self.0)
+            impl $name {
+                pub const PREFIX: &'static str = $prefix;
+
+                /// A new time-ordered (UUIDv7) ID.
+                #[expect(clippy::new_without_default, reason = "a fresh ID each call isn't a default value")]
+                pub fn new() -> Self {
+                    Self(Uuid::now_v7())
+                }
+
+                pub fn from_uuid(uuid: Uuid) -> Self {
+                    Self(uuid)
+                }
+
+                pub fn uuid(&self) -> Uuid {
+                    self.0
+                }
             }
-        }
 
-        impl FromStr for $name {
-            type Err = QidError;
-
-            fn from_str(s: &str) -> Result<Self, QidError> {
-                s.strip_prefix(concat!($prefix, "_"))
-                    .and_then(|rest| Uuid::parse_str(rest).ok())
-                    .map(Self)
-                    .ok_or_else(|| QidError { prefix: $prefix, value: s.to_string() })
+            impl TypedQid for $name {
+                const ENTITY: QidEntity = QidEntity::$variant;
             }
-        }
 
-        impl Serialize for $name {
-            fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-                s.collect_str(self)
+            impl fmt::Display for $name {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    write!(f, "{}_{}", $prefix, self.0)
+                }
             }
-        }
 
-        impl<'de> Deserialize<'de> for $name {
-            fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-                String::deserialize(d)?.parse().map_err(de::Error::custom)
+            impl FromStr for $name {
+                type Err = QidError;
+
+                fn from_str(s: &str) -> Result<Self, QidError> {
+                    s.strip_prefix(concat!($prefix, "_"))
+                        .and_then(|rest| Uuid::parse_str(rest).ok())
+                        .map(Self)
+                        .ok_or_else(|| QidError { expected: QidEntity::$variant, value: s.to_string() })
+                }
             }
-        }
+
+            impl Serialize for $name {
+                fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+                    s.collect_str(self)
+                }
+            }
+
+            impl<'de> Deserialize<'de> for $name {
+                fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+                    String::deserialize(d)?.parse().map_err(de::Error::custom)
+                }
+            }
+        )*
     };
 }
 
-qid!(
+impl QidEntity {
+    /// Which entity `qid` is of, if it's one of awzy's: `challenge_<uuid>` is `Challenge`.
+    pub fn of(qid: &str) -> Option<QidEntity> {
+        // A UUID has hyphens, never underscores, so the prefix is everything before the last one.
+        let (prefix, uuid) = qid.rsplit_once('_')?;
+        Uuid::parse_str(uuid).ok()?;
+        Self::ALL.iter().copied().find(|e| e.prefix() == prefix)
+    }
+}
+
+impl fmt::Display for QidEntity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.prefix())
+    }
+}
+
+qids! {
     /// One authorization decision, as returned to the enforcement point and logged.
-    DecisionId,
-    "decision"
-);
-qid!(
+    DecisionId, Decision, "decision";
     /// A versioned Cedar policy bundle.
-    PolicyBundleId,
-    "policy_bundle"
-);
-qid!(
+    PolicyBundleId, PolicyBundle, "policy_bundle";
     /// One client install of awzy, as registered in the corp portal.
-    InstallId,
-    "install"
-);
-qid!(
+    InstallId, Install, "install";
     /// One event awzy-intake took in from an app or audit log.
-    EventId,
-    "event"
-);
-qid!(
+    EventId, Event, "event";
     /// One challenge awzy-challenge opened for a request: what the principal must pass first.
-    ChallengeId,
-    "challenge"
-);
-qid!(
+    ChallengeId, Challenge, "challenge";
     /// One containment: a principal whose access awzy-challenge revoked until it's lifted.
-    ContainmentId,
-    "containment"
-);
-qid!(
+    ContainmentId, Containment, "containment";
     /// A person's security key (a WebAuthn credential) in awzy-challenge.
-    SecurityKeyId,
-    "security_key"
-);
-qid!(
+    SecurityKeyId, SecurityKey, "security_key";
     /// One WebAuthn ceremony: a challenge awzy-challenge issued to a browser, used once.
-    CeremonyId,
-    "ceremony"
-);
-qid!(
+    CeremonyId, Ceremony, "ceremony";
     /// One investigation awzy-reasoner ran: a model's checked finding about one principal.
-    InvestigationId,
-    "investigation"
-);
-qid!(
+    InvestigationId, Investigation, "investigation";
     /// One support session (ADR 0095): awzy staff asked for it in the corp portal, which minted
     /// the ID, and a client admin decides it in the client portal.
-    SupportSessionId,
-    "support_session"
-);
+    SupportSessionId, SupportSession, "support_session";
+}
 
 #[cfg(test)]
 mod tests {
@@ -146,9 +174,22 @@ mod tests {
         assert_eq!(id.uuid().get_version_num(), 7);
 
         let err = qid.parse::<PolicyBundleId>().unwrap_err();
-        assert_eq!(err.to_string(), format!("{qid:?} is not a policy_bundle ID; expected policy_bundle_<uuid>"));
+        assert_eq!(err.to_string(), format!("{qid:?} is a decision ID, not a policy_bundle ID"));
+        assert_eq!(err.expected(), QidEntity::PolicyBundle);
+        let err = "decision_not-a-uuid".parse::<PolicyBundleId>().unwrap_err();
+        assert_eq!(err.to_string(), "\"decision_not-a-uuid\" is not a policy_bundle ID; expected policy_bundle_<uuid>");
         assert!("decision_not-a-uuid".parse::<DecisionId>().is_err());
         assert!(id.uuid().to_string().parse::<DecisionId>().is_err(), "a bare UUID is not a QID");
+    }
+
+    #[test]
+    fn a_qid_says_which_entity_it_is_of() {
+        assert_eq!(QidEntity::of(&PolicyBundleId::new().to_string()), Some(QidEntity::PolicyBundle));
+        assert_eq!(QidEntity::of(&SupportSessionId::new().to_string()), Some(QidEntity::SupportSession));
+        assert_eq!(QidEntity::of("widget_0199a8f2-6c1e-7b3a-9d4e-2f8c1a5b7e90"), None, "not an entity awzy has");
+        assert_eq!(QidEntity::of("decision_nope"), None);
+        let prefixes: std::collections::BTreeSet<_> = QidEntity::ALL.iter().map(|e| e.prefix()).collect();
+        assert_eq!(prefixes.len(), QidEntity::ALL.len(), "every entity has its own prefix");
     }
 
     #[test]

@@ -1,10 +1,8 @@
 //! Relay global object identification. Global IDs are QIDs (`<entity_type>_<uuid>`), so
-//! `node(id)` routes on the type the ID parses as.
+//! `node(id)` routes on the entity the QID is of.
 
 use async_graphql::{Context, Interface, Object, Result, ID};
-use awzy_model::{
-    ChallengeId, ContainmentId, DecisionId, InvestigationId, PolicyBundleId, SecurityKeyId, SupportSessionId,
-};
+use awzy_model::QidEntity;
 
 use crate::{
     challenges::{Challenge, Containment},
@@ -35,27 +33,22 @@ pub struct NodeQuery;
 impl NodeQuery {
     /// Refetches any object by its ID.
     async fn node(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Node>> {
-        if let Ok(id) = id.parse::<PolicyBundleId>() {
-            return Ok(crate::policies::get_by_id(ctx, id).await?.map(Node::PolicyBundle));
-        }
-        if let Ok(id) = id.parse::<DecisionId>() {
-            return Ok(crate::decisions::get_by_id(ctx, id).await?.map(Node::Decision));
-        }
-        if let Ok(id) = id.parse::<ChallengeId>() {
-            return Ok(crate::challenges::get_by_id(ctx, id).await?.map(Node::Challenge));
-        }
-        if let Ok(id) = id.parse::<ContainmentId>() {
-            return Ok(crate::challenges::containment_by_id(ctx, id).await?.map(Node::Containment));
-        }
-        if let Ok(id) = id.parse::<InvestigationId>() {
-            return Ok(crate::investigations::get_by_id(ctx, id).await?.map(Node::Investigation));
-        }
-        if let Ok(id) = id.parse::<SecurityKeyId>() {
-            return Ok(crate::security_keys::get_by_id(ctx, id).await?.map(Node::SecurityKey));
-        }
-        if let Ok(id) = id.parse::<SupportSessionId>() {
-            return Ok(crate::support::get_by_id(ctx, id).await?.map(Node::SupportSession));
-        }
-        Ok(None)
+        let Some(entity) = QidEntity::of(&id) else { return Ok(None) };
+        // Exhaustive, so a new entity has to say here whether it's a Node in this portal.
+        Ok(match entity {
+            QidEntity::PolicyBundle => crate::policies::get_by_id(ctx, id.parse()?).await?.map(Node::PolicyBundle),
+            QidEntity::Decision => crate::decisions::get_by_id(ctx, id.parse()?).await?.map(Node::Decision),
+            QidEntity::Challenge => crate::challenges::get_by_id(ctx, id.parse()?).await?.map(Node::Challenge),
+            QidEntity::Containment => {
+                crate::challenges::containment_by_id(ctx, id.parse()?).await?.map(Node::Containment)
+            }
+            QidEntity::Investigation => {
+                crate::investigations::get_by_id(ctx, id.parse()?).await?.map(Node::Investigation)
+            }
+            QidEntity::SecurityKey => crate::security_keys::get_by_id(ctx, id.parse()?).await?.map(Node::SecurityKey),
+            QidEntity::SupportSession => crate::support::get_by_id(ctx, id.parse()?).await?.map(Node::SupportSession),
+            // Not objects this portal serves.
+            QidEntity::Install | QidEntity::Event | QidEntity::Ceremony => None,
+        })
     }
 }
