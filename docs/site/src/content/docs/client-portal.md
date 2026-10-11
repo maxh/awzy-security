@@ -123,6 +123,8 @@ it acts for; with the person's own token, as the person.
 | `check_access` | Would this principal be allowed this action on this resource now? Decided like a check, but nothing is logged and no challenge is opened |
 | `dry_run_policy` | Replay recent requests under a draft and list every verdict it would change |
 | `propose_policy` | Save a draft, for a person to publish in the portal |
+| `get_principal` | A person or service account as the PDPs see it: attributes, every group above it, and its risk score |
+| `get_resource` | A resource as the PDPs see it: sensitivity, owner, sharing, the folders above it, and who is assigned to work on it |
 | `get_enforcement` | The mode, and the last 24 hours' would-deny and would-challenge counts |
 | `list_investigations` | Investigations, by status |
 | `get_investigation` | One investigation, with its evidence and what the checks changed |

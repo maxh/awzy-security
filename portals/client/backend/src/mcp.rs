@@ -148,6 +148,44 @@ pub struct CheckAccessOut {
 
 #[derive(Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
+pub struct GetPrincipalParams {
+    /// `Human` or `ServiceAccount`.
+    pub principal_type: String,
+    /// The principal's ID, e.g. "alice" or "sales-genie".
+    pub principal_id: String,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct PrincipalOut {
+    /// The principal as the PDPs see it, in Cedar's entity shape: attributes (`active`, a service
+    /// account's `owner` and `ai`) and the groups it's in. None when awzy doesn't know it.
+    pub entity: Option<serde_json::Value>,
+    /// Every group above it, nested groups included.
+    pub groups: Vec<String>,
+    /// Its risk score from awzy-reasoner, 0 to 100, when it has one.
+    pub risk_score: Option<i64>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct GetResourceParams {
+    /// The resource's ID in awzy-context, e.g. a document's ID from its source system.
+    pub resource_id: String,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct ResourceOut {
+    /// The resource and the folders above it, nearest first, in Cedar's entity shape: sensitivity,
+    /// owner, and sharing. Empty when awzy doesn't know it.
+    pub entities: Vec<serde_json::Value>,
+    /// Who is assigned to open work that links it or a folder above it.
+    pub assignees: Vec<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
 pub struct DryRunPolicyParams {
     /// A draft bundle's QID, `policy_bundle_<uuid>`, as `propose_policy` returned it.
     pub draft_qid: String,
@@ -466,6 +504,53 @@ impl ClientPortalMcp {
     }
 
     #[tool(
+        name = "get_principal",
+        description = "A person or service account as the PDPs see it: its attributes, the groups it's in (nested included), and its current risk score. Read-only."
+    )]
+    async fn get_principal(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(p): Parameters<GetPrincipalParams>,
+    ) -> Result<Json<PrincipalOut>, ErrorData> {
+        let viewer = self.allow(&parts, PortalAction::View, PortalArea::Directory).await?;
+        self.record(&viewer, "get_principal");
+        let snapshot: serde_json::Value = self.context()?.get("/v1/principals").await.map_err(internal)?;
+        Ok(Json(principal_from_snapshot(&snapshot, &p.principal_type, &p.principal_id)))
+    }
+
+    #[tool(
+        name = "get_resource",
+        description = "A resource as the PDPs see it: its sensitivity, owner, and sharing, the folders above it, and who is assigned to work that links it. Read-only."
+    )]
+    async fn get_resource(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(p): Parameters<GetResourceParams>,
+    ) -> Result<Json<ResourceOut>, ErrorData> {
+        let viewer = self.allow(&parts, PortalAction::View, PortalArea::Directory).await?;
+        self.record(&viewer, "get_resource");
+        let path = format!("/v1/resources/{}/entities", urlencode(&p.resource_id));
+        let (status, body) = self.context()?.call("GET", &path, None, None).await.map_err(internal)?;
+        if status == 404 {
+            return Ok(Json(ResourceOut { entities: vec![], assignees: vec![] }));
+        }
+        if status != 200 {
+            return Err(internal(anyhow::anyhow!(
+                "awzy-context answered {status}: {}",
+                String::from_utf8_lossy(&body)
+            )));
+        }
+        let found: serde_json::Value = serde_json::from_slice(&body).map_err(|e| internal(e.into()))?;
+        let strings = |v: &serde_json::Value| -> Vec<String> {
+            v.as_array().into_iter().flatten().filter_map(|x| x.as_str().map(str::to_string)).collect()
+        };
+        Ok(Json(ResourceOut {
+            entities: found["entities"].as_array().cloned().unwrap_or_default(),
+            assignees: strings(&found["assignees"]),
+        }))
+    }
+
+    #[tool(
         name = "dry_run_policy",
         description = "Replay recent requests under the active policies and a draft (from propose_policy), with today's people and resources, and report every verdict the draft would change, most frequent first. Read-only."
     )]
@@ -618,6 +703,40 @@ impl ClientPortalMcp {
     }
 }
 
+/// One principal from awzy-context's snapshot, with its groups up the hierarchy and its risk.
+fn principal_from_snapshot(snapshot: &serde_json::Value, kind: &str, id: &str) -> PrincipalOut {
+    let entities = snapshot["entities"].as_array().cloned().unwrap_or_default();
+    let find =
+        |kind: &str, id: &str| entities.iter().find(|e| e["uid"]["type"] == kind && e["uid"]["id"] == id).cloned();
+    let entity = find(kind, id);
+    let mut groups: Vec<String> = Vec::new();
+    let mut queue: Vec<serde_json::Value> =
+        entity.iter().flat_map(|e| e["parents"].as_array().cloned().unwrap_or_default()).collect();
+    while let Some(parent) = queue.pop() {
+        let Some(name) = parent["id"].as_str() else { continue };
+        if groups.iter().any(|g| g == name) {
+            continue;
+        }
+        groups.push(name.to_string());
+        if let Some(group) = find("Group", name) {
+            queue.extend(group["parents"].as_array().cloned().unwrap_or_default());
+        }
+    }
+    groups.sort();
+    let risk_score = snapshot["risk"][format!("{kind}::{id}")].as_i64();
+    PrincipalOut { entity, groups, risk_score }
+}
+
+/// A path segment, percent-encoded.
+fn urlencode(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
 fn internal(e: anyhow::Error) -> ErrorData {
     ErrorData::internal_error(e.to_string(), None)
 }
@@ -733,6 +852,23 @@ mod tests {
 
     fn alice() -> Extension<Parts> {
         signed_in(testing::human("alice", "security"))
+    }
+
+    #[test]
+    fn a_principal_comes_with_every_group_above_it_and_its_risk() {
+        let snapshot = serde_json::json!({
+            "entities": [
+                { "uid": { "type": "Human", "id": "bob" }, "attrs": { "active": true }, "parents": [{ "type": "Group", "id": "appsec" }] },
+                { "uid": { "type": "Group", "id": "appsec" }, "attrs": {}, "parents": [{ "type": "Group", "id": "security" }] },
+                { "uid": { "type": "Group", "id": "security" }, "attrs": {}, "parents": [] },
+            ],
+            "risk": { "Human::bob": 42 },
+        });
+        let bob = principal_from_snapshot(&snapshot, "Human", "bob");
+        assert_eq!((bob.groups, bob.risk_score), (vec!["appsec".to_string(), "security".to_string()], Some(42)));
+        assert_eq!(bob.entity.unwrap()["attrs"]["active"], true);
+        let nobody = principal_from_snapshot(&snapshot, "Human", "nobody");
+        assert!(nobody.entity.is_none() && nobody.groups.is_empty() && nobody.risk_score.is_none());
     }
 
     #[tokio::test]
@@ -959,6 +1095,8 @@ mod tests {
                 "get_active_policy_bundle",
                 "get_enforcement",
                 "get_investigation",
+                "get_principal",
+                "get_resource",
                 "list_investigations",
                 "list_policy_bundles",
                 "propose_policy",
