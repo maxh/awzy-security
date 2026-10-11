@@ -1,6 +1,6 @@
 ---
 title: Agent builders
-description: Building AI agents and services that work under awzy: registering them, acting for people, and handling challenges.
+description: "Building AI agents and services that work under awzy: registering them, acting for people, and handling challenges."
 ---
 
 You build the AI agents and backend services that act in your company's systems. awzy checks
