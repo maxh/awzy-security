@@ -23,6 +23,10 @@
 {{- if or .Values.connectors.drive.subject .Values.connectors.jira.url }}
 {{- $env = append $env (dict "name" "AWZY_CONNECTORS_ADDR" "value" (printf "http://awzy-connectors.%s.svc:8080" $sys)) }}
 {{- end }}
+{{- /* Without it, the portal shows that nothing is sent to awzy. */ -}}
+{{- if .Values.reporter.enabled }}
+{{- $env = append $env (dict "name" "AWZY_REPORTER_ADDR" "value" (printf "http://awzy-reporter.%s.svc:8080" $sys)) }}
+{{- end }}
 {{- if $p.publicUrl }}
 {{- $env = append $env (dict "name" "AWZY_PORTAL_PUBLIC_URL" "value" $p.publicUrl) }}
 {{- end }}
