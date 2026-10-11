@@ -32,6 +32,9 @@ build:ci --show_progress_rate_limit=10
 # Tests and lint need no build outputs on the runner, only results. Publishing leaves this off
 # so the images it pushes are downloaded.
 build:ci-check --remote_download_minimal
+# Release images are optimized builds, as the PDP's latency budget assumes; tests and PR builds
+# stay in fastbuild. Bazel keeps opt outputs apart (k8-opt), so each mode has its own cache entries.
+build:release --compilation_mode=opt
 
 # Remote cache and build results on BuildBuddy: --config=remote. The API key goes in
 # .bazelrc.user (CI writes it from the AWZY_CORP_BUILDBUDDY_API_KEY secret):
