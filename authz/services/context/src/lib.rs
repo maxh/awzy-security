@@ -10,6 +10,8 @@
 
 pub mod classify;
 pub mod connector_settings;
+#[cfg(test)]
+mod contract_tests;
 pub mod investigations;
 pub mod resources;
 pub mod risk;
