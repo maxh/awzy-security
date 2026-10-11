@@ -105,6 +105,7 @@ Bootstrap takes:
 | `registry_credentials` | Install ID and pull token |
 | `reporter` | Install ID and reporting token, or `null` to send no heartbeat |
 | `cosign_public_key` | [`deploy/release/cosign.pub`](deploy/release/cosign.pub); Kyverno rejects images not signed with it |
+| `support_public_key` | awzy's support key (`deploy/release/support.pub`), so awzy staff can sign in to a support session your admin approves; `null` leaves support sessions unable to sign in |
 | `ingress` | The portal hostname and the Let's Encrypt contact |
 | `client_portal` | Your IdP's issuer, JWKS URL, and the portal's public URL; the token audiences for the portal (`audience`, default `awzy`) and for its MCP endpoint (`mcp_audience`, default `awzy-mcp`); and `subject_claim`, the claim holding a person's SCIM user name when `sub` doesn't (default `sub`) |
 | `awzy_bot` | Whether Awzy Bot runs; needs Claude enabled in the install account's Bedrock |

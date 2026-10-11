@@ -25,7 +25,10 @@ use std::{
 };
 
 use anyhow::{bail, Context};
-use awzy_heartbeat::{is_version, Heartbeat, Metrics, Service, ServiceStatus, SCHEMA_VERSION};
+use awzy_heartbeat::{
+    is_version, Heartbeat, HeartbeatAnswer, Metrics, Service, ServiceStatus, SupportSessionState, SupportStatus,
+    SCHEMA_VERSION,
+};
 use awzy_model::InstallId;
 use axum::{extract::State, routing, Json, Router};
 use bytes::Bytes;
@@ -163,7 +166,15 @@ pub struct Reporter {
     freshness: freshness::Tracker,
     restarts: restarts::RestartTracker,
     data: data_metrics::DataSources,
+    /// awzy-challenge, where support session requests go (ADR 0095); None leaves them unanswered.
+    support: Option<ChallengeClient>,
+    /// What awzy-challenge last said of each support session, for the next heartbeat.
+    support_states: Vec<SupportSessionState>,
 }
+
+/// awzy-challenge's client, with this reporter's service token.
+pub type ChallengeClient =
+    awzy_authz_proto::challenge::v1::challenge_service_client::ChallengeServiceClient<awzy_service_auth::AuthChannel>;
 
 impl Reporter {
     pub fn new(config: Config) -> anyhow::Result<Self> {
@@ -184,6 +195,62 @@ impl Reporter {
             freshness: Default::default(),
             restarts: Default::default(),
             data,
+            support: None,
+            support_states: vec![],
+        }
+    }
+
+    /// Brings support session requests from the corp portal's answers to awzy-challenge (ADR 0095).
+    pub fn with_support(mut self, challenge: ChallengeClient) -> Self {
+        self.support = Some(challenge);
+        self
+    }
+
+    /// Hands the corp portal's support requests to awzy-challenge, and keeps what it says of each
+    /// session for the next heartbeat. Without awzy-challenge, requests wait in the corp portal.
+    pub async fn relay_support(&mut self, answer: HeartbeatAnswer) {
+        use awzy_authz_proto::{
+            challenge::v1::{RecordSupportRequestsRequest, SupportRequest, SupportSessionStatus as Wire},
+            prost_types::Timestamp,
+        };
+        let Some(mut challenge) = self.support.clone() else { return };
+        let requests = answer
+            .support_requests
+            .into_iter()
+            .map(|r| SupportRequest {
+                qid: r.id.to_string(),
+                requested_by: r.requested_by,
+                areas: r.areas,
+                reason: r.reason,
+                duration_minutes: r.duration_minutes,
+                requested_at: Some(Timestamp { seconds: r.requested_at.timestamp(), nanos: 0 }),
+            })
+            .collect();
+        match challenge.record_support_requests(RecordSupportRequestsRequest { requests }).await {
+            Ok(res) => {
+                self.support_states = res
+                    .into_inner()
+                    .sessions
+                    .into_iter()
+                    .filter_map(|s| {
+                        let status = match s.status() {
+                            Wire::Requested => SupportStatus::Requested,
+                            Wire::Approved => SupportStatus::Approved,
+                            Wire::Rejected => SupportStatus::Rejected,
+                            Wire::Ended => SupportStatus::Ended,
+                            Wire::Expired => SupportStatus::Expired,
+                            Wire::Unspecified => return None,
+                        };
+                        Some(SupportSessionState {
+                            id: s.request?.qid.parse().ok()?,
+                            status,
+                            expires_at: s.expires_at.and_then(|t| chrono::DateTime::from_timestamp(t.seconds, 0)),
+                        })
+                    })
+                    .take(awzy_heartbeat::MAX_SUPPORT_SESSIONS)
+                    .collect();
+            }
+            Err(e) => tracing::warn!(error = %e.message(), "couldn't hand support requests to awzy-challenge"),
         }
     }
 
@@ -229,6 +296,7 @@ impl Reporter {
                 connector_sync_age_seconds: fresh.connector_sync_age,
                 gateway_pdp_unreachable: fresh.gateway_unreachable,
             },
+            support_sessions: self.support_states.clone(),
         }
     }
 
@@ -248,8 +316,8 @@ impl Reporter {
         services
     }
 
-    /// Sends one heartbeat. The corp portal answers 204.
-    pub async fn send(&self, hb: &Heartbeat) -> anyhow::Result<()> {
+    /// Sends one heartbeat. The corp portal answers 204, or 200 with support requests.
+    pub async fn send(&self, hb: &Heartbeat) -> anyhow::Result<HeartbeatAnswer> {
         let body = serde_json::to_vec(hb)?;
         let req = axum::http::Request::post(format!("{}/v1/heartbeat", self.config.corp_url))
             .header("content-type", "application/json")
@@ -261,7 +329,11 @@ impl Reporter {
             let body = res.into_body().collect().await.map(|b| b.to_bytes()).unwrap_or_default();
             bail!("the corp portal answered {status}: {}", String::from_utf8_lossy(&body));
         }
-        Ok(())
+        if status == axum::http::StatusCode::NO_CONTENT {
+            return Ok(HeartbeatAnswer::default());
+        }
+        let body = res.into_body().collect().await?.to_bytes();
+        serde_json::from_slice(&body).context("the corp portal's answer")
     }
 }
 
@@ -357,11 +429,20 @@ pub async fn run(mut reporter: Reporter, last: LastSent) {
         let hb = reporter.collect().await;
         // The client can read exactly what leaves their install.
         tracing::info!(heartbeat = %serde_json::to_string(&hb).unwrap_or_default(), "sending heartbeat");
-        let result = reporter.send(&hb).await;
-        if let Err(e) = &result {
-            tracing::warn!(error = %e, "heartbeat not delivered");
-        }
-        let sent = LastSend { heartbeat: hb, delivered: result.is_ok(), error: result.err().map(|e| format!("{e:#}")) };
+        let (delivered, error) = match reporter.send(&hb).await {
+            Ok(answer) => {
+                if !answer.support_requests.is_empty() {
+                    tracing::info!(requests = answer.support_requests.len(), "support session requests from awzy");
+                }
+                reporter.relay_support(answer).await;
+                (true, None)
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "heartbeat not delivered");
+                (false, Some(format!("{e:#}")))
+            }
+        };
+        let sent = LastSend { heartbeat: hb, delivered, error };
         *last.write().unwrap_or_else(|e| e.into_inner()) = Some(sent);
     }
 }

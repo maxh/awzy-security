@@ -15,6 +15,7 @@ It reads the awzy namespaces' workloads with a Role per namespace, never cluster
   (dict "name" "AWZY_CHART_VERSION" "value" .Chart.Version)
   (dict "name" "AWZY_REPORTER_NAMESPACES" "value" (join "," $namespaces))
   (dict "name" "AWZY_REPORTER_INTERVAL_SECS" "value" (toString $r.intervalSeconds))
+  (dict "name" "AWZY_CHALLENGE_ADDR" "value" (printf "http://awzy-challenge.%s.svc:8080" $sys))
 -}}
 {{- if .Values.clickhouse.enabled }}
 {{- /* ClickHouse disk use and Kafka lag, with its own read-only ClickHouse user (ADR 0042). */ -}}
@@ -61,5 +62,6 @@ subjects:
     namespace: {{ $sys }}
 {{- end }}
 ---
-{{ include "awzy.service" (dict "root" . "name" "awzy-reporter" "namespace" $sys "values" $r "serviceAccount" "awzy-reporter" "env" $env) }}
+{{ include "awzy.service" (dict "root" . "name" "awzy-reporter" "namespace" $sys "values" $r "serviceAccount" "awzy-reporter" "env" $env
+  "tokens" (list "awzy-challenge")) }}
 {{- end }}

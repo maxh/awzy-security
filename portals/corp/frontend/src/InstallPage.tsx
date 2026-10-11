@@ -12,6 +12,7 @@ import InstallPageQueryNode from "./__generated__/InstallPageQuery.graphql";
 import type { InstallPageRetireMutation } from "./__generated__/InstallPageRetireMutation.graphql";
 import { ago, CHANNELS, channelLabel, formatTime, healthOf, shortDigest } from "./format";
 import { InstallCharts } from "./InstallCharts";
+import { SupportSection } from "./SupportSection";
 
 /** Started by the route's loader as navigation begins (ADR 0099). */
 export const loadInstallPage = routeQuery<InstallPageQuery>(InstallPageQueryNode);
@@ -221,6 +222,8 @@ function Install({ id, queryRef }: { id: string; queryRef: PreloadedQuery<Instal
             </Table>
           )}
         </Section>
+
+        <SupportSection installId={id} />
       </Stack>
     </>
   );

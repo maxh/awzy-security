@@ -14,7 +14,7 @@
     (dict "name" "AWZY_CHALLENGE_PDPS" "value" $backend)
     (dict "name" "AWZY_CHALLENGE_PENDING_SECS" "value" (toString .Values.challenge.pendingSeconds))
     (dict "name" "AWZY_CHALLENGE_POLICY" "value" (printf "%s/awzy-policy" $sys))
-    (dict "name" "AWZY_CHALLENGE_REPORTERS" "value" $backend)
+    (dict "name" "AWZY_CHALLENGE_REPORTERS" "value" (printf "%s/awzy-reporter" $sys))
     (dict "name" "AWZY_PDP_ADDR" "value" (printf "http://awzy-pdp.%s.svc:8080" $sys))
     (dict "name" "AWZY_POSTGRES_URL" "valueFrom" (dict "secretKeyRef" (dict "name" "awzy-postgres" "key" "challenge_url")))
     (dict "name" "AWZY_POSTGRES_MIGRATE" "value" "check")

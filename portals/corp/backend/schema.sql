@@ -53,6 +53,21 @@ CREATE TABLE public.release_channel_changes (
     CONSTRAINT release_channel_changes_channel_check CHECK ((channel = ANY (ARRAY['stable'::text, 'fast'::text])))
 );
 
+CREATE TABLE public.support_sessions (
+    id uuid NOT NULL,
+    install_id uuid NOT NULL,
+    requested_by text NOT NULL,
+    areas text[] NOT NULL,
+    reason text NOT NULL,
+    duration_minutes integer NOT NULL,
+    portal_url text NOT NULL,
+    requested_at timestamp with time zone DEFAULT now() NOT NULL,
+    status text DEFAULT 'requested'::text NOT NULL,
+    expires_at timestamp with time zone,
+    reported_at timestamp with time zone,
+    CONSTRAINT support_sessions_duration_minutes_check CHECK ((duration_minutes > 0))
+);
+
 ALTER TABLE ONLY public.heartbeat_samples
     ADD CONSTRAINT heartbeat_samples_pkey PRIMARY KEY (install_id, received_at);
 
@@ -68,13 +83,21 @@ ALTER TABLE ONLY public.installs
 ALTER TABLE ONLY public.release_channel_changes
     ADD CONSTRAINT release_channel_changes_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY public.support_sessions
+    ADD CONSTRAINT support_sessions_pkey PRIMARY KEY (id);
+
 CREATE UNIQUE INDEX installs_client_environment_active ON public.installs USING btree (client, environment) WHERE (retired_at IS NULL);
 
 CREATE INDEX release_channel_changes_latest ON public.release_channel_changes USING btree (channel, changed_at DESC);
+
+CREATE INDEX support_sessions_by_install ON public.support_sessions USING btree (install_id, requested_at DESC);
 
 ALTER TABLE ONLY public.heartbeat_samples
     ADD CONSTRAINT heartbeat_samples_install_id_fkey FOREIGN KEY (install_id) REFERENCES public.installs(id);
 
 ALTER TABLE ONLY public.install_versions
     ADD CONSTRAINT install_versions_install_id_fkey FOREIGN KEY (install_id) REFERENCES public.installs(id);
+
+ALTER TABLE ONLY public.support_sessions
+    ADD CONSTRAINT support_sessions_install_id_fkey FOREIGN KEY (install_id) REFERENCES public.installs(id);
 

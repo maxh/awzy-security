@@ -882,6 +882,8 @@ dependencies = [
  "http-body-util",
  "hyper-rustls",
  "hyper-util",
+ "jsonwebtoken",
+ "p256",
  "rmcp",
  "rustls",
  "serde",
@@ -1208,10 +1210,12 @@ name = "awzy-reporter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "awzy-authz-proto",
  "awzy-heartbeat",
  "awzy-kafka",
  "awzy-model",
  "awzy-server",
+ "awzy-service-auth",
  "awzy-telemetry",
  "axum",
  "bytes",
@@ -1226,6 +1230,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tonic",
  "tracing",
 ]
 

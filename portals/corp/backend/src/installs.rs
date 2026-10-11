@@ -123,6 +123,11 @@ pub struct Install(pub InstallRecord);
 
 #[Object]
 impl Install {
+    /// Support sessions asked for on this install, newest first (ADR 0095).
+    async fn support_sessions(&self, ctx: &Context<'_>) -> Result<Vec<crate::support::SupportSession>> {
+        Ok(store(ctx)?.support_sessions(self.0.id).await?.into_iter().map(crate::support::SupportSession).collect())
+    }
+
     pub async fn id(&self) -> ID {
         ID(self.0.id.to_string())
     }
@@ -335,8 +340,10 @@ impl Release {
 
 #[derive(Interface)]
 #[graphql(field(name = "id", ty = "ID"))]
+#[allow(clippy::large_enum_variant, reason = "one is built per node(id) call; boxing buys nothing")]
 pub enum Node {
     Install(Install),
+    SupportSession(crate::support::SupportSession),
 }
 
 #[derive(Default)]
@@ -346,8 +353,17 @@ pub struct FleetQuery;
 impl FleetQuery {
     /// Refetches any object by its ID.
     async fn node(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Node>> {
-        let Ok(id) = id.parse::<InstallId>() else { return Ok(None) };
-        Ok(store(ctx)?.get(id).await?.map(|r| Node::Install(Install(r))))
+        if let Ok(id) = id.parse::<InstallId>() {
+            return Ok(store(ctx)?.get(id).await?.map(|r| Node::Install(Install(r))));
+        }
+        if let Ok(id) = id.parse::<awzy_model::SupportSessionId>() {
+            return match store(ctx)?.support_session(id).await {
+                Ok(s) => Ok(Some(Node::SupportSession(crate::support::SupportSession(s)))),
+                Err(crate::support::SupportError::NotFound(_)) => Ok(None),
+                Err(e) => Err(e.into()),
+            };
+        }
+        Ok(None)
     }
 
     /// Every registered install, in registration order.

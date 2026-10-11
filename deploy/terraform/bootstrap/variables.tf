@@ -39,6 +39,12 @@ variable "cosign_public_key" {
   type        = string
 }
 
+variable "support_public_key" {
+  description = "PEM public key the corp portal signs support session tokens with (deploy/release/support.pub, ADR 0095). awzy staff sign in with one only while a session your admin approved lasts. Null: support sessions can't sign in"
+  type        = string
+  default     = null
+}
+
 variable "client_portal" {
   description = "The client's IdP for the client portal (not needed with demo_idp): its issuer and keys; the audiences of the portal's own tokens and of those agents get for its MCP endpoint (ADR 0081); and the claim holding a person's SCIM userName, when `sub` doesn't (empty: sub)"
   type = object({

@@ -144,6 +144,7 @@ resource "helm_release" "config" {
       demoData   = { enabled = var.demo_data, activity = { enabled = var.demo_activity } }
       reporter   = var.reporter == null ? { enabled = false, installId = "" } : { enabled = true, installId = nonsensitive(var.reporter.install_id) }
       clientPortal = {
+        supportPublicKey = var.support_public_key == null ? "" : var.support_public_key
         auth = {
           issuer       = var.client_portal.issuer
           jwksUrl      = var.client_portal.jwks_url

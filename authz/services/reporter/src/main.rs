@@ -9,6 +9,14 @@ async fn main() -> anyhow::Result<()> {
     }
     let config = awzy_reporter::Config::from_env()?;
     let mut reporter = awzy_reporter::Reporter::new(config.clone())?;
+    // Support session requests go to awzy-challenge, with this reporter's service token (ADR 0095).
+    if let Ok(addr) = std::env::var("AWZY_CHALLENGE_ADDR") {
+        let channel = tonic::transport::Channel::from_shared(addr)?.connect_lazy();
+        reporter = reporter.with_support(awzy_reporter::ChallengeClient::new(awzy_service_auth::grpc_channel(
+            channel,
+            "awzy-challenge",
+        )));
+    }
     // --print: show one heartbeat without sending it, so the client can see what would leave.
     if std::env::args().any(|a| a == "--print") {
         let hb = reporter.collect().await;

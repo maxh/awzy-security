@@ -6,11 +6,14 @@
 //! is checked against a narrow pattern, so nothing free-form (hostnames, user names, policy
 //! text) can ride along. The reporter logs each heartbeat it sends, so the client can read it.
 
-use awzy_model::InstallId;
+use awzy_model::{InstallId, SupportSessionId};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 pub const SCHEMA_VERSION: u32 = 1;
+
+/// The most support sessions one heartbeat reports.
+pub const MAX_SUPPORT_SESSIONS: usize = 100;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -27,6 +30,69 @@ pub struct Heartbeat {
     pub services: Vec<ServiceStatus>,
     #[serde(default)]
     pub metrics: Metrics,
+    /// Where each support session the install knows stands (ADR 0095): its ID, its status, and
+    /// until when. Nothing else of it: not its areas, its reason, or who decided.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub support_sessions: Vec<SupportSessionState>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SupportSessionState {
+    #[serde(rename = "qid")]
+    pub id: SupportSessionId,
+    pub status: SupportStatus,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SupportStatus {
+    Requested,
+    Approved,
+    Rejected,
+    Ended,
+    Expired,
+}
+
+impl SupportStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Requested => "requested",
+            Self::Approved => "approved",
+            Self::Rejected => "rejected",
+            Self::Ended => "ended",
+            Self::Expired => "expired",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        [Self::Requested, Self::Approved, Self::Rejected, Self::Ended, Self::Expired]
+            .into_iter()
+            .find(|v| v.as_str() == s)
+    }
+}
+
+/// What the corp portal answers a heartbeat with: support sessions awzy staff asked for that the
+/// install hasn't reported yet (ADR 0095). This way the corp portal never calls into an install.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct HeartbeatAnswer {
+    #[serde(default)]
+    pub support_requests: Vec<SupportRequest>,
+}
+
+/// One support session awzy staff asked for.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SupportRequest {
+    #[serde(rename = "qid")]
+    pub id: SupportSessionId,
+    /// The staff member's corp portal username.
+    pub requested_by: String,
+    /// Client portal areas, e.g. "decisions".
+    pub areas: Vec<String>,
+    pub reason: String,
+    pub duration_minutes: u32,
+    pub requested_at: DateTime<Utc>,
 }
 
 /// One deployed unit inside the install.
@@ -150,6 +216,8 @@ pub enum InvalidHeartbeat {
     OutOfRange(&'static str),
     #[error("sent_at is more than 10 minutes away from now")]
     Clock,
+    #[error("more than {0} support sessions")]
+    TooManySupportSessions(usize),
 }
 
 /// A version string: up to 64 of `[0-9A-Za-z.+-]`, e.g. `0.5.0-rc.1+3f1a`.
@@ -215,6 +283,9 @@ impl Heartbeat {
         // A year: anything older is as stale as it gets.
         if !ages.iter().all(|a| in_range(*a, 3.2e7)) {
             return Err(InvalidHeartbeat::OutOfRange("freshness"));
+        }
+        if self.support_sessions.len() > MAX_SUPPORT_SESSIONS {
+            return Err(InvalidHeartbeat::TooManySupportSessions(MAX_SUPPORT_SESSIONS));
         }
         Ok(())
     }
@@ -310,5 +381,18 @@ mod tests {
             sent["metrics"].get("connector_sync_age_seconds").is_none(),
             "older corp portals reject fields they don't know"
         );
+    }
+
+    #[test]
+    fn a_heartbeat_reports_support_sessions_by_id_status_and_expiry_only() {
+        let mut hb = sample();
+        hb["support_sessions"] =
+            json!([{ "qid": SupportSessionId::new().to_string(), "status": "approved", "expires_at": Utc::now() }]);
+        let parsed: Heartbeat = serde_json::from_value(hb.clone()).unwrap();
+        assert_eq!(parsed.support_sessions[0].status, SupportStatus::Approved);
+        parsed.validate(Utc::now()).unwrap();
+        // Nothing more of a session can ride along.
+        hb["support_sessions"][0]["reason"] = json!("customer data here");
+        assert!(serde_json::from_value::<Heartbeat>(hb).is_err());
     }
 }

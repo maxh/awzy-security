@@ -88,6 +88,24 @@ aws ecs update-service --profile <build profile> \
   --cluster awzy-corp-portal --service awzy-corp-portal --force-new-deployment
 ```
 
+## Support sessions
+
+Staff sign in to a client's portal during a session the client approved with a token the corp
+portal signs (ADR 0095). The private key lives only in the `awzy-corp-portal/support-signing-key`
+secret; its public half is `deploy/release/support.pub`, which installs trust. Make the pair once:
+
+```sh
+openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt > support.pem
+openssl ec -in support.pem -pubout > deploy/release/support.pub        # commit this
+aws secretsmanager put-secret-value --profile <build profile> \
+  --secret-id awzy-corp-portal/support-signing-key --secret-string file://support.pem
+rm support.pem
+aws ecs update-service --profile <build profile> \
+  --cluster awzy-corp-portal --service awzy-corp-portal --force-new-deployment
+```
+
+Until it's set, staff can ask for sessions but can't sign in to them.
+
 ## Fleet alerts
 
 Alerts for installs that become degraded, stop reporting, or recover (ADR 0043) go to a Slack
