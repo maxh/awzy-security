@@ -123,6 +123,11 @@ pub struct Install(pub InstallRecord);
 
 #[Object]
 impl Install {
+    /// Support sessions asked for on this install, newest first (ADR 0095).
+    async fn support_sessions(&self, ctx: &Context<'_>) -> Result<Vec<crate::support::SupportSession>> {
+        Ok(store(ctx)?.support_sessions(self.0.id).await?.into_iter().map(crate::support::SupportSession).collect())
+    }
+
     pub async fn id(&self) -> ID {
         ID(self.0.id.to_string())
     }

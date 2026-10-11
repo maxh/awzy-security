@@ -27,7 +27,14 @@ async fn main() -> anyhow::Result<()> {
     let pool = sqlx::postgres::PgPoolOptions::new().max_connections(5).connect(&url).await?;
     // The registry proxy's pull tokens live in its own schema of this database (ADR 0028).
     let pull_tokens = awzy_registry::tokens::TokenStore::connect(&url, "registry").await?;
-    let store = awzy_corp_portal::fleet::FleetStore::new(pool).with_pull_tokens(pull_tokens);
+    let mut store = awzy_corp_portal::fleet::FleetStore::new(pool).with_pull_tokens(pull_tokens);
+    // Signs support session tokens (ADR 0095); without the key, staff can't sign in to one.
+    match awzy_corp_portal::support::SupportSigner::from_env()? {
+        Some(signer) => store = store.with_support_signer(signer),
+        None => {
+            tracing::warn!("AWZY_CORP_PORTAL_SUPPORT_SIGNING_KEY is not set; support sessions can't be signed in to")
+        }
+    }
     store.migrate_on_start().await?;
     // Fleet alerts to Slack (ADR 0043).
     let slack = std::env::var("AWZY_CORP_PORTAL_ALERTS_SLACK_WEBHOOK_URL")

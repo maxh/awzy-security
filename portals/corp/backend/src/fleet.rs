@@ -285,11 +285,23 @@ pub struct FleetStore {
     pool: PgPool,
     /// The registry proxy's pull tokens (ADR 0028), when this portal issues them.
     pull_tokens: Option<Arc<awzy_registry::tokens::TokenStore>>,
+    /// Signs support session tokens (ADR 0095), when this portal has the key.
+    pub(crate) support_signer: Option<Arc<crate::support::SupportSigner>>,
 }
 
 impl FleetStore {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool, pull_tokens: None }
+        Self { pool, pull_tokens: None, support_signer: None }
+    }
+
+    /// Signs support session tokens with this key (ADR 0095).
+    pub fn with_support_signer(mut self, signer: crate::support::SupportSigner) -> Self {
+        self.support_signer = Some(Arc::new(signer));
+        self
+    }
+
+    pub(crate) fn pool(&self) -> &PgPool {
+        &self.pool
     }
 
     /// Issue and revoke installs' registry pull tokens along with their registration.
@@ -635,11 +647,21 @@ async fn heartbeat(State(store): State<FleetStore>, headers: HeaderMap, body: By
     if let Err(e) = hb.validate(now) {
         return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
     }
-    match store.record_heartbeat(&hb, now).await {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+    if let Err(e) = store.record_heartbeat(&hb, now).await {
+        tracing::error!(error = %e, install = %install, "heartbeat: storing failed");
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    }
+    // Support sessions (ADR 0095): where the install says each stands, and the requests it hasn't
+    // got yet, in the answer, since the corp portal never calls into an install.
+    if let Err(e) = store.record_support_states(install, &hb.support_sessions).await {
+        tracing::error!(error = %e, install = %install, "heartbeat: storing support session states failed");
+    }
+    match store.pending_support(install).await {
+        Ok(requests) if requests.is_empty() => StatusCode::NO_CONTENT.into_response(),
+        Ok(requests) => axum::Json(awzy_heartbeat::HeartbeatAnswer { support_requests: requests }).into_response(),
         Err(e) => {
-            tracing::error!(error = %e, install = %install, "heartbeat: storing failed");
-            StatusCode::SERVICE_UNAVAILABLE.into_response()
+            tracing::error!(error = %e, install = %install, "heartbeat: reading support requests failed");
+            StatusCode::NO_CONTENT.into_response()
         }
     }
 }

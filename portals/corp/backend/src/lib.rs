@@ -11,6 +11,7 @@ pub mod alerts;
 pub mod auth;
 pub mod fleet;
 mod installs;
+pub mod support;
 
 use async_graphql::{http::GraphiQLSource, Context, EmptySubscription, MergedObject, Object, Result, Schema};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
@@ -59,7 +60,7 @@ pub struct CorpPortalQuery(MetaQuery, installs::FleetQuery);
 
 #[derive(MergedObject, Default)]
 #[graphql(name = "Mutation")]
-pub struct CorpPortalMutation(installs::FleetMutation);
+pub struct CorpPortalMutation(installs::FleetMutation, support::SupportMutation);
 
 pub type CorpPortalSchema = Schema<CorpPortalQuery, CorpPortalMutation, EmptySubscription>;
 
