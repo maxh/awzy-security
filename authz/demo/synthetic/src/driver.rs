@@ -30,10 +30,16 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 pub struct Driver {
     /// The gateway's MCP endpoints, before the upstream's name: e.g. http://127.0.0.1:8086/mcp.
     mcp: String,
-    key: EncodingKey,
+    key: Signer,
     issuer: String,
     audience: String,
     http: HttpClient,
+}
+
+/// How the driver signs the tokens it presents.
+enum Signer {
+    Secret(EncodingKey),
+    DevIdp,
 }
 
 /// What became of one tool call.
@@ -65,13 +71,23 @@ impl Tally {
 }
 
 impl Driver {
+    /// Signs tokens with the gateway's development secret (HS256).
     pub fn new(mcp: &str, secret: &[u8], issuer: &str, audience: &str) -> Self {
+        Self::with_signer(mcp, Signer::Secret(EncodingKey::from_secret(secret)), issuer, audience)
+    }
+
+    /// Signs tokens as the dev IdP at `issuer`, for a gateway that trusts it (the demo install).
+    pub fn signed_by_dev_idp(mcp: &str, issuer: &str, audience: &str) -> Self {
+        Self::with_signer(mcp, Signer::DevIdp, issuer, audience)
+    }
+
+    fn with_signer(mcp: &str, key: Signer, issuer: &str, audience: &str) -> Self {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let https =
             hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_or_http().enable_http1().build();
         Self {
             mcp: mcp.trim_end_matches('/').to_string(),
-            key: EncodingKey::from_secret(secret),
+            key,
             issuer: issuer.to_string(),
             audience: audience.to_string(),
             http: Client::builder(TokioExecutor::new()).build(https),
@@ -98,7 +114,10 @@ impl Driver {
                 }
             }
         }
-        Ok(encode(&Header::default(), &claims, &self.key)?)
+        match &self.key {
+            Signer::Secret(key) => Ok(encode(&Header::default(), &claims, key)?),
+            Signer::DevIdp => awzy_dev_idp::sign(&claims),
+        }
     }
 
     /// Makes the tool call in `a` through the gateway.

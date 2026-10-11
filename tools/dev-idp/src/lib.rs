@@ -58,6 +58,20 @@ struct PendingCode {
     nonce: Option<String>,
 }
 
+// A fixed key: tokens keep working across restarts. Development only.
+fn signing_key() -> anyhow::Result<SigningKey> {
+    SigningKey::from_bytes(&Sha256::digest(b"awzy-dev-idp signing key")).map_err(|e| anyhow::anyhow!("{e}"))
+}
+
+/// Signs `claims` as the dev IdP signs its tokens, for tools that act as the demo's sample
+/// people without signing in (awzy-synthetic's activity).
+pub fn sign(claims: &Value) -> anyhow::Result<String> {
+    let key = EncodingKey::from_ec_pem(signing_key()?.to_pkcs8_pem(LineEnding::LF)?.as_bytes())?;
+    let mut header = Header::new(Algorithm::ES256);
+    header.kid = Some(KID.into());
+    Ok(encode(&header, claims, &key)?)
+}
+
 #[derive(Clone)]
 pub struct DevIdp(Arc<Inner>);
 
@@ -71,9 +85,7 @@ struct Inner {
 
 impl DevIdp {
     pub fn new(issuer: String) -> anyhow::Result<Self> {
-        // A fixed key: tokens keep working across restarts. Development only.
-        let key =
-            SigningKey::from_bytes(&Sha256::digest(b"awzy-dev-idp signing key")).map_err(|e| anyhow::anyhow!("{e}"))?;
+        let key = signing_key()?;
         let encoding = EncodingKey::from_ec_pem(key.to_pkcs8_pem(LineEnding::LF)?.as_bytes())?;
         let decoding = DecodingKey::from_ec_pem(key.verifying_key().to_public_key_pem(LineEnding::LF)?.as_bytes())?;
         let point = key.verifying_key().to_encoded_point(false);
@@ -316,6 +328,13 @@ mod tests {
 
     fn idp() -> DevIdp {
         DevIdp::new("http://idp.test".into()).unwrap()
+    }
+
+    #[test]
+    fn tokens_signed_outside_the_idp_are_its_own() {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        let token = sign(&json!({ "iss": "http://idp.test", "aud": AUDIENCE, "sub": "bob", "exp": now + 60 })).unwrap();
+        assert_eq!(idp().validate(&token).unwrap()["sub"], "bob");
     }
 
     async fn post_form(app: Router, form: &str) -> (StatusCode, Value) {

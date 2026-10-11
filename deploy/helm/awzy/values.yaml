@@ -235,6 +235,16 @@ demoData:
   enabled: false
   profile: demo # demo (~200 people) or scale (~10,000)
   seed: 1
+  # Everyday tool calls through awzy-gateway, so the demo has decisions to show: larkspur-drive
+  # and larkspur-admin as the gateway's upstreams, and `awzy-synthetic activity` on a schedule,
+  # signing as the demo IdP. Needs demoIdp and mcpGateway.
+  activity:
+    enabled: false
+    schedule: "0 13 * * 1-5" # one generated workday, each weekday morning (UTC)
+    rate: 5 # tool calls per second
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { memory: 256Mi }
 
 # DEMO INSTALLS ONLY (ADR 0032): runs the dev IdP at https://<clientPortal.hostname>/idp and
 # signs the client portal in against it. Anyone who can reach it can sign in as a sample user,

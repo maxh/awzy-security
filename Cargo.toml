@@ -109,6 +109,7 @@ awzy-model = { path = "libs/model" }
 awzy-pdp = { path = "authz/services/pdp" }
 awzy-reasoner = { path = "authz/services/reasoner" }
 awzy-synthetic = { path = "authz/demo/synthetic" }
+awzy-dev-idp = { path = "tools/dev-idp" }
 awzy-server = { path = "libs/server" }
 awzy-signing = { path = "authz/libs/signing" }
 awzy-classify = { path = "authz/libs/classify" }

@@ -44,6 +44,8 @@ Generates Larkspur Capital, the synthetic company in the [demo plan](../../../do
   isn't sent; it's regenerated from the seed to score detection.
 - The same seed always gives the same company; running it again replaces rather than duplicates.
 - Demo installs run it as a Job after each sync (`demoData.enabled`); never on a real install.
+  With `demoData.activity.enabled` they also run larkspur-drive behind awzy-gateway and `activity`
+  each weekday, signing its tokens as the demo IdP.
 
  Running it locally:
 [DEVELOPMENT.md](../../../DEVELOPMENT.md#the-synthetic-company-adr-0039).

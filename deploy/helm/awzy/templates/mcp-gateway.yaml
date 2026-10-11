@@ -13,7 +13,18 @@
 {{- $token := dict "issuer" (required "mcpGateway.auth.issuer (or clientPortal.auth.issuer) is required" $issuer)
   "audience" $g.auth.audience "jwks_url" (required "mcpGateway.auth.jwksUrl (or clientPortal.auth.jwksUrl) is required" $jwks) -}}
 {{- with ($g.auth.subjectClaim | default $p.auth.subjectClaim) }}{{- $_ := set $token "subject_claim" . }}{{- end }}
-{{- $config := dict "token" $token "upstreams" $g.upstreams "service_account_registry" "awzy-context"
+{{- $upstreams := $g.upstreams -}}
+{{- if and .Values.demoData.enabled .Values.demoData.activity.enabled }}
+{{- $drive := printf "http://larkspur-drive.%s.svc:8080" $sys -}}
+{{- $upstreams = concat $upstreams (list
+  (dict "name" "larkspur-drive" "url" (printf "%s/mcp" $drive) "default_sensitivity" "internal"
+    "tools" (dict "read_document" "internal" "list_folder" "internal")
+    "resource_tools" (dict "read_document" (dict "argument" "id") "list_folder" (dict "argument" "id")))
+  (dict "name" "larkspur-admin" "url" (printf "%s/admin/mcp" $drive) "default_sensitivity" "crown_jewels"
+    "tools" (dict "reset_password" "confidential" "disable_mfa" "crown_jewels" "rotate_admin_credentials" "crown_jewels" "export_directory" "crown_jewels"))
+) -}}
+{{- end }}
+{{- $config := dict "token" $token "upstreams" $upstreams "service_account_registry" "awzy-context"
   "outage" (dict "fail_open_tiers" $g.outage.failOpenTiers "cached_allow_ttl_secs" (int $g.outage.cachedAllowTtlSecs)) -}}
 {{- /* Where agents reach it, for the OAuth metadata MCP clients sign in with (ADR 0081). */ -}}
 {{- with $g.hostname }}{{- $_ := set $config "public_url" (printf "https://%s" .) }}{{- end }}
