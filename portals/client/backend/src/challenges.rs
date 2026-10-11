@@ -128,7 +128,7 @@ impl Challenge {
 
     /// The decision that opened it.
     async fn decision_qid(&self) -> Result<Qid<DecisionId>> {
-        Ok(Qid(self.0.decision_qid.parse()?))
+        Ok(Qid(self.0.decision_qid.parse::<DecisionId>()?))
     }
 
     async fn principal(&self) -> Option<EntityRef> {

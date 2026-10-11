@@ -46,7 +46,7 @@ impl SecurityKey {
 
     /// The key that authorized adding this one; null for a person's first key.
     async fn added_with_qid(&self) -> Result<Option<Qid<SecurityKeyId>>> {
-        Ok(Some(&self.0.added_with_qid).filter(|s| !s.is_empty()).map(|s| s.parse()).transpose()?.map(Qid))
+        Ok(Some(&self.0.added_with_qid).filter(|s| !s.is_empty()).map(|s| s.parse::<SecurityKeyId>()).transpose()?.map(Qid))
     }
 
     async fn created_at(&self) -> Option<UtcTimestamp> {
@@ -139,7 +139,7 @@ pub struct SecurityKeyPayload {
 }
 
 fn ceremony(ceremony_qid: String, options_json: String) -> Result<WebAuthnCeremony> {
-    Ok(WebAuthnCeremony { ceremony_qid: Qid(ceremony_qid.parse()?), options_json })
+    Ok(WebAuthnCeremony { ceremony_qid: Qid(ceremony_qid.parse::<CeremonyId>()?), options_json })
 }
 
 fn key(k: Option<WireKey>) -> Result<SecurityKeyPayload> {

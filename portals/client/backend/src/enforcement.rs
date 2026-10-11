@@ -210,7 +210,7 @@ pub(crate) async fn switch_challenge(ctx: &Context<'_>, viewer: &access::Viewer)
     let switch = "switch_enforcement";
     match access::authorize_action(services, viewer, Surface::Portal, switch, PortalArea::Enforcement).await {
         Ok(()) => Ok(None),
-        Err(access::AccessError::Challenged { challenge_qid: Some(qid), .. }) => Ok(Some(Qid(qid.parse()?))),
+        Err(access::AccessError::Challenged { challenge_qid: Some(qid), .. }) => Ok(Some(Qid(qid.parse::<ChallengeId>()?))),
         Err(access::AccessError::Challenged { challenges, decision, .. }) => Err(format!(
             "changing what's enforced needs a {challenges} challenge, and none could be opened: is awzy-challenge \
              reachable? (decision {decision})"
