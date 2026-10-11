@@ -281,6 +281,12 @@ type PageInfo {
 	endCursor: String
 }
 
+"""
+One of awzy's IDs, `<entity_type>_<uuid>`, e.g. `challenge_0199a8f2-6c1e-7b3a-9d4e-2f8c1a5b7e90`.
+Each field and argument takes one entity's; any other is refused.
+"""
+scalar Qid
+
 type Query {
 	"""
 	Version of the corp portal API.
@@ -398,12 +404,6 @@ type Staff {
 	username: String!
 	name: String!
 }
-
-"""
-One of awzy's IDs, `<entity_type>_<uuid>`, e.g. `challenge_0199a8f2-6c1e-7b3a-9d4e-2f8c1a5b7e90`.
-Each field and argument takes one entity's; any other is refused.
-"""
-scalar Qid
 
 type SupportSession implements Node {
 	id: ID!
