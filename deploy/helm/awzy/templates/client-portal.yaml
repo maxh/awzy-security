@@ -14,6 +14,7 @@
   (dict "name" "AWZY_AUTH_CLIENT_ID" "value" $p.auth.clientId)
   (dict "name" "AWZY_MCP_AUDIENCE" "value" $p.auth.mcpAudience)
   (dict "name" "AWZY_CHALLENGE_ADDR" "value" (printf "http://awzy-challenge.%s.svc:8080" $sys))
+  (dict "name" "AWZY_CONTEXT_ADDR" "value" (printf "http://awzy-context.%s.svc:8080" $sys))
   (dict "name" "AWZY_PDP_ADDR" "value" (printf "http://awzy-pdp.%s.svc:8080" $sys))
   (dict "name" "AWZY_POLICY_ADDR" "value" (printf "http://awzy-policy.%s.svc:8080" $sys))
 -}}

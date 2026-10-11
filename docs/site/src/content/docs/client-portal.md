@@ -107,6 +107,13 @@ recommended. **Needs review** lists those a person has to decide: a proposed con
 privileged principal, or a benign finding about someone the scores flag. Close an investigation
 once you've reviewed it, with what you found. It stays, as the record of that review.
 
+### Status
+
+Whether each of awzy's services the portal uses is ready, and the release it runs: the PDP,
+awzy-policy, awzy-context, awzy-challenge, and ClickHouse. It's a first look when something seems
+wrong, for anyone who can view the Enforcement page. A service that stays not ready is usually
+waiting on another; your platform team can see more with `kubectl`.
+
 ## MCP for your own agents
 
 The portal also serves an [MCP](https://modelcontextprotocol.io) endpoint at `/mcp`, so your

@@ -19,6 +19,7 @@ mod mcp;
 mod node;
 mod policies;
 mod security_keys;
+mod status;
 
 use access::{Auth, PortalAction, PortalArea, Surface, Viewer};
 use async_graphql::{
@@ -166,6 +167,7 @@ pub struct ClientPortalQuery(
     challenges::ChallengeQuery,
     security_keys::SecurityKeyQuery,
     investigations::InvestigationQuery,
+    status::StatusQuery,
 );
 
 #[derive(MergedObject, Default)]
