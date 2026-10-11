@@ -112,10 +112,7 @@ async fn heartbeat_export(client: &HttpClient, addr: Option<String>) -> Heartbea
         enabled: true,
         corp_url: v["corp_url"].as_str().map(str::to_string),
         interval_secs: v["interval_secs"].as_i64(),
-        sent_at: last["heartbeat"]["sent_at"]
-            .as_str()
-            .and_then(|t| t.parse::<DateTime<Utc>>().ok())
-            .map(UtcTimestamp),
+        sent_at: last["heartbeat"]["sent_at"].as_str().and_then(|t| t.parse::<DateTime<Utc>>().ok()).map(UtcTimestamp),
         delivered: last["delivered"].as_bool(),
         error: last["error"].as_str().map(str::to_string),
         heartbeat: last.get("heartbeat").filter(|h| !h.is_null()).map(|h| h.to_string()),

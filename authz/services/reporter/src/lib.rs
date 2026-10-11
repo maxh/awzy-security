@@ -25,9 +25,9 @@ use std::{
 };
 
 use anyhow::{bail, Context};
-use axum::{extract::State, routing::get, Json, Router};
 use awzy_heartbeat::{is_version, Heartbeat, Metrics, Service, ServiceStatus, SCHEMA_VERSION};
 use awzy_model::InstallId;
+use axum::{extract::State, routing::get, Json, Router};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
 use hyper_util::{
@@ -370,17 +370,18 @@ pub async fn run(mut reporter: Reporter, last: LastSent) {
 /// (null before the first). For the client portal, inside the cluster only.
 pub fn router(config: &Config, last: LastSent) -> Router {
     let about = json!({ "corp_url": config.corp_url, "interval_secs": config.interval.as_secs() });
-    Router::new().route(
-        "/v1/last-heartbeat",
-        get(move |State(last): State<LastSent>| {
-            let mut body = about.clone();
-            async move {
-                body["last"] = json!(*last.read().unwrap_or_else(|e| e.into_inner()));
-                Json(body)
-            }
-        }),
-    )
-    .with_state(last)
+    Router::new()
+        .route(
+            "/v1/last-heartbeat",
+            get(move |State(last): State<LastSent>| {
+                let mut body = about.clone();
+                async move {
+                    body["last"] = json!(*last.read().unwrap_or_else(|e| e.into_inner()));
+                    Json(body)
+                }
+            }),
+        )
+        .with_state(last)
 }
 
 #[cfg(test)]
