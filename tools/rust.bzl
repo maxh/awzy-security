@@ -6,6 +6,10 @@ load("@rules_oci//oci:defs.bzl", "oci_image", "oci_image_index", "oci_load", "oc
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
+# rustc's aarch64-unknown-linux-gnu target passes -Wl,--fix-cortex-a53-843419, which the Zig linker
+# in hermetic_cc_toolchain rejects, so linux/arm64 binaries link through a wrapper that drops it.
+_LINUX_ARM64_LINKER = "//tools:zig_aarch64_link.sh"
+
 # Where portal images put the built frontend.
 FRONTEND_DIR = "/usr/share/awzy/portal"
 
@@ -71,6 +75,14 @@ def awzy_service(name, crate_name, binary_name, deps = [], test_deps = [], compi
             srcs = ["src/main.rs"] if binary == binary_name else ["src/bin/%s.rs" % binary],
             deps = [":" + name] + deps + all_crate_deps(normal = True),
             proc_macro_deps = all_crate_deps(proc_macro = True),
+            compile_data = select({
+                "//tools/platforms:is_linux_arm64": [_LINUX_ARM64_LINKER],
+                "//conditions:default": [],
+            }),
+            rustc_flags = select({
+                "//tools/platforms:is_linux_arm64": ["-Clinker=$(execpath %s)" % _LINUX_ARM64_LINKER],
+                "//conditions:default": [],
+            }),
             visibility = visibility or ["//visibility:public"],
         )
 
