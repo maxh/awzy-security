@@ -19,9 +19,15 @@ async fn main() -> anyhow::Result<()> {
         serde_json::from_slice(&std::fs::read(&path).with_context(|| format!("reading {path}"))?)
             .with_context(|| format!("parsing {path}"))?;
     let pdp_addr = std::env::var("AWZY_PDP_ADDR").context("AWZY_PDP_ADDR is not set")?;
-    // With this gateway's service token for the PDP (ADR 0055).
+    // With this gateway's service token for the PDP (ADR 0055). A check takes milliseconds; the
+    // timeouts bound how long a tool call waits on an unreachable PDP before the outage rules
+    // apply (ADR 0030). Without them, each call in the example install's outage drill waited
+    // about 8 seconds.
     let pdp = AuthorizerClient::new(awzy_service_auth::grpc_channel(
-        Channel::from_shared(pdp_addr)?.connect_lazy(),
+        Channel::from_shared(pdp_addr)?
+            .connect_timeout(std::time::Duration::from_millis(500))
+            .timeout(std::time::Duration::from_secs(2))
+            .connect_lazy(),
         "awzy-pdp",
     ));
     // Containments from awzy-challenge, so a PDP outage never replays an allow for a contained

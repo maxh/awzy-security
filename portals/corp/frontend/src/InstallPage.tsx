@@ -1,13 +1,14 @@
 import { EmptyState, PageHeader, PageLoader, Section, Stat, StatusBadge } from "@awzy/ui";
-import { Alert, Button, Group, Modal, SimpleGrid, Stack, Table, Text } from "@mantine/core";
-import { IconArchive, IconBox, IconHistory } from "@tabler/icons-react";
+import { Alert, Button, Group, Modal, Select, SimpleGrid, Stack, Table, Text, TextInput } from "@mantine/core";
+import { IconArchive, IconBox, IconHistory, IconPin } from "@tabler/icons-react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { Suspense, useState } from "react";
 import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
 
 import type { InstallPageQuery } from "./__generated__/InstallPageQuery.graphql";
+import type { InstallPageReleaseMutation, ReleaseChannel } from "./__generated__/InstallPageReleaseMutation.graphql";
 import type { InstallPageRetireMutation } from "./__generated__/InstallPageRetireMutation.graphql";
-import { ago, channelLabel, formatTime, healthOf, shortDigest } from "./format";
+import { ago, CHANNELS, channelLabel, formatTime, healthOf, shortDigest } from "./format";
 import { InstallCharts } from "./InstallCharts";
 import { SupportSection } from "./SupportSection";
 
@@ -118,7 +119,14 @@ function Install({ id }: { id: string }) {
             {i.retiredAt ? ` · retired by ${i.retiredBy?.label ?? "staff"} on ${formatTime(i.retiredAt)}` : ""}
           </>
         }
-        actions={i.retiredAt ? undefined : <RetireButton id={id} name={`${i.client} / ${i.environment}`} />}
+        actions={
+          i.retiredAt ? undefined : (
+            <Group gap="xs">
+              <ReleaseButton id={id} channel={i.channel ?? "FAST"} pinnedVersion={i.pinnedVersion ?? null} />
+              <RetireButton id={id} name={`${i.client} / ${i.environment}`} />
+            </Group>
+          )
+        }
       />
       <Stack gap="lg">
         <SimpleGrid cols={{ base: 2, md: 3, lg: 6 }}>
@@ -210,6 +218,85 @@ function Install({ id }: { id: string }) {
 
         <SupportSection installId={id} />
       </Stack>
+    </>
+  );
+}
+
+/** Moves the install to another channel, or pins it to a chart version. */
+function ReleaseButton({
+  id,
+  channel: current,
+  pinnedVersion,
+}: {
+  id: string;
+  channel: string;
+  pinnedVersion: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const [channel, setChannel] = useState<string | null>(current);
+  const [pinned, setPinned] = useState(pinnedVersion ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [commit, isSaving] = useMutation<InstallPageReleaseMutation>(graphql`
+    mutation InstallPageReleaseMutation($input: SetInstallReleaseInput!) {
+      setInstallRelease(input: $input) {
+        install {
+          id
+          channel
+          pinnedVersion
+        }
+      }
+    }
+  `);
+  const save = () =>
+    commit({
+      variables: {
+        input: {
+          installQid: id,
+          channel: (channel ?? "FAST") as ReleaseChannel,
+          pinnedVersion: channel === "PINNED" ? pinned.trim() : null,
+        },
+      },
+      onCompleted: () => {
+        setError(null);
+        setOpen(false);
+      },
+      onError: (e) => setError(e.message),
+    });
+  return (
+    <>
+      <Button variant="default" leftSection={<IconPin size={16} />} onClick={() => setOpen(true)}>
+        Release
+      </Button>
+      <Modal opened={open} onClose={() => setOpen(false)} title={<Text fw={600}>Release channel</Text>}>
+        <Stack gap="sm">
+          <Select label="Channel" data={CHANNELS} value={channel} onChange={setChannel} allowDeselect={false} />
+          {channel === "PINNED" && (
+            <TextInput
+              label="Pinned version"
+              placeholder="0.4.2-g0123456789ab"
+              value={pinned}
+              onChange={(e) => setPinned(e.currentTarget.value)}
+            />
+          )}
+          <Text size="sm" c="dimmed">
+            From now on the registry serves the install the version this names: it moves to it, up or back, at its next
+            upgrade.
+          </Text>
+          {error && (
+            <Alert color="red" title="Not changed">
+              {error}
+            </Alert>
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button loading={isSaving} onClick={save}>
+              Save
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </>
   );
 }

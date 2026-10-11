@@ -233,6 +233,41 @@ type ComponentStatus {
 	runbookUrl: String!
 }
 
+"""
+A configured connector and how its syncing is going.
+"""
+type Connector {
+	"""
+	drive or jira.
+	"""
+	name: String!
+	"""
+	What it was configured with. Never its credentials.
+	"""
+	settings: [ConnectorSetting!]!
+	intervalSecs: Int!
+	lastSuccessAt: UtcTimestamp
+	lastFailureAt: UtcTimestamp
+	"""
+	Why the last failed round failed; null once a round succeeds.
+	"""
+	lastError: String
+	failures: Int!
+	"""
+	Written to or deleted from awzy's world model since awzy-connectors started.
+	"""
+	written: Int!
+	deleted: Int!
+}
+
+"""
+One of a connector's settings, for display.
+"""
+type ConnectorSetting {
+	name: String!
+	value: String!
+}
+
 input ContainPrincipalInput {
 	principal: EntityRefInput!
 	reason: String!
@@ -514,6 +549,36 @@ input FinishSecurityKeyRegistrationInput {
 	`response.attestationObject`, base64url.
 	"""
 	attestationObject: String!
+}
+
+"""
+What this install sends awzy: the heartbeat (the only thing that leaves it for awzy), whether
+it's on, and the last one exactly as sent.
+"""
+type HeartbeatExport {
+	"""
+	False when the install turned reporting off; then nothing is sent.
+	"""
+	enabled: Boolean!
+	"""
+	Where heartbeats go.
+	"""
+	corpUrl: String
+	intervalSecs: Int
+	sentAt: UtcTimestamp
+	"""
+	Whether awzy's corp portal took the last one.
+	"""
+	delivered: Boolean
+	"""
+	Why the last one wasn't delivered, or why the portal couldn't ask awzy-reporter.
+	"""
+	error: String
+	"""
+	The last heartbeat, as JSON, byte for byte the fields that were sent. None before the
+	first, which goes out within a minute of awzy-reporter starting.
+	"""
+	heartbeat: String
 }
 
 """
@@ -1062,6 +1127,16 @@ type Query {
 	those who may view the enforcement area.
 	"""
 	installStatus: [ComponentStatus!]!
+	"""
+	What this install sends awzy, and the last heartbeat it sent. For those who may view the
+	enforcement area.
+	"""
+	heartbeatExport: HeartbeatExport!
+	"""
+	The configured connectors and how their syncing is going. For those who may view the
+	enforcement area.
+	"""
+	connectors: [Connector!]!
 	"""
 	What awzy-gateway does while the PDP is unreachable: each tool's tier, and which tiers
 	fail open.

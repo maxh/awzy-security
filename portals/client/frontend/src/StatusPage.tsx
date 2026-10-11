@@ -3,6 +3,8 @@ import { Alert, Anchor, Button, Code, Group, ScrollArea, Stack, Table, Text } fr
 import { Suspense, useState } from "react";
 import { fetchQuery, graphql, useLazyLoadQuery, useRelayEnvironment } from "react-relay";
 
+import { prettyJson, Time } from "./format";
+import type { StatusPageExportQuery } from "./__generated__/StatusPageExportQuery.graphql";
 import type { StatusPageDiagnosticsQuery } from "./__generated__/StatusPageDiagnosticsQuery.graphql";
 import type { StatusPageQuery } from "./__generated__/StatusPageQuery.graphql";
 
@@ -99,8 +101,76 @@ function Status({ fetchKey, onRefresh }: { fetchKey: number; onRefresh: () => vo
           </Group>
         )}
       </Section>
+      <Suspense fallback={<PageLoader />}>
+        <HeartbeatExport fetchKey={fetchKey} />
+      </Suspense>
       {data.canGenerateDiagnostics && <Diagnostics />}
     </>
+  );
+}
+
+/**
+ * What leaves the install for awzy: the heartbeat, whether it's on, and the last one exactly as
+ * sent. Its fields are fixed (service health and aggregate metrics), never client data.
+ */
+function HeartbeatExport({ fetchKey }: { fetchKey: number }) {
+  const { heartbeatExport: e } = useLazyLoadQuery<StatusPageExportQuery>(
+    graphql`
+      query StatusPageExportQuery {
+        heartbeatExport {
+          enabled
+          corpUrl
+          intervalSecs
+          sentAt
+          delivered
+          error
+          heartbeat
+        }
+      }
+    `,
+    {},
+    { fetchKey, fetchPolicy: "network-only" },
+  );
+  if (!e.enabled) {
+    return (
+      <Section title="Sent to awzy" description="The heartbeat is the only thing your install sends awzy.">
+        <Group gap="xs">
+          <StatusBadge tone="neutral">Off</StatusBadge>
+          <Text size="sm" c="dimmed">
+            Reporting is turned off (reporter.enabled=false in the chart's values), so nothing is sent.
+          </Text>
+        </Group>
+      </Section>
+    );
+  }
+  return (
+    <Section
+      title="Sent to awzy"
+      description={`The heartbeat is the only thing your install sends awzy${e.corpUrl ? `, to ${e.corpUrl}` : ""}${e.intervalSecs ? `, every ${e.intervalSecs} seconds` : ""}. Turn it off with reporter.enabled=false in the chart's values.`}
+    >
+      <Stack gap="sm">
+        <Group gap="xs">
+          <StatusBadge tone={e.delivered ? "success" : e.delivered === false || e.error ? "danger" : "neutral"}>
+            {e.delivered ? "Delivered" : e.delivered === false ? "Not delivered" : e.error ? "Unknown" : "Not sent yet"}
+          </StatusBadge>
+          {e.sentAt && (
+            <Text size="sm" c="dimmed">
+              Last sent <Time at={e.sentAt} />
+            </Text>
+          )}
+        </Group>
+        {e.error && (
+          <Text size="sm" c="dimmed">
+            {e.error}
+          </Text>
+        )}
+        {e.heartbeat && (
+          <ScrollArea.Autosize mah={420}>
+            <Code block>{prettyJson(e.heartbeat)}</Code>
+          </ScrollArea.Autosize>
+        )}
+      </Stack>
+    </Section>
   );
 }
 

@@ -2,7 +2,8 @@
 //!
 //! The heartbeat is the only thing that leaves an install for awzy (ADR 0009), in the fixed
 //! schema of `awzy_heartbeat`. Every heartbeat is logged before it is sent, `--print` shows one
-//! without sending it, and AWZY_REPORTER_ENABLED=false turns reporting off.
+//! without sending it, and AWZY_REPORTER_ENABLED=false turns reporting off. The last one sent is
+//! served at `/v1/last-heartbeat`, so the client portal can show exactly what left.
 //!
 //! In a cluster it reads the awzy workloads from the Kubernetes API (replicas, restarts, image
 //! digests) and scrapes each PDP pod's `/metrics` for decisions per second, p99, and error rate,
@@ -17,7 +18,11 @@ pub mod kube;
 mod pdp_metrics;
 mod restarts;
 
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
 use anyhow::{bail, Context};
 use awzy_heartbeat::{
@@ -25,13 +30,15 @@ use awzy_heartbeat::{
     SCHEMA_VERSION,
 };
 use awzy_model::InstallId;
+use axum::{extract::State, routing, Json, Router};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
 use hyper_util::{
     client::legacy::{connect::HttpConnector, Client},
     rt::TokioExecutor,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 const SEND_TIMEOUT: Duration = Duration::from_secs(10);
@@ -402,25 +409,60 @@ fn bracket(ip: &str) -> String {
     }
 }
 
-/// Collects, logs, and sends a heartbeat every interval, forever. A failed send is logged and
-/// retried at the next interval.
-pub async fn run(mut reporter: Reporter) {
+/// The heartbeat the reporter last tried to send, and whether the corp portal took it.
+#[derive(Debug, Clone, Serialize)]
+pub struct LastSend {
+    pub heartbeat: Heartbeat,
+    pub delivered: bool,
+    pub error: Option<String>,
+}
+
+/// Shared between [`run`], which writes it, and [`router`], which serves it.
+pub type LastSent = Arc<RwLock<Option<LastSend>>>;
+
+/// Collects, logs, and sends a heartbeat every interval, forever, remembering the last in `last`.
+/// A failed send is logged and retried at the next interval.
+pub async fn run(mut reporter: Reporter, last: LastSent) {
     let mut tick = tokio::time::interval(reporter.config.interval);
     loop {
         tick.tick().await;
         let hb = reporter.collect().await;
         // The client can read exactly what leaves their install.
         tracing::info!(heartbeat = %serde_json::to_string(&hb).unwrap_or_default(), "sending heartbeat");
-        match reporter.send(&hb).await {
+        let (delivered, error) = match reporter.send(&hb).await {
             Ok(answer) => {
                 if !answer.support_requests.is_empty() {
                     tracing::info!(requests = answer.support_requests.len(), "support session requests from awzy");
                 }
                 reporter.relay_support(answer).await;
+                (true, None)
             }
-            Err(e) => tracing::warn!(error = %e, "heartbeat not delivered"),
-        }
+            Err(e) => {
+                tracing::warn!(error = %e, "heartbeat not delivered");
+                (false, Some(format!("{e:#}")))
+            }
+        };
+        let sent = LastSend { heartbeat: hb, delivered, error };
+        *last.write().unwrap_or_else(|e| e.into_inner()) = Some(sent);
     }
+}
+
+/// `GET /v1/last-heartbeat`: where heartbeats go, how often, and the last one exactly as sent
+/// (null before the first). For the client portal, inside the cluster only.
+pub fn router(config: &Config, last: LastSent) -> Router {
+    let about = json!({ "corp_url": config.corp_url, "interval_secs": config.interval.as_secs() });
+    Router::new()
+        .route(
+            "/v1/last-heartbeat",
+            routing::get(move |State(last): State<LastSent>| {
+                let mut body = about.clone();
+                async move {
+                    body["last"] = json!(*last.read().unwrap_or_else(|e| e.into_inner()));
+                    Json(body)
+                }
+            }),
+        )
+        .with_state(last)
 }
 
 #[cfg(test)]
@@ -621,5 +663,38 @@ mod tests {
         let ch = &hb.services[1];
         assert_eq!((ch.version.as_deref(), ch.replicas_ready), (Some("25.8"), 1));
         assert!(hb.metrics.decisions_per_second.unwrap() > 0.0, "the ready PDP pod was scraped");
+    }
+
+    #[tokio::test]
+    async fn the_last_heartbeat_is_served_exactly_as_sent() {
+        let received = Arc::new(Mutex::new(Vec::<String>::new()));
+        let seen = received.clone();
+        let corp = serve(Router::new().route(
+            "/v1/heartbeat",
+            post(move |body: String| {
+                let seen = seen.clone();
+                async move {
+                    seen.lock().unwrap().push(body);
+                    axum::http::StatusCode::NO_CONTENT
+                }
+            }),
+        ))
+        .await;
+        let config = config(Source::Probe(vec![]), corp);
+        let last = LastSent::default();
+        let served = serve(router(&config, last.clone())).await;
+        tokio::spawn(run(Reporter::with_kube(config, None), last.clone()));
+        while last.read().unwrap().is_none() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        let req = axum::http::Request::get(format!("{served}/v1/last-heartbeat")).body(Full::default()).unwrap();
+        let res = http_client().request(req).await.unwrap();
+        let body: serde_json::Value =
+            serde_json::from_slice(&res.into_body().collect().await.unwrap().to_bytes()).unwrap();
+        assert_eq!(body["interval_secs"], 60);
+        assert_eq!(body["last"]["delivered"], true);
+        let sent: serde_json::Value = serde_json::from_str(&received.lock().unwrap()[0]).unwrap();
+        assert_eq!(body["last"]["heartbeat"], sent);
     }
 }

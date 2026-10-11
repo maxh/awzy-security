@@ -1,4 +1,4 @@
-import { EmptyState, PageHeader, PageLoader, Section, StatusBadge } from "@awzy/ui";
+import { EmptyState, PageHeader, PageLoader, Section, StatusBadge, type Tone } from "@awzy/ui";
 import { Anchor, Group, Table, Text } from "@mantine/core";
 import { IconPackage } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
@@ -45,6 +45,18 @@ function Releases() {
             health
           }
         }
+        installs(first: 200) {
+          edges {
+            node {
+              id
+              client
+              environment
+              channel
+              pinnedVersion
+              chartVersion
+            }
+          }
+        }
       }
     `,
     {},
@@ -83,6 +95,9 @@ function Releases() {
             </Table.Tbody>
           </Table>
         )}
+      </Section>
+      <Section title="Rollout" flush>
+        <Rollout channels={data.channels} installs={data.installs.edges.map((e) => e.node)} />
       </Section>
       <Section title="Running" flush>
         <Running releases={data.releases} />
@@ -142,5 +157,79 @@ function Running({ releases }: { releases: ReleasesPageQuery["response"]["releas
         ))}
       </Table.Tbody>
     </Table>
+  );
+}
+
+type RolloutInstall = ReleasesPageQuery["response"]["installs"]["edges"][number]["node"];
+
+/** Each install's target, from its pin or its channel, against what it last reported running. */
+function Rollout({
+  channels,
+  installs,
+}: {
+  channels: ReleasesPageQuery["response"]["channels"];
+  installs: ReadonlyArray<RolloutInstall>;
+}) {
+  if (installs.length === 0) {
+    return (
+      <Text size="sm" c="dimmed" p="md">
+        No installs yet.
+      </Text>
+    );
+  }
+  const named = new Map(channels.map((c) => [c.channel as string, c.chartVersion]));
+  const rows = installs.map((i) => {
+    const target = i.channel === "PINNED" ? i.pinnedVersion : named.get(i.channel);
+    const status: { tone: Tone; label: string } = !i.chartVersion
+      ? { tone: "neutral", label: "Not reporting" }
+      : !target
+        ? { tone: "neutral", label: "No target" }
+        : i.chartVersion === target
+          ? { tone: "success", label: "Up to date" }
+          : { tone: "warning", label: "Not yet" };
+    return { i, target, status };
+  });
+  const behind = rows.filter((r) => r.status.label === "Not yet").length;
+  return (
+    <Table.ScrollContainer minWidth={640}>
+      <Table>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Install</Table.Th>
+            <Table.Th>Follows</Table.Th>
+            <Table.Th>Target</Table.Th>
+            <Table.Th>Running</Table.Th>
+            <Table.Th>{behind > 0 ? `${behind} not yet on target` : "Status"}</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {rows.map(({ i, target, status }) => (
+            <Table.Tr key={i.id}>
+              <Table.Td>
+                <Anchor
+                  size="sm"
+                  underline="hover"
+                  renderRoot={(props) => <Link to="/installs/$installId" params={{ installId: i.id }} {...props} />}
+                >
+                  {i.client}/{i.environment}
+                </Anchor>
+              </Table.Td>
+              <Table.Td>
+                <Text size="sm">{channelLabel(i.channel, i.pinnedVersion)}</Text>
+              </Table.Td>
+              <Table.Td ff="monospace" fz="sm">
+                {target ?? "—"}
+              </Table.Td>
+              <Table.Td ff="monospace" fz="sm">
+                {i.chartVersion ?? "—"}
+              </Table.Td>
+              <Table.Td>
+                <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Table.ScrollContainer>
   );
 }

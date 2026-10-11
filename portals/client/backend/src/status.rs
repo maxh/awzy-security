@@ -12,6 +12,9 @@ use hyper_util::{
     rt::TokioExecutor,
 };
 
+use awzy_portal::UtcTimestamp;
+use chrono::{DateTime, Utc};
+
 use crate::{
     access::{require, PortalAction, PortalArea},
     Services,
@@ -23,7 +26,7 @@ const TIMEOUT: Duration = Duration::from_secs(3);
 /// The docs site's troubleshooting guide, with a section per component.
 const RUNBOOKS: &str = "https://docs.awzysecurity.com/guides/troubleshooting/";
 
-type HttpClient = Client<HttpConnector, Empty<Bytes>>;
+pub(crate) type HttpClient = Client<HttpConnector, Empty<Bytes>>;
 
 /// The services the portal reaches, by the setting that holds each one's address.
 const SERVICES: &[(&str, &str)] = &[
@@ -51,6 +54,25 @@ fn runbook_url(name: &str) -> String {
     format!("{RUNBOOKS}#{}", name.to_lowercase())
 }
 
+/// What this install sends awzy: the heartbeat (the only thing that leaves it for awzy), whether
+/// it's on, and the last one exactly as sent.
+#[derive(SimpleObject, Debug, Clone, PartialEq, Default)]
+pub struct HeartbeatExport {
+    /// False when the install turned reporting off; then nothing is sent.
+    pub enabled: bool,
+    /// Where heartbeats go.
+    pub corp_url: Option<String>,
+    pub interval_secs: Option<i64>,
+    pub sent_at: Option<UtcTimestamp>,
+    /// Whether awzy's corp portal took the last one.
+    pub delivered: Option<bool>,
+    /// Why the last one wasn't delivered, or why the portal couldn't ask awzy-reporter.
+    pub error: Option<String>,
+    /// The last heartbeat, as JSON, byte for byte the fields that were sent. None before the
+    /// first, which goes out within a minute of awzy-reporter starting.
+    pub heartbeat: Option<String>,
+}
+
 #[derive(Default)]
 pub struct StatusQuery;
 
@@ -61,6 +83,39 @@ impl StatusQuery {
     async fn install_status(&self, ctx: &Context<'_>) -> Result<Vec<ComponentStatus>> {
         require(ctx, PortalAction::View, PortalArea::Enforcement).await?;
         Ok(check(ctx.data::<Services>()?).await)
+    }
+
+    /// What this install sends awzy, and the last heartbeat it sent. For those who may view the
+    /// enforcement area.
+    async fn heartbeat_export(&self, ctx: &Context<'_>) -> Result<HeartbeatExport> {
+        require(ctx, PortalAction::View, PortalArea::Enforcement).await?;
+        let client: HttpClient = Client::builder(TokioExecutor::new()).build_http();
+        Ok(heartbeat_export(&client, std::env::var("AWZY_REPORTER_ADDR").ok()).await)
+    }
+}
+
+/// Asks awzy-reporter, at `addr`, what it last sent. No address means reporting is off: the chart
+/// deploys no reporter then.
+async fn heartbeat_export(client: &HttpClient, addr: Option<String>) -> HeartbeatExport {
+    let Some(addr) = addr else { return HeartbeatExport::default() };
+    let unreachable = |error: String| HeartbeatExport { enabled: true, error: Some(error), ..Default::default() };
+    let body = match get(client, &format!("{}/v1/last-heartbeat", addr.trim_end_matches('/'))).await {
+        Ok((200, body)) => body,
+        Ok((code, _)) => return unreachable(format!("awzy-reporter answered {code}")),
+        Err(e) => return unreachable(format!("awzy-reporter is unreachable: {e}")),
+    };
+    let Ok(v) = serde_json::from_slice::<serde_json::Value>(&body) else {
+        return unreachable("awzy-reporter's answer isn't JSON".into());
+    };
+    let last = &v["last"];
+    HeartbeatExport {
+        enabled: true,
+        corp_url: v["corp_url"].as_str().map(str::to_string),
+        interval_secs: v["interval_secs"].as_i64(),
+        sent_at: last["heartbeat"]["sent_at"].as_str().and_then(|t| t.parse::<DateTime<Utc>>().ok()).map(UtcTimestamp),
+        delivered: last["delivered"].as_bool(),
+        error: last["error"].as_str().map(str::to_string),
+        heartbeat: last.get("heartbeat").filter(|h| !h.is_null()).map(|h| h.to_string()),
     }
 }
 
@@ -76,7 +131,7 @@ pub(crate) async fn check(services: &Services) -> Vec<ComponentStatus> {
     status
 }
 
-async fn get(client: &HttpClient, url: &str) -> anyhow::Result<(u16, Bytes)> {
+pub(crate) async fn get(client: &HttpClient, url: &str) -> anyhow::Result<(u16, Bytes)> {
     let req = axum::http::Request::get(url).body(Empty::new())?;
     // The body too: a service that answers and then stalls mustn't hold up the page.
     tokio::time::timeout(TIMEOUT, async {
@@ -160,5 +215,31 @@ mod tests {
         assert_eq!(unset.detail.as_deref(), Some("not configured"));
         assert_eq!(unset.runbook_url, "https://docs.awzysecurity.com/guides/troubleshooting/#awzy-challenge");
         assert_eq!(clickhouse_status(None).await.detail.as_deref(), Some("not configured"));
+    }
+
+    #[tokio::test]
+    async fn the_heartbeat_export_is_off_unreachable_or_the_last_one_sent() {
+        let client: HttpClient = Client::builder(TokioExecutor::new()).build_http();
+        assert_eq!(heartbeat_export(&client, None).await, HeartbeatExport::default(), "no reporter: nothing is sent");
+        let gone = heartbeat_export(&client, Some("http://127.0.0.1:9".into())).await;
+        assert!(gone.enabled && gone.error.unwrap().starts_with("awzy-reporter is unreachable"));
+
+        let app = Router::new().route(
+            "/v1/last-heartbeat",
+            get(|| async {
+                axum::Json(serde_json::json!({
+                    "corp_url": "https://corp.example.com",
+                    "interval_secs": 60,
+                    "last": { "delivered": true, "error": null, "heartbeat": { "sent_at": "2026-10-11T12:00:00Z" } },
+                }))
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let reporter = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let sent = heartbeat_export(&client, Some(reporter)).await;
+        assert_eq!((sent.enabled, sent.delivered, sent.interval_secs), (true, Some(true), Some(60)));
+        assert_eq!(sent.sent_at.unwrap().0.to_rfc3339(), "2026-10-11T12:00:00+00:00");
+        assert_eq!(sent.heartbeat.as_deref(), Some(r#"{"sent_at":"2026-10-11T12:00:00Z"}"#));
     }
 }

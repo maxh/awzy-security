@@ -120,6 +120,14 @@ Bootstrap takes:
 | `break_glass_public_keys` | The PEM public keys of the admins who may roll back a policy bundle that locks everyone out, without the portal or your IdP; `null` turns break-glass off |
 | `demo_idp`, `demo_data`, `demo_activity` | **Demo installs only:** the dev IdP, the synthetic company, and its everyday tool calls through awzy-gateway each weekday (needs `mcp_gateway`) |
 
+On a cluster you already have, rather than one the cloud layer made, check it first from a
+checkout of this repository. `contract.json` is your `install_contract` as JSON. The check only
+reads, and says what to fix:
+
+```sh
+deploy/terraform/bootstrap/preflight.sh --context <your context> --contract contract.json
+```
+
 ```sh
 cd ../bootstrap
 tofu init && tofu plan -out=bootstrap.plan

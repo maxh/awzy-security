@@ -447,6 +447,19 @@ pub struct RegisterInstallPayload {
 }
 
 #[derive(InputObject)]
+pub struct SetInstallReleaseInput {
+    pub install_qid: ID,
+    pub channel: ReleaseChannel,
+    /// Required for PINNED, and only then.
+    pub pinned_version: Option<String>,
+}
+
+#[derive(SimpleObject)]
+pub struct SetInstallReleasePayload {
+    pub install: Install,
+}
+
+#[derive(InputObject)]
 pub struct RetireInstallInput {
     pub install_qid: ID,
 }
@@ -481,6 +494,26 @@ impl FleetMutation {
             Err(e @ (RegisterError::Invalid(_) | RegisterError::Exists { .. })) => Err(e.to_string().into()),
             Err(e) => Err(e.into()),
         }
+    }
+
+    /// Moves an install to another channel, or pins it to a chart version. It upgrades or rolls
+    /// back the next time it pulls.
+    async fn set_install_release(
+        &self,
+        ctx: &Context<'_>,
+        input: SetInstallReleaseInput,
+    ) -> Result<SetInstallReleasePayload> {
+        let staff = ctx.data::<Staff>().map_err(|_| "sign in first")?;
+        let id: InstallId = input.install_qid.parse().map_err(|_| "not an install ID")?;
+        let pinned = input.pinned_version.as_deref().map(str::trim).filter(|v| !v.is_empty());
+        let record = match store(ctx)?.set_release(id, input.channel.into(), pinned).await {
+            Ok(Some(record)) => record,
+            Ok(None) => return Err("no active install with that ID".into()),
+            Err(e @ RegisterError::Invalid(_)) => return Err(e.to_string().into()),
+            Err(e) => return Err(e.into()),
+        };
+        tracing::warn!(install = %record.id, channel = record.channel.as_str(), pinned = ?record.pinned_version, by = %staff.username, "install's release changed");
+        Ok(SetInstallReleasePayload { install: Install(record) })
     }
 
     /// Retires an install: its reporting and pull tokens stop working at once, it leaves the
