@@ -14,8 +14,8 @@ Relay's answer is to start the query when navigation starts (`loadQuery`) and re
 (`usePreloadedQuery`). [react-router-relay](https://github.com/loop-payments/react-router-relay)
 does this for React Router's data routers, but both portals use TanStack Router, and switching
 routers would rewrite both portals' routing for a feature TanStack Router already has: a route
-`loader`, which runs as navigation starts. The platform plan's frontend stack already called for route loaders that
-call `loadQuery`; the portals hadn't done it.
+`loader`, which runs as navigation starts. The platform plan's frontend stack already called for
+route loaders that call `loadQuery`; the portals hadn't done it.
 
 ## Decision
 
