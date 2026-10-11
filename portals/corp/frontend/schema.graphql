@@ -281,13 +281,13 @@ type Query {
 	"""
 	releases: [Release!]!
 	"""
-	The services an install can report, for filters and empty states.
-	"""
-	knownServices: [String!]!
-	"""
 	Each channel's chart version, stable first. A channel never moved isn't listed.
 	"""
 	channels: [ChannelVersion!]!
+	"""
+	The services an install can report, for filters and empty states.
+	"""
+	knownServices: [String!]!
 }
 
 input RegisterInstallInput {
