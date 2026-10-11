@@ -23,8 +23,8 @@ use awzy_authz_proto::{
     challenges_from_wire,
     prost_types::Timestamp,
 };
-use awzy_model::{entity_type, ChallengeId, ContainmentId};
-use awzy_portal::{Actor, UtcTimestamp};
+use awzy_model::{entity_type, ChallengeId, ContainmentId, DecisionId};
+use awzy_portal::{Actor, Qid, UtcTimestamp};
 use chrono::DateTime;
 
 use crate::{
@@ -127,8 +127,8 @@ impl Challenge {
     }
 
     /// The decision that opened it.
-    async fn decision_qid(&self) -> ID {
-        ID(self.0.decision_qid.clone())
+    async fn decision_qid(&self) -> Result<Qid<DecisionId>> {
+        Ok(Qid(self.0.decision_qid.parse()?))
     }
 
     async fn principal(&self) -> Option<EntityRef> {
@@ -392,14 +392,14 @@ async fn list(
 
 #[derive(InputObject)]
 pub struct JustifyChallengeInput {
-    pub challenge_qid: ID,
+    pub challenge_qid: Qid<ChallengeId>,
     /// Why the access is needed: at least 20 characters.
     pub justification: String,
 }
 
 #[derive(InputObject)]
 pub struct DecideChallengeInput {
-    pub challenge_qid: ID,
+    pub challenge_qid: Qid<ChallengeId>,
     pub approve: bool,
     pub note: Option<String>,
 }
@@ -425,7 +425,7 @@ pub struct ContainPrincipalInput {
 
 #[derive(InputObject)]
 pub struct LiftContainmentInput {
-    pub containment_qid: ID,
+    pub containment_qid: Qid<ContainmentId>,
     pub reason: String,
 }
 
@@ -443,7 +443,7 @@ impl ChallengeMutation {
     async fn justify_challenge(&self, ctx: &Context<'_>, input: JustifyChallengeInput) -> Result<ChallengePayload> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let req = JustifyRequest {
-            challenge_qid: input.challenge_qid.0,
+            challenge_qid: input.challenge_qid.to_string(),
             answered_by_actor: Some(awzy_model::Actor::human(answering_human(&viewer)?).into()),
             justification: input.justification,
             ..Default::default()
@@ -465,7 +465,7 @@ impl ChallengeMutation {
             .into());
         }
         let req = DecideRequest {
-            challenge_qid: input.challenge_qid.0,
+            challenge_qid: input.challenge_qid.to_string(),
             decided_by_actor: Some(viewer.actor().into()),
             approve: input.approve,
             note: input.note.unwrap_or_default(),
@@ -495,7 +495,7 @@ impl ChallengeMutation {
     async fn lift_containment(&self, ctx: &Context<'_>, input: LiftContainmentInput) -> Result<ContainmentPayload> {
         let viewer = require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
         let req = LiftRequest {
-            containment_qid: input.containment_qid.0,
+            containment_qid: input.containment_qid.to_string(),
             lifted_by_actor: Some(viewer.actor().into()),
             reason: input.reason,
             ..Default::default()

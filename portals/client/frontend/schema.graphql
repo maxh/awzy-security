@@ -55,7 +55,7 @@ type AskAwzyBotPayload {
 A `navigator.credentials.get()` response.
 """
 input AssertionInput {
-	ceremonyQid: ID!
+	ceremonyQid: Qid!
 	"""
 	`rawId`, base64url.
 	"""
@@ -75,7 +75,7 @@ input AssertionInput {
 }
 
 input BeginChallengeVerificationInput {
-	challengeQid: ID!
+	challengeQid: Qid!
 }
 
 input BeginSecurityKeyRegistrationInput {
@@ -93,7 +93,7 @@ type Challenge implements Node {
 	"""
 	The decision that opened it.
 	"""
-	decisionQid: ID!
+	decisionQid: Qid!
 	principal: EntityRef
 	"""
 	Set when a service account acted for a person.
@@ -202,7 +202,7 @@ type ClientPortalSubscription {
 }
 
 input CloseInvestigationInput {
-	investigationQid: ID!
+	investigationQid: Qid!
 	"""
 	What the review found.
 	"""
@@ -316,13 +316,13 @@ type CreatePolicyDraftPayload {
 }
 
 input DecideChallengeInput {
-	challengeQid: ID!
+	challengeQid: Qid!
 	approve: Boolean!
 	note: String
 }
 
 input DecideSupportSessionInput {
-	supportSessionQid: ID!
+	supportSessionQid: Qid!
 	approve: Boolean!
 	"""
 	With approve: the areas to allow, at most those asked for.
@@ -342,7 +342,7 @@ type DecideSupportSessionPayload {
 	"""
 	The challenge to pass, then decide again.
 	"""
-	challengeQid: ID
+	challengeQid: Qid
 }
 
 type Decision implements Node {
@@ -536,7 +536,7 @@ input FinishChallengeVerificationInput {
 }
 
 input FinishSecurityKeyRegistrationInput {
-	ceremonyQid: ID!
+	ceremonyQid: Qid!
 	"""
 	What to call the key, e.g. "YubiKey on my keychain".
 	"""
@@ -676,7 +676,7 @@ enum InvestigationVerdict {
 }
 
 input JustifyChallengeInput {
-	challengeQid: ID!
+	challengeQid: Qid!
 	"""
 	Why the access is needed: at least 20 characters.
 	"""
@@ -684,7 +684,7 @@ input JustifyChallengeInput {
 }
 
 input LiftContainmentInput {
-	containmentQid: ID!
+	containmentQid: Qid!
 	reason: String!
 }
 
@@ -720,7 +720,7 @@ type Mutation {
 	"""
 	Ends an approved support session now. The staff member's next request is refused.
 	"""
-	endSupportSession(supportSessionQid: ID!): SupportSession!
+	endSupportSession(supportSessionQid: Qid!): SupportSession!
 	"""
 	Registers a service account, or changes one. Until it's registered, the PDP denies it.
 	"""
@@ -936,7 +936,7 @@ type PolicyDryRunExample {
 	"""
 	One of those decisions, `decision_<uuid>`.
 	"""
-	sampleDecisionQid: ID!
+	sampleDecisionQid: Qid
 	"""
 	The policies that decided it under the active bundle, and under the draft.
 	"""
@@ -1012,7 +1012,7 @@ input PublishPolicyBundleInput {
 	"""
 	A draft bundle's QID.
 	"""
-	policyBundleQid: ID!
+	policyBundleQid: Qid!
 	"""
 	Publish even though the draft would stop the signed-in person administering policies.
 	"""
@@ -1084,7 +1084,7 @@ type Query {
 	bundle and the draft, with today's people and resources, and the verdicts compared.
 	`days` defaults to 7, at most 30.
 	"""
-	policyDryRun(draftQid: ID!, days: Int): PolicyDryRun!
+	policyDryRun(draftQid: Qid!, days: Int): PolicyDryRun!
 	"""
 	Whether this install has Awzy Bot set up (ADR 0048).
 	"""
@@ -1187,7 +1187,7 @@ type RegisterServiceAccountPayload {
 }
 
 input RemoveSecurityKeyInput {
-	securityKeyQid: ID!
+	securityKeyQid: Qid!
 	"""
 	An assertion over a `beginSecurityKeyChange` ceremony, from any of your keys.
 	"""
@@ -1203,7 +1203,7 @@ type RemoveServiceAccountPayload {
 }
 
 input ResetSecurityKeyInput {
-	securityKeyQid: ID!
+	securityKeyQid: Qid!
 }
 
 """
@@ -1282,7 +1282,7 @@ type SecurityKey implements Node {
 	"""
 	The key that authorized adding this one; null for a person's first key.
 	"""
-	addedWithQid: ID
+	addedWithQid: Qid
 	createdAt: UtcTimestamp
 	lastUsedAt: UtcTimestamp
 }
@@ -1352,7 +1352,7 @@ type SetEnforcementModePayload {
 	The security-key challenge to pass first, when the switch needs one: answer it, then switch
 	again within its grant.
 	"""
-	challengeQid: ID
+	challengeQid: Qid
 }
 
 input SetOutageFallbackInput {
@@ -1372,7 +1372,7 @@ type SetOutageFallbackPayload {
 	"""
 	The challenge to pass, then save again.
 	"""
-	challengeQid: ID
+	challengeQid: Qid
 }
 
 type SupportSession implements Node {
@@ -1440,6 +1440,12 @@ input ToolTierInput {
 	tier: SensitivityTier!
 }
 
+"""
+One of awzy's IDs, `<entity_type>_<uuid>`, e.g. `challenge_0199a8f2-6c1e-7b3a-9d4e-2f8c1a5b7e90`.
+Each field and argument takes one entity's; any other is refused.
+"""
+scalar Qid
+
 scalar UtcTimestamp
 
 enum Verdict {
@@ -1468,7 +1474,7 @@ type ViewerInfo {
 The signed-in viewer's own support session, when they're awzy staff in one.
 """
 type ViewerSupport {
-	supportSessionQid: ID!
+	supportSessionQid: Qid!
 	staff: String!
 	areas: [String!]!
 	expiresAt: UtcTimestamp!
@@ -1481,7 +1487,7 @@ type WebAuthnCeremony {
 	"""
 	Pass back with the browser's response.
 	"""
-	ceremonyQid: ID!
+	ceremonyQid: Qid!
 	"""
 	The options for `navigator.credentials.create()` or `.get()`, as WebAuthn's JSON (binary
 	fields base64url).

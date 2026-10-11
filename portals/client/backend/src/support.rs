@@ -18,8 +18,8 @@ use awzy_authz_proto::challenge::v1::{
     RecordSupportActionRequest, SupportSession as WireSession, SupportSessionStatus as WireStatus,
 };
 use awzy_identity::Principal;
-use awzy_model::SupportSessionId;
-use awzy_portal::{Actor, UtcTimestamp};
+use awzy_model::{ChallengeId, SupportSessionId};
+use awzy_portal::{Actor, Qid, UtcTimestamp};
 use chrono::{DateTime, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde::Deserialize;
@@ -300,7 +300,7 @@ impl SupportSession {
 /// The signed-in viewer's own support session, when they're awzy staff in one.
 #[derive(SimpleObject)]
 pub struct ViewerSupport {
-    pub support_session_qid: ID,
+    pub support_session_qid: Qid<SupportSessionId>,
     pub staff: String,
     pub areas: Vec<String>,
     pub expires_at: UtcTimestamp,
@@ -332,7 +332,7 @@ impl SupportQuery {
     async fn viewer_support(&self, ctx: &Context<'_>) -> Option<ViewerSupport> {
         let grant = ctx.data_opt::<Viewer>()?.1.clone()?;
         Some(ViewerSupport {
-            support_session_qid: ID(grant.session.to_string()),
+            support_session_qid: Qid(grant.session),
             staff: grant.staff.clone(),
             areas: grant.areas.clone(),
             expires_at: UtcTimestamp(grant.expires_at),
@@ -342,7 +342,7 @@ impl SupportQuery {
 
 #[derive(InputObject)]
 pub struct DecideSupportSessionInput {
-    pub support_session_qid: ID,
+    pub support_session_qid: Qid<SupportSessionId>,
     pub approve: bool,
     /// With approve: the areas to allow, at most those asked for.
     #[graphql(default)]
@@ -357,7 +357,7 @@ pub struct DecideSupportSessionPayload {
     /// The session as decided; null when a challenge must be passed first.
     pub support_session: Option<SupportSession>,
     /// The challenge to pass, then decide again.
-    pub challenge_qid: Option<ID>,
+    pub challenge_qid: Option<Qid<ChallengeId>>,
 }
 
 #[derive(Default)]
@@ -380,7 +380,7 @@ impl SupportMutation {
             }
         }
         let req = DecideSupportSessionRequest {
-            qid: input.support_session_qid.0,
+            qid: input.support_session_qid.to_string(),
             approve: input.approve,
             areas: input.areas,
             minutes: input.minutes,
@@ -391,9 +391,13 @@ impl SupportMutation {
     }
 
     /// Ends an approved support session now. The staff member's next request is refused.
-    async fn end_support_session(&self, ctx: &Context<'_>, support_session_qid: ID) -> Result<SupportSession> {
+    async fn end_support_session(
+        &self,
+        ctx: &Context<'_>,
+        support_session_qid: Qid<SupportSessionId>,
+    ) -> Result<SupportSession> {
         let viewer = require(ctx, Administer, PortalArea::Enforcement).await?;
-        let req = EndSupportSessionRequest { qid: support_session_qid.0, ended_by_actor: Some(viewer.actor().into()) };
+        let req = EndSupportSessionRequest { qid: support_session_qid.to_string(), ended_by_actor: Some(viewer.actor().into()) };
         let session = client(ctx)?.end_support_session(req).await.map_err(grpc)?.into_inner().session;
         Ok(SupportSession(session.ok_or("awzy-challenge returned no support session")?))
     }

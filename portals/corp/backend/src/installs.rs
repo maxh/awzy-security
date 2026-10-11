@@ -8,7 +8,7 @@ use async_graphql::{
 };
 use awzy_heartbeat::{Service as WireService, ServiceStatus};
 use awzy_model::InstallId;
-use awzy_portal::{Actor, UtcTimestamp};
+use awzy_portal::{Actor, Qid, UtcTimestamp};
 use chrono::Utc;
 
 use crate::{
@@ -462,7 +462,7 @@ pub struct SetInstallReleasePayload {
 
 #[derive(InputObject)]
 pub struct RetireInstallInput {
-    pub install_qid: ID,
+    pub install_qid: Qid<InstallId>,
 }
 
 #[derive(SimpleObject)]
@@ -521,7 +521,7 @@ impl FleetMutation {
     /// fleet views, and its client and environment can be registered again.
     async fn retire_install(&self, ctx: &Context<'_>, input: RetireInstallInput) -> Result<RetireInstallPayload> {
         let staff = ctx.data::<Staff>().map_err(|_| "sign in first")?;
-        let id: InstallId = input.install_qid.parse().map_err(|_| "not an install ID")?;
+        let id = input.install_qid.0;
         let record = store(ctx)?.retire(id, &staff.username).await?.ok_or("no active install with that ID")?;
         tracing::warn!(install = %record.id, client = %record.client, environment = %record.environment, by = %staff.username, "install retired");
         Ok(RetireInstallPayload { install: Install(record) })

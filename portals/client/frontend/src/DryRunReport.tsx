@@ -38,7 +38,7 @@ export function DryRunReport({ draftQid }: { draftQid: string }) {
 function Report({ draftQid }: { draftQid: string }) {
   const { policyDryRun: r } = useLazyLoadQuery<DryRunReportQuery>(
     graphql`
-      query DryRunReportQuery($draftQid: ID!) {
+      query DryRunReportQuery($draftQid: Qid!) {
         policyDryRun(draftQid: $draftQid) {
           days
           comparedWithVersion

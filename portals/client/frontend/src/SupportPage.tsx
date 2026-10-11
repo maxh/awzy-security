@@ -31,7 +31,7 @@ const decide = graphql`
 `;
 
 const end = graphql`
-  mutation SupportPageEndMutation($supportSessionQid: ID!) {
+  mutation SupportPageEndMutation($supportSessionQid: Qid!) {
     endSupportSession(supportSessionQid: $supportSessionQid) {
       id
       status

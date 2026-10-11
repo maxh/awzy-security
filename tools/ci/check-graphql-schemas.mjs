@@ -2,10 +2,10 @@
 // Holds both portals' GraphQL schemas to the conventions in AGENTS.md (ADR 0013, 0058, 0100):
 //
 // - An object with `id: ID!` implements Node, so Relay can refetch it with `node(id)`, and a Node
-//   has `id: ID!`.
-// - Any other field, argument, or input field typed ID holds one of awzy's QIDs, so it's named
-//   `qid` or `<entity>Qid`; IDs from the client's systems are Strings. `node(id)` is Relay's.
-// - A `…Qid` is typed ID.
+//   has `id: ID!`. `ID` is for nothing else, except `node(id)`'s argument, which Relay names.
+// - Any other field, argument, or input field holding one of awzy's QIDs is a `Qid`, named `qid`
+//   or `<entity>Qid`; the backend types each with its entity (`Qid<ChallengeId>`). IDs from the
+//   client's systems are Strings.
 // - A field ending in `At` is a UtcTimestamp, and there's no DateTime scalar.
 //
 // Run by `pnpm lint`, so CI's lint-ts job checks the committed schemas.
@@ -16,6 +16,7 @@ import { buildSchema, getNamedType, isInputObjectType, isInterfaceType, isObject
 const SCHEMAS = ["portals/client/frontend/schema.graphql", "portals/corp/frontend/schema.graphql"];
 
 const isId = (type) => getNamedType(type).name === "ID";
+const isQid = (type) => getNamedType(type).name === "Qid";
 const qidNamed = (name) => name === "qid" || name.endsWith("Qid");
 
 /** The problems in one schema's SDL, as `Type.field: what's wrong`. */
@@ -34,22 +35,23 @@ export function check(sdl) {
       const at = `${type.name}.${field.name}`;
       const ownId = field.name === "id" && !isInputObjectType(type);
       if (ownId && isId(field.type)) {
-        if (isObjectType(type) && !isNode && !roots.has(type))
+        if (isObjectType(type) && !isNode && !roots.has(type)) {
           problems.push(`${at}: an object with an ID implements Node`);
+        }
         if (String(field.type) !== "ID!") problems.push(`${at}: a Node's id is ID!`);
-      } else if (isId(field.type) && !qidNamed(field.name)) {
-        problems.push(`${at}: an ID field holds a QID, so it's named qid or …Qid`);
+      } else if (isId(field.type)) {
+        problems.push(`${at}: ID is only a Node's id; a QID is a Qid`);
       }
-      if (qidNamed(field.name) && !isId(field.type)) problems.push(`${at}: a QID is typed ID`);
+      if (qidNamed(field.name) && !isQid(field.type)) problems.push(`${at}: a QID is a Qid`);
+      if (isQid(field.type) && !qidNamed(field.name)) problems.push(`${at}: a Qid is named qid or …Qid`);
       if (/[a-z]At$/.test(field.name) && getNamedType(field.type).name !== "UtcTimestamp") {
         problems.push(`${at}: a time is a UtcTimestamp`);
       }
       for (const arg of field.args ?? []) {
         const relayNode = type === schema.getQueryType() && field.name === "node" && arg.name === "id";
-        if (isId(arg.type) && !qidNamed(arg.name) && !relayNode) {
-          problems.push(`${at}(${arg.name}): an ID argument holds a QID, so it's named qid or …Qid`);
-        }
-        if (qidNamed(arg.name) && !isId(arg.type)) problems.push(`${at}(${arg.name}): a QID is typed ID`);
+        if (isId(arg.type) && !relayNode) problems.push(`${at}(${arg.name}): an ID argument is a Qid`);
+        if (qidNamed(arg.name) && !isQid(arg.type)) problems.push(`${at}(${arg.name}): a QID is a Qid`);
+        if (isQid(arg.type) && !qidNamed(arg.name)) problems.push(`${at}(${arg.name}): a Qid is named qid or …Qid`);
       }
     }
     if (isNode && !type.getFields().id) problems.push(`${type.name}: a Node has id: ID!`);

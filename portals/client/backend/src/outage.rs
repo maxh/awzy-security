@@ -2,12 +2,12 @@
 //! sends the PDP, and which tiers may replay a recent allow while the PDP is unreachable. Kept and
 //! signed by awzy-policy; awzy-gateway verifies it before using it.
 
-use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject, ID};
+use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject};
 use awzy_authz_proto::policy::v1::{
     GetOutageFallbackRequest, OutageFallback as WireFallback, SetOutageFallbackRequest,
 };
-use awzy_model::OutageFallback;
-use awzy_portal::{Actor, UtcTimestamp};
+use awzy_model::{ChallengeId, OutageFallback};
+use awzy_portal::{Actor, Qid, UtcTimestamp};
 use chrono::DateTime;
 
 use crate::{
@@ -135,7 +135,7 @@ pub struct SetOutageFallbackPayload {
     /// The new setting; null when a challenge must be passed first.
     pub outage_fallback: Option<OutageFallbackSetting>,
     /// The challenge to pass, then save again.
-    pub challenge_qid: Option<ID>,
+    pub challenge_qid: Option<Qid<ChallengeId>>,
 }
 
 #[derive(Default)]

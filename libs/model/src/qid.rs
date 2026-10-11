@@ -16,6 +16,12 @@ pub struct QidError {
     value: String,
 }
 
+/// What every typed ID has in common, for code generic over them, like the portals' `Qid` scalar.
+pub trait TypedQid: Copy + fmt::Display + FromStr<Err = QidError> + Send + Sync + 'static {
+    /// The entity type its QIDs start with, e.g. `decision`.
+    const PREFIX: &'static str;
+}
+
 macro_rules! qid {
     ($(#[$doc:meta])* $name:ident, $prefix:literal) => {
         $(#[$doc])*
@@ -38,6 +44,10 @@ macro_rules! qid {
             pub fn uuid(&self) -> Uuid {
                 self.0
             }
+        }
+
+        impl TypedQid for $name {
+            const PREFIX: &'static str = $prefix;
         }
 
         impl fmt::Display for $name {

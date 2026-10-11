@@ -4,7 +4,7 @@
 
 use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject, ID};
 use awzy_model::InvestigationId;
-use awzy_portal::{Actor, UtcTimestamp};
+use awzy_portal::{Actor, Qid, UtcTimestamp};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -301,7 +301,7 @@ pub(crate) async fn get_by_id(ctx: &Context<'_>, id: InvestigationId) -> Result<
 
 #[derive(InputObject)]
 pub struct CloseInvestigationInput {
-    pub investigation_qid: ID,
+    pub investigation_qid: Qid<InvestigationId>,
     /// What the review found.
     pub reason: String,
 }
@@ -327,7 +327,7 @@ impl InvestigationMutation {
         if reason.is_empty() {
             return Err("say what the review found".into());
         }
-        let closed = close(context(ctx)?, &input.investigation_qid.0, reason, &viewer.actor()).await?;
+        let closed = close(context(ctx)?, &input.investigation_qid.to_string(), reason, &viewer.actor()).await?;
         Ok(CloseInvestigationPayload { investigation: Investigation(closed) })
     }
 }
