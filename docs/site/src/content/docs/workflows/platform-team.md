@@ -29,7 +29,9 @@ Kyverno admits only images awzy signed. Upgrades roll services without dropping 
 ## Running it
 
 - **Health:** every service serves `/healthz`, `/readyz`, and `/metrics`. Point your Prometheus at
-  them, or use the dashboards and alerts that ship with awzy.
+  them. A Grafana dashboard and Prometheus alert rules are in the repository's
+  [`deploy/observability`](https://github.com/maxh/awzy-security/tree/main/deploy/observability);
+  the install doesn't deploy them for you yet.
 - **The heartbeat** is the only thing that leaves your install for awzy: service health and a few
   numbers, never data about your people, resources, or decisions. See the
   [security model](/reference/security-model/).

@@ -11,10 +11,23 @@ description: What awzy can and can't see, and how releases reach your install.
   revocable token. Every image is signed with awzy's release key, and the cluster refuses any
   image in awzy's namespaces that isn't from that registry with that signature, third-party
   images included.
-- **A heartbeat, and nothing else.** The only thing that leaves your install is a heartbeat to
-  awzy's corp portal: versions, readiness, and a few aggregate numbers, in a fixed schema with
-  no free-form fields. You can turn it off.
+- **A heartbeat, and nothing else, to awzy.** The only thing that leaves your install for awzy is
+  a heartbeat to its corp portal: versions, readiness, and a few aggregate numbers, in a fixed
+  schema with no free-form fields. You can turn it off.
+- **Your own services, only when you turn them on.** Awzy Bot and investigations send prompts,
+  including decisions and document text, to the model service in your own cloud account. Slack
+  notifications send short messages naming the request to your own Slack workspace. Connectors
+  read your Google Drive and Jira. Each is off until you turn it on; see
+  [optional features](/guides/optional-features/).
 - **Services authenticate to each other.** Inside the install, every call between awzy's
   services carries a short-lived Kubernetes service-account token, checked by the receiver.
-- **Policy is signed.** PDPs load only bundles signed by awzy-policy's key, and every publish,
-  rollback, and mode change is recorded with who did it.
+- **Policy is signed.** awzy-policy signs every bundle it publishes and every switch between
+  monitor and enforce, with a key the install generates. PDPs apply only what verifies, and never
+  an older bundle or mode change than the one they've applied, so someone who can write to
+  awzy-policy's database can't change what's enforced. Every publish, rollback, and mode change is
+  recorded with who did it.
+- **awzy knows an agent only by its token.** An agent with its own identity, through a token
+  exchange, is checked as itself and as its person, and can't answer their challenges. An agent
+  using a person's own token is that person to awzy; only a security key proves the person
+  themselves was there. See
+  [People, agents, and delegation](/concepts/principals-and-delegation/).

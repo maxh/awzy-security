@@ -21,11 +21,20 @@ agent for routine, low-sensitivity requests. See
 
 Nobody approves their own request, or one made for them by an agent.
 
+:::note[Owners approve through the security team, for now]
+The client portal shows waiting approvals only to people who may `administer` the challenges
+area, which under the base policies is the security team. A resource's owner, or anyone else
+your policies let approve, is told about a request when Slack is connected, but can't open it in
+the portal yet. Until they can, they tell the security team what they decided, and the security
+team approves or rejects it.
+:::
+
 ## Approving or rejecting
 
 1. **Find the request.** It's on the client portal's **Challenges** page, under *Waiting for
-   approval*. With [Slack connected](/guides/optional-features/#slack-notifications), owners get
-   a direct message and the security team's channel gets a post, each with a link.
+   approval*, for those who administer challenges. With
+   [Slack connected](/guides/optional-features/#slack-notifications), owners get a direct message
+   and the security team's channel gets a post, each with a link to the Challenges page.
 2. **Look at what's asked:** who is asking, whether an agent is asking for them, the action, and the
    resource. A justification, if the request needed one, appears with it.
 3. **Decide,** with a note:

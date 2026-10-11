@@ -19,7 +19,7 @@ says what's coming.
 | Service | What it does |
 | --- | --- |
 | **awzy-pdp** | The policy decision point. Answers `Check(principal, action, resource)` with allow, deny, or challenge, in milliseconds. |
-| **awzy-gateway** | An enforcement point you don't have to code: a proxy for MCP tool calls and HTTP APIs. |
+| **awzy-gateway** | An enforcement point you don't have to code: a proxy that checks every MCP tool call. |
 | **awzy-policy** | Versioned, signed Cedar policy bundles: drafts, dry runs, publishing, and break-glass rollback. |
 | **awzy-context** | Who and what: people and groups from your IdP over SCIM, registered service accounts, and resources with their sensitivity. |
 | **awzy-challenge** | Challenges (justification, security key, approval) and containments. |

@@ -31,10 +31,11 @@ Leave **automated containments** in monitor for longer, and switch them separate
 
 ## Day to day
 
-- **Approvals.** On the Challenges page, under *Waiting for approval*, approve or reject requests
-  for data you're responsible for, with a note. Resource owners can approve their own data too.
-  With [Slack connected](/guides/optional-features/#slack-notifications), each request reaches
-  your team's channel with a link.
+- **Approvals.** On the Challenges page, under *Waiting for approval*, approve or reject requests,
+  with a note. Only those who administer challenges see that list for now, so a resource's owner
+  who gets a request decides it with you, and you record it. With
+  [Slack connected](/guides/optional-features/#slack-notifications), each request reaches your
+  team's channel with a link.
 - **Containments.** Contain a principal yourself when you see something wrong, and lift a
   containment once you've reviewed it, with what you found. Review awzy-reasoner's
   *Would contain* records: contain the person, or dismiss the record.
@@ -61,5 +62,9 @@ permit (principal in Group::"auditors", action == Action::"view",
 
 Your team's agents, such as Claude or an internal copilot, can search and explain decisions, read
 policies and investigations, and draft policy changes through the portal's
-[MCP endpoint](/client-portal/#mcp-for-your-own-agents). They act as the person who runs them, and
-can't publish, switch modes, or contain anyone.
+[MCP endpoint](/client-portal/#mcp-for-your-own-agents). The MCP tools can't publish, switch
+modes, or contain anyone.
+
+An agent signed in with a person's own token, rather than a token exchange, is that person to
+awzy: the token also works on the portal's GraphQL API, with everything the person may do there.
+See [An agent using a person's own credentials](/concepts/principals-and-delegation/#an-agent-using-a-persons-own-credentials).

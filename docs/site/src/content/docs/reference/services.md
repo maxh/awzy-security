@@ -42,7 +42,7 @@ Three databases on your managed Postgres (Aurora on AWS). Each service migrates 
 | Database | Owner | Tables |
 | --- | --- | --- |
 | `awzy_policy` | awzy-policy | `policy_bundles`, `enforcement_mode_changes` (append-only), `break_glass_events` |
-| `awzy_context` | awzy-context | `humans`, `groups`, `group_members`, `service_accounts`, `resources`, `work_items`, `risk_scores`, `investigations`, `snapshot_version` |
+| `awzy_context` | awzy-context | `humans`, `removed_humans`, `groups`, `group_members`, `service_accounts`, `resources`, `resource_changes`, `work_items`, `risk_scores`, `investigations`, `snapshot_version` |
 | `awzy_challenge` | awzy-challenge | `challenges`, `containments`, `containment_feed`, `security_keys`, `webauthn_ceremonies`, `notifications` |
 
 ### Kafka
@@ -133,6 +133,8 @@ Challenges, containments, security keys, and notifications.
   - `Resolve`: the PDP opens or finds the challenge for a request;
   - `GetChallenge`, `ListChallenges`, `Justify`, `Decide`: answering challenges, through the client
     portal;
+  - `WatchChallenges`: a stream of challenges as they open and change, for the portal's live
+    Challenges page;
   - `Contain`, `Lift`, `ListContainments`: containments, from the client portal and awzy-reasoner;
   - `WatchContainments`: a stream of who is contained, with a heartbeat, followed by every PDP and
     gateway;

@@ -7,10 +7,11 @@ Every request an enforcement point sends is one **check**: a *principal* (who), 
 and a *resource* (on what), with *context*.
 
 ```text
-principal: ServiceAccount::"sales-genie"   acting for Human::"bob"
-action:    read
-resource:  Resource::"q3-strategy-deck"
-context:   { "human_present": false }
+principal:     ServiceAccount::"sales-genie"   acting for Human::"bob"
+action:        read
+resource:      Resource::"q3-strategy-deck"
+human_present: false
+context:       { "client": "mcp" }
 ```
 
 awzy-pdp fills in what it knows: the person's groups and status from your IdP, the resource's

@@ -10,8 +10,8 @@ This is how you find out what your policies would do before they do it. The clie
 Enforcement page shows how many requests would have been denied or challenged over the last day,
 and the most recent ones.
 
-When the numbers look right, an admin switches the install to **enforce**. Enforcement points
-pick the change up within about ten seconds. Switching back is one click, and every switch is
+When the numbers look right, an admin switches the install to **enforce**. Every PDP picks the
+change up as soon as it's made, usually within a second. Switching back is one click, and every switch is
 recorded with who made it.
 
 Before publishing a policy change, a **dry run** replays the last week's requests under the

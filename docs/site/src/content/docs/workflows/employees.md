@@ -50,5 +50,10 @@ you lose your key, ask your security team to reset it, then add a new one.
 
 When an agent acts for you, awzy checks both the agent and you, and the stricter answer wins. An
 agent never gets more than both of you could. Challenges for an agent's requests come to you,
-because you're the person it's acting for. See
+because you're the person it's acting for.
+
+If you run an agent with your own sign-in, such as a coding agent using your token, awzy sees it
+as you: what it does counts as yours, including toward your risk score. Don't let it answer
+challenges for you, and keep your security key to yourself: touching it is how awzy knows it's
+really you. See
 [People, agents, and delegation](/concepts/principals-and-delegation/).

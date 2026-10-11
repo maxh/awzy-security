@@ -137,7 +137,8 @@ shows it as `alice`, or `sales-genie for alice`. An actor is one of:
 | `AwzyService` | One of awzy's own components, such as `awzy-reasoner` containing a risky principal, or `awzy-bot` drafting a policy for someone |
 | `BreakGlassKey` | A break-glass key, by its fingerprint. Who held it isn't known |
 
-In the APIs, an actor is `{subject, on_behalf_of}`, with each part a type and ID.
+Over gRPC, an actor is `{subject, on_behalf_of}`, with each part a type and ID. The client
+portal's GraphQL API gives its `type` and `id`, and the person it acted for.
 
 ## QIDs
 
