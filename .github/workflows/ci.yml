@@ -154,6 +154,10 @@ jobs:
       # One word for each thing (ADR 0074, 0079): human, principal, enforcement point.
       - name: Names stay consistent
         run: tools/ci/check-names.sh
+      # What the code-quality pass removed stays removed, and what's left only shrinks (#221 to
+      # #227).
+      - name: Code quality ratchets
+        run: tools/ci/check-quality-ratchets.sh
       - uses: ./.github/actions/setup-bazel
         with:
           buildbuddy-api-key: ${{ secrets.AWZY_CORP_BUILDBUDDY_API_KEY }}
