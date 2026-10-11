@@ -72,6 +72,35 @@ breaks under it (#191). Still one gRPC connection per run.
 - **About 1 ms of PDP CPU per check,** against a 0.39 ms decision: gRPC, service-token
   verification, entity assembly, and the decision log make up the rest. Not yet profiled.
 
+## Evening: across PDP pods
+
+On release `e3f65fc`: PDPs close connections after about a minute (#201), `pdp_loadtest` opens a
+connection per client, and a verified service token is remembered until it expires (#203).
+16 clients for 180 s, with each PDP pod's CPU sampled every 30 s.
+
+| Clients | Duration | Checks | Failed | Checks/s | p50 | p95 | p99 | p99.9 | Max |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 16 | 180 s | 613,882 | 0 | 3,410 | 3.66 ms | 12.10 ms | 18.78 ms | 31.91 ms | 99.67 ms |
+
+| At | PDP pods | CPU per pod |
+| --- | --- | --- |
+| 30 s | 2 | 294m, 375m |
+| 60 s | 4 | 878m, 899m, and two new pods at 1m |
+| 90 s | 4 | 625m, 980m, 521m, 554m |
+| 150 s | 4 | 635m, 909m, 600m, 599m |
+
+- **2.9 times the afternoon's throughput** (3,410 checks/s against 1,168) at a lower p99 (18.8 ms
+  against 28.5 ms), with no failed checks: the load now spreads over every PDP pod.
+- **New pods took load within 30 s** of the autoscaler adding them, as connections reached their
+  age and reconnected.
+- **About 0.8 ms of PDP CPU per check** (2.7 cores at 3,410 checks/s), against about 1 ms in the
+  afternoon, with #203 deployed. Still not profiled.
+- **The nodes were full** (93% and 103% CPU), so this is close to what two `t3.large` nodes can
+  do. During part of the run, a Kafka replay test (#115) was also reading the decisions topic in
+  ClickHouse, so these numbers are, if anything, low.
+- **Pass condition** (p99 under 10 ms at 1,500 checks/s): still **not met** on `small`, where the
+  load generator, ClickHouse, and the PDPs share two nodes.
+
 ## Outage drill
 
 The PDP scaled to 0 for 6.5 minutes, with the install in Enforce and the `internal` tier failing
@@ -89,6 +118,7 @@ open (#108). The demo's day of activity ran at 20 calls/s before and during the 
 Bugs, all fixed: the demo-data Job's accounts and tool tiers (#160, #167), releases that couldn't
 publish (#162, #165), a bootstrap that couldn't be planned (#163), and a channel that could move a
 chart past its bootstrap (#171, fixed by #175). In the afternoon: a check lost to each rollout
-(#191), checks held on one PDP pod (#201), and a slow outage fallback (#195).
+(#191), checks held on one PDP pod (#201), and a slow outage fallback (#195). In the evening:
+Kyverno refusing ClickHouse's image, whose SBOM is over its 2 MiB limit (#213).
 
 Test decisions were deleted from ClickHouse after each set of runs.
