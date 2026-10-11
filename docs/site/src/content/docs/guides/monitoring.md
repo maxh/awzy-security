@@ -100,6 +100,26 @@ awzy-gateway can't reach the PDP, so tool calls follow the outage tiers set in t
 replayed or denied. Check the PDP's pods and their readiness, then the network between the
 gateway and the PDP.
 
+### AwzyReleaseNotSynced (ticket)
+
+Argo CD hasn't synced the install's release for 30 minutes. The install keeps running the release
+it has, but takes no newer one, fixes included. `kubectl -n awzy-ops get application awzy -o
+yaml` says why, under `status.operationState.message` and `status.conditions`:
+
+- **A release waiting for a newer bootstrap** names the awzy commit to apply bootstrap (and the
+  cloud layer) from. See [Installing awzy](/guides/install/), "Upgrades".
+- **A sync error** (an object the API server refuses, or a hook Job that failed) is awzy's to fix
+  in a release; tell awzy support. Once a fixed release is out, a sync still retrying the old one
+  can be stopped with `kubectl -n awzy-ops patch application awzy --type merge -p
+  '{"status":{"operationState":{"phase":"Terminating"}}}'`, and Argo CD moves to the new one.
+
+### AwzyReleaseUnhealthy (page)
+
+Argo CD reports the release as Degraded or Missing for 15 minutes: a Deployment that can't become
+ready, a Job that failed, or an object that's gone. `kubectl -n awzy-ops get application awzy -o
+json | jq '.status.resources[] | select(.health.status != "Healthy")'` names them; then look at
+those pods' events and logs.
+
 ## What awzy sees, and what you see
 
 Two views start from the same `/metrics`, for different people.

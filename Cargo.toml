@@ -30,6 +30,8 @@ members = [
     "authz/libs/signing",
     "authz/libs/signing-aws",
     "authz/libs/secrets-aws",
+    "libs/http",
+    "libs/kube",
     "authz/libs/classify",
     "authz/libs/service-auth",
     "portals/client/backend",
@@ -64,6 +66,7 @@ async-graphql-axum = "7.2"
 async-trait = "0.1"
 axum = "0.8"
 cedar-policy = "4.13"
+http = "1"
 http-body-util = "0.1"
 # rustls with ring: aws-lc-rs needs CMake, which the hermetic Bazel toolchain doesn't have.
 hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "ring", "tls12", "webpki-tokio"] }
@@ -111,6 +114,8 @@ awzy-cloud = { path = "libs/cloud" }
 awzy-context = { path = "authz/services/context" }
 awzy-gateway = { path = "authz/services/gateway" }
 awzy-heartbeat = { path = "libs/heartbeat" }
+awzy-http = { path = "libs/http" }
+awzy-kube = { path = "libs/kube" }
 awzy-portal = { path = "libs/portal" }
 awzy-registry = { path = "portals/corp/registry" }
 awzy-activity = { path = "authz/libs/activity" }

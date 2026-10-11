@@ -18,6 +18,31 @@ resource "helm_release" "argo_cd" {
   depends_on = [kubernetes_secret_v1.registry]
 }
 
+# Argo CD's chart lets only the cluster's pods reach its controller's metrics. A managed scraper
+# (AMP's on AWS) comes from outside any pod, so this opens the metrics port, and only it: the
+# release's sync and health, which the install's alerts watch (deploy/observability).
+resource "kubernetes_network_policy_v1" "argo_cd_metrics" {
+  metadata {
+    name      = "argo-cd-controller-metrics"
+    namespace = kubernetes_namespace_v1.awzy["ops"].metadata[0].name
+  }
+  spec {
+    pod_selector {
+      match_labels = {
+        "app.kubernetes.io/instance" = "argo-cd"
+        "app.kubernetes.io/name"     = "argocd-application-controller"
+      }
+    }
+    policy_types = ["Ingress"]
+    ingress {
+      ports {
+        port     = "metrics"
+        protocol = "TCP"
+      }
+    }
+  }
+}
+
 resource "helm_release" "kyverno" {
   name             = "kyverno"
   namespace        = "kyverno"

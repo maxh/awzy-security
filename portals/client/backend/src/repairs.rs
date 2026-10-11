@@ -6,19 +6,11 @@
 use anyhow::Context as _;
 use async_graphql::{Context, Enum, Object, Result, SimpleObject};
 use awzy_portal::UtcTimestamp;
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use http_body_util::{BodyExt, Full};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
-use rustls_pki_types::{pem::PemObject, CertificateDer};
 use serde_json::{json, Value};
 
 use crate::access::{require, PortalAction, PortalArea};
 
-const SA_DIR: &str = "/var/run/secrets/kubernetes.io/serviceaccount";
 const LABEL: &str = "awzy.io/repair";
 
 /// A repair the chart defines.
@@ -71,66 +63,21 @@ pub struct RepairRun {
 }
 
 /// The Kubernetes API, as the portal's own service account.
-struct KubeApi {
-    base: String,
-    token: Option<String>,
-    client: Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>,
-}
+struct KubeApi(awzy_kube::KubeApi);
 
 impl KubeApi {
     fn in_cluster() -> anyhow::Result<Self> {
-        let host =
-            std::env::var("KUBERNETES_SERVICE_HOST").context("not running in Kubernetes (KUBERNETES_SERVICE_HOST)")?;
-        let port = std::env::var("KUBERNETES_SERVICE_PORT").unwrap_or_else(|_| "443".into());
-        let host = if host.contains(':') { format!("[{host}]") } else { host };
-        let ca = std::fs::read(format!("{SA_DIR}/ca.crt")).context("reading the cluster CA")?;
-        let _ = rustls::crypto::ring::default_provider().install_default();
-        let mut roots = rustls::RootCertStore::empty();
-        for cert in CertificateDer::pem_slice_iter(&ca) {
-            roots.add(cert?)?;
-        }
-        let tls = rustls::ClientConfig::builder().with_root_certificates(roots).with_no_client_auth();
-        let https = hyper_rustls::HttpsConnectorBuilder::new().with_tls_config(tls).https_only().enable_http1().build();
-        Ok(Self {
-            base: format!("https://{host}:{port}"),
-            token: None,
-            client: Client::builder(TokioExecutor::new()).build(https),
-        })
+        Ok(Self(awzy_kube::KubeApi::in_cluster()?))
     }
 
     #[cfg(test)]
     fn for_test(base: String) -> Self {
-        let https =
-            hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_or_http().enable_http1().build();
-        Self { base, token: Some("test-token".into()), client: Client::builder(TokioExecutor::new()).build(https) }
-    }
-
-    async fn call(&self, method: &str, path: &str, body: Option<&Value>) -> anyhow::Result<Value> {
-        // Re-read each call: projected service account tokens rotate.
-        let token = match &self.token {
-            Some(t) => t.clone(),
-            None => std::fs::read_to_string(format!("{SA_DIR}/token")).context("reading the service account token")?,
-        };
-        let req = axum::http::Request::builder()
-            .method(method)
-            .uri(format!("{}{path}", self.base))
-            .header("authorization", format!("Bearer {}", token.trim()))
-            .header("content-type", "application/json")
-            .body(Full::new(body.map(|b| Bytes::from(b.to_string())).unwrap_or_default()))?;
-        let res = tokio::time::timeout(std::time::Duration::from_secs(5), self.client.request(req))
-            .await
-            .context("timed out")??;
-        let status = res.status();
-        let bytes = res.into_body().collect().await?.to_bytes();
-        anyhow::ensure!(status.is_success(), "{method} {path}: {status}: {}", String::from_utf8_lossy(&bytes));
-        Ok(serde_json::from_slice(&bytes)?)
+        Self(awzy_kube::KubeApi::for_test(base))
     }
 
     async fn runs(&self, namespace: &str) -> anyhow::Result<Vec<RepairRun>> {
-        let list = self
-            .call("GET", &format!("/apis/batch/v1/namespaces/{namespace}/jobs?labelSelector=awzy.io%2Frepair"), None)
-            .await?;
-        let mut runs: Vec<RepairRun> = list["items"].as_array().into_iter().flatten().filter_map(run).collect();
+        let jobs = self.0.list(&format!("/apis/batch/v1/namespaces/{namespace}/jobs"), LABEL).await?;
+        let mut runs: Vec<RepairRun> = jobs.iter().filter_map(run).collect();
         runs.sort_by_key(|r| std::cmp::Reverse(r.started_at));
         Ok(runs)
     }
@@ -140,9 +87,7 @@ impl KubeApi {
         if self.runs(namespace).await?.iter().any(|r| r.kind == kind && r.status == RepairStatus::Running) {
             anyhow::bail!("that repair is already running");
         }
-        let cronjob = self
-            .call("GET", &format!("/apis/batch/v1/namespaces/{namespace}/cronjobs/{}", kind.cronjob()), None)
-            .await?;
+        let cronjob = self.0.get(&format!("/apis/batch/v1/namespaces/{namespace}/cronjobs/{}", kind.cronjob())).await?;
         let job = json!({
             "apiVersion": "batch/v1",
             "kind": "Job",
@@ -153,7 +98,7 @@ impl KubeApi {
             },
             "spec": cronjob["spec"]["jobTemplate"]["spec"],
         });
-        let created = self.call("POST", &format!("/apis/batch/v1/namespaces/{namespace}/jobs"), Some(&job)).await?;
+        let created = self.0.create(&format!("/apis/batch/v1/namespaces/{namespace}/jobs"), &job).await?;
         run(&created).context("the API server returned a Job without the repair's label")
     }
 }

@@ -33,23 +33,17 @@ use awzy_model::InstallId;
 use axum::{extract::State, routing, Json, Router};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 const SEND_TIMEOUT: Duration = Duration::from_secs(10);
 
-pub type HttpClient = Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>;
+pub type HttpClient = awzy_http::Client;
 
 /// HTTP and HTTPS (rustls with the webpki roots).
 pub fn http_client() -> HttpClient {
-    let _ = rustls::crypto::ring::default_provider().install_default();
-    let https = hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_or_http().enable_http1().build();
-    Client::builder(TokioExecutor::new()).build(https)
+    awzy_http::client()
 }
 
 /// Where the reporter learns what's running.

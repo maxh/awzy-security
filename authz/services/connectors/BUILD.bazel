@@ -6,6 +6,7 @@ awzy_service(
     binary_name = "awzy-connectors",
     deps = [
         "//authz/libs/service-auth",
+        "//libs/http",
         "//libs/server",
         "//libs/telemetry",
     ],

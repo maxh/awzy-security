@@ -6,11 +6,6 @@ use std::time::Duration;
 
 use async_graphql::{Context, Object, Result, SimpleObject};
 use bytes::Bytes;
-use http_body_util::{BodyExt, Empty};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
 
 use awzy_portal::{JsonObject, UtcTimestamp};
 use chrono::{DateTime, Utc};
@@ -26,7 +21,7 @@ const TIMEOUT: Duration = Duration::from_secs(3);
 /// The docs site's troubleshooting guide, with a section per component.
 const RUNBOOKS: &str = "https://docs.awzysecurity.com/guides/troubleshooting/";
 
-pub(crate) type HttpClient = Client<HttpConnector, Empty<Bytes>>;
+pub(crate) type HttpClient = awzy_http::Client;
 
 /// The services the portal reaches, by the setting that holds each one's address.
 const SERVICES: &[(&str, &str)] = &[
@@ -89,7 +84,7 @@ impl StatusQuery {
     /// enforcement area.
     async fn heartbeat_export(&self, ctx: &Context<'_>) -> Result<HeartbeatExport> {
         require(ctx, PortalAction::View, PortalArea::Enforcement).await?;
-        let client: HttpClient = Client::builder(TokioExecutor::new()).build_http();
+        let client = awzy_http::client();
         Ok(heartbeat_export(&client, std::env::var("AWZY_REPORTER_ADDR").ok()).await)
     }
 }
@@ -121,7 +116,7 @@ async fn heartbeat_export(client: &HttpClient, addr: Option<String>) -> Heartbea
 
 /// Every component, checked at once. The diagnostics bundle carries the same.
 pub(crate) async fn check(services: &Services) -> Vec<ComponentStatus> {
-    let client: HttpClient = Client::builder(TokioExecutor::new()).build_http();
+    let client = awzy_http::client();
     let checks = SERVICES.iter().map(|(name, var)| {
         let client = client.clone();
         async move { service_status(&client, name, std::env::var(var).ok()).await }
@@ -132,14 +127,9 @@ pub(crate) async fn check(services: &Services) -> Vec<ComponentStatus> {
 }
 
 pub(crate) async fn get(client: &HttpClient, url: &str) -> anyhow::Result<(u16, Bytes)> {
-    let req = axum::http::Request::get(url).body(Empty::new())?;
-    // The body too: a service that answers and then stalls mustn't hold up the page.
-    tokio::time::timeout(TIMEOUT, async {
-        let res = client.request(req).await?;
-        let status = res.status().as_u16();
-        Ok::<_, anyhow::Error>((status, res.into_body().collect().await?.to_bytes()))
-    })
-    .await?
+    // The whole response: a service that answers and then stalls mustn't hold up the page.
+    let res = awzy_http::get(client, url, &[], TIMEOUT).await?;
+    Ok((res.status.as_u16(), res.body))
 }
 
 async fn service_status(client: &HttpClient, name: &str, addr: Option<String>) -> ComponentStatus {
@@ -204,7 +194,7 @@ mod tests {
         let unready = format!("http://{}", listener.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(listener, starting).await.unwrap() });
 
-        let client: HttpClient = Client::builder(TokioExecutor::new()).build_http();
+        let client = awzy_http::client();
         let up = service_status(&client, "awzy-pdp", Some(ready)).await;
         assert_eq!((up.ready, up.version.as_deref(), up.detail), (true, Some("0.1.0-gabc"), None));
         let starting = service_status(&client, "awzy-policy", Some(unready)).await;
@@ -219,7 +209,7 @@ mod tests {
 
     #[tokio::test]
     async fn the_heartbeat_export_is_off_unreachable_or_the_last_one_sent() {
-        let client: HttpClient = Client::builder(TokioExecutor::new()).build_http();
+        let client = awzy_http::client();
         assert_eq!(heartbeat_export(&client, None).await, HeartbeatExport::default(), "no reporter: nothing is sent");
         let gone = heartbeat_export(&client, Some("http://127.0.0.1:9".into())).await;
         assert!(gone.enabled && gone.error.unwrap().starts_with("awzy-reporter is unreachable"));

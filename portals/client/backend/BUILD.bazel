@@ -19,6 +19,8 @@ awzy_service(
         "//authz/libs/proto",
         "//authz/libs/service-auth",
         "//libs/cloud",
+        "//libs/http",
+        "//libs/kube",
         "//libs/llm",
         "//libs/model",
         "//libs/portal",
