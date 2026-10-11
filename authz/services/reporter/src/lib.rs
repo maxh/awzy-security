@@ -326,7 +326,7 @@ impl Reporter {
             return Ok(HeartbeatAnswer::default());
         }
         let body = res.into_body().collect().await?.to_bytes();
-        Ok(serde_json::from_slice(&body).context("the corp portal's answer")?)
+        serde_json::from_slice(&body).context("the corp portal's answer")
     }
 }
 
