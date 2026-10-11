@@ -1,4 +1,4 @@
-# 0096. A release waits for the bootstrap it needs
+# 0098. A release waits for the bootstrap it needs
 
 - Status: Accepted
 - Date: 2026-10-11

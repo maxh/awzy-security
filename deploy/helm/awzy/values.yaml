@@ -1,7 +1,7 @@
 # Values come from bootstrap, which maps install_contract onto them (deploy/terraform/bootstrap).
 # Namespaces and the ClickHouse credentials Secret are created by bootstrap, not this chart.
 
-# What the release needs from bootstrap (ADR 0096). `level` is set by bootstrap; `required` belongs
+# What the release needs from bootstrap (ADR 0098). `level` is set by bootstrap; `required` belongs
 # to the chart: an install whose bootstrap is older than this release needs installs nothing new,
 # keeps running the release it has, and says what to apply.
 bootstrap:

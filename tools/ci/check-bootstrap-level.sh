@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bootstrap's level and the chart's bootstrap.required are equal (ADR 0096): a change that makes
+# Bootstrap's level and the chart's bootstrap.required are equal (ADR 0098): a change that makes
 # the chart need something new from bootstrap raises both, so a release never installs onto a
 # bootstrap that lacks it, and never refuses one that has it.
 set -euo pipefail
