@@ -9,6 +9,7 @@ license.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 clickhouse.workspace = true
+rskafka.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 awzy-server.workspace = true

@@ -96,6 +96,29 @@ pub async fn migrate(client: &Client, settings: &Settings) -> anyhow::Result<Vec
     Ok(done)
 }
 
+/// Partitions of a topic created here, as awzy-pdp and awzy-intake create theirs.
+const TOPIC_PARTITIONS: i32 = 6;
+
+/// Creates the topics the queue tables read, if they don't exist. Their producers create them
+/// too, but until one has, the queue table only logs errors (an install without awzy-intake has
+/// no events topic).
+pub async fn ensure_topics(brokers: &str, topics: &[&str]) -> anyhow::Result<()> {
+    use rskafka::client::{
+        error::{Error as KafkaError, ProtocolError},
+        ClientBuilder,
+    };
+    let client = ClientBuilder::new(brokers.split(',').map(str::to_string).collect()).build().await?;
+    let controller = client.controller_client()?;
+    for &topic in topics {
+        match controller.create_topic(topic, TOPIC_PARTITIONS, 1, 5_000).await {
+            Ok(()) => tracing::info!(topic, "created topic"),
+            Err(KafkaError::ServerError { protocol_error: ProtocolError::TopicAlreadyExists, .. }) => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Ok(())
+}
+
 /// The ClickHouse user awzy-reporter reads disk use and Kafka consumer positions with (ADR 0042).
 pub const REPORTER_USER: &str = "awzy_reporter";
 
