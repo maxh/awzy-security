@@ -6,14 +6,15 @@
 #   tools/ci/check-quality-ratchets.sh              # compare with origin/main
 #   tools/ci/check-quality-ratchets.sh <ref>        # or with another commit
 #
-# Rust counts look only at non-test code: each file up to its first #[cfg(test)].
+# Rust counts look only at non-test code: each file up to its first #[cfg(test)], and no tests.rs.
 set -Eeuo pipefail
 trap 'echo "::error::check-quality-ratchets.sh stopped at line $LINENO" >&2' ERR
 cd "$(git rev-parse --show-toplevel)"
 max_lines=800
 
 non_test_rust() {
-  git ls-files '*.rs' | while read -r f; do awk '/#\[cfg\(test\)\]/{exit} {print FILENAME": "$0}' "$f"; done
+  # A tests module in its own file (`tests.rs`, declared under #[cfg(test)]) is all test code.
+  git ls-files '*.rs' | grep -vE '(^|/)tests\.rs$|(^|/)tests/' | while read -r f; do awk '/#\[cfg\(test\)\]/{exit} {print FILENAME": "$0}' "$f"; done
 }
 count() { grep -cE "$1" <<<"$rust" || true; }
 files_with() { git ls-files '*.rs' | grep -vE "$2" | xargs grep -lE "$1" 2>/dev/null | wc -l | tr -d ' ' || true; }
