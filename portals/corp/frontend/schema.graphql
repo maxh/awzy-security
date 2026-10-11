@@ -381,7 +381,7 @@ type Staff {
 	name: String!
 }
 
-type SupportSession {
+type SupportSession implements Node {
 	id: ID!
 	status: SupportSessionStatus!
 	requestedBy: String!

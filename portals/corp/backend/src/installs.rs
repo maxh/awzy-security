@@ -342,6 +342,7 @@ impl Release {
 #[graphql(field(name = "id", ty = "ID"))]
 pub enum Node {
     Install(Install),
+    SupportSession(crate::support::SupportSession),
 }
 
 #[derive(Default)]
@@ -351,8 +352,17 @@ pub struct FleetQuery;
 impl FleetQuery {
     /// Refetches any object by its ID.
     async fn node(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Node>> {
-        let Ok(id) = id.parse::<InstallId>() else { return Ok(None) };
-        Ok(store(ctx)?.get(id).await?.map(|r| Node::Install(Install(r))))
+        if let Ok(id) = id.parse::<InstallId>() {
+            return Ok(store(ctx)?.get(id).await?.map(|r| Node::Install(Install(r))));
+        }
+        if let Ok(id) = id.parse::<awzy_model::SupportSessionId>() {
+            return match store(ctx)?.support_session(id).await {
+                Ok(s) => Ok(Some(Node::SupportSession(crate::support::SupportSession(s)))),
+                Err(crate::support::SupportError::NotFound(_)) => Ok(None),
+                Err(e) => Err(e.into()),
+            };
+        }
+        Ok(None)
     }
 
     /// Every registered install, in registration order.
