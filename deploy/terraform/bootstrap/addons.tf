@@ -122,7 +122,7 @@ resource "helm_release" "config" {
         database  = local.c.postgres.database
         secretRef = local.c.postgres.secret_arn
       }
-      kafka      = { brokers = local.c.kafka.bootstrap_brokers }
+      kafka      = { brokers = local.c.kafka.bootstrap_brokers, tls = local.c.kafka.tls }
       policy     = { breakGlassKeysSecret = var.break_glass_public_keys == null ? "" : "awzy-policy-break-glass" }
       clickhouse = { storageClass = local.c.storage_class.name }
       demoIdp    = { enabled = var.demo_idp }

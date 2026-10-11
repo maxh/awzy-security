@@ -16,8 +16,9 @@ output "install_contract" {
       secret_arn = aws_rds_cluster.postgres.master_user_secret[0].secret_arn
     }
     kafka = {
-      bootstrap_brokers     = aws_msk_cluster.kafka.bootstrap_brokers
-      bootstrap_brokers_tls = aws_msk_cluster.kafka.bootstrap_brokers_tls
+      # awzy's services and ClickHouse reach MSK over TLS, on its TLS port.
+      bootstrap_brokers = aws_msk_cluster.kafka.bootstrap_brokers_tls
+      tls               = true
     }
     valkey = {
       host = aws_elasticache_serverless_cache.valkey.endpoint[0].address
