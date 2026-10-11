@@ -42,10 +42,7 @@ read [AGENTS.md](AGENTS.md).
 [INSTALL.md](INSTALL.md) is the runbook for installing awzy in your own cloud account: the cloud
 layer, bootstrap, DNS and your IdP, and checking the install.
 
-## Not done yet
+## Status
 
-- linux/arm64 images: the Zig linker rejects rustc's `--fix-cortex-a53-843419` flag (see `tools/rust.bzl`).
-- Optimized (`-c opt`) release builds.
-- Real implementations behind the remaining service skeletons; the corp portal has no MCP tools yet.
-
-What each service does today, in more detail: [Built so far](docs/platform-plan.md#built-so-far).
+What each service does today: [Built so far](docs/platform-plan.md#built-so-far). What isn't done
+yet: [TODO.md](TODO.md).

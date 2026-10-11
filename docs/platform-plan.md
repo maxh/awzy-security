@@ -81,8 +81,6 @@ A policy engine on its own is a commodity: OPA, Amazon Verified Permissions, and
 - Self-hosted models as the default. The cloud's hosted model service is the default; a GPU pool is an option.
 - awzy operating a client's install with standing access.
 
-> **Still missing from this plan: team size, timeline, and cost per install.** The phases below have exit criteria but no dates. The `small` profile's monthly infrastructure cost on AWS should be measured in Phase 0 and written here, because it sets the floor on pricing.
-
 ## Beyond Zero mapping
 
 The paper describes four cooperating components in a feedback loop. Each one maps to one or more awzy-authz services.
