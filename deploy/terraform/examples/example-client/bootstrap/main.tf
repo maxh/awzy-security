@@ -133,11 +133,12 @@ module "bootstrap" {
     token      = local.install_credentials.reporting_token
   }
 
-  # The demo hostname (ADR 0027). Its Cloudflare CNAME points at the Gateway's load
-  # balancer: `kubectl -n awzy-ops get gateway awzy` shows the address once it exists.
+  # The demo hostname (ADR 0027, 0106), and older ones that redirect to it. Each has a Cloudflare
+  # CNAME to the Gateway's load balancer: `kubectl -n awzy-ops get gateway awzy` shows the address.
   ingress = {
-    hostname   = var.demo_hostname
-    acme_email = var.acme_email
+    hostname           = var.demo_hostname
+    acme_email         = var.acme_email
+    redirect_hostnames = var.demo_redirect_hostnames
   }
 
   # The demo signs in against the dev IdP (ADR 0032): no real accounts, sample data only.

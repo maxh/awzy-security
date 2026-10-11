@@ -172,10 +172,11 @@ variable "break_glass_public_keys" {
 }
 
 variable "ingress" {
-  description = "Public hostname of the client portal, and the contact Let's Encrypt registers"
+  description = "Public hostname of the client portal, and the contact Let's Encrypt registers. redirect_hostnames are older names for it, each with its own certificate, that redirect to it, path and all: for a hostname that changed"
   type = object({
-    hostname   = string
-    acme_email = string
+    hostname           = string
+    acme_email         = string
+    redirect_hostnames = optional(list(string), [])
   })
 }
 
