@@ -1,5 +1,5 @@
 {
-  "checksum": "f8808745a59d635396f2c3d6cc1dec56888c1c8215d145506b1737d3a1afdfdc",
+  "checksum": "920228cb8e2f0f4f79595299bc7fb38f2ba803bfd8c8262e6c71d7ae45bcb1b0",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -5217,6 +5217,66 @@
         {
           "Library": {
             "crate_name": "awzy_signing_aws",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
+    "awzy-signing-gcp 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "base64 0.22.1",
+            "target": "base64"
+          },
+          {
+            "id": "http 1.5.0",
+            "target": "http"
+          },
+          {
+            "id": "p256 0.13.2",
+            "target": "p256"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          },
+          {
+            "id": "serde_json 1.0.151",
+            "target": "serde_json"
+          },
+          {
+            "id": "sha2 0.10.9",
+            "target": "sha2"
+          },
+          {
+            "id": "tokio 1.53.2",
+            "target": "tokio"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "axum 0.8.9",
+            "target": "axum"
+          }
+        ],
+        "edition": "2021",
+        "proc_macro_deps": [
+          {
+            "id": "async-trait 0.1.92",
+            "target": "async_trait"
+          }
+        ]
+      },
+      "library_target_name": "awzy_signing_gcp",
+      "license": "UNLICENSED",
+      "name": "awzy-signing-gcp",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "awzy_signing_gcp",
             "crate_root": "src/lib.rs"
           }
         }
@@ -28482,6 +28542,7 @@
     "awzy-service-auth 0.1.0": "authz/libs/service-auth",
     "awzy-signing 0.1.0": "authz/libs/signing",
     "awzy-signing-aws 0.1.0": "authz/libs/signing-aws",
+    "awzy-signing-gcp 0.1.0": "authz/libs/signing-gcp",
     "awzy-store 0.1.0": "libs/store",
     "awzy-synthetic 0.1.0": "authz/demo/synthetic",
     "awzy-telemetry 0.1.0": "libs/telemetry"

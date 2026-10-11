@@ -29,6 +29,7 @@ members = [
     "authz/services/reporter",
     "authz/libs/signing",
     "authz/libs/signing-aws",
+    "authz/libs/signing-gcp",
     "authz/libs/secrets-aws",
     "libs/http",
     "libs/kube",
@@ -134,6 +135,7 @@ awzy-dev-idp = { path = "tools/dev-idp" }
 awzy-server = { path = "libs/server" }
 awzy-signing = { path = "authz/libs/signing" }
 awzy-signing-aws = { path = "authz/libs/signing-aws" }
+awzy-signing-gcp = { path = "authz/libs/signing-gcp" }
 awzy-secrets-aws = { path = "authz/libs/secrets-aws" }
 awzy-classify = { path = "authz/libs/classify" }
 awzy-service-auth = { path = "authz/libs/service-auth" }
