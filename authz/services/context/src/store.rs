@@ -725,6 +725,5 @@ impl ContextStore {
 }
 
 /// Integration tests against Postgres; skipped without AWZY_TEST_POSTGRES_URL.
-
 #[cfg(test)]
 pub(crate) mod tests;

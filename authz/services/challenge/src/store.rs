@@ -724,6 +724,5 @@ fn containment_from_row(row: &PgRow) -> Result<Containment, sqlx::Error> {
 /// Integration tests against Postgres. Run with the local stack up:
 ///   bazel test --config=local-stack //authz/services/challenge:challenge_test
 /// Without AWZY_TEST_POSTGRES_URL they pass without checking anything, so CI stays green.
-
 #[cfg(test)]
 pub(crate) mod tests;

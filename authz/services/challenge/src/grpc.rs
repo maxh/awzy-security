@@ -823,6 +823,5 @@ fn containment_to_wire(c: Containment) -> WireContainment {
 
 /// End to end against Postgres: an awzy-pdp in enforce mode opens challenges here, honors them
 /// once passed, and follows the containment feed.
-
 #[cfg(test)]
 mod tests;

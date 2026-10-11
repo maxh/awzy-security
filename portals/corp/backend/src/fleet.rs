@@ -712,6 +712,5 @@ pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
 }
 
 /// Integration tests against Postgres; skipped without AWZY_TEST_POSTGRES_URL.
-
 #[cfg(test)]
 pub(crate) mod tests;
