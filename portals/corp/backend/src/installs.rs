@@ -340,6 +340,7 @@ impl Release {
 
 #[derive(Interface)]
 #[graphql(field(name = "id", ty = "ID"))]
+#[expect(clippy::large_enum_variant, reason = "one is built per node(id) call; boxing buys nothing")]
 pub enum Node {
     Install(Install),
     SupportSession(crate::support::SupportSession),
