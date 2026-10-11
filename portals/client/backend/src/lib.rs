@@ -24,6 +24,7 @@ mod mcp;
 mod node;
 mod outage;
 mod policies;
+mod repairs;
 mod security_keys;
 mod status;
 pub mod support;
@@ -196,6 +197,7 @@ pub struct ClientPortalQuery(
     support::SupportQuery,
     lookup::LookupQuery,
     diagnostics::DiagnosticsQuery,
+    repairs::RepairQuery,
 );
 
 #[derive(MergedObject, Default)]
@@ -210,6 +212,7 @@ pub struct ClientPortalMutation(
     challenges::ChallengeMutation,
     security_keys::SecurityKeyMutation,
     investigations::InvestigationMutation,
+    repairs::RepairMutation,
 );
 
 /// Live updates: the Challenges page's challenges and containments.

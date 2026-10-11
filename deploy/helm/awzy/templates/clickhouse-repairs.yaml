@@ -1,0 +1,132 @@
+{{- if .Values.clickhouse.enabled }}
+{{- $ch := .Values.clickhouse -}}
+{{- $data := .Values.namespaces.data -}}
+# Repairs a client admin starts from the client portal's Status page (ADR 0102). Each is a
+# CronJob that never runs on its own (suspended); the portal starts a Job from it, so what a
+# repair does is fixed here, in the chart, and the portal can't run anything else.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: awzy-clickhouse-disk-cleanup
+  namespace: {{ $data }}
+  labels:
+    awzy.io/repair: disk-cleanup
+spec:
+  suspend: true
+  schedule: "0 0 1 1 *"
+  jobTemplate:
+    metadata:
+      labels:
+        awzy.io/repair: disk-cleanup
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            awzy.io/repair: disk-cleanup
+        spec:
+          restartPolicy: Never
+          {{- with .Values.image.pullSecret }}
+          imagePullSecrets: [{ name: {{ . }} }]
+          {{- end }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: repair
+              image: {{ include "awzy.image" (dict "root" . "name" "awzy-clickhouse-migrate") }}
+              args: ["repair", "disk-cleanup"]
+              env:
+                - { name: AWZY_CLICKHOUSE_URL, value: "http://clickhouse-awzy.{{ $data }}.svc:8123" }
+                - { name: AWZY_CLICKHOUSE_USER, value: {{ $ch.user | quote }} }
+                - { name: AWZY_CLICKHOUSE_DATABASE, value: {{ $ch.database | quote }} }
+                - name: AWZY_CLICKHOUSE_PASSWORD
+                  valueFrom: { secretKeyRef: { name: {{ $ch.passwordSecret }}, key: password } }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+---
+# The client portal reads the repairs' CronJobs, starts Jobs from them, and reads the Jobs'
+# status. Nothing else, and only in the data namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: awzy-client-portal-repairs
+  namespace: {{ $data }}
+rules:
+  - apiGroups: ["batch"]
+    resources: ["cronjobs"]
+    resourceNames: ["awzy-clickhouse-disk-cleanup"]
+    verbs: ["get"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "list"]
+---
+# RBAC can't limit which Jobs the portal creates, so this does: from the portal's service
+# account, only a Job that is one of the repairs above, exactly as the chart wrote it.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: awzy-client-portal-repairs
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["jobs"]
+  matchConditions:
+    - name: from-the-client-portal
+      expression: "request.userInfo.username == 'system:serviceaccount:{{ .Values.namespaces.portal }}:awzy'"
+  variables:
+    - name: pod
+      expression: "object.spec.template.spec"
+  validations:
+    - expression: "has(object.metadata.labels) && 'awzy.io/repair' in object.metadata.labels && object.metadata.labels['awzy.io/repair'] in ['disk-cleanup']"
+      message: "the client portal may only start a repair the chart defines"
+    - expression: >-
+        variables.pod.containers.size() == 1 &&
+        variables.pod.containers.all(c, c.image == '{{ include "awzy.image" (dict "root" . "name" "awzy-clickhouse-migrate") }}' &&
+          has(c.args) && c.args == ['repair', object.metadata.labels['awzy.io/repair']] && !has(c.envFrom) &&
+          (!has(c.env) || c.env.all(e, !has(e.valueFrom) ||
+            (has(e.valueFrom.secretKeyRef) && e.valueFrom.secretKeyRef.name == '{{ $ch.passwordSecret }}'))))
+      message: "a repair runs the migrate image with its own arguments and only ClickHouse's password"
+    - expression: >-
+        !has(variables.pod.volumes) && !has(variables.pod.initContainers) &&
+        !has(variables.pod.ephemeralContainers) &&
+        (!has(variables.pod.serviceAccountName) || variables.pod.serviceAccountName == 'default') &&
+        (!has(variables.pod.hostNetwork) || !variables.pod.hostNetwork) &&
+        (!has(variables.pod.hostPID) || !variables.pod.hostPID)
+      message: "a repair mounts nothing and runs as the namespace's default account"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: awzy-client-portal-repairs
+spec:
+  policyName: awzy-client-portal-repairs
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: {{ $data }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: awzy-client-portal-repairs
+  namespace: {{ $data }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: awzy-client-portal-repairs
+subjects:
+  - kind: ServiceAccount
+    name: awzy
+    namespace: {{ .Values.namespaces.portal }}
+{{- end }}

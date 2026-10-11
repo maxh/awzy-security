@@ -777,6 +777,11 @@ type Mutation {
 	Closes an investigation once a person has reviewed it. It stays, with who closed it and why.
 	"""
 	closeInvestigation(input: CloseInvestigationInput!): CloseInvestigationPayload!
+	"""
+	Starts a repair, unless one of its kind is running. For those who may administer the
+	enforcement area.
+	"""
+	startRepair(kind: RepairKind!): RepairRun!
 }
 
 interface Node {
@@ -1179,6 +1184,16 @@ type Query {
 	enforcement area, to review before sending it to awzy support.
 	"""
 	diagnosticsBundle: String!
+	"""
+	The repairs this install defines; empty where it defines none. For those who may
+	administer the enforcement area.
+	"""
+	repairKinds: [RepairKind!]!
+	"""
+	Recent repair runs, newest first; a finished one is kept for a week. For those who may
+	administer the enforcement area.
+	"""
+	repairRuns: [RepairRun!]!
 }
 
 input RegisterServiceAccountInput {
@@ -1213,6 +1228,41 @@ input RemoveServiceAccountInput {
 
 type RemoveServiceAccountPayload {
 	removedId: String!
+}
+
+"""
+A repair the chart defines.
+"""
+enum RepairKind {
+	"""
+	Drops parts ClickHouse detached, empties its own query and metric logs, and applies
+	decisions' and events' retention now. Loses none of awzy's data.
+	"""
+	CLICKHOUSE_DISK_CLEANUP
+}
+
+"""
+One run of a repair.
+"""
+type RepairRun {
+	"""
+	The Job's name, for `kubectl logs job/<name>`.
+	"""
+	name: String!
+	kind: RepairKind!
+	status: RepairStatus!
+	"""
+	Who started it, as the portal knew them.
+	"""
+	startedBy: String
+	startedAt: UtcTimestamp
+	finishedAt: UtcTimestamp
+}
+
+enum RepairStatus {
+	RUNNING
+	SUCCEEDED
+	FAILED
 }
 
 input ResetSecurityKeyInput {

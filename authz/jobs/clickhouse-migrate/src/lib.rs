@@ -4,6 +4,8 @@
 //! Migrations may use `{{placeholders}}` for settings that differ per install (see
 //! [`Settings`]), such as the Kafka brokers as ClickHouse itself reaches them.
 
+pub mod repair;
+
 use axum::Router;
 use clickhouse::Client;
 
