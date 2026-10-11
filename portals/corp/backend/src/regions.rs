@@ -132,9 +132,38 @@ pub fn of(cloud: &str) -> Option<&'static [&'static str]> {
     CLOUDS.iter().find(|(c, _)| *c == cloud).map(|(_, regions)| *regions)
 }
 
+#[derive(Debug, PartialEq, thiserror::Error)]
+pub enum RegionError {
+    #[error("cloud must be aws, gcp, or azure")]
+    UnknownCloud,
+    #[error("{region} isn't a {cloud} region")]
+    NotTheClouds { cloud: String, region: String },
+}
+
+/// Whether `region` is one of `cloud`'s, as registering an install requires.
+pub fn check(cloud: &str, region: &str) -> Result<(), RegionError> {
+    match of(cloud) {
+        None => Err(RegionError::UnknownCloud),
+        Some(regions) if !regions.contains(&region) => {
+            Err(RegionError::NotTheClouds { cloud: cloud.into(), region: region.into() })
+        }
+        Some(_) => Ok(()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_install_is_registered_in_one_of_its_clouds_regions() {
+        assert!(check("aws", "us-east-2").is_ok());
+        assert!(check("gcp", "us-central1").is_ok());
+        let wrong = check("gcp", "us-east-2").unwrap_err();
+        assert_eq!(wrong.to_string(), "us-east-2 isn't a gcp region");
+        assert!(check("aws", "us-esat-2").is_err(), "a typo");
+        assert!(check("oracle", "us-east-2").is_err());
+    }
 
     #[test]
     fn each_cloud_has_its_own_regions_and_no_duplicates() {
