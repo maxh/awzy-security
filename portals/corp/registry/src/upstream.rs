@@ -9,22 +9,16 @@ use axum::http::{header, HeaderMap, HeaderValue, Method, Request, Response};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use http_body_util::{BodyExt, Full};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
 use serde::Deserialize;
 use tokio::sync::Mutex;
 
 use crate::sigv4;
 
-pub type HttpClient = Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>;
+pub type HttpClient = awzy_http::Client;
 
 /// HTTP and HTTPS (rustls with the webpki roots).
 pub fn http_client() -> HttpClient {
-    let _ = rustls::crypto::ring::default_provider().install_default();
-    let https = hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_or_http().enable_http1().build();
-    Client::builder(TokioExecutor::new()).build(https)
+    awzy_http::client()
 }
 
 /// Headers passed back to the client from the upstream registry.

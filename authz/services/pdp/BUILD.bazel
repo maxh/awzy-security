@@ -11,6 +11,7 @@ awzy_service(
     # The load test runs in the cluster from the published image, so it measures what ships (#94).
     image_binaries = ["pdp_loadtest"],
     deps = [
+        "//libs/http",
         "//authz/libs/kafka",
         "//libs/server",
         "//libs/telemetry",

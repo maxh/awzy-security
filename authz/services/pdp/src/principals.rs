@@ -19,11 +19,7 @@ use std::{
 use arc_swap::ArcSwap;
 use awzy_model::EntityRef;
 use bytes::Bytes;
-use http_body_util::{BodyExt, Empty};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
+use http_body_util::{BodyExt, Full};
 use serde_json::Value;
 
 /// The reason recorded for a service account that isn't registered in awzy-context. Not a
@@ -162,19 +158,19 @@ impl Principals {
 }
 
 /// A GET to awzy-context, with this process's service token for it (ADR 0055).
-pub(crate) fn context_get(url: &str, tokens: &TokenSource) -> anyhow::Result<axum::http::Request<Empty<Bytes>>> {
+pub(crate) fn context_get(url: &str, tokens: &TokenSource) -> anyhow::Result<axum::http::Request<Full<Bytes>>> {
     let mut req = axum::http::Request::get(url);
     if let Some(authorization) = tokens.authorization("awzy-context")? {
         req = req.header(axum::http::header::AUTHORIZATION, authorization);
     }
-    Ok(req.body(Empty::new())?)
+    Ok(req.body(Full::default())?)
 }
 
 /// Follows awzy-context's `/v1/principals` forever: each request waits there for the snapshot
 /// to move (ADR 0077), so a change reaches this PDP as it's made. Failures keep the snapshot in
 /// hand and are retried after `every`.
 pub async fn sync_principals(principals: Arc<Principals>, endpoint: String, every: Duration) {
-    let client: Client<HttpConnector, Empty<Bytes>> = Client::builder(TokioExecutor::new()).build_http();
+    let client: awzy_http::Client = awzy_http::client();
     let tokens = TokenSource::from_env();
     loop {
         // Nothing to wait against until the first snapshot.
@@ -201,7 +197,7 @@ const WAIT: Duration = Duration::from_secs(25);
 pub async fn sync_once(
     principals: &Principals,
     endpoint: &str,
-    client: &Client<HttpConnector, Empty<Bytes>>,
+    client: &awzy_http::Client,
     tokens: &TokenSource,
 ) -> anyhow::Result<bool> {
     sync_waiting(principals, endpoint, client, tokens, None).await
@@ -211,7 +207,7 @@ pub async fn sync_once(
 pub async fn sync_waiting(
     principals: &Principals,
     endpoint: &str,
-    client: &Client<HttpConnector, Empty<Bytes>>,
+    client: &awzy_http::Client,
     tokens: &TokenSource,
     wait: Option<Duration>,
 ) -> anyhow::Result<bool> {

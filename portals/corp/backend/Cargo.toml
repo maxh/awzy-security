@@ -6,6 +6,7 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
+awzy-http.workspace = true
 rmcp.workspace = true
 awzy-migrations.workspace = true
 anyhow.workspace = true

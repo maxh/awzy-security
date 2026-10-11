@@ -6,6 +6,7 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
+awzy-http.workspace = true
 chrono.workspace = true
 awzy-kafka.workspace = true
 rskafka.workspace = true

@@ -13,16 +13,12 @@ use anyhow::Context;
 use axum::http::{header, Method, Request};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
 use jsonwebtoken::{encode, EncodingKey, Header};
 use serde_json::{json, Value};
 
 use crate::activity::{server_of, Access};
 
-type HttpClient = Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>;
+type HttpClient = awzy_http::Client;
 
 const TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -82,15 +78,12 @@ impl Driver {
     }
 
     fn with_signer(mcp: &str, key: Signer, issuer: &str, audience: &str) -> Self {
-        let _ = rustls::crypto::ring::default_provider().install_default();
-        let https =
-            hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_or_http().enable_http1().build();
         Self {
             mcp: mcp.trim_end_matches('/').to_string(),
             key,
             issuer: issuer.to_string(),
             audience: audience.to_string(),
-            http: Client::builder(TokioExecutor::new()).build(https),
+            http: awzy_http::client(),
         }
     }
 

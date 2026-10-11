@@ -10,12 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use bytes::Bytes;
-use http_body_util::{BodyExt, Empty};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
+use http_body_util::{BodyExt, Full};
 use jsonwebtoken::{jwk::JwkSet, DecodingKey};
 use rustls_pki_types::{pem::PemObject, CertificateDer};
 use tokio::sync::Mutex;
@@ -29,7 +24,7 @@ pub struct Jwks {
     /// Kubernetes API server serves its keys only to authenticated callers, and a pod's token
     /// rotates (ADR 0055).
     bearer_file: Option<std::path::PathBuf>,
-    client: Client<hyper_rustls::HttpsConnector<HttpConnector>, Empty<Bytes>>,
+    client: awzy_http::Client,
     state: Mutex<State>,
 }
 
@@ -46,7 +41,6 @@ impl Jwks {
         let uri: hyper::Uri = url.parse()?;
         anyhow::ensure!(uri.scheme_str() == Some("https"), "JWKS URL must be https://: {url}");
 
-        let _ = rustls::crypto::ring::default_provider().install_default();
         let mut roots = rustls::RootCertStore { roots: webpki_roots::TLS_SERVER_ROOTS.to_vec() };
         if let Some(pem) = extra_ca_pem {
             let certs = CertificateDer::pem_slice_iter(pem).collect::<Result<Vec<_>, _>>()?;
@@ -55,12 +49,10 @@ impl Jwks {
                 roots.add(cert)?;
             }
         }
-        let tls = rustls::ClientConfig::builder().with_root_certificates(roots).with_no_client_auth();
-        let https = hyper_rustls::HttpsConnectorBuilder::new().with_tls_config(tls).https_only().enable_http1().build();
         Ok(Self {
             bearer_file: None,
             uri,
-            client: Client::builder(TokioExecutor::new()).build(https),
+            client: awzy_http::client_with_roots(roots),
             state: Mutex::new(State::default()),
         })
     }
@@ -94,7 +86,7 @@ impl Jwks {
                 .map_err(|e| anyhow::anyhow!("reading the bearer token in {}: {e}", path.display()))?;
             req = req.header(hyper::header::AUTHORIZATION, format!("Bearer {}", token.trim()));
         }
-        let res = tokio::time::timeout(FETCH_TIMEOUT, self.client.request(req.body(Empty::new())?))
+        let res = tokio::time::timeout(FETCH_TIMEOUT, self.client.request(req.body(Full::default())?))
             .await
             .map_err(|_| anyhow::anyhow!("JWKS fetch from {} timed out", self.uri))??;
         anyhow::ensure!(res.status().is_success(), "JWKS fetch from {} returned {}", self.uri, res.status());

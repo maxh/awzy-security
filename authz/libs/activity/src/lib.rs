@@ -11,10 +11,6 @@ use awzy_model::EntityRef;
 use bytes::Bytes;
 use chrono::{DateTime, SecondsFormat, Utc};
 use http_body_util::Full;
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
 use serde_json::{json, Map, Value};
 use tokio::sync::mpsc;
 
@@ -142,7 +138,7 @@ pub fn batch_json(events: &[Activity], system: &str) -> Value {
 }
 
 async fn send(mut rx: mpsc::Receiver<Activity>, endpoint: String, authorization: String, system: String) {
-    let client: Client<HttpConnector, Full<Bytes>> = Client::builder(TokioExecutor::new()).build_http();
+    let client: awzy_http::Client = awzy_http::client();
     let mut batch = Vec::with_capacity(BATCH);
     loop {
         let first = tokio::select! {
@@ -167,13 +163,7 @@ async fn send(mut rx: mpsc::Receiver<Activity>, endpoint: String, authorization:
     }
 }
 
-async fn post(
-    client: &Client<HttpConnector, Full<Bytes>>,
-    endpoint: &str,
-    authorization: &str,
-    body: String,
-    n: usize,
-) {
+async fn post(client: &awzy_http::Client, endpoint: &str, authorization: &str, body: String, n: usize) {
     let req = hyper::Request::post(endpoint)
         .header(hyper::header::CONTENT_TYPE, "application/json")
         .header(hyper::header::AUTHORIZATION, authorization)

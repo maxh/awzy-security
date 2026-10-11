@@ -30,10 +30,6 @@ use axum::{
 };
 use bytes::Bytes;
 use http_body_util::Full;
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
 use serde_json::{json, Value};
 
 use awzy_identity::{IdentityError, Principal, Verifier};
@@ -55,7 +51,7 @@ struct Inner {
     config: GatewayConfig,
     verifier: Verifier,
     pdp: AuthorizerClient<AuthChannel>,
-    upstream: Client<HttpConnector, Full<Bytes>>,
+    upstream: awzy_http::Client,
     /// The last mode the PDP reported. If the PDP becomes unreachable, a monitoring install
     /// keeps allowing; an enforcing one (or one never heard from) falls back to `outage`.
     last_seen_monitor: AtomicBool,
@@ -183,7 +179,7 @@ impl GatewayState {
     ) -> anyhow::Result<Self> {
         config.validate()?;
         let verifier = Verifier::new(&config.token)?;
-        let upstream = Client::builder(TokioExecutor::new()).build_http();
+        let upstream = awzy_http::client();
         let allows = AllowCache {
             ttl: std::time::Duration::from_secs(config.outage.cached_allow_ttl_secs),
             entries: Default::default(),

@@ -4,6 +4,9 @@ load("//tools:rust.bzl", "awzy_rust_library")
 awzy_rust_library(
     name = "activity",
     crate_name = "awzy_activity",
-    deps = ["//libs/model"],
+    deps = [
+        "//libs/http",
+        "//libs/model",
+    ],
     visibility = ["//tools:client_side"],
 )
