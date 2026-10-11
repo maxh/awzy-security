@@ -93,3 +93,20 @@ groups:
         annotations:
           summary: "awzy-gateway can't reach awzy-pdp; tool calls are replayed or denied (ADR 0030)"
 
+
+      # The release, from Argo CD's controller. Out of sync, the install keeps running the release
+      # it has, but takes no newer one: no fixes, and no upgrade a channel asks for.
+      - alert: AwzyReleaseNotSynced
+        expr: max by (name) (argocd_app_info{name="awzy", sync_status!="Synced"}) == 1
+        for: 30m
+        labels: { severity: ticket }
+        annotations:
+          summary: "The install's release hasn't synced for 30 minutes: it's running an older release than its channel names"
+          description: "Check `kubectl -n awzy-ops get application awzy`: a sync error, or a release waiting for a newer bootstrap (ADR 0098)."
+
+      - alert: AwzyReleaseUnhealthy
+        expr: max by (name, health_status) (argocd_app_info{name="awzy", health_status=~"Degraded|Missing"}) == 1
+        for: 15m
+        labels: { severity: page }
+        annotations:
+          summary: "The install's release is {{ $labels.health_status }}: something it runs is failing or missing"

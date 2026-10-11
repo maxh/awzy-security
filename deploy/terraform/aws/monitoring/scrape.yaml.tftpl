@@ -1,6 +1,7 @@
-# What AMP's managed scraper collects (ADR 0096): each awzy pod's /metrics, and the kubelets'
-# container CPU and memory. No per-principal or per-resource labels: awzy's metrics have none, and
-# this keeps the few container metrics the dashboards use.
+# What AMP's managed scraper collects (ADR 0096): each awzy pod's /metrics, the release's sync and
+# health from Argo CD, and the kubelets' container CPU and memory. No per-principal or
+# per-resource labels: awzy's metrics have none, and this keeps the few container metrics the
+# dashboards use.
 global:
   scrape_interval: 30s
 scrape_configs:
@@ -22,6 +23,23 @@ scrape_configs:
         target_label: namespace
       - source_labels: [__meta_kubernetes_pod_name]
         target_label: pod
+  # Argo CD's controller: whether the install's release synced, and its health.
+  - job_name: argocd
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [awzy-ops]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        regex: argocd-application-controller
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_container_port_name]
+        regex: metrics
+        action: keep
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: argocd_app_info
+        action: keep
   - job_name: kubelet-cadvisor
     scheme: https
     tls_config:
