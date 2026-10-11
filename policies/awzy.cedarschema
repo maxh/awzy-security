@@ -65,9 +65,13 @@ type RequestContext = {
   // resource or a folder above it (ADR 0046). Absent when awzy doesn't know, so test it with
   // `context has assigned`.
   assigned?: Bool,
-  // What the enforcement point observed about the calling software, e.g. "browser",
-  // "cli", or an MCP client name. Helps spot agents using a person's own credentials.
+  // What the enforcement point observed about the calling software, e.g. "browser", "cli",
+  // or "mcp" (awzy-gateway). A Human arriving through "mcp" is software holding a person's own
+  // token.
   client?: String,
+  // The MCP client's name, as its session's `initialize` gave it (awzy-gateway), e.g.
+  // "claude-code". What the client says it is: a hint, not proof.
+  mcp_client?: String,
   // Set by awzy-challenge on an `approve` check: the person who answers for the challenged
   // request (the human asking, the person an agent acts for, or an unattended account's owner).
   // A service account never approves for its own owner (ADR 0065).

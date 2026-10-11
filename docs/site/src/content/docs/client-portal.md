@@ -80,9 +80,9 @@ Who awzy knows about.
 What's waiting for people. See [Challenges and containment](/concepts/challenges-and-containment/).
 
 - **Waiting for you:** challenges sent to you. Give a reason, or touch your security key.
-- **Waiting for approval,** for those who administer challenges: approve or reject someone else's
-  request, with a note. Others whom policy lets approve, such as a resource's owner, don't see
-  this list yet; see [Data owners and approvers](/workflows/approvers/).
+- **Waiting for your approval:** requests you may approve, such as for data you own. Approve or
+  reject each, with a note. Those who administer challenges see every waiting request instead.
+  See [Data owners and approvers](/workflows/approvers/).
 - **Containments:** who is contained, and why. Contain a principal yourself, or lift a
   containment with a reason. While automated containments are in monitor, the ones awzy-reasoner
   would have made appear as "would contain": contain the person, or dismiss the record.
@@ -125,7 +125,8 @@ it acts for; with the person's own token, as the person.
 All but `propose_policy` only read, and it only drafts. Nothing through MCP publishes policy,
 switches modes, or contains anyone.
 
-The same token works on the portal's GraphQL API. An agent given a person's own token can do
-there whatever the person may, including answering their justification challenges, so prefer a
-token exchange for agents. See
+The MCP endpoint takes tokens for its own audience (`awzy-mcp` unless your install sets another),
+and the portal's GraphQL API doesn't accept them, so a token handed to an agent for MCP can't
+answer challenges or approve anything. MCP clients find where to sign in from the endpoint's OAuth
+metadata. Prefer a token exchange for agents, so they're known as agents. See
 [An agent using a person's own credentials](/concepts/principals-and-delegation/#an-agent-using-a-persons-own-credentials).

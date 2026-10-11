@@ -129,7 +129,13 @@ resource "helm_release" "config" {
       demoData   = { enabled = var.demo_data }
       reporter   = var.reporter == null ? { enabled = false, installId = "" } : { enabled = true, installId = nonsensitive(var.reporter.install_id) }
       clientPortal = {
-        auth      = { issuer = var.client_portal.issuer, jwksUrl = var.client_portal.jwks_url }
+        auth = {
+          issuer       = var.client_portal.issuer
+          jwksUrl      = var.client_portal.jwks_url
+          audience     = var.client_portal.audience
+          mcpAudience  = var.client_portal.mcp_audience
+          subjectClaim = var.client_portal.subject_claim
+        }
         publicUrl = coalesce(var.client_portal.public_url, "https://${var.ingress.hostname}")
         hostname  = var.ingress.hostname
         awzyBot   = { enabled = var.awzy_bot && local.c.cloud == "aws", region = local.c.region, model = var.llm_model }
@@ -153,6 +159,7 @@ resource "helm_release" "config" {
       mcpGateway = {
         enabled   = var.mcp_gateway != null
         hostname  = try(var.mcp_gateway.hostname == null ? "" : var.mcp_gateway.hostname, "")
+        auth      = { audience = try(var.mcp_gateway.audience, "awzy-gateway") }
         upstreams = try(var.mcp_gateway.upstreams, [])
         outage    = { failOpenTiers = try(var.mcp_gateway.fail_open_tiers, []), cachedAllowTtlSecs = 300 }
       }

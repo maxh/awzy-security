@@ -457,7 +457,10 @@ Every portal and MCP operation is checked with the PDP as `view` or `administer`
 
 Agents get tokens from the dev IdP's token endpoint: `grant_type=client_credentials&client_id=<account>`
 for a service account on its own authority, or RFC 8693 token exchange
-(`subject_token=<person's token>&actor=<account>`) for an account acting for a person. Register the
+(`subject_token=<person's token>&actor=<account>`) for an account acting for a person. Add
+`audience=awzy-mcp` for the portal's `/mcp` (`AWZY_MCP_AUDIENCE`) or `audience=awzy-gateway` for
+awzy-gateway: each takes tokens for its own audience, and the portal's GraphQL API only `awzy`
+([ADR 0081](docs/adr/0081-agents-get-tokens-of-their-own-and-say-which-client-they-are.md)). Register the
 account in `AWZY_SERVICE_ACCOUNTS_FILE` (a JSON list of `{id, owner, ai, groups}`).
 
 ### People and groups from the IdP (ADR 0031)

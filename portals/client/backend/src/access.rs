@@ -178,6 +178,9 @@ struct AuthInner {
     client_id: String,
     /// The portal's own URL, for MCP clients discovering how to sign in (RFC 9728).
     public_url: Option<String>,
+    /// Where on the portal these tokens are for: "" for the portal itself, "/mcp" for its MCP
+    /// endpoint, which takes tokens of its own (ADR 0081).
+    resource_path: &'static str,
 }
 
 impl Auth {
@@ -194,11 +197,25 @@ impl Auth {
             issuer: token.issuer,
             client_id,
             public_url,
+            resource_path: "",
         })))
     }
 
+    /// The same sign-in for the MCP endpoint at `/mcp`, whose tokens are for `token.audience`
+    /// (ADR 0081): a token handed to an agent for MCP doesn't work on the portal's GraphQL API.
+    pub fn new_for_mcp(
+        token: TokenConfig,
+        service_accounts: Vec<ServiceAccountConfig>,
+        client_id: String,
+        public_url: Option<String>,
+    ) -> anyhow::Result<Self> {
+        let mut auth = Self::new(token, service_accounts, client_id, public_url)?;
+        Arc::get_mut(&mut auth.0).expect("not shared yet").resource_path = "/mcp";
+        Ok(auth)
+    }
+
     /// - AWZY_AUTH_ISSUER and AWZY_AUTH_JWKS_URL: the client's IdP. Required.
-    /// - AWZY_AUTH_AUDIENCE: the `aud` tokens must carry (default `awzy`).
+    /// - AWZY_AUTH_AUDIENCE: the `aud` the portal's tokens must carry (default `awzy`).
     /// - AWZY_AUTH_CA_FILE: PEM CA certificates for an IdP behind a private CA (optional).
     /// - AWZY_AUTH_SUBJECT_CLAIM: the claim that identifies a person (default `sub`).
     /// - AWZY_AUTH_CLIENT_ID: the portal frontend's OIDC client (default `awzy-client-portal`).
@@ -206,12 +223,21 @@ impl Auth {
     ///   AWZY_SERVICE_ACCOUNT_REGISTRY=awzy-context to leave registration to awzy-context.
     /// - AWZY_PORTAL_PUBLIC_URL: the portal's URL as clients see it (optional).
     pub fn from_env() -> anyhow::Result<Self> {
+        Self::from_env_with(std::env::var("AWZY_AUTH_AUDIENCE").unwrap_or_else(|_| "awzy".into()), false)
+    }
+
+    /// [`Self::from_env`] for the MCP endpoint: tokens for AWZY_MCP_AUDIENCE (default `awzy-mcp`).
+    pub fn from_env_for_mcp() -> anyhow::Result<Self> {
+        Self::from_env_with(std::env::var("AWZY_MCP_AUDIENCE").unwrap_or_else(|_| "awzy-mcp".into()), true)
+    }
+
+    fn from_env_with(audience: String, mcp: bool) -> anyhow::Result<Self> {
         let var = |k: &str| {
             std::env::var(k).map_err(|_| anyhow::anyhow!("{k} is not set; the portal needs an identity provider"))
         };
         let token = TokenConfig {
             issuer: var("AWZY_AUTH_ISSUER")?,
-            audience: std::env::var("AWZY_AUTH_AUDIENCE").unwrap_or_else(|_| "awzy".into()),
+            audience,
             jwks_ca_file: std::env::var("AWZY_AUTH_CA_FILE").ok(),
             subject_claim: std::env::var("AWZY_AUTH_SUBJECT_CLAIM").ok(),
             key: TokenKey::JwksUrl(var("AWZY_AUTH_JWKS_URL")?),
@@ -221,15 +247,34 @@ impl Auth {
             Err(_) => vec![],
         };
         let client_id = std::env::var("AWZY_AUTH_CLIENT_ID").unwrap_or_else(|_| "awzy-client-portal".into());
-        let mut auth = Self::new(token, service_accounts, client_id, std::env::var("AWZY_PORTAL_PUBLIC_URL").ok())?;
+        let public_url = std::env::var("AWZY_PORTAL_PUBLIC_URL").ok();
+        let mut auth = if mcp {
+            Self::new_for_mcp(token, service_accounts, client_id, public_url)?
+        } else {
+            Self::new(token, service_accounts, client_id, public_url)?
+        };
         if std::env::var("AWZY_SERVICE_ACCOUNT_REGISTRY").as_deref() == Ok("awzy-context") {
             Arc::get_mut(&mut auth.0).expect("not shared yet").defer_registry = true;
         }
         Ok(auth)
     }
 
+    /// Where clients find how to sign in for these tokens (RFC 9728).
     fn metadata_url(&self) -> Option<String> {
-        self.0.public_url.as_ref().map(|u| format!("{}/.well-known/oauth-protected-resource", u.trim_end_matches('/')))
+        self.0.public_url.as_ref().map(|u| {
+            format!("{}/.well-known/oauth-protected-resource{}", u.trim_end_matches('/'), self.0.resource_path)
+        })
+    }
+
+    /// RFC 9728 protected resource metadata for these tokens.
+    fn metadata(&self) -> serde_json::Value {
+        let resource =
+            self.0.public_url.as_ref().map(|u| format!("{}{}", u.trim_end_matches('/'), self.0.resource_path));
+        json!({
+            "resource": resource,
+            "authorization_servers": [self.0.issuer],
+            "bearer_methods_supported": ["header"],
+        })
     }
 }
 
@@ -266,22 +311,16 @@ pub async fn require_viewer(State(auth): State<Auth>, mut req: Request, next: Ne
 }
 
 /// Unauthenticated: how to sign in. `/auth/config` for the portal frontend, and OAuth protected
-/// resource metadata (RFC 9728) for MCP clients.
-pub fn routes(auth: Auth) -> Router {
-    let config = auth.clone();
+/// resource metadata (RFC 9728) for MCP clients, at the path for `/mcp` and at the root, where
+/// clients look when they're given none.
+pub fn routes(auth: Auth, mcp: Auth) -> Router {
+    let metadata = mcp.metadata();
+    let at_root = metadata.clone();
     Router::new()
         .route(
             "/auth/config",
-            get(move || async move { Json(json!({ "issuer": config.0.issuer, "clientId": config.0.client_id })) }),
+            get(move || async move { Json(json!({ "issuer": auth.0.issuer, "clientId": auth.0.client_id })) }),
         )
-        .route(
-            "/.well-known/oauth-protected-resource",
-            get(move || async move {
-                Json(json!({
-                    "resource": auth.0.public_url,
-                    "authorization_servers": [auth.0.issuer],
-                    "bearer_methods_supported": ["header"],
-                }))
-            }),
-        )
+        .route("/.well-known/oauth-protected-resource/mcp", get(move || async move { Json(metadata) }))
+        .route("/.well-known/oauth-protected-resource", get(move || async move { Json(at_root) }))
 }

@@ -74,8 +74,14 @@ clientPortal:
   auth:
     issuer: ""
     jwksUrl: ""
+    # The `aud` of the portal's own tokens, and of those agents get for its MCP endpoint, kept
+    # apart so a token handed to an agent doesn't open the portal's API (ADR 0081).
     audience: awzy
+    mcpAudience: awzy-mcp
     clientId: awzy-client-portal
+    # The claim holding the person's SCIM userName, when `sub` doesn't (an opaque ID, as with
+    # Entra): e.g. email. Empty: sub.
+    subjectClaim: ""
   publicUrl: ""
   # Public hostname; when set, the portal is served through the Gateway below.
   hostname: ""
@@ -163,11 +169,12 @@ mcpGateway:
   replicas: 2
   # Public hostname for agents outside the cluster: https://<hostname>/mcp/<upstream>. Empty: in-cluster only.
   hostname: ""
+  # Tokens from the client portal's IdP unless set here, for an audience of their own (ADR 0081).
   auth:
     issuer: ""
     jwksUrl: ""
-    audience: awzy
-    subjectClaim: "" # e.g. email with Okta or Entra
+    audience: awzy-gateway
+    subjectClaim: "" # default: the client portal's
   # Each: { name, url, default_sensitivity, tools: { <tool>: <tier> }, resource_tools: {...} }
   upstreams: []
   outage:

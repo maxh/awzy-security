@@ -79,6 +79,9 @@ pub struct Pdp {
     unknown_resource_attrs: Vec<&'static str>,
     /// Whether the schema declares `context.assigned` for `read` (ADR 0046). Same reason.
     knows_assigned: bool,
+    /// Whether the schema declares `context.mcp_client` for `call` (ADR 0081). Same reason: a
+    /// bundle published before it existed doesn't, and the gateway sends it anyway.
+    knows_mcp_client: bool,
 }
 
 /// The PDP every request reads. Policy sync swaps in a new one without blocking readers.
@@ -130,7 +133,18 @@ impl Pdp {
         let read = EntityUid::from_type_name_and_id(EntityTypeName::from_str("Action")?, EntityId::new("read"));
         let probe = serde_json::json!({ "risk_score": 0, "human_present": true, "assigned": true });
         let knows_assigned = Context::from_json_value(probe, Some((&schema, &read))).is_ok();
-        Ok(Self { schema, policies, authorizer: Authorizer::new(), version: 0, unknown_resource_attrs, knows_assigned })
+        let call = EntityUid::from_type_name_and_id(EntityTypeName::from_str("Action")?, EntityId::new("call"));
+        let probe = serde_json::json!({ "risk_score": 0, "human_present": true, "mcp_client": "probe" });
+        let knows_mcp_client = Context::from_json_value(probe, Some((&schema, &call))).is_ok();
+        Ok(Self {
+            schema,
+            policies,
+            authorizer: Authorizer::new(),
+            version: 0,
+            unknown_resource_attrs,
+            knows_assigned,
+            knows_mcp_client,
+        })
     }
 
     pub fn with_version(mut self, version: i64) -> Self {
@@ -210,6 +224,9 @@ impl Pdp {
             );
         }
         let mut context = req.context.clone();
+        if !self.knows_mcp_client {
+            context.remove("mcp_client");
+        }
         // Each check replaces this with its own principal's score when awzy-reasoner has one
         // (ADR 0056); an enforcement point's value only stands for principals it has never scored.
         context.entry("risk_score").or_insert(serde_json::Value::from(0));
@@ -723,6 +740,25 @@ mod tests {
             .unwrap();
         let d = pdp.decide_passed(&read("bob", "design-doc", 10), &deactivated, None, &passed(&["deactivated-humans"]));
         assert_eq!(d.unwrap().verdict, Verdict::Deny);
+    }
+
+    #[test]
+    fn the_mcp_client_reaches_policy_and_a_schema_without_it_still_decides() {
+        let mut req = read("bob", "design-doc", 10);
+        req.context.insert("mcp_client".into(), json!("claude-code"));
+
+        let forbid = format!(
+            "{DEFAULT_POLICIES}\n@id(\"no-claude-code\")\nforbid (principal, action, resource) \
+             when {{ context has mcp_client && context.mcp_client == \"claude-code\" }};"
+        );
+        let pdp = Pdp::new(DEFAULT_SCHEMA, &forbid).unwrap();
+        let d = pdp.decide(&req, &fixtures(&pdp)).unwrap();
+        assert_eq!((d.verdict, d.policies), (Verdict::Deny, vec!["no-claude-code".to_string()]));
+
+        let older = DEFAULT_SCHEMA.replace("  mcp_client?: String,\n", "");
+        assert_ne!(older, DEFAULT_SCHEMA, "the schema declares it");
+        let pdp = Pdp::new(&older, DEFAULT_POLICIES).unwrap();
+        assert_eq!(pdp.decide(&req, &fixtures(&pdp)).unwrap().verdict, Verdict::Allow, "dropped, not refused");
     }
 
     #[test]

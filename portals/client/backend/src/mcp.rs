@@ -672,29 +672,45 @@ mod tests {
 
     const SECRET_ENV: &str = "AWZY_TEST_PORTAL_SECRET";
 
-    /// Portal auth with an HS256 test key, and a token for `sub` acting for `person`.
-    fn auth() -> access::Auth {
+    fn token_config(audience: &str) -> awzy_identity::TokenConfig {
         std::env::set_var(SECRET_ENV, "test-secret");
-        let token = awzy_identity::TokenConfig {
+        awzy_identity::TokenConfig {
             issuer: "https://idp.test".into(),
-            audience: "awzy".into(),
+            audience: audience.into(),
             jwks_ca_file: None,
             subject_claim: None,
             key: awzy_identity::TokenKey::Hs256SecretEnv(SECRET_ENV.into()),
-        };
-        let agent = awzy_identity::ServiceAccountConfig {
+        }
+    }
+
+    fn agents() -> Vec<awzy_identity::ServiceAccountConfig> {
+        vec![awzy_identity::ServiceAccountConfig {
             id: "sec-agent".into(),
             owner: "alice".into(),
             ai: true,
             groups: vec!["security".into()],
-        };
-        access::Auth::new(token, vec![agent], "portal".into(), Some("https://portal.test".into())).unwrap()
+        }]
+    }
+
+    /// The portal router, with an HS256 test key: tokens for `awzy` on GraphQL, `awzy-mcp` on MCP.
+    async fn app() -> Router {
+        let portal = Some("https://portal.test".to_string());
+        let auth = access::Auth::new(token_config("awzy"), agents(), "portal".into(), portal.clone()).unwrap();
+        let mcp = access::Auth::new_for_mcp(token_config("awzy-mcp"), agents(), "portal".into(), portal).unwrap();
+        crate::router(services().await, auth, mcp, vec![])
     }
 
     fn bearer(claims: Value) -> String {
+        bearer_for("awzy-mcp", claims)
+    }
+
+    fn bearer_for(audience: &str, claims: Value) -> String {
         let mut claims = claims;
         claims.as_object_mut().unwrap().extend(
-            json!({ "iss": "https://idp.test", "aud": "awzy", "exp": 4_000_000_000_u64 }).as_object().unwrap().clone(),
+            json!({ "iss": "https://idp.test", "aud": audience, "exp": 4_000_000_000_u64 })
+                .as_object()
+                .unwrap()
+                .clone(),
         );
         let token = jsonwebtoken::encode(
             &jsonwebtoken::Header::default(),
@@ -736,7 +752,7 @@ mod tests {
 
     #[tokio::test]
     async fn speaks_mcp_over_http_on_the_portal_router() {
-        let app = crate::router(services().await, auth(), vec![]);
+        let app = app().await;
 
         let anonymous = app
             .clone()
@@ -746,7 +762,7 @@ mod tests {
         assert_eq!(anonymous.status(), 401);
         assert_eq!(
             anonymous.headers()["www-authenticate"],
-            r#"Bearer error="invalid_token", resource_metadata="https://portal.test/.well-known/oauth-protected-resource""#
+            r#"Bearer error="invalid_token", resource_metadata="https://portal.test/.well-known/oauth-protected-resource/mcp""#
         );
 
         let (init, session) = rpc(
@@ -790,5 +806,36 @@ mod tests {
             call["result"]["structuredContent"]["draft"]["created_by"], "ServiceAccount::sec-agent for Human::alice",
             "{call}"
         );
+    }
+
+    #[tokio::test]
+    async fn a_token_for_mcp_doesnt_open_graphql_or_the_reverse() {
+        let app = app().await;
+        let alice = json!({ "sub": "alice", "groups": ["security"] });
+        let status = |path: &'static str, token: String| {
+            let app = app.clone();
+            async move {
+                let req = Request::post(path)
+                    .header("authorization", token)
+                    .header("host", "localhost")
+                    .header("content-type", "application/json")
+                    .header("accept", "application/json, text/event-stream")
+                    .body(Body::from(r#"{"query":"{ apiVersion }"}"#))
+                    .unwrap();
+                app.oneshot(req).await.unwrap().status()
+            }
+        };
+        assert_eq!(status("/graphql", bearer_for("awzy-mcp", alice.clone())).await, 401, "an agent's MCP token");
+        assert_eq!(status("/mcp", bearer_for("awzy", alice.clone())).await, 401, "the portal's own token");
+        assert_eq!(status("/graphql", bearer_for("awzy", alice)).await, 200);
+
+        let metadata = app
+            .oneshot(Request::get("/.well-known/oauth-protected-resource/mcp").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let bytes = axum::body::to_bytes(metadata.into_body(), usize::MAX).await.unwrap();
+        let metadata: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(metadata["resource"], "https://portal.test/mcp");
+        assert_eq!(metadata["authorization_servers"], json!(["https://idp.test"]));
     }
 }

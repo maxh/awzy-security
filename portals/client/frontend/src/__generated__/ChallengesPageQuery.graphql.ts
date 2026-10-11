@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<8595b758ad41ab670592b92db41df8dc>>
+ * @generated SignedSource<<0e9e88e1eb487f7deaceed53dfc8811a>>
  * @lightSyntaxTransform
  */
 
@@ -59,6 +59,27 @@ export type ChallengesPageQuery$data = {
       readonly type: string;
     } | null | undefined;
     readonly status: ChallengeStatus;
+  }>;
+  readonly toApprove: ReadonlyArray<{
+    readonly action: string;
+    readonly answererId: string | null | undefined;
+    readonly createdAt: string | null | undefined;
+    readonly id: string;
+    readonly justification: string | null | undefined;
+    readonly kinds: ReadonlyArray<ChallengeKind>;
+    readonly onBehalfOf: {
+      readonly id: string;
+      readonly type: string;
+    } | null | undefined;
+    readonly passed: ReadonlyArray<ChallengeKind>;
+    readonly principal: {
+      readonly id: string;
+      readonly type: string;
+    } | null | undefined;
+    readonly resource: {
+      readonly id: string;
+      readonly type: string;
+    } | null | undefined;
   }>;
 };
 export type ChallengesPageQuery = {
@@ -125,10 +146,24 @@ v6 = {
   "alias": null,
   "args": null,
   "kind": "ScalarField",
+  "name": "kinds",
+  "storageKey": null
+},
+v7 = {
+  "alias": null,
+  "args": null,
+  "kind": "ScalarField",
+  "name": "passed",
+  "storageKey": null
+},
+v8 = {
+  "alias": null,
+  "args": null,
+  "kind": "ScalarField",
   "name": "createdAt",
   "storageKey": null
 },
-v7 = [
+v9 = [
   {
     "alias": "canAdminister",
     "args": [
@@ -166,20 +201,8 @@ v7 = [
       (v3/*:: as any*/),
       (v4/*:: as any*/),
       (v5/*:: as any*/),
-      {
-        "alias": null,
-        "args": null,
-        "kind": "ScalarField",
-        "name": "kinds",
-        "storageKey": null
-      },
-      {
-        "alias": null,
-        "args": null,
-        "kind": "ScalarField",
-        "name": "passed",
-        "storageKey": null
-      },
+      (v6/*:: as any*/),
+      (v7/*:: as any*/),
       {
         "alias": null,
         "args": null,
@@ -216,7 +239,7 @@ v7 = [
         "name": "status",
         "storageKey": null
       },
-      (v6/*:: as any*/),
+      (v8/*:: as any*/),
       {
         "alias": null,
         "args": null,
@@ -261,7 +284,7 @@ v7 = [
         "name": "name",
         "storageKey": null
       },
-      (v6/*:: as any*/),
+      (v8/*:: as any*/),
       {
         "alias": null,
         "args": null,
@@ -269,6 +292,39 @@ v7 = [
         "name": "lastUsedAt",
         "storageKey": null
       }
+    ],
+    "storageKey": null
+  },
+  {
+    "alias": "toApprove",
+    "args": null,
+    "concreteType": "Challenge",
+    "kind": "LinkedField",
+    "name": "challengesToApprove",
+    "plural": true,
+    "selections": [
+      (v0/*:: as any*/),
+      (v2/*:: as any*/),
+      (v3/*:: as any*/),
+      (v4/*:: as any*/),
+      (v5/*:: as any*/),
+      (v6/*:: as any*/),
+      (v7/*:: as any*/),
+      {
+        "alias": null,
+        "args": null,
+        "kind": "ScalarField",
+        "name": "answererId",
+        "storageKey": null
+      },
+      {
+        "alias": null,
+        "args": null,
+        "kind": "ScalarField",
+        "name": "justification",
+        "storageKey": null
+      },
+      (v8/*:: as any*/)
     ],
     "storageKey": null
   }
@@ -279,7 +335,7 @@ return {
     "kind": "Fragment",
     "metadata": null,
     "name": "ChallengesPageQuery",
-    "selections": (v7/*:: as any*/),
+    "selections": (v9/*:: as any*/),
     "type": "Query",
     "abstractKey": null
   },
@@ -288,19 +344,19 @@ return {
     "argumentDefinitions": [],
     "kind": "Operation",
     "name": "ChallengesPageQuery",
-    "selections": (v7/*:: as any*/)
+    "selections": (v9/*:: as any*/)
   },
   "params": {
-    "cacheID": "ca0c5e361ea2e2d82326be8e9cb0a67f",
+    "cacheID": "e5ac17c05b6013710b95636ede7ad447",
     "id": null,
     "metadata": {},
     "name": "ChallengesPageQuery",
     "operationKind": "query",
-    "text": "query ChallengesPageQuery {\n  canAdminister: viewerCan(action: ADMINISTER, area: CHALLENGES)\n  pending: myChallenges(status: PENDING) {\n    id\n    principal {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    kinds\n    passed\n    expiresAt\n  }\n  recent: myChallenges(first: 20) {\n    id\n    principal {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    status\n    createdAt\n    decidedBy {\n      label\n    }\n    grantExpiresAt\n  }\n  mySecurityKeys {\n    id\n    name\n    createdAt\n    lastUsedAt\n  }\n}\n"
+    "text": "query ChallengesPageQuery {\n  canAdminister: viewerCan(action: ADMINISTER, area: CHALLENGES)\n  pending: myChallenges(status: PENDING) {\n    id\n    principal {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    kinds\n    passed\n    expiresAt\n  }\n  recent: myChallenges(first: 20) {\n    id\n    principal {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    status\n    createdAt\n    decidedBy {\n      label\n    }\n    grantExpiresAt\n  }\n  mySecurityKeys {\n    id\n    name\n    createdAt\n    lastUsedAt\n  }\n  toApprove: challengesToApprove {\n    id\n    principal {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    kinds\n    passed\n    answererId\n    justification\n    createdAt\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "ea38c78a01c160b05eb200fdd0a4e8c1";
+(node as any).hash = "f68093d8c73e257e398e876d5c906599";
 
 export default node;
