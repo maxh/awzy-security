@@ -101,7 +101,7 @@ Bootstrap takes:
 | Input | From |
 | --- | --- |
 | `install_contract` | The cloud layer's output (the example reads it from remote state) |
-| `chart_version` | The release to install, or what your channel names |
+| `chart_version` | Leave it unset to follow the channel you registered with: awzy's registry shows your install only the version that channel (or your pinned version) names. Set an exact version to hold the install there |
 | `registry_credentials` | Install ID and pull token |
 | `reporter` | Install ID and reporting token, or `null` to send no heartbeat |
 | `cosign_public_key` | [`deploy/release/cosign.pub`](deploy/release/cosign.pub); Kyverno rejects images not signed with it |
@@ -197,8 +197,11 @@ the cluster on it.
 
 ## Operating an install
 
-- **Upgrades** follow the release channel the install was registered with. A pinned install
-  upgrades when you change `chart_version` and apply bootstrap again. If a sync failed (a hook
+- **Upgrades** follow the release channel the install was registered with: Argo CD moves to the
+  version the channel names within minutes of awzy moving it. `fast` gets every release as it's
+  published; a release reaches `stable` after it has run on `fast` for at least a day and a second
+  person at awzy has approved it. A pinned install stays on its version. Setting `chart_version`
+  to an exact version and applying bootstrap again holds any install there. If a sync failed (a hook
   Job that kept failing, say), Argo CD keeps retrying that revision after you move on; stop it
   with `kubectl -n awzy-ops patch application awzy --type merge -p
   '{"status":{"operationState":{"phase":"Terminating"}}}'` and the next sync takes the new one.

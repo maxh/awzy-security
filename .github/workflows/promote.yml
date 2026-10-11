@@ -1,0 +1,32 @@
+name: promote
+# Makes a chart version the stable channel's (ADR 0094). The `stable` environment's required
+# reviewers mean a second person approves each promotion before it runs; tools/ci/promote.sh
+# checks the version has soaked in fast first.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Chart version to make stable: 0.1.0-g<12 hex digits>, as the corp portal's Releases page shows it"
+        required: true
+concurrency:
+  group: promote
+  cancel-in-progress: false
+jobs:
+  stable:
+    runs-on: ubuntu-latest
+    environment: stable
+    permissions:
+      id-token: write # GitHub OIDC token for AWS: the deploy role trusts this environment
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWZY_CORP_AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWZY_CORP_AWS_REGION }}
+      - name: Promote to stable
+        # Inputs through the environment, never into the script's text.
+        env:
+          AWZY_CORP_PROMOTE_BY: ${{ github.actor }}
+          VERSION: ${{ inputs.version }}
+        run: tools/ci/promote.sh "$VERSION"

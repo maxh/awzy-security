@@ -687,3 +687,18 @@ local frontend adds or changes ([ADR 0088](docs/adr/0088-the-client-portal-runs-
 The corp frontend works the same way (`cd portals/corp/frontend`, Vite on :5174, local backend on
 :8090), against awzy's own corp deployments. It needs no IdP client: corp sign-in is a session
 cookie, which passes through the proxy.
+
+## Releases
+
+Every merge to `main` publishes signed images, their SBOMs, and the chart
+([ADR 0093](docs/adr/0093-every-image-and-release-carries-a-signed-sbom.md)), and
+`deploy-corp.sh` points the `fast` channel at that chart. Installs follow their channel through
+the registry proxy, which shows each one only the version its channel names
+([ADR 0094](docs/adr/0094-installs-follow-their-channel-through-the-registry.md)); the corp
+portal's Releases page shows each channel's version.
+
+To promote a version to `stable`, run the `promote` workflow (Actions, or
+`gh workflow run promote.yml -f version=0.1.0-g<sha>`). It waits for a reviewer of the `stable`
+environment to approve, then refuses a version published less than 24 hours ago. The environment
+is set in the repository's settings: required reviewers, with "Prevent self-review" on, so the
+person who asks can't also approve.

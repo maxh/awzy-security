@@ -19,7 +19,9 @@ async fn main() -> anyhow::Result<()> {
             // e.g. 123456789012.dkr.ecr.us-east-2.amazonaws.com
             let upstream = Upstream::ecr(&var("AWZY_REGISTRY_UPSTREAM")?)?;
             let realm = std::env::var("AWZY_REGISTRY_REALM").unwrap_or_else(|_| "registry.awzysecurity.com".into());
-            awzy_server::serve("awzy-registry", router(Registry { tokens: store, upstream, realm })).await
+            // Which chart version each install's channel names, from the corp portal's tables (ADR 0094).
+            let channels = awzy_registry::channels::ChannelStore::connect(&var("AWZY_POSTGRES_URL")?).await?;
+            awzy_server::serve("awzy-registry", router(Registry { tokens: store, channels, upstream, realm })).await
         }
         ["token", "create", install, by] => {
             let install: InstallId = install.parse()?;
