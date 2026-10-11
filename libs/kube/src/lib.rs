@@ -98,8 +98,11 @@ impl KubeApi {
 
     /// The items at `path` whose labels match `selector` (e.g. `app.kubernetes.io/part-of=awzy`).
     pub async fn list(&self, path: &str, selector: &str) -> Result<Vec<Value>, KubeError> {
-        let list = self.call(Method::GET, &format!("{path}?labelSelector={}", encode(selector)), None).await?;
-        Ok(list["items"].as_array().cloned().unwrap_or_default())
+        let mut list = self.call(Method::GET, &format!("{path}?labelSelector={}", encode(selector)), None).await?;
+        match list.get_mut("items").map(Value::take) {
+            Some(Value::Array(items)) => Ok(items),
+            _ => Ok(Vec::new()),
+        }
     }
 
     /// One object.

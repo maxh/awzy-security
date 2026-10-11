@@ -1,7 +1,7 @@
 # Written by tools/ci/check-quality-ratchets.sh --update. Counts may only go down.
-hyper_clients 21
+hyper_clients 14
 json_field_index 239
-kube_clients 4
+kube_clients 2
 large_file_excess_lines 2760
 large_files 10
 string_results 12
