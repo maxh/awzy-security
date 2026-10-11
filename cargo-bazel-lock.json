@@ -1,5 +1,5 @@
 {
-  "checksum": "0b5ee136d9b4dcc9b705b472dd852b5a7696576a55c0db518f2ea5635db4fdb0",
+  "checksum": "223289cdbb361a20db983f7b9ee0fd03c50511f32c0639814df126e073d9361d",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -3650,6 +3650,10 @@
             "target": "hyper_util"
           },
           {
+            "id": "jsonwebtoken 11.1.0",
+            "target": "jsonwebtoken"
+          },
+          {
             "id": "rmcp 3.5.1",
             "target": "rmcp"
           },
@@ -3691,6 +3695,10 @@
           }
         ],
         "deps_dev": [
+          {
+            "id": "p256 0.13.2",
+            "target": "p256"
+          },
           {
             "id": "tower 0.5.3",
             "target": "tower"
@@ -4768,6 +4776,10 @@
           {
             "id": "tokio 1.53.2",
             "target": "tokio"
+          },
+          {
+            "id": "tonic 0.14.6",
+            "target": "tonic"
           },
           {
             "id": "tracing 0.1.44",
