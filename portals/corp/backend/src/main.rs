@@ -24,8 +24,12 @@ async fn main() -> anyhow::Result<()> {
         .and_then(|url| awzy_corp_portal::alerts::SlackWebhook::from_url(url.trim()));
     let corp_url = std::env::var("AWZY_CORP_PORTAL_PUBLIC_URL").ok().map(|u| u.trim_end_matches('/').to_string());
     tokio::spawn(awzy_corp_portal::alerts::run(store.clone(), slack, corp_url));
-    let mut app = awzy_corp_portal::router(awzy_corp_portal::auth::Auth::from_env()?, store);
-    if let Some(dir) = awzy_portal::frontend_dir_from_env() {
+    // The built frontend carries the queries it sends by ID (ADR 0090). The corp portal also runs
+    // query text: it holds no client data, and staff point local frontends at production (ADR 0024).
+    let frontend = awzy_portal::frontend_dir_from_env();
+    let persisted = awzy_portal::PersistedQueries::from_frontend(frontend.as_deref(), false)?;
+    let mut app = awzy_corp_portal::router(awzy_corp_portal::auth::Auth::from_env()?, store, persisted);
+    if let Some(dir) = frontend {
         app = awzy_portal::with_frontend(app, &dir);
     }
     awzy_server::serve("awzy-corp-portal", app).await

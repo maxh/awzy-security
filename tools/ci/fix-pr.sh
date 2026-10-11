@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Makes a pull request's mechanical fixes so nobody has to run Bazel locally for them: re-pins
-# crate_universe's lockfiles, regenerates both portals' GraphQL schemas and Relay artifacts (with
-# the persisted queries the backends embed), and formats the Rust (rustfmt) and TypeScript
-# (oxfmt) the PR changed. Each step runs only when the PR touches what it fixes. When anything
+# crate_universe's lockfiles, regenerates both portals' GraphQL schemas, and formats the Rust
+# (rustfmt) and TypeScript (oxfmt) the PR changed. Relay's output isn't committed, so it isn't
+# regenerated here (ADR 0090). Each step runs only when the PR touches what it fixes. When anything
 # changed, it pushes one commit to the PR's branch and starts the PR's CI, which the workflow
 # token's push doesn't.
 #
@@ -32,24 +32,13 @@ if touches '(^|/)Cargo\.toml$|^Cargo\.lock$|^MODULE\.bazel$'; then
   echo "::endgroup::"
 fi
 
-if touches '^libs/(model|portal)/|^portals/[^/]+/backend/|^portals/[^/]+/frontend/(schema\.graphql$|src/)'; then
-  echo "::group::Regenerate GraphQL schemas and Relay artifacts"
+if touches '^libs/(model|portal)/|^portals/[^/]+/backend/|^portals/[^/]+/frontend/schema\.graphql$'; then
+  echo "::group::Regenerate GraphQL schemas"
   for portal in client corp; do
     bazel run --config=ci "//portals/$portal/frontend:update_schema" </dev/null
   done
-  pnpm install --frozen-lockfile
-  # From nothing, so persisted_queries.json holds exactly the queries the frontend sends (ADR
-  # 0088): the compiler adds to it but never removes, and persists only the artifacts it writes.
-  for portal in client corp; do
-    rm -rf "portals/$portal/frontend/src/__generated__"
-    echo '{}' >"portals/$portal/frontend/persisted_queries.json"
-    (cd "portals/$portal/frontend" && pnpm relay)
-  done
-  # A wildcard pathspec matches whole paths, so the artifacts' needs `**`, not a directory prefix.
-  generated=('portals/*/frontend/schema.graphql' 'portals/*/frontend/persisted_queries.json'
-    ':(glob)portals/*/frontend/src/__generated__/**')
-  [ -z "$(git status --porcelain -- "${generated[@]}")" ] || fixed+=("regenerate schemas")
-  paths+=("${generated[@]}")
+  [ -z "$(git status --porcelain -- 'portals/*/frontend/schema.graphql')" ] || fixed+=("regenerate schemas")
+  paths+=('portals/*/frontend/schema.graphql')
   echo "::endgroup::"
 fi
 

@@ -18,3 +18,7 @@ deploy/terraform/**/deployment.env
 # Credentials for trying the Drive and Jira connectors locally (ADR 0069, 0070).
 drive-key.json
 jira-token
+
+# Relay's output: `pnpm relay` and the frontends' Bazel `relay` targets generate it (ADR 0090).
+__generated__/
+portals/*/frontend/persisted_queries.json

@@ -50,8 +50,7 @@ complains about; skip it once with `git commit --no-verify`.
 
 On a pull request, the `fix-prs` workflow (`tools/ci/fix-pr.sh`) makes the mechanical fixes and
 pushes them to the branch as one commit, then starts CI again: it re-pins the lockfiles when a
-`Cargo.toml` or `MODULE.bazel` changed, regenerates the GraphQL schemas and Relay artifacts,
-and runs rustfmt and oxfmt on the files the PR changed. Pull before pushing again. Lint findings
+`Cargo.toml` or `MODULE.bazel` changed, regenerates the GraphQL schemas, and runs rustfmt and oxfmt on the files the PR changed. Pull before pushing again. Lint findings
 aren't fixed for you; CI reports them.
 
 If the hook stops a commit:
@@ -653,12 +652,18 @@ The corp portal needs Postgres for its registry: `AWZY_POSTGRES_URL=postgres://a
 
 ```sh
 bazel run //portals/client/frontend:update_schema   # regenerate schema.graphql from the Rust backend
-cd portals/client/frontend && pnpm relay && pnpm dev # https://localhost:5173 (with .dev-certs/), proxies /graphql and /auth/config to :8080
+cd portals/client/frontend && pnpm dev                # https://localhost:5173 (with .dev-certs/), proxies /graphql and /auth/config to :8080
 ```
 
-`bazel test` fails if `schema.graphql` or the committed Relay artifacts are stale. On a pull
-request you needn't regenerate them: the `fix-prs` workflow (`tools/ci/fix-pr.sh`) does, pushes
-them to the branch, and starts CI again.
+`bazel test` fails if `schema.graphql` is stale. On a pull request you needn't regenerate it: the
+`fix-prs` workflow (`tools/ci/fix-pr.sh`) does, pushes it to the branch, and starts CI again.
+
+Relay's output, `src/__generated__/` and `persisted_queries.json`, isn't committed
+([ADR 0090](docs/adr/0090-relay-output-is-generated-not-committed.md)). `pnpm relay` makes it from
+nothing, and `pnpm dev` and `pnpm build` run that first; run it yourself after pulling so your
+editor has the types. Bazel generates its own (the frontends' `relay` targets). The dev server's
+frontend sends each query's text, since a backend only has the queries of the built frontend it
+serves; a built frontend sends their IDs.
 
 `//portals/client/e2e:signin_test` signs in to the client portal in headless Chrome through the dev
 IdP (code + PKCE), switches users, and checks what the backend sees. It uses the machine's Chrome

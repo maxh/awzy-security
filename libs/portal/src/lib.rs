@@ -8,7 +8,7 @@ mod persisted;
 mod scalars;
 
 pub use actor::Actor;
-pub use persisted::PersistedQueries;
+pub use persisted::{PersistedQueries, PersistedQueriesError};
 pub use scalars::UtcTimestamp;
 
 /// The deepest query either portal runs. Deep enough for the frontends' Relay queries and

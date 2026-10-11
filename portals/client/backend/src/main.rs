@@ -18,8 +18,11 @@ async fn main() -> anyhow::Result<()> {
     services.bot = awzy_client_portal::awzy_bot::model_from_env().await;
     let auth = awzy_client_portal::access::Auth::from_env()?;
     let mcp_auth = awzy_client_portal::access::Auth::from_env_for_mcp()?;
-    let mut app = awzy_client_portal::router(services, auth, mcp_auth, mcp_hosts, persisted_only);
-    if let Some(dir) = awzy_portal::frontend_dir_from_env() {
+    // The built frontend carries the queries it sends by ID (ADR 0090).
+    let frontend = awzy_portal::frontend_dir_from_env();
+    let persisted = awzy_portal::PersistedQueries::from_frontend(frontend.as_deref(), persisted_only)?;
+    let mut app = awzy_client_portal::router(services, auth, mcp_auth, mcp_hosts, persisted);
+    if let Some(dir) = frontend {
         app = awzy_portal::with_frontend(app, &dir);
     }
     awzy_server::serve("awzy-client-portal", app).await

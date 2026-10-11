@@ -78,25 +78,13 @@ fn schema_builder() -> async_graphql::SchemaBuilder<CorpPortalQuery, CorpPortalM
         .limit_complexity(awzy_portal::MAX_QUERY_COMPLEXITY)
 }
 
-/// The frontend's queries by ID, from the Relay compiler (ADR 0088).
-const PERSISTED_QUERIES: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../frontend/persisted_queries.json"));
-
-/// The corp portal resolves its frontend's IDs but also runs query text: it holds no client data,
-/// and staff point local frontends at production (ADR 0024).
-fn persisted_queries() -> awzy_portal::PersistedQueries {
-    awzy_portal::PersistedQueries::new(PERSISTED_QUERIES, false)
-        .expect("persisted_queries.json is the Relay compiler's")
-}
-
 /// `/graphql` behind sign-in, the sign-in routes under `/auth`, and heartbeat intake at
-/// `/v1/heartbeat`.
-pub fn router(auth: Auth, store: FleetStore) -> Router {
+/// `/v1/heartbeat`. GraphQL resolves the frontend's queries by ID from `persisted` (ADR 0088,
+/// 0090).
+pub fn router(auth: Auth, store: FleetStore, persisted: awzy_portal::PersistedQueries) -> Router {
     let signed_in = middleware::from_fn_with_state(auth.clone(), auth::require_staff);
     let graphql = get(|| async { Html(GraphiQLSource::build().endpoint("/graphql").finish()) }).merge(
-        post(graphql)
-            .layer(signed_in)
-            .with_state(schema_builder().data(store.clone()).extension(persisted_queries()).finish()),
+        post(graphql).layer(signed_in).with_state(schema_builder().data(store.clone()).extension(persisted).finish()),
     );
     Router::new().route("/graphql", graphql).merge(auth::routes(auth)).merge(fleet::intake_routes(store))
 }
@@ -121,16 +109,6 @@ mod tests {
     use super::*;
     use crate::auth::{hash_password, StaffAccount};
 
-    #[test]
-    fn the_frontends_queries_are_embedded_and_parse() {
-        let queries: std::collections::HashMap<String, String> =
-            serde_json::from_str(super::PERSISTED_QUERIES).unwrap();
-        assert!(!queries.is_empty());
-        for text in queries.values() {
-            async_graphql::parser::parse_query(text).unwrap();
-        }
-    }
-
     #[tokio::test]
     async fn api_version_query() {
         let res = super::schema().execute("{ apiVersion }").await;
@@ -150,7 +128,7 @@ mod tests {
     /// Sign-in doesn't touch Postgres, so the store never connects.
     fn app() -> Router {
         let pool = sqlx::postgres::PgPoolOptions::new().connect_lazy("postgres://unused@localhost:1/unused").unwrap();
-        router(auth(), FleetStore::new(pool))
+        router(auth(), FleetStore::new(pool), awzy_portal::PersistedQueries::none())
     }
 
     async fn send(app: &Router, req: Request<Body>) -> (StatusCode, Option<String>, String) {
@@ -250,7 +228,7 @@ mod tests {
     #[tokio::test]
     async fn registered_installs_report_and_show_in_the_fleet() {
         let Some(store) = crate::fleet::tests::test_store().await else { return };
-        let app = router(auth(), store);
+        let app = router(auth(), store, awzy_portal::PersistedQueries::none());
         let cookie = session(&app).await;
 
         let (_, _, body) = send(

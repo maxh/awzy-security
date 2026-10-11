@@ -11,7 +11,10 @@ import { router } from "./router";
 import { currentStaff, SignInPage, StaffContext, type Staff } from "./session";
 
 // The session cookie goes with every request; an expired one sends the viewer back to sign in.
-const environment = createEnvironment("/graphql", { onUnauthorized: () => window.location.reload() });
+const environment = createEnvironment("/graphql", {
+  onUnauthorized: () => window.location.reload(),
+  sendQueryText: import.meta.env.DEV,
+});
 
 function App({ initial }: { initial: Staff | null }) {
   const [staff, setStaff] = useState(initial);

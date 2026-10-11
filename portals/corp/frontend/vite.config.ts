@@ -1,8 +1,21 @@
 import { existsSync, readFileSync } from "node:fs";
 
 import react from "@vitejs/plugin-react";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import relay from "vite-plugin-relay";
+
+// The queries this build sends by ID, in dist/ beside it: the backend loads them from the frontend
+// it serves (ADR 0090). `pnpm relay` or the Bazel `relay` target writes the file first.
+const persistedQueries: Plugin = {
+  name: "awzy-persisted-queries",
+  generateBundle() {
+    this.emitFile({
+      type: "asset",
+      fileName: "persisted_queries.json",
+      source: readFileSync("persisted_queries.json", "utf8"),
+    });
+  },
+};
 
 // https://localhost with the mkcert certificate in .dev-certs/ (see the README): the browser
 // trusts it, Secure cookies work in every browser, and IdPs that want HTTPS redirects accept it.
@@ -21,7 +34,7 @@ export default defineConfig(({ mode }) => {
   // changeOrigin: the deployed backend sees its own Host header, as it would behind its ingress.
   const proxy = { target: backend, changeOrigin: true, secure: true };
   return {
-    plugins: [react(), relay],
+    plugins: [react(), relay, persistedQueries],
     server: {
       port: 5174,
       https,

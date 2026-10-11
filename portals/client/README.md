@@ -16,7 +16,8 @@ The client's view of awzy, installed in their cluster with the rest of the insta
   frontend.
   Policies come from awzy-policy over gRPC, decisions from ClickHouse.
 - **`frontend/`** (`@awzy/client-portal`): the React app. `schema.graphql` is generated from the
-  backend; `bazel test` fails when it or the Relay artifacts are stale.
+  backend; `bazel test` fails when it's stale. Relay's output isn't committed: `pnpm relay`
+  makes it.
 - **`e2e/`**: signs in through the dev IdP in headless Chrome and checks who the backend thinks
   is signed in (`//portals/client/e2e:signin_test`).
 
