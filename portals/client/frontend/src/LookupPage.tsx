@@ -21,7 +21,7 @@ export function LookupPage() {
         <SegmentedControl
           w={320}
           value={kind}
-          onChange={(v) => setKind(v as "principal" | "resource")}
+          onChange={(v) => setKind(v)}
           data={[
             { value: "principal", label: "Principal" },
             { value: "resource", label: "Resource" },
@@ -42,7 +42,7 @@ function PrincipalLookup() {
       <Group align="flex-end">
         <SegmentedControl
           value={type}
-          onChange={(v) => setType(v as PrincipalType)}
+          onChange={(v) => setType(v)}
           data={[
             { value: "HUMAN", label: "Person" },
             { value: "SERVICE_ACCOUNT", label: "Service account" },
