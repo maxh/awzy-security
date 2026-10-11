@@ -235,7 +235,7 @@ pub struct SupportSession(WireSession);
 #[Object]
 impl SupportSession {
     /// Its QID, which the corp portal minted.
-    async fn id(&self) -> ID {
+    pub async fn id(&self) -> ID {
         ID(self.0.request.as_ref().map(|r| r.qid.clone()).unwrap_or_default())
     }
 

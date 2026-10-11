@@ -30,7 +30,7 @@ pub struct SecurityKey(WireKey);
 #[Object]
 impl SecurityKey {
     /// QID: security_key_<uuid>.
-    async fn id(&self) -> ID {
+    pub async fn id(&self) -> ID {
         ID(self.0.qid.clone())
     }
 
