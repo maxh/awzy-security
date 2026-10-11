@@ -21,7 +21,7 @@ const MIN_REQUESTS: u64 = 10;
 /// Points for a day entirely through MCP, scaled by the share that was.
 const MOST_FOR_MCP: f64 = 60.0;
 /// Requests in one minute a person rarely passes, points per request beyond it, and the most.
-const PERSON_PER_MINUTE: u64 = 20;
+const HUMAN_PER_MINUTE: u64 = 20;
 const POINTS_PER_EXTRA_REQUEST: u64 = 2;
 const MOST_FOR_BURSTS: u64 = 40;
 
@@ -45,10 +45,10 @@ pub fn score(day: Day) -> Option<Score> {
         points += p;
         reasons.push(format!("{} of {} requests in the last day came through MCP", day.through_mcp, day.requests));
     }
-    if day.busiest_minute > PERSON_PER_MINUTE {
-        points += ((day.busiest_minute - PERSON_PER_MINUTE) * POINTS_PER_EXTRA_REQUEST).min(MOST_FOR_BURSTS);
+    if day.busiest_minute > HUMAN_PER_MINUTE {
+        points += ((day.busiest_minute - HUMAN_PER_MINUTE) * POINTS_PER_EXTRA_REQUEST).min(MOST_FOR_BURSTS);
         reasons.push(format!(
-            "{} requests in its busiest minute; a person rarely passes {PERSON_PER_MINUTE}",
+            "{} requests in its busiest minute; a person rarely passes {HUMAN_PER_MINUTE}",
             day.busiest_minute
         ));
     }
