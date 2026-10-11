@@ -29,3 +29,12 @@ variable "grafana_admin_user_ids" {
   type        = list(string)
   default     = []
 }
+
+variable "traces" {
+  description = "Which traces the collector keeps (ADR 0097): every failed one, every one slower than slow_ms, and sample_percent of the rest"
+  type = object({
+    slow_ms        = optional(number, 25)
+    sample_percent = optional(number, 1)
+  })
+  default = {}
+}

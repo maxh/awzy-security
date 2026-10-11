@@ -213,18 +213,22 @@ the cluster on it.
 
 ## 8. Monitoring (optional)
 
-Every awzy service serves Prometheus metrics. On AWS, two more modules watch them for you:
+Every awzy service serves Prometheus metrics, and sends OpenTelemetry traces to a collector you
+name in bootstrap's `tracing`. On AWS, two more modules watch them for you:
 
 - [`deploy/terraform/aws/monitoring`](deploy/terraform/aws/monitoring): Amazon Managed Service for
-  Prometheus, fed by its managed scraper (nothing more runs in your cluster), with awzy's alert
-  rules routed to an SNS topic and the `alert_emails` you give it; and an Amazon Managed Grafana
-  workspace, signed in to through your IAM Identity Center, that reads Prometheus and CloudWatch
-  (Aurora, MSK, ElastiCache). Pass it the cloud layer's `monitoring` output.
+  Prometheus, fed by its managed scraper, with awzy's alert rules routed to an SNS topic and the
+  `alert_emails` you give it; an OpenTelemetry collector in the cluster that keeps every failed or
+  slow trace and a sample of the rest, and writes them to X-Ray; and an Amazon Managed Grafana
+  workspace, signed in to through your IAM Identity Center, that reads Prometheus, X-Ray, and
+  CloudWatch (Aurora, MSK, ElastiCache). Pass it the cloud layer's `monitoring` output, then set
+  bootstrap's `tracing.otlp_endpoint` to its `otlp_endpoint` output.
 - [`deploy/terraform/grafana`](deploy/terraform/grafana): awzy's dashboards and data sources, in
   that workspace or any Grafana of yours. Apply it after the first, with the `grafana` output.
 
-You can use your own monitoring instead: scrape each awzy pod's `/metrics` (port `http`), and load
-[`deploy/observability`](deploy/observability)'s alert rules and dashboards into it.
+You can use your own monitoring instead: scrape each awzy pod's `/metrics` (port `http`), load
+[`deploy/observability`](deploy/observability)'s alert rules and dashboards into it, and point
+`tracing.otlp_endpoint` at your own OpenTelemetry collector (OTLP over gRPC).
 
 ## Operating an install
 

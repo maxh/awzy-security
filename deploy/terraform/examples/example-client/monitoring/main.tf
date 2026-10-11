@@ -68,6 +68,10 @@ module "monitoring" {
   grafana_admin_user_ids = var.grafana_admin_user_ids
 }
 
+output "otlp_endpoint" {
+  value = module.monitoring.otlp_endpoint
+}
+
 output "grafana" {
   value     = module.monitoring.grafana
   sensitive = true

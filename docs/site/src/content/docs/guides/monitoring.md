@@ -10,6 +10,15 @@ On AWS, the `aws/monitoring` module runs Amazon Managed Prometheus with a scrape
 and loads the alert rules, and the `grafana` module loads the dashboard into any Grafana. You can
 use your own Prometheus and Grafana instead: load the same files.
 
+## Traces
+
+Every service sends OpenTelemetry traces over OTLP (gRPC) to the collector named in bootstrap's
+`tracing.otlp_endpoint`, so a slow check opens as one trace: the enforcement point, the PDP, and
+the awzy-context and awzy-challenge calls it made. Traces stay in your account. Send them all
+(`sample_ratio = 1`, the default) and let the collector choose which to keep. On AWS,
+`aws/monitoring` runs a collector that keeps every failed trace, every one slower than 25 ms, and
+1% of the rest, and writes them to X-Ray, which its Grafana reads.
+
 ## The dashboard
 
 `awzy-operator` shows each service's readiness and release, the PDP's checks, latency, Cedar time,

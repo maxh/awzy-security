@@ -36,8 +36,21 @@ data "terraform_remote_state" "install" {
   }
 }
 
+# Traces go to the collector monitoring/ runs, once it's applied (ADR 0097).
+data "terraform_remote_state" "monitoring" {
+  backend = "s3"
+  config = {
+    bucket  = var.state_bucket
+    key     = "example-client/monitoring/terraform.tfstate"
+    region  = var.region
+    profile = var.management_profile
+  }
+  defaults = { otlp_endpoint = null }
+}
+
 locals {
-  contract = data.terraform_remote_state.install.outputs.install_contract
+  contract      = data.terraform_remote_state.install.outputs.install_contract
+  otlp_endpoint = data.terraform_remote_state.monitoring.outputs.otlp_endpoint
 }
 
 provider "aws" {
@@ -134,6 +147,7 @@ module "bootstrap" {
   demo_data     = true
   demo_activity = true
   mcp_gateway   = { upstreams = [] }
+  tracing       = local.otlp_endpoint == null ? null : { otlp_endpoint = local.otlp_endpoint }
 }
 
 variable "chart_version" {
