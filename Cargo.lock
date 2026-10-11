@@ -724,6 +724,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "awzy-intake",
+ "awzy-kafka",
  "awzy-model",
  "awzy-pdp",
  "awzy-server",
@@ -981,6 +982,7 @@ name = "awzy-intake"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "awzy-kafka",
  "awzy-model",
  "awzy-server",
  "awzy-telemetry",
@@ -995,6 +997,18 @@ dependencies = [
  "tower",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "awzy-kafka"
+version = "0.1.0"
+dependencies = [
+ "rcgen",
+ "rskafka",
+ "rustls",
+ "rustls-pki-types",
+ "thiserror 2.0.21",
+ "webpki-roots 1.0.9",
 ]
 
 [[package]]
@@ -1039,6 +1053,7 @@ dependencies = [
  "anyhow",
  "arc-swap",
  "awzy-authz-proto",
+ "awzy-kafka",
  "awzy-model",
  "awzy-server",
  "awzy-service-auth",
@@ -1166,6 +1181,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "awzy-heartbeat",
+ "awzy-kafka",
  "awzy-model",
  "awzy-server",
  "awzy-telemetry",
@@ -4256,8 +4272,10 @@ dependencies = [
  "parking_lot",
  "rand 0.8.8",
  "rsasl",
+ "rustls",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-rustls",
  "tracing",
 ]
 
@@ -4295,6 +4313,7 @@ version = "0.23.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
 dependencies = [
+ "log",
  "once_cell",
  "ring",
  "rustls-pki-types",
