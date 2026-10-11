@@ -90,3 +90,24 @@ the last known resource, which may be out of date. Check awzy-context and Postgr
 awzy-gateway can't reach the PDP, so tool calls follow the outage tiers set in the client portal:
 replayed or denied. Check the PDP's pods and their readiness, then the network between the
 gateway and the PDP.
+
+## What awzy sees, and what you see
+
+Two views start from the same `/metrics`, for different people.
+
+| | awzy's corp portal | Your monitoring |
+| --- | --- | --- |
+| **Who sees it** | awzy staff | Your team. awzy has no access |
+| **Where it lives** | awzy's own account | Your account, beside the install |
+| **How the data gets there** | awzy-reporter scrapes the pods, reduces them to a heartbeat, and sends it once a minute: the only thing that leaves your install | Your Prometheus scrapes every pod directly, at full resolution |
+| **What's in it** | A fixed summary: decisions per second, PDP p99, error rate, Kafka lag, ClickHouse disk use, the freshness ages, tool calls during PDP outages, and each service's version and replicas. Never data about your people, resources, decisions, or policies | Every series, per pod: the dashboard, the alerts, traces, and your cloud's metrics for Postgres, Kafka, and Valkey (CloudWatch on AWS) |
+| **What it's for** | Seeing the fleet: which installs are healthy, how a release is rolling out, where support should look | Running your install: alerts that reach your on-call, and finding why something is slow |
+
+- **They agree.** The heartbeat's PDP p99 and the dashboard's come from the same histogram; the
+  heartbeat sends one number a minute instead of the series.
+- **The heartbeat is deliberately thin.** It tells awzy that something is wrong and roughly
+  where, not why. Finding out why takes your monitoring, a support session your admin approves,
+  or a diagnostics bundle your admin reviews and sends.
+- **You can see what leaves.** The client portal's Status page shows the last heartbeat sent,
+  and you can turn reporting off (bootstrap's `reporter = null`). Your own monitoring doesn't
+  depend on it.
