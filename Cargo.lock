@@ -802,7 +802,9 @@ dependencies = [
  "awzy-challenge",
  "awzy-clickhouse",
  "awzy-cloud",
+ "awzy-http",
  "awzy-identity",
+ "awzy-kube",
  "awzy-llm",
  "awzy-model",
  "awzy-pdp",
@@ -816,13 +818,8 @@ dependencies = [
  "bytes",
  "chrono",
  "clickhouse",
- "http-body-util",
- "hyper-rustls",
- "hyper-util",
  "jsonwebtoken",
  "rmcp",
- "rustls",
- "rustls-pki-types",
  "serde",
  "serde_json",
  "sqlx",
@@ -846,6 +843,7 @@ name = "awzy-connectors"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "awzy-http",
  "awzy-server",
  "awzy-service-auth",
  "awzy-telemetry",
@@ -853,11 +851,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "chrono",
- "http-body-util",
- "hyper-rustls",
- "hyper-util",
  "jsonwebtoken",
- "rustls",
  "serde",
  "serde_json",
  "tokio",
@@ -1010,6 +1004,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "awzy-http"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "http",
+ "http-body-util",
+ "hyper-rustls",
+ "hyper-util",
+ "rustls",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "awzy-identity"
 version = "0.1.0"
 dependencies = [
@@ -1068,6 +1077,19 @@ dependencies = [
  "rustls-pki-types",
  "thiserror 2.0.21",
  "webpki-roots 1.0.9",
+]
+
+[[package]]
+name = "awzy-kube"
+version = "0.1.0"
+dependencies = [
+ "awzy-http",
+ "axum",
+ "rustls",
+ "rustls-pki-types",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]
@@ -1242,7 +1264,9 @@ dependencies = [
  "anyhow",
  "awzy-authz-proto",
  "awzy-heartbeat",
+ "awzy-http",
  "awzy-kafka",
+ "awzy-kube",
  "awzy-model",
  "awzy-server",
  "awzy-service-auth",
@@ -1252,11 +1276,7 @@ dependencies = [
  "chrono",
  "clickhouse",
  "http-body-util",
- "hyper-rustls",
- "hyper-util",
  "rskafka",
- "rustls",
- "rustls-pki-types",
  "serde",
  "serde_json",
  "tokio",

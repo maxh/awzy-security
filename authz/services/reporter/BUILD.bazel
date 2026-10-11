@@ -12,6 +12,8 @@ awzy_service(
         "//authz/libs/proto",
         "//authz/libs/service-auth",
         "//libs/heartbeat",
+        "//libs/kube",
+        "//libs/http",
         "//libs/model",
         "//libs/server",
         "//libs/telemetry",

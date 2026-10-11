@@ -1,0 +1,7 @@
+load("//tools:rust.bzl", "awzy_rust_library")
+
+# One way to make an HTTP call (#223): the client, a whole-response timeout, and encoding.
+awzy_rust_library(
+    name = "http",
+    crate_name = "awzy_http",
+)

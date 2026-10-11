@@ -1,11 +1,10 @@
 //! The Connectors page: which systems of record awzy reads (Google Drive, Jira), what each was
-//! configured with, and whether it's syncing. Read from awzy-connectors; connectors are configured
-//! in the chart's values today.
+//! configured with, and whether it's syncing. Read from awzy-connectors; `connector_config` is
+//! where they're configured.
 
 use async_graphql::{Context, Object, Result, SimpleObject};
 use awzy_portal::UtcTimestamp;
 use chrono::{DateTime, Utc};
-use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use serde_json::Value;
 
 use crate::{
@@ -86,7 +85,7 @@ impl ConnectorsQuery {
     /// enforcement area.
     async fn connectors(&self, ctx: &Context<'_>) -> Result<Vec<Connector>> {
         require(ctx, PortalAction::View, PortalArea::Enforcement).await?;
-        let client: HttpClient = Client::builder(TokioExecutor::new()).build_http();
+        let client = awzy_http::client();
         connectors(&client, std::env::var("AWZY_CONNECTORS_ADDR").ok()).await
     }
 }
@@ -99,7 +98,7 @@ mod tests {
 
     #[tokio::test]
     async fn connectors_are_none_unreachable_or_as_awzy_connectors_reports_them() {
-        let client: HttpClient = Client::builder(TokioExecutor::new()).build_http();
+        let client = awzy_http::client();
         assert!(connectors(&client, None).await.unwrap().is_empty(), "nothing configured");
         let gone = connectors(&client, Some("http://127.0.0.1:9".into())).await.unwrap_err();
         assert!(gone.message.starts_with("awzy-connectors is unreachable"));
