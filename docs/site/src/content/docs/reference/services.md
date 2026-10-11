@@ -49,7 +49,7 @@ Three databases on your managed Postgres (Aurora on AWS). Each service migrates 
 
 | Topic | Written by | Read by |
 | --- | --- | --- |
-| `awzy.decisions.v1` | awzy-pdp, one record per decision, keyed by subject | ClickHouse |
+| `awzy.decisions.v1` | awzy-pdp, one record per decision, keyed by principal | ClickHouse |
 | `awzy.events.v1` | awzy-intake, one record per event | ClickHouse |
 
 ### ClickHouse

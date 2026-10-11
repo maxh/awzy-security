@@ -97,7 +97,7 @@ impl Containments {
                 LOOKUP_TIMEOUT,
                 client.clone().list_containments(ListContainmentsRequest {
                     active_only: true,
-                    subject: Some((*w).clone().into()),
+                    principal: Some((*w).clone().into()),
                     limit: 1,
                     // Recorded, not applied (ADR 0066).
                     include_monitor: false,
@@ -126,7 +126,7 @@ impl Containments {
         while let Some(msg) = stream.message().await? {
             if msg.changed {
                 let count = msg.active.len();
-                self.load(msg.active.into_iter().filter_map(|c| Some((c.subject?.into(), c.qid))));
+                self.load(msg.active.into_iter().filter_map(|c| Some((c.principal?.into(), c.qid))));
                 tracing::info!(version = msg.version, active = count, "loaded containments");
             } else {
                 self.heard();

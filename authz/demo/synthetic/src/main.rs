@@ -153,12 +153,12 @@ async fn activity(args: &[String]) -> anyhow::Result<()> {
             id += 1;
             let outcome = driver.send(a, id).await;
             if let awzy_synthetic::driver::Outcome::Failed(why) = &outcome {
-                tracing::warn!(subject = %a.subject, resource = %a.resource, %why, "call failed");
+                tracing::warn!(principal = %a.principal, resource = %a.resource, %why, "call failed");
             }
             match step {
                 Some(step) => {
                     let caught = step.expect.met_by(&outcome);
-                    tracing::info!(scenario = step.scenario, subject = %a.subject, resource = %a.resource,
+                    tracing::info!(scenario = step.scenario, principal = %a.principal, resource = %a.resource,
                         expected = ?step.expect, ?outcome, caught, "scenario step");
                     detection.add_step(step, &outcome);
                 }

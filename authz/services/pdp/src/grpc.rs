@@ -4,7 +4,7 @@ use awzy_authz_proto::authz::v1::{
     authorizer_server::{Authorizer, AuthorizerServer},
     CheckRequest, CheckResponse,
 };
-use awzy_model::AccessRequest;
+use awzy_model::Check;
 use axum::Router;
 use tonic::{Request, Response, Status};
 
@@ -17,7 +17,7 @@ impl Authorizer for Service {
     async fn check(&self, request: Request<CheckRequest>) -> Result<Response<CheckResponse>, Status> {
         let mut req = request.into_inner();
         let entities = awzy_authz_proto::entities_to_json(std::mem::take(&mut req.entities));
-        let access = AccessRequest::try_from(req).map_err(|e| Status::invalid_argument(e.to_string()))?;
+        let access = Check::try_from(req).map_err(|e| Status::invalid_argument(e.to_string()))?;
         let decision = self.0.check(&access, entities).await.map_err(|e| match e {
             crate::CheckError::NotReady | crate::CheckError::Unavailable(_) => Status::unavailable(e.to_string()),
             crate::CheckError::Invalid(_) => Status::invalid_argument(e.to_string()),
@@ -54,7 +54,7 @@ mod tests {
         let mut client = AuthorizerClient::connect(format!("http://{addr}")).await.unwrap();
         let res = client
             .check(CheckRequest {
-                subject: Some(r("ServiceAccount", "sales-genie")),
+                principal: Some(r("ServiceAccount", "sales-genie")),
                 action: "read".into(),
                 resource: Some(r("Resource", "design-doc")),
                 context: obj(json!({ "risk_score": 95 })),

@@ -59,7 +59,8 @@ pub struct AppEvent {
     pub at: DateTime<Utc>,
     /// The app that logged it.
     pub system: String,
-    pub subject: EntityRef,
+    /// Who did it.
+    pub principal: EntityRef,
     #[serde(default)]
     pub on_behalf_of: Option<EntityRef>,
     pub action: String,
@@ -83,8 +84,8 @@ pub fn app(batch: AppBatch, now: DateTime<Utc>) -> Result<Vec<EventRecord>, Norm
         .map(|(i, e)| {
             for (field, value) in [
                 ("system", &e.system),
-                ("subject.type", &e.subject.kind),
-                ("subject.id", &e.subject.id),
+                ("principal.type", &e.principal.kind),
+                ("principal.id", &e.principal.id),
                 ("action", &e.action),
             ] {
                 if value.trim().is_empty() {
@@ -104,8 +105,8 @@ pub fn app(batch: AppBatch, now: DateTime<Utc>) -> Result<Vec<EventRecord>, Norm
                 received_at: now,
                 source: "app".into(),
                 system: e.system,
-                subject_type: e.subject.kind,
-                subject_id: e.subject.id,
+                principal_type: e.principal.kind,
+                principal_id: e.principal.id,
                 on_behalf_of_type: on_behalf_of.kind,
                 on_behalf_of_id: on_behalf_of.id,
                 action: e.action,
@@ -128,7 +129,7 @@ pub struct CloudTrailBatch {
     pub records: Vec<Value>,
 }
 
-/// The subject is the calling AWS principal's ARN (`AwsPrincipal`), or the AWS service that
+/// The principal is the calling AWS principal's ARN (`AwsPrincipal`), or the AWS service that
 /// called (`AwsService`). Mapping ARNs to people and service accounts is awzy-context's job, so
 /// the event keeps what CloudTrail said.
 pub fn aws_cloudtrail(batch: CloudTrailBatch, now: DateTime<Utc>) -> Result<Vec<EventRecord>, NormalizeError> {
@@ -149,7 +150,7 @@ fn cloudtrail_record(i: usize, r: &Value, now: DateTime<Utc>) -> Result<EventRec
     let action = required("eventName")?;
 
     let identity = &r["userIdentity"];
-    let (subject_type, subject_id) = match (identity["arn"].as_str(), identity["invokedBy"].as_str()) {
+    let (principal_type, principal_id) = match (identity["arn"].as_str(), identity["invokedBy"].as_str()) {
         (Some(arn), _) if !arn.is_empty() => ("AwsPrincipal", arn.to_string()),
         (_, Some(service)) if !service.is_empty() => ("AwsService", service.to_string()),
         _ => match identity["principalId"].as_str() {
@@ -179,8 +180,8 @@ fn cloudtrail_record(i: usize, r: &Value, now: DateTime<Utc>) -> Result<EventRec
         received_at: now,
         source: "aws_cloudtrail".into(),
         system,
-        subject_type: subject_type.into(),
-        subject_id,
+        principal_type: principal_type.into(),
+        principal_id,
         on_behalf_of_type: String::new(),
         on_behalf_of_id: String::new(),
         action,
@@ -209,7 +210,7 @@ mod tests {
         let batch = app_batch(json!([{
             "at": "2026-10-09T10:30:00-04:00",
             "system": "jira",
-            "subject": { "type": "ServiceAccount", "id": "code-helper" },
+            "principal": { "type": "ServiceAccount", "id": "code-helper" },
             "on_behalf_of": { "type": "Human", "id": "bob" },
             "action": "read",
             "resource": { "type": "Ticket", "id": "ENG-42" },
@@ -220,7 +221,7 @@ mod tests {
         assert_eq!(e.at, "2026-10-09T14:30:00Z".parse::<DateTime<Utc>>().unwrap());
         assert_eq!(e.received_at, now());
         assert_eq!((e.source.as_str(), e.system.as_str()), ("app", "jira"));
-        assert_eq!((e.subject_type.as_str(), e.subject_id.as_str()), ("ServiceAccount", "code-helper"));
+        assert_eq!((e.principal_type.as_str(), e.principal_id.as_str()), ("ServiceAccount", "code-helper"));
         assert_eq!((e.on_behalf_of_type.as_str(), e.on_behalf_of_id.as_str()), ("Human", "bob"));
         assert_eq!((e.resource_type.as_str(), e.resource_id.as_str()), ("Ticket", "ENG-42"));
         assert_eq!(e.attributes, r#"{"project":"ENG"}"#);
@@ -229,7 +230,7 @@ mod tests {
 
     #[test]
     fn one_bad_app_event_rejects_the_batch_and_names_it() {
-        let good = json!({ "at": "2026-10-09T14:00:00Z", "system": "jira", "subject": { "type": "Human", "id": "bob" }, "action": "read" });
+        let good = json!({ "at": "2026-10-09T14:00:00Z", "system": "jira", "principal": { "type": "Human", "id": "bob" }, "action": "read" });
         let mut no_action = good.clone();
         no_action["action"] = json!("");
         assert_eq!(app(app_batch(json!([good, no_action])), now()), Err(invalid(1, "`action` is required")));
@@ -237,13 +238,13 @@ mod tests {
 
     #[test]
     fn events_from_a_clock_far_ahead_are_refused() {
-        let ahead = json!([{ "at": "2026-10-09T15:10:00Z", "system": "jira", "subject": { "type": "Human", "id": "bob" }, "action": "read" }]);
+        let ahead = json!([{ "at": "2026-10-09T15:10:00Z", "system": "jira", "principal": { "type": "Human", "id": "bob" }, "action": "read" }]);
         assert!(matches!(app(app_batch(ahead), now()), Err(NormalizeError::Invalid { index: 0, .. })));
     }
 
     #[test]
     fn unknown_outcomes_and_fields_are_refused() {
-        let odd = json!([{ "at": "2026-10-09T14:00:00Z", "system": "jira", "subject": { "type": "Human", "id": "bob" }, "action": "read", "outcome": "ok" }]);
+        let odd = json!([{ "at": "2026-10-09T14:00:00Z", "system": "jira", "principal": { "type": "Human", "id": "bob" }, "action": "read", "outcome": "ok" }]);
         assert!(app(app_batch(odd), now()).is_err());
         let extra = json!({ "events": [], "user": "bob" });
         assert!(serde_json::from_value::<AppBatch>(extra).is_err());
@@ -252,7 +253,7 @@ mod tests {
     #[test]
     fn empty_and_oversized_batches_are_refused() {
         assert_eq!(app(app_batch(json!([])), now()), Err(NormalizeError::Empty));
-        let e = json!({ "at": "2026-10-09T14:00:00Z", "system": "s", "subject": { "type": "Human", "id": "b" }, "action": "a" });
+        let e = json!({ "at": "2026-10-09T14:00:00Z", "system": "s", "principal": { "type": "Human", "id": "b" }, "action": "a" });
         let many = Value::Array(vec![e; MAX_EVENTS + 1]);
         assert_eq!(app(app_batch(many), now()), Err(NormalizeError::TooMany(MAX_EVENTS + 1)));
     }
@@ -285,7 +286,7 @@ mod tests {
             ("aws_cloudtrail", "s3.amazonaws.com", "GetObject")
         );
         assert_eq!(
-            (s3.subject_type.as_str(), s3.subject_id.as_str()),
+            (s3.principal_type.as_str(), s3.principal_id.as_str()),
             ("AwsPrincipal", "arn:aws:sts::111122223333:assumed-role/Analyst/carol")
         );
         assert_eq!(
@@ -297,7 +298,7 @@ mod tests {
         assert_eq!(attrs["eventID"], "6f1c0d0e-0000-4000-8000-000000000001");
         assert_eq!(attrs["userIdentityType"], "AssumedRole");
 
-        assert_eq!((kms.subject_type.as_str(), kms.subject_id.as_str()), ("AwsService", "s3.amazonaws.com"));
+        assert_eq!((kms.principal_type.as_str(), kms.principal_id.as_str()), ("AwsService", "s3.amazonaws.com"));
         assert_eq!(kms.outcome, "failure");
         assert_eq!(kms.resource_id, "");
     }

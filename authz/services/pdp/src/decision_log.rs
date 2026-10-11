@@ -1,7 +1,7 @@
 //! Sends every decision to Kafka, where ClickHouse picks it up (see authz/jobs/clickhouse-migrate).
 //!
 //! Recording is fire-and-forget: records go into a bounded buffer and a background task
-//! batches them to the topic, partitioned by subject so one principal's decisions stay in order.
+//! batches them to the topic, partitioned by principal so one principal's decisions stay in order.
 //! When Kafka is slow or down and the buffer fills, records are dropped and counted rather
 //! than slowing decisions down.
 
@@ -126,7 +126,7 @@ async fn produce_with_retry(client: &PartitionClient, records: Vec<Record>) {
 
 fn to_kafka(r: &DecisionRecord) -> Record {
     Record {
-        key: Some(r.subject_id.clone().into_bytes()),
+        key: Some(r.principal_id.clone().into_bytes()),
         value: Some(serde_json::to_vec(r).expect("DecisionRecord serializes")),
         headers: BTreeMap::new(),
         timestamp: r.at,
@@ -136,7 +136,7 @@ fn to_kafka(r: &DecisionRecord) -> Record {
 /// Stable across processes and releases (FNV-1a), unlike std's hasher.
 fn partition_for(r: &DecisionRecord, partitions: usize) -> usize {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in r.subject_type.bytes().chain([0]).chain(r.subject_id.bytes()) {
+    for b in r.principal_type.bytes().chain([0]).chain(r.principal_id.bytes()) {
         hash = (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
     }
     (hash % partitions as u64) as usize
@@ -147,12 +147,12 @@ mod tests {
     use super::*;
     use awzy_model::DecisionId;
 
-    fn record(subject: &str) -> DecisionRecord {
+    fn record(principal: &str) -> DecisionRecord {
         DecisionRecord {
             id: DecisionId::new(),
             at: chrono::Utc::now(),
-            subject_type: "Human".into(),
-            subject_id: subject.into(),
+            principal_type: "Human".into(),
+            principal_id: principal.into(),
             on_behalf_of_type: String::new(),
             on_behalf_of_id: String::new(),
             human_present: true,

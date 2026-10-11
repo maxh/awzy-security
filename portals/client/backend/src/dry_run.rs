@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 
 use async_graphql::{Context, Object, Result, SimpleObject, ID};
-use awzy_model::{AccessRequest, Decision, EntityRef, PolicyBundleId, Verdict};
+use awzy_model::{Check, Decision, EntityRef, PolicyBundleId, Verdict};
 use awzy_pdp::{replay::Replayer, Pdp};
 use chrono::{Duration, Utc};
 use serde::Deserialize;
@@ -27,8 +27,8 @@ const EXAMPLES: usize = 5;
 /// One distinct request from the decision log, and how many times it was decided.
 #[derive(Debug, Clone, clickhouse::Row, Deserialize)]
 pub struct RequestGroup {
-    pub subject_type: String,
-    pub subject_id: String,
+    pub principal_type: String,
+    pub principal_id: String,
     pub on_behalf_of_type: String,
     pub on_behalf_of_id: String,
     pub human_present: bool,
@@ -41,7 +41,7 @@ pub struct RequestGroup {
 }
 
 const GROUP_BY: &str =
-    "subject_type, subject_id, on_behalf_of_type, on_behalf_of_id, human_present, action, resource_type, resource_id, context";
+    "principal_type, principal_id, on_behalf_of_type, on_behalf_of_id, human_present, action, resource_type, resource_id, context";
 
 /// The most frequent distinct requests since `days` ago, how many decisions there were in all,
 /// and how many distinct requests.
@@ -71,13 +71,13 @@ pub async fn recent_requests(
     Ok((groups, total, distinct))
 }
 
-fn request_of(g: &RequestGroup) -> anyhow::Result<AccessRequest> {
+fn request_of(g: &RequestGroup) -> anyhow::Result<Check> {
     let context = match g.context.trim() {
         "" => Default::default(),
         c => serde_json::from_str(c)?,
     };
-    Ok(AccessRequest {
-        subject: EntityRef::new(&g.subject_type, &g.subject_id),
+    Ok(Check {
+        principal: EntityRef::new(&g.principal_type, &g.principal_id),
         action: g.action.clone(),
         resource: EntityRef::new(&g.resource_type, &g.resource_id),
         context,
@@ -97,8 +97,8 @@ fn verdict_label(d: &Decision) -> String {
 
 #[derive(SimpleObject, Clone)]
 pub struct PolicyDryRunExample {
-    pub subject_type: String,
-    pub subject_id: String,
+    pub principal_type: String,
+    pub principal_id: String,
     /// The person a service account acted for, if any.
     pub on_behalf_of_id: Option<String>,
     pub action: String,
@@ -168,7 +168,7 @@ pub async fn compare(
             Ok(pair) => pair,
             Err(e) => {
                 skipped += 1;
-                skipped_reason.get_or_insert_with(|| format!("{} on {}: {e}", g.subject_id, g.resource_id));
+                skipped_reason.get_or_insert_with(|| format!("{} on {}: {e}", g.principal_id, g.resource_id));
                 continue;
             }
         };
@@ -189,8 +189,8 @@ pub async fn compare(
         // Groups arrive most frequent first, so the first few are the examples.
         if change.examples.len() < EXAMPLES {
             change.examples.push(PolicyDryRunExample {
-                subject_type: g.subject_type.clone(),
-                subject_id: g.subject_id.clone(),
+                principal_type: g.principal_type.clone(),
+                principal_id: g.principal_id.clone(),
                 on_behalf_of_id: (!g.on_behalf_of_id.is_empty()).then(|| g.on_behalf_of_id.clone()),
                 action: g.action.clone(),
                 resource_id: g.resource_id.clone(),
@@ -261,10 +261,10 @@ mod tests {
     use super::*;
     use crate::policies::tests::{serve_fake_policy, FakePolicy};
 
-    fn group(subject: &str, resource: &str, decisions: u64, context: &str) -> RequestGroup {
+    fn group(principal: &str, resource: &str, decisions: u64, context: &str) -> RequestGroup {
         RequestGroup {
-            subject_type: "Human".into(),
-            subject_id: subject.into(),
+            principal_type: "Human".into(),
+            principal_id: principal.into(),
             on_behalf_of_type: String::new(),
             on_behalf_of_id: String::new(),
             human_present: true,
@@ -311,7 +311,7 @@ mod tests {
         assert_eq!(changes.len(), 1);
         let c = &changes[0];
         assert_eq!((c.from.as_str(), c.to.as_str(), c.decisions, c.requests), ("allow", "deny", 42, 2));
-        assert_eq!(c.examples[0].subject_id, "alice", "most frequent first");
+        assert_eq!(c.examples[0].principal_id, "alice", "most frequent first");
         assert_eq!(c.examples[0].policies_before, ["security-team-read"]);
         assert_eq!(c.examples[0].policies_after, ["no-security-reads"]);
         assert!(c.examples[0].sample_decision_qid.starts_with("decision_"));
@@ -341,9 +341,9 @@ mod tests {
         awzy_clickhouse::migrate(&ch, &settings).await.unwrap();
         // alice read board-deck 3 times and bob design-doc once in the window; carol 40 days ago.
         let now = Utc::now().timestamp_millis();
-        let row = |subject: &str, resource: &str, at: i64| {
+        let row = |principal: &str, resource: &str, at: i64| {
             format!(
-                "('{}', fromUnixTimestamp64Milli({at}, 'UTC'), 'Human', '{subject}', 'read', 'Resource', '{resource}', 'allow', [], true, '')",
+                "('{}', fromUnixTimestamp64Milli({at}, 'UTC'), 'Human', '{principal}', 'read', 'Resource', '{resource}', 'allow', [], true, '')",
                 Uuid::now_v7()
             )
         };
@@ -356,7 +356,7 @@ mod tests {
             row("carol", "q3-plan", now - 40 * day),
         ];
         ch.query(&format!(
-            "INSERT INTO decisions (id, at, subject_type, subject_id, action, resource_type, resource_id, verdict, policies, human_present, context) VALUES {}",
+            "INSERT INTO decisions (id, at, principal_type, principal_id, action, resource_type, resource_id, verdict, policies, human_present, context) VALUES {}",
             rows.join(",")
         ))
         .execute()
@@ -365,7 +365,7 @@ mod tests {
 
         let (groups, total, distinct) = recent_requests(&ch, 7, 10).await.unwrap();
         assert_eq!((total, distinct), (4, 2));
-        assert_eq!((groups[0].subject_id.as_str(), groups[0].decisions), ("alice", 3));
+        assert_eq!((groups[0].principal_id.as_str(), groups[0].decisions), ("alice", 3));
         let (groups, _, _) = recent_requests(&ch, 7, 1).await.unwrap();
         assert_eq!(groups.len(), 1, "the limit keeps the most frequent");
 

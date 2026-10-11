@@ -20,8 +20,8 @@ pub type History = BTreeMap<Principal, BTreeMap<u32, Day>>;
 
 #[derive(Debug, clickhouse::Row, serde::Deserialize)]
 struct Row {
-    subject_type: String,
-    subject_id: String,
+    principal_type: String,
+    principal_id: String,
     days_ago: u32,
     accesses: u64,
     resources: u64,
@@ -33,24 +33,24 @@ struct Row {
 // score back into itself.
 const QUERY: &str = "
 SELECT
-    subject_type,
-    subject_id,
+    principal_type,
+    principal_id,
     toUInt32(intDiv(? - toUnixTimestamp64Milli(at), 86400000)) AS days_ago,
     count() AS accesses,
     uniqExact(resource_id) AS resources,
     sum(denied) AS denied
 FROM
 (
-    SELECT at, subject_type, subject_id, resource_id, toUInt8(verdict = 'deny') AS denied
+    SELECT at, principal_type, principal_id, resource_id, toUInt8(verdict = 'deny') AS denied
     FROM decisions
     WHERE at > fromUnixTimestamp64Milli(?, 'UTC') AND at <= fromUnixTimestamp64Milli(?, 'UTC')
     UNION ALL
-    SELECT at, subject_type, subject_id, resource_id, toUInt8(outcome = 'failure') AS denied
+    SELECT at, principal_type, principal_id, resource_id, toUInt8(outcome = 'failure') AS denied
     FROM events
     WHERE at > fromUnixTimestamp64Milli(?, 'UTC') AND at <= fromUnixTimestamp64Milli(?, 'UTC')
 )
-WHERE subject_type IN ('Human', 'ServiceAccount')
-GROUP BY subject_type, subject_id, days_ago";
+WHERE principal_type IN ('Human', 'ServiceAccount')
+GROUP BY principal_type, principal_id, days_ago";
 
 /// The [`HISTORY_DAYS`] before `as_of`.
 pub async fn load(clickhouse: &clickhouse::Client, as_of: DateTime<Utc>) -> anyhow::Result<History> {
@@ -61,7 +61,7 @@ pub async fn load(clickhouse: &clickhouse::Client, as_of: DateTime<Utc>) -> anyh
     let mut history = History::new();
     for r in rows {
         let day = Day { accesses: r.accesses, resources: r.resources, denied: r.denied, ..Day::default() };
-        history.entry((r.subject_type, r.subject_id)).or_default().insert(r.days_ago, day);
+        history.entry((r.principal_type, r.principal_id)).or_default().insert(r.days_ago, day);
     }
     Ok(history)
 }
@@ -92,20 +92,20 @@ struct OpenersRow {
 const OPENERS_QUERY: &str = "
 WITH accesses AS
 (
-    SELECT at, subject_type, subject_id, resource_id
+    SELECT at, principal_type, principal_id, resource_id
     FROM decisions
     WHERE at > fromUnixTimestamp64Milli(?, 'UTC') AND at <= fromUnixTimestamp64Milli(?, 'UTC')
-      AND resource_type = 'Resource' AND subject_type IN ('Human', 'ServiceAccount')
+      AND resource_type = 'Resource' AND principal_type IN ('Human', 'ServiceAccount')
     UNION ALL
-    SELECT at, subject_type, subject_id, resource_id
+    SELECT at, principal_type, principal_id, resource_id
     FROM events
     WHERE at > fromUnixTimestamp64Milli(?, 'UTC') AND at <= fromUnixTimestamp64Milli(?, 'UTC')
-      AND resource_type = 'Resource' AND subject_type IN ('Human', 'ServiceAccount')
+      AND resource_type = 'Resource' AND principal_type IN ('Human', 'ServiceAccount')
 )
 SELECT
     resource_id,
-    groupUniqArrayIf(LIMIT)((subject_type, subject_id), at <= fromUnixTimestamp64Milli(?, 'UTC')) AS before,
-    groupUniqArrayIf(LIMIT)((subject_type, subject_id), at > fromUnixTimestamp64Milli(?, 'UTC')) AS last_day
+    groupUniqArrayIf(LIMIT)((principal_type, principal_id), at <= fromUnixTimestamp64Milli(?, 'UTC')) AS before,
+    groupUniqArrayIf(LIMIT)((principal_type, principal_id), at > fromUnixTimestamp64Milli(?, 'UTC')) AS last_day
 FROM accesses
 WHERE resource_id IN (SELECT resource_id FROM accesses WHERE at > fromUnixTimestamp64Milli(?, 'UTC'))
 GROUP BY resource_id";
@@ -178,7 +178,7 @@ mod tests {
             }
         }
         ch.query(&format!(
-            "INSERT INTO events (id, at, subject_type, subject_id, resource_type, resource_id) VALUES {}",
+            "INSERT INTO events (id, at, principal_type, principal_id, resource_type, resource_id) VALUES {}",
             events.join(",")
         ))
         .execute()
@@ -187,7 +187,7 @@ mod tests {
         // One denied decision for ben today, and a group, which isn't a principal.
         let now = as_of.timestamp_millis() - 1000;
         ch.query(&format!(
-            "INSERT INTO decisions (id, at, subject_type, subject_id, resource_type, resource_id, verdict) VALUES
+            "INSERT INTO decisions (id, at, principal_type, principal_id, resource_type, resource_id, verdict) VALUES
              (generateUUIDv4(), fromUnixTimestamp64Milli({now}, 'UTC'), 'Human', 'ben', 'Resource', 'board-deck', 'deny'),
              (generateUUIDv4(), fromUnixTimestamp64Milli({now}, 'UTC'), 'Group', 'analysts', 'Resource', 'x', 'allow')"
         ))
@@ -198,7 +198,7 @@ mod tests {
         // The handbook: cy opened it a week ago and ana today. A tool call isn't a resource.
         let (week_ago, today) = ((as_of - chrono::Duration::days(7)).timestamp_millis(), now);
         ch.query(&format!(
-            "INSERT INTO events (id, at, subject_type, subject_id, resource_type, resource_id) VALUES
+            "INSERT INTO events (id, at, principal_type, principal_id, resource_type, resource_id) VALUES
              (generateUUIDv4(), fromUnixTimestamp64Milli({week_ago}, 'UTC'), 'Human', 'cy', 'Resource', 'handbook'),
              (generateUUIDv4(), fromUnixTimestamp64Milli({today}, 'UTC'), 'Human', 'ana', 'Resource', 'handbook'),
              (generateUUIDv4(), fromUnixTimestamp64Milli({today}, 'UTC'), 'Human', 'ana', 'McpTool', 'admin/export')"

@@ -12,7 +12,7 @@ use awzy_authz_proto::{
     challenge::v1::{challenge_service_client::ChallengeServiceClient, ResolveRequest},
     challenges_from_wire, challenges_to_wire,
 };
-use awzy_model::{AccessRequest, ChallengeId, Challenges, DecisionId, EntityRef};
+use awzy_model::{ChallengeId, Challenges, Check, DecisionId, EntityRef};
 use serde_json::Value;
 use tonic::transport::Channel;
 
@@ -53,7 +53,7 @@ impl ChallengeResolver {
     pub async fn resolve(
         &self,
         decision_id: DecisionId,
-        req: &AccessRequest,
+        req: &Check,
         required: Challenges,
         parties: &Parties,
     ) -> anyhow::Result<Resolution> {
@@ -62,7 +62,7 @@ impl ChallengeResolver {
             RESOLVE_TIMEOUT,
             client.clone().resolve(ResolveRequest {
                 decision_qid: decision_id.to_string(),
-                subject: Some(req.subject.clone().into()),
+                principal: Some(req.principal.clone().into()),
                 on_behalf_of: req.on_behalf_of.clone().map(Into::into),
                 action: req.action.clone(),
                 resource: Some(req.resource.clone().into()),
@@ -91,12 +91,12 @@ pub struct Parties {
     pub resource_owner: Option<String>,
 }
 
-pub fn parties(req: &AccessRequest, entities: &Value) -> Parties {
+pub fn parties(req: &Check, entities: &Value) -> Parties {
     Parties { answerer: answerer(req, entities), resource_owner: resource_owner(req, entities) }
 }
 
 /// The person who owns the requested resource, from its entity's `owner` (ADR 0061).
-pub fn resource_owner(req: &AccessRequest, entities: &Value) -> Option<String> {
+pub fn resource_owner(req: &Check, entities: &Value) -> Option<String> {
     let resource = entities
         .as_array()?
         .iter()
@@ -111,20 +111,20 @@ fn human_ref(v: &Value) -> Option<String> {
     (r.kind == awzy_model::entity_type::HUMAN).then_some(r.id)
 }
 
-/// The person a challenge goes to: the human subject, the person a service account acts for,
+/// The person a challenge goes to: the human principal, the person a service account acts for,
 /// or a service account's owner (from its entity). None when no one is known.
-pub fn answerer(req: &AccessRequest, entities: &Value) -> Option<String> {
+pub fn answerer(req: &Check, entities: &Value) -> Option<String> {
     if let Some(human) = &req.on_behalf_of {
         return Some(human.id.clone());
     }
-    if req.subject.kind == awzy_model::entity_type::HUMAN {
-        return Some(req.subject.id.clone());
+    if req.principal.kind == awzy_model::entity_type::HUMAN {
+        return Some(req.principal.id.clone());
     }
-    let subject = entities
+    let principal = entities
         .as_array()?
         .iter()
-        .find(|e| e["uid"]["type"] == req.subject.kind.as_str() && e["uid"]["id"] == req.subject.id.as_str())?;
-    human_ref(&subject["attrs"]["owner"])
+        .find(|e| e["uid"]["type"] == req.principal.kind.as_str() && e["uid"]["id"] == req.principal.id.as_str())?;
+    human_ref(&principal["attrs"]["owner"])
 }
 
 #[cfg(test)]
@@ -133,9 +133,9 @@ mod tests {
 
     use super::*;
 
-    fn request(subject: EntityRef, on_behalf_of: Option<EntityRef>) -> AccessRequest {
-        AccessRequest {
-            subject,
+    fn request(principal: EntityRef, on_behalf_of: Option<EntityRef>) -> Check {
+        Check {
+            principal,
             action: "read".into(),
             resource: EntityRef::new("Resource", "plan"),
             context: Default::default(),

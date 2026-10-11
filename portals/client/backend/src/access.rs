@@ -128,7 +128,7 @@ pub async fn authorize(
         Surface::AwzyBot => "awzy-bot",
     };
     let req = CheckRequest {
-        subject: Some(wire(&viewer.subject)),
+        principal: Some(wire(&viewer.subject)),
         action: action.as_str().into(),
         resource: Some(WireRef { r#type: entity_type::PORTAL_AREA.into(), id: area.as_str().into() }),
         context: Some(json_to_struct(json!({ "client": client }).as_object().expect("object").clone())),

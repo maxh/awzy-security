@@ -82,7 +82,7 @@ pub fn record(f: &Flagged, model: &str, started_at: DateTime<Utc>, run: &Run) ->
     let o: &Outcome = &run.outcome;
     let needs_review = o.needs_review || o.containment == Containment::Propose;
     json!({
-        "subject": { "type": f.principal.0, "id": f.principal.1 },
+        "principal": { "type": f.principal.0, "id": f.principal.1 },
         "trigger": f.trigger,
         "floor": f.score.clamp(0, 100),
         "status": if needs_review { "needs_review" } else { "done" },
@@ -129,7 +129,7 @@ const DECISIONS: &str = "
 SELECT toString(id) AS id, toString(at) AS at, on_behalf_of_type, on_behalf_of_id, action, resource_type,
        resource_id, verdict, mode
 FROM decisions
-WHERE subject_type = ? AND subject_id = ?
+WHERE principal_type = ? AND principal_id = ?
   AND at > fromUnixTimestamp64Milli(?, 'UTC') AND at <= fromUnixTimestamp64Milli(?, 'UTC')
 ORDER BY at DESC
 LIMIT ?";
@@ -138,7 +138,7 @@ LIMIT ?";
 const EVENTS: &str = "
 SELECT toString(id) AS id, toString(at) AS at, source, system, action, resource_type, resource_id, outcome
 FROM events
-WHERE ((subject_type = ? AND subject_id = ?) OR (on_behalf_of_type = ? AND on_behalf_of_id = ?))
+WHERE ((principal_type = ? AND principal_id = ?) OR (on_behalf_of_type = ? AND on_behalf_of_id = ?))
   AND at > fromUnixTimestamp64Milli(?, 'UTC') AND at <= fromUnixTimestamp64Milli(?, 'UTC')
 ORDER BY at DESC
 LIMIT ?";
@@ -240,7 +240,7 @@ pub async fn build_case(
                     .unwrap_or_default(),
                 summary: format!(
                     "challenge for {} {} {}: status {}{decided}",
-                    on(&ch.subject),
+                    on(&ch.principal),
                     ch.action,
                     on(&ch.resource),
                     ch.status().as_str_name()
@@ -263,7 +263,7 @@ pub async fn build_case(
     }
 
     Ok(Case {
-        subject: f.principal.clone(),
+        principal: f.principal.clone(),
         floor: f.score.clamp(0, 100),
         trigger: f.trigger.clone(),
         privileged,
@@ -315,7 +315,7 @@ impl<M: ModelProvider> Investigations<M> {
             }
             let qid = context.put_investigation(record(&f, &self.model_name, started_at, &run)).await?;
             ran += 1;
-            tracing::info!(investigation = %qid, subject = ?f.principal, verdict = ?run.outcome.verdict,
+            tracing::info!(investigation = %qid, principal = ?f.principal, verdict = ?run.outcome.verdict,
                 containment = ?run.outcome.containment, "investigation finished");
             if let (Containment::Recommend, Some(c), "Human") =
                 (run.outcome.containment, containments, f.principal.0.as_str())
@@ -383,7 +383,7 @@ mod tests {
         let run = |o| Run {
             outcome: o,
             finding: Some(Finding {
-                subject: "Human::lee".into(),
+                principal: "Human::lee".into(),
                 verdict: Verdict::Malicious,
                 risk: 80,
                 summary: "s".into(),

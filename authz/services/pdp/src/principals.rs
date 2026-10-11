@@ -70,10 +70,10 @@ impl Principals {
     }
 
     /// A service account that awzy-context doesn't know, when the PDP uses awzy-context.
-    pub fn is_unregistered(&self, subject: &EntityRef) -> bool {
+    pub fn is_unregistered(&self, principal: &EntityRef) -> bool {
         self.configured
-            && subject.kind == awzy_model::entity_type::SERVICE_ACCOUNT
-            && !self.snapshot.load().entities.contains_key(&key(&subject.kind, &subject.id))
+            && principal.kind == awzy_model::entity_type::SERVICE_ACCOUNT
+            && !self.snapshot.load().entities.contains_key(&key(&principal.kind, &principal.id))
     }
 
     pub fn version(&self) -> i64 {
@@ -85,7 +85,7 @@ impl Principals {
         self.load_with_risk(version, entities, HashMap::new());
     }
 
-    /// The scores of `who` (the subject and the person it acts for) that awzy has, keyed
+    /// The scores of `who` (the principal and the person it acts for) that awzy has, keyed
     /// `Type::id`: what each check sees as `context.risk_score` (ADR 0056).
     pub fn risk_of(&self, who: &[&EntityRef]) -> HashMap<String, i64> {
         let snapshot = self.snapshot.load();

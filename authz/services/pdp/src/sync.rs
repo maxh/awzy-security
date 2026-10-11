@@ -128,7 +128,7 @@ mod tests {
         ListEnforcementChangesRequest, ListEnforcementChangesResponse, PolicyBundle, PublishRequest, PublishResponse,
         SetEnforcementRequest, SetEnforcementResponse,
     };
-    use awzy_model::{AccessRequest, EntityRef, Verdict};
+    use awzy_model::{Check, EntityRef, Verdict};
     use tonic::{Request, Response, Status};
 
     /// Serves one fixed active bundle at version 7.
@@ -232,8 +232,8 @@ mod tests {
                 { "uid": { "type": "Resource", "id": "board-deck" }, "attrs": { "sensitivity": "crown_jewels" }, "parents": [] },
             ]))
             .unwrap();
-        let req = AccessRequest {
-            subject: EntityRef::new("Human", "bob"),
+        let req = Check {
+            principal: EntityRef::new("Human", "bob"),
             action: "read".into(),
             resource: EntityRef::new("Resource", "board-deck"),
             context: serde_json::json!({ "risk_score": 1 }).as_object().unwrap().clone(),

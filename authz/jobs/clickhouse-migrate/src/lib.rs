@@ -15,6 +15,7 @@ const MIGRATIONS: &[(u32, &str, &str)] = &[
     (4, "enforcement_mode", include_str!("../migrations/0004_enforcement_mode.sql")),
     (5, "events", include_str!("../migrations/0005_events.sql")),
     (6, "human_policy_ids", include_str!("../migrations/0006_human_policy_ids.sql")),
+    (7, "principal", include_str!("../migrations/0007_principal.sql")),
 ];
 
 /// Values substituted into migrations.
@@ -256,8 +257,8 @@ mod tests {
         assert!(migrate(&client, &settings).await.unwrap().is_empty(), "migrations apply once");
 
         let pdp = awzy_pdp::Pdp::with_defaults().unwrap();
-        let req = awzy_model::AccessRequest {
-            subject: awzy_model::EntityRef::new("ServiceAccount", "ops-bot"),
+        let req = awzy_model::Check {
+            principal: awzy_model::EntityRef::new("ServiceAccount", "ops-bot"),
             action: "read".into(),
             resource: awzy_model::EntityRef::new("Resource", "board-deck"),
             context: serde_json::from_str(r#"{"risk_score": 10}"#).unwrap(),
@@ -284,8 +285,8 @@ mod tests {
             received_at: now,
             source: "aws_cloudtrail".into(),
             system: "s3.amazonaws.com".into(),
-            subject_type: "AwsPrincipal".into(),
-            subject_id: "arn:aws:sts::111122223333:assumed-role/Analyst/carol".into(),
+            principal_type: "AwsPrincipal".into(),
+            principal_id: "arn:aws:sts::111122223333:assumed-role/Analyst/carol".into(),
             on_behalf_of_type: String::new(),
             on_behalf_of_id: String::new(),
             action: "GetObject".into(),
@@ -301,7 +302,7 @@ mod tests {
         for _ in 0..60 {
             found = client
                 .query(
-                    "SELECT count() FROM decisions WHERE id = toUUID(?) AND verdict = 'allow' AND subject_id = 'ops-bot'
+                    "SELECT count() FROM decisions WHERE id = toUUID(?) AND verdict = 'allow' AND principal_id = 'ops-bot'
                      AND on_behalf_of_id = 'alice' AND human_present AND on_behalf_of_verdict = 'allow'
                      AND has(on_behalf_of_policies, 'security-team-read') AND mode = 'enforce'",
                 )
@@ -319,7 +320,7 @@ mod tests {
             found_event = client
                 .query(
                     "SELECT count() FROM events WHERE id = toUUID(?) AND source = 'aws_cloudtrail' AND action = 'GetObject'
-                     AND subject_id = 'arn:aws:sts::111122223333:assumed-role/Analyst/carol' AND outcome = 'failure'
+                     AND principal_id = 'arn:aws:sts::111122223333:assumed-role/Analyst/carol' AND outcome = 'failure'
                      AND at = fromUnixTimestamp64Milli(?, 'UTC')",
                 )
                 .bind(event.id.uuid().to_string())

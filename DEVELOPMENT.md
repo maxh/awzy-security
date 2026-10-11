@@ -245,7 +245,7 @@ and the stricter verdict wins:
 
 ```sh
 curl -s localhost:8082/v1/access/evaluation -H 'content-type: application/json' -d '{
-  "subject": {"type": "ServiceAccount", "id": "sales-genie"}, "on_behalf_of": {"type": "Human", "id": "bob"},
+  "principal": {"type": "ServiceAccount", "id": "sales-genie"}, "on_behalf_of": {"type": "Human", "id": "bob"},
   "action": "read", "resource": {"type": "Resource", "id": "design-doc"}, "context": {"risk_score": 90},
   "entities": [
     {"uid": {"type": "Human", "id": "bob"}, "attrs": {}, "parents": [{"type": "Group", "id": "engineering"}]},
@@ -540,13 +540,13 @@ export AWZY_INTAKE_TOKEN=$(openssl rand -hex 24)
 AWZY_LISTEN_ADDR=127.0.0.1:8085 AWZY_KAFKA_BROKERS=localhost:9092 bazel run //authz/services/intake:awzy-intake
 curl -X POST http://127.0.0.1:8085/v1/events -H "authorization: Bearer $AWZY_INTAKE_TOKEN" \
   -H 'content-type: application/json' -d '{"events": [{"at": "'"$(date -u +%FT%TZ)"'", "system": "jira",
-  "subject": {"type": "Human", "id": "bob"}, "action": "read", "resource": {"type": "Ticket", "id": "ENG-1"}}]}'
+  "principal": {"type": "Human", "id": "bob"}, "action": "read", "resource": {"type": "Ticket", "id": "ENG-1"}}]}'
 # {"accepted":1,"qids":["event_0199…"]}
 ```
 
 A CloudTrail log file goes to `/v1/events/aws-cloudtrail` as is (`{"Records": [...]}`, after
 gunzipping). The events show up in ClickHouse within a few seconds:
-`SELECT at, subject_id, action, resource_id FROM awzy.events ORDER BY at DESC LIMIT 10`.
+`SELECT at, principal_id, action, resource_id FROM awzy.events ORDER BY at DESC LIMIT 10`.
 
 ### Models for Awzy Bot (ADR 0048)
 

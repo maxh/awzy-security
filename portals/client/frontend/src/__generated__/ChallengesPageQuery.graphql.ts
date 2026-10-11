@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<a802224167a8c241c1151c0536a64f98>>
+ * @generated SignedSource<<8595b758ad41ab670592b92db41df8dc>>
  * @lightSyntaxTransform
  */
 
@@ -29,11 +29,11 @@ export type ChallengesPageQuery$data = {
       readonly type: string;
     } | null | undefined;
     readonly passed: ReadonlyArray<ChallengeKind>;
-    readonly resource: {
+    readonly principal: {
       readonly id: string;
       readonly type: string;
     } | null | undefined;
-    readonly subject: {
+    readonly resource: {
       readonly id: string;
       readonly type: string;
     } | null | undefined;
@@ -50,15 +50,15 @@ export type ChallengesPageQuery$data = {
       readonly id: string;
       readonly type: string;
     } | null | undefined;
+    readonly principal: {
+      readonly id: string;
+      readonly type: string;
+    } | null | undefined;
     readonly resource: {
       readonly id: string;
       readonly type: string;
     } | null | undefined;
     readonly status: ChallengeStatus;
-    readonly subject: {
-      readonly id: string;
-      readonly type: string;
-    } | null | undefined;
   }>;
 };
 export type ChallengesPageQuery = {
@@ -89,7 +89,7 @@ v2 = {
   "args": null,
   "concreteType": "EntityRef",
   "kind": "LinkedField",
-  "name": "subject",
+  "name": "principal",
   "plural": false,
   "selections": (v1/*:: as any*/),
   "storageKey": null
@@ -291,16 +291,16 @@ return {
     "selections": (v7/*:: as any*/)
   },
   "params": {
-    "cacheID": "89d83c5021e41fac85ea9b348c13b4e6",
+    "cacheID": "ca0c5e361ea2e2d82326be8e9cb0a67f",
     "id": null,
     "metadata": {},
     "name": "ChallengesPageQuery",
     "operationKind": "query",
-    "text": "query ChallengesPageQuery {\n  canAdminister: viewerCan(action: ADMINISTER, area: CHALLENGES)\n  pending: myChallenges(status: PENDING) {\n    id\n    subject {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    kinds\n    passed\n    expiresAt\n  }\n  recent: myChallenges(first: 20) {\n    id\n    subject {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    status\n    createdAt\n    decidedBy {\n      label\n    }\n    grantExpiresAt\n  }\n  mySecurityKeys {\n    id\n    name\n    createdAt\n    lastUsedAt\n  }\n}\n"
+    "text": "query ChallengesPageQuery {\n  canAdminister: viewerCan(action: ADMINISTER, area: CHALLENGES)\n  pending: myChallenges(status: PENDING) {\n    id\n    principal {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    kinds\n    passed\n    expiresAt\n  }\n  recent: myChallenges(first: 20) {\n    id\n    principal {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    status\n    createdAt\n    decidedBy {\n      label\n    }\n    grantExpiresAt\n  }\n  mySecurityKeys {\n    id\n    name\n    createdAt\n    lastUsedAt\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "c975ca4fc5462a7f07c7813196a73302";
+(node as any).hash = "ea38c78a01c160b05eb200fdd0a4e8c1";
 
 export default node;

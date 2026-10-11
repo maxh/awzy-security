@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<1c4c7c5a9423be8246a494f4f11ebf92>>
+ * @generated SignedSource<<137c831801933b97ccdf00d7960f6c6f>>
  * @lightSyntaxTransform
  */
 
@@ -157,7 +157,7 @@ return {
                 "args": null,
                 "concreteType": "EntityRef",
                 "kind": "LinkedField",
-                "name": "subject",
+                "name": "principal",
                 "plural": false,
                 "selections": (v3/*:: as any*/),
                 "storageKey": null
@@ -249,12 +249,12 @@ return {
     ]
   },
   "params": {
-    "cacheID": "27289a821710ba9fdb81a0adb3e172b2",
+    "cacheID": "34a0e32510b0bec291f00b43da39c286",
     "id": null,
     "metadata": {},
     "name": "DecisionDetailQuery",
     "operationKind": "query",
-    "text": "query DecisionDetailQuery(\n  $id: ID!\n) {\n  node(id: $id) {\n    __typename\n    ...DecisionDetail_decision\n    id\n  }\n}\n\nfragment DecisionDetail_decision on Decision {\n  id\n  at\n  subject {\n    type\n    id\n  }\n  onBehalfOf {\n    human {\n      type\n      id\n    }\n    verdict\n    determiningPolicies {\n      id\n      source\n    }\n  }\n  humanPresent\n  action\n  resource {\n    type\n    id\n  }\n  verdict\n  mode\n  challenges\n  policyVersion\n  context\n  determiningPolicies {\n    id\n    source\n  }\n}\n"
+    "text": "query DecisionDetailQuery(\n  $id: ID!\n) {\n  node(id: $id) {\n    __typename\n    ...DecisionDetail_decision\n    id\n  }\n}\n\nfragment DecisionDetail_decision on Decision {\n  id\n  at\n  principal {\n    type\n    id\n  }\n  onBehalfOf {\n    human {\n      type\n      id\n    }\n    verdict\n    determiningPolicies {\n      id\n      source\n    }\n  }\n  humanPresent\n  action\n  resource {\n    type\n    id\n  }\n  verdict\n  mode\n  challenges\n  policyVersion\n  context\n  determiningPolicies {\n    id\n    source\n  }\n}\n"
   }
 };
 })();

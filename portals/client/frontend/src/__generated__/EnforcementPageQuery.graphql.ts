@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<3bd8588ef879a6fbdc43f38ea63c3e62>>
+ * @generated SignedSource<<4691cd21dce135ec19f24c2b2d73e441>>
  * @lightSyntaxTransform
  */
 
@@ -49,11 +49,11 @@ export type EnforcementPageQuery$data = {
         readonly at: string;
         readonly id: string;
         readonly policies: ReadonlyArray<string>;
-        readonly resource: {
+        readonly principal: {
           readonly id: string;
           readonly type: string;
         };
-        readonly subject: {
+        readonly resource: {
           readonly id: string;
           readonly type: string;
         };
@@ -274,7 +274,7 @@ v3 = [
                 "args": null,
                 "concreteType": "EntityRef",
                 "kind": "LinkedField",
-                "name": "subject",
+                "name": "principal",
                 "plural": false,
                 "selections": (v2/*:: as any*/),
                 "storageKey": null
@@ -347,16 +347,16 @@ return {
     "selections": (v3/*:: as any*/)
   },
   "params": {
-    "cacheID": "20a003bbb5598f8f086cd9c1c5d614cb",
+    "cacheID": "072b28e4f4ff16bea2a9105c78497c6a",
     "id": null,
     "metadata": {},
     "name": "EnforcementPageQuery",
     "operationKind": "query",
-    "text": "query EnforcementPageQuery {\n  canSwitch: viewerCan(action: ADMINISTER, area: ENFORCEMENT)\n  enforcement {\n    mode\n    changedBy {\n      label\n    }\n    changedAt\n  }\n  containmentEnforcement: enforcement(scope: AUTOMATED_CONTAINMENTS) {\n    mode\n    changedBy {\n      label\n    }\n    changedAt\n  }\n  enforcementSummary {\n    since\n    total\n    monitored\n    wouldDeny\n    wouldChallenge\n    enforcedDeny\n    enforcedChallenge\n  }\n  wouldDeny: decisions(first: 5, filter: {mode: MONITOR, verdict: DENY}) {\n    edges {\n      node {\n        id\n        at\n        subject {\n          type\n          id\n        }\n        action\n        resource {\n          type\n          id\n        }\n        policies\n      }\n    }\n  }\n  enforcementHistory(first: 10) {\n    mode\n    changedBy {\n      label\n    }\n    changedAt\n  }\n}\n"
+    "text": "query EnforcementPageQuery {\n  canSwitch: viewerCan(action: ADMINISTER, area: ENFORCEMENT)\n  enforcement {\n    mode\n    changedBy {\n      label\n    }\n    changedAt\n  }\n  containmentEnforcement: enforcement(scope: AUTOMATED_CONTAINMENTS) {\n    mode\n    changedBy {\n      label\n    }\n    changedAt\n  }\n  enforcementSummary {\n    since\n    total\n    monitored\n    wouldDeny\n    wouldChallenge\n    enforcedDeny\n    enforcedChallenge\n  }\n  wouldDeny: decisions(first: 5, filter: {mode: MONITOR, verdict: DENY}) {\n    edges {\n      node {\n        id\n        at\n        principal {\n          type\n          id\n        }\n        action\n        resource {\n          type\n          id\n        }\n        policies\n      }\n    }\n  }\n  enforcementHistory(first: 10) {\n    mode\n    changedBy {\n      label\n    }\n    changedAt\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "6eb4af6766d2ea5b29e8c09a960eb847";
+(node as any).hash = "d24d123db66a49c6b7cbb28b1405b6f4";
 
 export default node;

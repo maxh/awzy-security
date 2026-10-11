@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<f032a768e9b0d32a91a9eec139ed28e4>>
+ * @generated SignedSource<<dd2ad7f6d53113f652772448498dcdbf>>
  * @lightSyntaxTransform
  */
 
@@ -27,11 +27,11 @@ export type DecisionsPage_decisions$data = {
           };
         } | null | undefined;
         readonly policies: ReadonlyArray<string>;
-        readonly resource: {
+        readonly principal: {
           readonly id: string;
           readonly type: string;
         };
-        readonly subject: {
+        readonly resource: {
           readonly id: string;
           readonly type: string;
         };
@@ -155,7 +155,7 @@ return {
                   "args": null,
                   "concreteType": "EntityRef",
                   "kind": "LinkedField",
-                  "name": "subject",
+                  "name": "principal",
                   "plural": false,
                   "selections": (v2/*:: as any*/),
                   "storageKey": null
@@ -280,6 +280,6 @@ return {
 };
 })();
 
-(node as any).hash = "982978d5aefb142e5b1ee8cd2ec7bac6";
+(node as any).hash = "64de53bf86e1737c02ae16fcdf2843c9";
 
 export default node;

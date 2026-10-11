@@ -497,7 +497,7 @@ mod tests {
     async fn a_security_key_passes_the_verification_it_was_asked_for() {
         let Some((keys, store)) = setup().await else { return };
         let request = RequestKey {
-            subject: EntityRef::new("Human", "bob"),
+            principal: EntityRef::new("Human", "bob"),
             on_behalf_of: None,
             action: "read".into(),
             resource: EntityRef::new("Resource", "board-deck"),

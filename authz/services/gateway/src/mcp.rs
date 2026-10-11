@@ -64,7 +64,7 @@ struct Inner {
     containments: Arc<Containments>,
 }
 
-/// Recent allows, keyed by everything that identified the call: subject, the person it acted
+/// Recent allows, keyed by everything that identified the call: principal, the person it acted
 /// for, and the tool. Bounded; entries older than the TTL are dropped when it fills up.
 struct AllowCache {
     ttl: std::time::Duration,
@@ -105,8 +105,8 @@ impl AllowCache {
         let mut entries = self.entries.lock().expect("allow cache lock");
         entries.retain(|key, _| {
             let mut parts = key.splitn(3, '|');
-            let (subject, human) = (parts.next().unwrap_or_default(), parts.next().unwrap_or_default());
-            !contained.contains(subject) && !contained.contains(human)
+            let (principal, human) = (parts.next().unwrap_or_default(), parts.next().unwrap_or_default());
+            !contained.contains(principal) && !contained.contains(human)
         });
     }
 }
@@ -212,7 +212,7 @@ async fn authorize(
         "attrs": { "sensitivity": up.sensitivity(tool) },
         "parents": [{ "type": entity_type::MCP_SERVER, "id": up.name }],
     })));
-    let call = Check {
+    let call = ToolCheck {
         action: "call",
         resource: WireRef { r#type: entity_type::MCP_TOOL.into(), id: tool_id.clone() },
         what: format!("the call to `{tool_id}`"),
@@ -228,7 +228,7 @@ async fn authorize(
     let Some(resource) = msg.pointer(&format!("/params/arguments/{}", rt.argument)).and_then(Value::as_str) else {
         return Some(jsonrpc_error(&id, -32602, &format!("`{tool_id}` needs the argument {:?}", rt.argument)));
     };
-    let on_resource = Check {
+    let on_resource = ToolCheck {
         action: &rt.action,
         resource: WireRef { r#type: entity_type::RESOURCE.into(), id: resource.into() },
         what: format!("`{}` on `{resource}` through `{tool_id}`", rt.action),
@@ -239,7 +239,7 @@ async fn authorize(
 }
 
 /// One PDP check for a tool call.
-struct Check<'a> {
+struct ToolCheck<'a> {
     action: &'a str,
     resource: WireRef,
     /// How messages name what was checked, e.g. "the call to `drive/read_file`".
@@ -256,11 +256,11 @@ async fn check(
     principal: &Principal,
     tool: &str,
     id: &Value,
-    c: Check<'_>,
+    c: ToolCheck<'_>,
     entities: Vec<Entity>,
 ) -> Option<Response<Body>> {
     let req = CheckRequest {
-        subject: Some(wire_ref(&principal.subject)),
+        principal: Some(wire_ref(&principal.subject)),
         action: c.action.into(),
         resource: Some(c.resource.clone()),
         context: Some(json_to_struct(json!({ "client": "mcp" }).as_object().unwrap().clone())),
@@ -309,7 +309,7 @@ fn outage(
     up: &UpstreamConfig,
     principal: &Principal,
     tool: &str,
-    c: &Check<'_>,
+    c: &ToolCheck<'_>,
     id: &Value,
     status: &tonic::Status,
 ) -> Option<Response<Body>> {

@@ -62,7 +62,7 @@ impl Containments {
         *self.known.write().expect("containments lock") = Some(contained);
     }
 
-    /// Whether a recent allow may be replayed for `who` (the subject, and the person it acts for).
+    /// Whether a recent allow may be replayed for `who` (the principal, and the person it acts for).
     pub fn replay(&self, who: &[&EntityRef]) -> Replay {
         match self.known.read().expect("containments lock").as_ref() {
             None => Replay::Unknown,
@@ -96,7 +96,7 @@ async fn follow_once(
     while let Some(msg) = stream.message().await? {
         if msg.changed {
             let contained: HashSet<String> =
-                msg.active.iter().filter_map(|c| c.subject.clone()).map(|s| key(&s.into())).collect();
+                msg.active.iter().filter_map(|c| c.principal.clone()).map(|s| key(&s.into())).collect();
             // Forget first, so there's no moment when the list names someone whose allows remain.
             forget(&contained);
             tracing::info!(version = msg.version, active = contained.len(), "loaded containments");
@@ -157,7 +157,7 @@ mod tests {
 
         client
             .contain(ContainRequest {
-                subject: Some(agent.clone().into()),
+                principal: Some(agent.clone().into()),
                 reason: "bulk export".into(),
                 created_by: "alice".into(),
                 ..Default::default()

@@ -61,7 +61,7 @@ bundle without the client portal or your IdP, for when a bad bundle locks admins
 or an approval. The caller retries once it's passed. See
 [Challenges and containment](/concepts/challenges-and-containment/).
 
-**Check.** One question to awzy-pdp: may this subject take this action on this resource, in this
+**Check.** One question to awzy-pdp: may this principal take this action on this resource, in this
 context? See [How awzy decides](/concepts/how-awzy-decides/).
 
 **Client portal.** The web app in your install where your team searches and explains decisions,
@@ -136,7 +136,7 @@ at a time. See [Writing policies](/guides/writing-policies/).
 `enforcement`, `directory`, `challenges`, and `investigations`.
 
 **Principal.** Who a check is about: a `Human` or a `ServiceAccount`, written `principal` in your
-policies (`principal is Human`). The decision API calls it the *subject*. See
+policies (`principal is Human`) and in the decision API. See
 [People, agents, and delegation](/concepts/principals-and-delegation/).
 
 **QID.** The ID awzy gives its own records: the record's type, an underscore, and a UUID, such as
@@ -162,7 +162,7 @@ pass a verification challenge.
 **Service account.** Anything non-human with its own credentials: a backend service, a scheduled
 job, an AI agent. It has an accountable owner, and one that isn't registered is denied.
 
-**Subject.** See *principal*.
+**Subject.** See *principal*. AuthZEN and other authorization APIs use the word.
 
 **Unclassified.** A resource that no label or classifier has placed yet. It gets your default tier,
 and policies can challenge it.

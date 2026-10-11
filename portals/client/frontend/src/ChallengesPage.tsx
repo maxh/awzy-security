@@ -55,8 +55,8 @@ const STATUS_COLOR = { PENDING: "yellow", PASSED: "teal", REJECTED: "red", EXPIR
 type Ref = { readonly type: string; readonly id: string } | null | undefined;
 
 /** "alice read Resource::board-deck", or "sales-genie for bob read …". */
-function requestLabel(c: { subject: Ref; onBehalfOf: Ref; action: string; resource: Ref }): string {
-  const who = c.subject ? c.subject.id : "someone";
+function requestLabel(c: { principal: Ref; onBehalfOf: Ref; action: string; resource: Ref }): string {
+  const who = c.principal ? c.principal.id : "someone";
   const forWhom = c.onBehalfOf ? ` for ${c.onBehalfOf.id}` : "";
   return `${who}${forWhom} ${c.action} ${c.resource ? entityLabel(c.resource) : ""}`;
 }
@@ -68,7 +68,7 @@ function kindLabel(kind: string): string {
 /** The notice for a challenge after an answer, from the challenge as awzy now has it. */
 function answeredFrom(
   what: Answered["what"],
-  c: { subject: Ref; onBehalfOf: Ref; action: string; resource: Ref },
+  c: { principal: Ref; onBehalfOf: Ref; action: string; resource: Ref },
   done: {
     readonly status: string;
     readonly kinds: ReadonlyArray<string>;
@@ -308,7 +308,7 @@ function Challenges({
         canAdminister: viewerCan(action: ADMINISTER, area: CHALLENGES)
         pending: myChallenges(status: PENDING) {
           id
-          subject {
+          principal {
             type
             id
           }
@@ -327,7 +327,7 @@ function Challenges({
         }
         recent: myChallenges(first: 20) {
           id
-          subject {
+          principal {
             type
             id
           }
@@ -753,7 +753,7 @@ function Admin({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => voi
       query ChallengesPageAdminQuery {
         pending: challenges(status: PENDING) {
           id
-          subject {
+          principal {
             type
             id
           }
@@ -774,7 +774,7 @@ function Admin({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => voi
         }
         containments {
           id
-          subject {
+          principal {
             type
             id
           }
@@ -916,7 +916,7 @@ function Containments({
 
   const submit = () =>
     contain({
-      variables: { input: { subject: { type: type ?? "ServiceAccount", id: id.trim() }, reason } },
+      variables: { input: { principal: { type: type ?? "ServiceAccount", id: id.trim() }, reason } },
       onCompleted: () => {
         setId("");
         setReason("");
@@ -927,9 +927,9 @@ function Containments({
     });
   // A monitored containment (ADR 0066) that the security team agrees with: contain for real.
   const confirm = (c: ContainmentRow) =>
-    c.subject &&
+    c.principal &&
     contain({
-      variables: { input: { subject: c.subject, reason: `Confirmed on review: ${c.reason}` } },
+      variables: { input: { principal: c.principal, reason: `Confirmed on review: ${c.reason}` } },
       onCompleted: () => {
         setError(null);
         onChanged();
@@ -965,7 +965,7 @@ function Containments({
             {containments.map((c) => (
               <Table.Tr key={c.id}>
                 <Table.Td>
-                  {c.subject ? entityLabel(c.subject) : ""}
+                  {c.principal ? entityLabel(c.principal) : ""}
                   {c.monitor && (
                     <Badge ml="xs" variant="light" color="gray">
                       Would contain
@@ -1023,7 +1023,7 @@ function Containments({
       <Modal
         opened={lifting !== null}
         onClose={() => setLifting(null)}
-        title={lifting?.subject ? `Lift the containment of ${entityLabel(lifting.subject)}?` : "Lift containment?"}
+        title={lifting?.principal ? `Lift the containment of ${entityLabel(lifting.principal)}?` : "Lift containment?"}
       >
         <Stack gap="sm">
           <TextInput

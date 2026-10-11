@@ -46,12 +46,12 @@ pub fn workdays_before(today: NaiveDate, days: usize) -> Vec<NaiveDate> {
 pub fn event(date: NaiveDate, a: &Access) -> Value {
     let at: DateTime<Utc> = Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).expect("midnight"))
         + chrono::Duration::minutes(i64::from(a.minute));
-    let subject_type = if a.on_behalf_of.is_some() || !a.human_present { "ServiceAccount" } else { "Human" };
+    let principal_type = if a.on_behalf_of.is_some() || !a.human_present { "ServiceAccount" } else { "Human" };
     let system = server_of(a.tool);
     let mut e = json!({
         "at": at.to_rfc3339(),
         "system": system,
-        "subject": { "type": subject_type, "id": a.subject },
+        "principal": { "type": principal_type, "id": a.principal },
         "action": if a.tool == LIST { "list" } else { "read" },
         "resource": { "type": "Resource", "id": a.resource },
         "outcome": "success",
@@ -74,7 +74,7 @@ pub fn exfiltration_event(at: DateTime<Utc>, e: &crate::scenarios::Exfiltration)
     json!({
         "at": at.to_rfc3339(),
         "system": e.system,
-        "subject": { "type": "Human", "id": e.human },
+        "principal": { "type": "Human", "id": e.human },
         "action": e.action,
         "resource": { "type": "Resource", "id": e.resource },
         "outcome": "success",
@@ -165,17 +165,17 @@ mod tests {
         let c = generate(Profile::Demo, 1);
         let day = activity::day(&c, Profile::Demo, 0);
         let nora = cast("sales-northeast-finserv").unwrap();
-        let genie = day.iter().find(|a| a.subject == "sales-genie").unwrap();
+        let genie = day.iter().find(|a| a.principal == "sales-genie").unwrap();
         let e = event(date("2026-10-08"), genie);
-        assert_eq!(e["subject"], json!({ "type": "ServiceAccount", "id": "sales-genie" }));
+        assert_eq!(e["principal"], json!({ "type": "ServiceAccount", "id": "sales-genie" }));
         assert_eq!(e["on_behalf_of"], json!({ "type": "Human", "id": nora }));
         assert!(e["at"].as_str().unwrap().starts_with("2026-10-08T"));
         let human = day.iter().find(|a| a.on_behalf_of.is_none() && a.human_present).unwrap();
         let p = event(date("2026-10-08"), human);
-        assert_eq!(p["subject"]["type"], "Human");
+        assert_eq!(p["principal"]["type"], "Human");
         assert!(p.get("on_behalf_of").is_none());
-        let alone = day.iter().find(|a| a.subject == "finance-summarizer").unwrap();
-        assert_eq!(event(date("2026-10-08"), alone)["subject"]["type"], "ServiceAccount");
+        let alone = day.iter().find(|a| a.principal == "finance-summarizer").unwrap();
+        assert_eq!(event(date("2026-10-08"), alone)["principal"]["type"], "ServiceAccount");
         let op = day.iter().find(|a| a.why == activity::Why::Admin).unwrap();
         let e = event(date("2026-10-08"), op);
         assert_eq!((e["system"].as_str(), e["action"].as_str()), (Some("larkspur-admin"), Some(op.tool)));

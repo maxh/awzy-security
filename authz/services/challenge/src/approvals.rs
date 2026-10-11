@@ -69,7 +69,7 @@ impl Approvals {
         }
         let res = client
             .check(CheckRequest {
-                subject: Some(approver.clone().into()),
+                principal: Some(approver.clone().into()),
                 action: APPROVE_ACTION.into(),
                 resource: Some(resource.clone().into()),
                 context: Some(json_to_struct(context)),

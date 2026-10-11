@@ -76,9 +76,9 @@ at awzy-challenge (for containments during a PDP outage; see below).
 
 The token says who the request is for:
 
-- **A person**, through an agent that uses their token: the subject is that person.
+- **A person**, through an agent that uses their token: the principal is that person.
 - **An agent acting for a person**, with an RFC 8693 `act` claim (`{"act": {"sub": "sales-genie"}}`):
-  the agent is the subject, `sub` is the person, and both are checked. See
+  the agent is the principal, `sub` is the person, and both are checked. See
   [People, agents, and delegation](/concepts/principals-and-delegation/).
 - **An agent on its own authority**, with a client-credentials token for a registered service
   account.

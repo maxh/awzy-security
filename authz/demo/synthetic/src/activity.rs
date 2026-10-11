@@ -65,12 +65,12 @@ pub struct Access {
     /// Minutes after midnight, Larkspur time.
     pub minute: u32,
     /// A person's userName, or a service account's ID.
-    pub subject: String,
+    pub principal: String,
     /// The person an agent acts for.
     pub on_behalf_of: Option<String>,
     /// Whether a person is there to answer a challenge.
     pub human_present: bool,
-    /// The subject's team (a person's own, or the person it acts for), sent as the token's groups.
+    /// The principal's team (a person's own, or the person it acts for), sent as the token's groups.
     pub team: &'static str,
     pub tool: &'static str,
     /// The resource a drive tool opens, or what an admin tool operates on (a person, a system).
@@ -117,7 +117,7 @@ pub fn day(company: &Company, profile: Profile, day: u32) -> Vec<Access> {
             let (resource, why) = pick(&mut rng, &mut docs, mine, &by_team[p.team], i, &by_team);
             out.push(Access {
                 minute: minute(&mut rng),
-                subject: p.user_name.clone(),
+                principal: p.user_name.clone(),
                 on_behalf_of: None,
                 human_present: true,
                 team: p.team,
@@ -138,7 +138,7 @@ pub fn day(company: &Company, profile: Profile, day: u32) -> Vec<Access> {
             let (resource, why) = pick(&mut rng, &mut docs, mine, &by_team[human.team], owner, &by_team);
             out.push(Access {
                 minute: if unattended { 6 * 60 + rng.below(60) as u32 } else { minute(&mut rng) },
-                subject: sa.id.clone(),
+                principal: sa.id.clone(),
                 on_behalf_of: (!unattended).then(|| human.user_name.clone()),
                 human_present: !unattended,
                 team: human.team,
@@ -160,7 +160,7 @@ pub fn day(company: &Company, profile: Profile, day: u32) -> Vec<Access> {
             };
             out.push(Access {
                 minute: minute(&mut rng),
-                subject: p.user_name.clone(),
+                principal: p.user_name.clone(),
                 on_behalf_of: None,
                 human_present: true,
                 team: p.team,
@@ -302,12 +302,12 @@ mod tests {
         let c = generate(Profile::Demo, 1);
         let accesses = day(&c, Profile::Demo, 0);
         let nora = cast("sales-northeast-finserv").unwrap();
-        let genie: Vec<&Access> = accesses.iter().filter(|a| a.subject == "sales-genie").collect();
+        let genie: Vec<&Access> = accesses.iter().filter(|a| a.principal == "sales-genie").collect();
         assert_eq!(genie.len(), CALLS_PER_AGENT);
         assert!(genie.iter().all(|a| a.on_behalf_of.as_deref() == Some(nora.as_str()) && a.human_present));
         assert!(!genie.iter().any(|a| a.resource == "synthetic:doc:strategic-plan-fy27"), "an ordinary day");
 
-        let summarizer: Vec<&Access> = accesses.iter().filter(|a| a.subject == "finance-summarizer").collect();
+        let summarizer: Vec<&Access> = accesses.iter().filter(|a| a.principal == "finance-summarizer").collect();
         assert!(summarizer.iter().all(|a| a.on_behalf_of.is_none() && !a.human_present && a.team == "finance"));
     }
 }

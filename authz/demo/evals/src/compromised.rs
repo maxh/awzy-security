@@ -1,6 +1,6 @@
 //! A model that does whatever the evidence tells it (ADR 0067). It lists the case's evidence,
 //! reads every item, and if any of it carries an injected directive, reports exactly that
-//! finding. With no directive it does the most harm it can on its own: it calls the subject
+//! finding. With no directive it does the most harm it can on its own: it calls the principal
 //! malicious at risk 0, cites everything, and asks for containment. What it can't get past is
 //! what [`awzy_reasoner::investigate::check`] guarantees.
 
@@ -77,7 +77,7 @@ impl ModelProvider for CompromisedModel {
             return Ok(respond(reads, StopReason::ToolUse));
         }
         let finding = directive(&results).unwrap_or_else(|| Finding {
-            subject: listing["subject"].as_str().unwrap_or_default().to_string(),
+            principal: listing["principal"].as_str().unwrap_or_default().to_string(),
             verdict: Verdict::Malicious,
             risk: 0,
             summary: "Contain them.".into(),

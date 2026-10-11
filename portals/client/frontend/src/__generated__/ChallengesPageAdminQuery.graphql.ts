@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<618ff60c232a77b72a70634fcd7c89ae>>
+ * @generated SignedSource<<2cad61f24a85fd008a5476cea151a1f3>>
  * @lightSyntaxTransform
  */
 
@@ -18,11 +18,11 @@ export type ChallengesPageAdminQuery$data = {
     } | null | undefined;
     readonly id: string;
     readonly monitor: boolean;
-    readonly reason: string;
-    readonly subject: {
+    readonly principal: {
       readonly id: string;
       readonly type: string;
     } | null | undefined;
+    readonly reason: string;
   }>;
   readonly pending: ReadonlyArray<{
     readonly action: string;
@@ -36,11 +36,11 @@ export type ChallengesPageAdminQuery$data = {
       readonly type: string;
     } | null | undefined;
     readonly passed: ReadonlyArray<ChallengeKind>;
-    readonly resource: {
+    readonly principal: {
       readonly id: string;
       readonly type: string;
     } | null | undefined;
-    readonly subject: {
+    readonly resource: {
       readonly id: string;
       readonly type: string;
     } | null | undefined;
@@ -74,7 +74,7 @@ v2 = {
   "args": null,
   "concreteType": "EntityRef",
   "kind": "LinkedField",
-  "name": "subject",
+  "name": "principal",
   "plural": false,
   "selections": (v1/*:: as any*/),
   "storageKey": null
@@ -227,16 +227,16 @@ return {
     "selections": (v4/*:: as any*/)
   },
   "params": {
-    "cacheID": "0b43f589af1569ee2d4343da902d4f29",
+    "cacheID": "308703ef23df61017e484d9f810810b7",
     "id": null,
     "metadata": {},
     "name": "ChallengesPageAdminQuery",
     "operationKind": "query",
-    "text": "query ChallengesPageAdminQuery {\n  pending: challenges(status: PENDING) {\n    id\n    subject {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    kinds\n    passed\n    answererId\n    justification\n    createdAt\n  }\n  containments {\n    id\n    subject {\n      type\n      id\n    }\n    reason\n    createdBy {\n      label\n    }\n    createdAt\n    monitor\n  }\n}\n"
+    "text": "query ChallengesPageAdminQuery {\n  pending: challenges(status: PENDING) {\n    id\n    principal {\n      type\n      id\n    }\n    onBehalfOf {\n      type\n      id\n    }\n    action\n    resource {\n      type\n      id\n    }\n    kinds\n    passed\n    answererId\n    justification\n    createdAt\n  }\n  containments {\n    id\n    principal {\n      type\n      id\n    }\n    reason\n    createdBy {\n      label\n    }\n    createdAt\n    monitor\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "235f976cfe53e67d365bae01cd20a841";
+(node as any).hash = "b1c6e41218f9a7e5b6d7def87326cbc0";
 
 export default node;
