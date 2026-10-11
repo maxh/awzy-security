@@ -130,6 +130,10 @@ jobs:
           helm lint --strict deploy/helm/awzy -f deploy/helm/awzy/values-example.yaml
           helm template awzy deploy/helm/awzy -f deploy/helm/awzy/values-example.yaml > /dev/null
           helm lint --strict deploy/terraform/bootstrap/charts/awzy-config -f deploy/terraform/bootstrap/charts/awzy-config/values-example.yaml
+      # What helm lint can't check: the chart as a Kubernetes API server reads it, admission
+      # policies' CEL above all (kind is on the runner image).
+      - name: Chart against the Kubernetes API
+        run: tools/ci/check-chart-api.sh
       # Every Terraform directory is formatted and valid, and root modules' lock files are current.
       - uses: opentofu/setup-opentofu@v1
         with:
