@@ -4,10 +4,10 @@ How to install awzy in your own cloud account. Developing awzy is in
 [DEVELOPMENT.md](DEVELOPMENT.md); why an install looks the way it does is in
 [docs/plans/deployment-plan.md](docs/plans/deployment-plan.md).
 
-> **Untested as written.** This runbook was written from the Terraform and the chart before the
-> first full install. It will be corrected during the example client's first install
+> **Tested on 2026-10-11** by the example client's install
 > ([deploy/terraform/examples/example-client](deploy/terraform/examples/example-client/README.md)),
-> which is the worked example throughout.
+> the worked example throughout: every step below was run end to end on AWS with the demo IdP,
+> and step 7's checks pass. A real IdP's sign-in and SCIM (step 6) haven't been run yet.
 
 An install runs entirely in your account. awzy (the vendor) holds no credential for it: the
 install pulls signed releases from awzy's registry and sends a heartbeat out, and nothing comes
@@ -33,6 +33,10 @@ You call both from your own Terraform, as
   SCPs that deny other Regions and deny IAM users with access keys; it uses neither.
 - **A hostname** for the client portal (`awzy.example.com`) in DNS you control, and an email
   address for Let's Encrypt.
+- **Load balancers:** some new AWS accounts can't create them until AWS Support allows it
+  (`OperationNotPermitted: This AWS account currently does not support creating load
+  balancers`, on the Gateway's Service). Open a support case for the install account early; the
+  Service retries on its own once it's lifted.
 - **Cost:** the `small` profile costs roughly $250 a month while it runs (EKS, MSK, Aurora). Test
   installs set `deletion_protection = false` and are destroyed between uses.
 
@@ -112,7 +116,7 @@ Bootstrap takes:
 | `drive` | The Google Drive connector: the member user it acts as (a Content manager of each shared drive to cover), an admin to name group shares, and the Google service account's JSON key, with domain-wide delegation for `drive.metadata.readonly` and `admin.directory.group.readonly`; `null` for none |
 | `jira` | The Jira connector: your site's URL, an account that can browse the projects, the projects (default: all), and its API token; `null` for none |
 | `break_glass_public_keys` | The PEM public keys of the admins who may roll back a policy bundle that locks everyone out, without the portal or your IdP; `null` turns break-glass off |
-| `demo_idp`, `demo_data` | **Demo installs only:** the dev IdP and the synthetic company |
+| `demo_idp`, `demo_data`, `demo_activity` | **Demo installs only:** the dev IdP, the synthetic company, and its everyday tool calls through awzy-gateway each weekday (needs `mcp_gateway`) |
 
 ```sh
 cd ../bootstrap
@@ -144,8 +148,11 @@ the cluster on it.
 ## 6. DNS and your IdP
 
 1. **DNS:** point the portal hostname (a CNAME) at the Gateway's load balancer:
-   `kubectl -n awzy-ops get gateway awzy` shows its address. cert-manager gets the certificate
-   once the name resolves.
+   `kubectl -n awzy-ops get gateway awzy` shows its address. On Cloudflare, make it DNS only
+   (not proxied): the Gateway terminates TLS itself. cert-manager gets the certificate once the
+   name resolves, from inside the cluster too. Resolvers that looked the name up before the
+   record existed cache the miss for the zone's negative TTL (30 minutes on Cloudflare), so
+   issuing can wait that long; it retries on its own.
 2. **SCIM:** `tofu output -json scim` gives the SCIM URL (`https://<hostname>/scim/v2`) and
    bearer token. Enter both in your IdP's provisioning settings (Okta, Entra) so people and
    groups reach awzy-context.
@@ -165,22 +172,36 @@ the cluster on it.
 - **Images:** `kubectl get clusterpolicy awzy-verify-images` is ready. In the awzy namespaces
   it refuses any image that isn't from `registry_prefix` with the release key's signature,
   including third-party ones, which awzy mirrors and signs:
-  `kubectl -n awzy-system run unsigned --image=busybox` is refused.
+  `kubectl -n awzy-system run unsigned --image=busybox` is refused (`only-the-release-registry`).
+  An image from awzy's registry without the signature is refused too
+  (`signed-by-awzy-release-key: … no signatures found`); the example install checked that with a
+  test tag pushed unsigned, then deleted.
 - **A decision:** port-forward the PDP and ask it something (the request shape is in
-  [DEVELOPMENT.md](DEVELOPMENT.md#pdp)):
+  [DEVELOPMENT.md](DEVELOPMENT.md#pdp)). The PDP takes only callers with a Kubernetes
+  service-account token for its audience, so make one for the backend's account:
   ```sh
-  kubectl -n awzy-system port-forward svc/awzy-pdp 8080:8080
-  curl -s localhost:8080/v1/access/evaluation -H 'content-type: application/json' -d '{…}'
+  kubectl -n awzy-system port-forward svc/awzy-pdp 8080:8080 &
+  token=$(kubectl -n awzy-system create token awzy --audience awzy-pdp --duration 10m)
+  curl -s localhost:8080/v1/access/evaluation -H "authorization: Bearer $token" \
+    -H 'content-type: application/json' -d '{…}'
   ```
-  Every install starts in `monitor` mode: decisions are made and recorded, and nothing is
-  blocked until an admin switches a scope to enforce.
-- **Heartbeat:** the install shows as reporting in the corp portal within a minute.
+  The answer has a `decision_…` QID, a verdict, and `"mode":"monitor"`. The verdict can differ
+  from DEVELOPMENT.md's example: once your directory is in awzy-context, the PDP uses what it
+  knows about a principal over the request's inline entities. Every install starts in `monitor`
+  mode: decisions are made and recorded, and nothing is blocked until an admin switches a scope
+  to enforce.
+- **Heartbeat:** the install shows as reporting in the corp portal within a minute, and
+  `kubectl -n awzy-system logs deploy/awzy-reporter` shows `sending heartbeat` each minute with
+  no `heartbeat not delivered`.
 - **The portal:** `https://<hostname>` signs you in through your IdP.
 
 ## Operating an install
 
 - **Upgrades** follow the release channel the install was registered with. A pinned install
-  upgrades when you change `chart_version` and apply bootstrap again.
+  upgrades when you change `chart_version` and apply bootstrap again. If a sync failed (a hook
+  Job that kept failing, say), Argo CD keeps retrying that revision after you move on; stop it
+  with `kubectl -n awzy-ops patch application awzy --type merge -p
+  '{"status":{"operationState":{"phase":"Terminating"}}}'` and the next sync takes the new one.
 - **Rotating credentials:** a new pull or reporting token comes from re-registering in the corp
   portal; update your secret store and apply bootstrap. Bootstrap's own passwords (ClickHouse,
   SCIM) rotate when you `tofu apply -replace` their `random_password`. Give your IdP the new SCIM

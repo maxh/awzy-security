@@ -122,7 +122,14 @@ Activate advanced features as in step 1, request the account quota increase, and
 
 The install pulls from `registry.awzysecurity.com` (ADR 0028) with its own pull token, as a real client would: no AWS account grants and no exception in awzy's RCP. Done 2026-10-09: the example install is registered in the corp portal (client `example-client`, environment `demo`, channel `fast`); its install ID, reporting token, and pull token are in the example client's Secrets Manager (`awzy/install-credentials`), which `examples/example-client/bootstrap` reads. Pulling an image, its layers, and the chart through the proxy was checked end to end. Run `bootstrap` through `examples/example-client`, passing it the `install_contract` output of `aws/install`. It installs Argo CD and Kyverno. Argo CD then pulls the chart and signed images from the `fast` channel, and Kyverno rejects anything unsigned.
 
-**Done when:** awzy-pdp answers a check inside the install, an unsigned image is rejected at admission, `bootstrap` contains nothing AWS-specific, and awzy holds no credential for the example client.
+**Done when:** awzy-pdp answers a check inside the install, an unsigned image is rejected at admission, `bootstrap` contains nothing AWS-specific, and awzy holds no credential for the example client. Done on 2026-10-11 (#97), with `INSTALL.md` run end to end:
+
+- **A check:** awzy-pdp answered `/v1/access/evaluation` through a port-forward, with a service-account token (`"mode":"monitor"`). awzy-gateway also runs the synthetic company's tool calls through it each weekday (`demo_activity`), and those decisions reach ClickHouse through Kafka.
+- **Admission:** an image pushed unsigned to a test tag in awzy's registry and pulled through `registry.awzysecurity.com` was refused (`signed-by-awzy-release-key: no signatures found`), as was one from outside the registry. The test tag was deleted.
+- **Bootstrap** has no AWS provider and makes no AWS resources. Its one cloud dependency is that Awzy Bot and investigations need Bedrock, so they're on only when the install contract's cloud is `aws`.
+- **No credential for the client:** awzy issued the install's pull and reporting tokens, which the client holds; nothing awzy runs can reach into the install.
+- **The client portal** signs in at the demo hostname through the dev IdP (`demo_idp`), with Let's Encrypt's certificate. The synthetic company is provisioned over SCIM. A real IdP's sign-in and SCIM are still to be run.
+- **What the first install found**, all fixed: third-party images now carry digests (#88), the ClickHouse operator watches the data namespace (#89), the migrate Job creates its database (#92) and Kafka topics (#136), the released chart pins awzy's image digests so Argo CD sees no drift (#119), and the demo IdP and portal start (#88). The install account needed AWS Support to allow load balancers.
 
 ### 5. Monitoring
 
