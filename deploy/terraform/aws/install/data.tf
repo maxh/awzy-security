@@ -24,7 +24,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "data" {
   }
 }
 
-# ClickHouse's backups expire after backup_retention_days (ADR 0104). A week's incrementals depend
+# ClickHouse's backups expire after backup_retention_days (ADR 0105). A week's incrementals depend
 # on its full backup, so every restore point is kept for at least that many days less a week.
 resource "aws_s3_bucket_lifecycle_configuration" "data" {
   bucket = aws_s3_bucket.data.id
