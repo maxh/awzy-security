@@ -18,6 +18,16 @@ export default defineConfig({
       sidebar: [
         { label: "Start here", items: ["introduction", "concepts/how-awzy-decides", "client-portal"] },
         {
+          label: "Workflows",
+          items: [
+            "workflows/security-team",
+            "workflows/employees",
+            "workflows/approvers",
+            "workflows/agent-builders",
+            "workflows/platform-team",
+          ],
+        },
+        {
           label: "Concepts",
           items: [
             "concepts/principals-and-delegation",
