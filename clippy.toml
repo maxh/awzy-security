@@ -1,0 +1,5 @@
+# Clippy's settings for every Rust crate; the lints themselves are in .bazelrc's lint config.
+# Tests may panic: an unwrap there is an assertion.
+allow-unwrap-in-tests = true
+allow-panic-in-tests = true
+allow-dbg-in-tests = true

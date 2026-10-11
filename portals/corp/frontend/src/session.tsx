@@ -2,11 +2,18 @@
 // session is an HttpOnly cookie the backend sets at /auth/login; who is signed in comes from the
 // GraphQL `viewer` query.
 
-import { AuthLayout, ShellAccount } from "@awzy/ui";
+import { AuthLayout, isRecord, ShellAccount } from "@awzy/ui";
 import { Alert, Button, PasswordInput, Stack, TextInput } from "@mantine/core";
 import { createContext, useContext, useState, type FormEvent } from "react";
 
 export type Staff = { username: string; name: string };
+
+/** `v` as a staff member, if it is one. */
+function asStaff(v: unknown): Staff | null {
+  return isRecord(v) && typeof v.username === "string" && typeof v.name === "string"
+    ? { username: v.username, name: v.name }
+    : null;
+}
 
 export const StaffContext = createContext<Staff | null>(null);
 
@@ -18,8 +25,8 @@ export async function currentStaff(): Promise<Staff | null> {
     body: JSON.stringify({ query: "{ viewer { username name } }" }),
   });
   if (!res.ok) return null;
-  const body = (await res.json()) as { data?: { viewer?: Staff } };
-  return body.data?.viewer ?? null;
+  const body: unknown = await res.json();
+  return isRecord(body) && isRecord(body.data) ? asStaff(body.data.viewer) : null;
 }
 
 export async function signOut(): Promise<void> {
@@ -43,7 +50,9 @@ export function SignInPage({ onSignedIn }: { onSignedIn: (staff: Staff) => void 
     });
     setBusy(false);
     if (res.ok) {
-      onSignedIn((await res.json()) as Staff);
+      const signedIn = asStaff(await res.json());
+      if (signedIn) onSignedIn(signedIn);
+      else setError("The portal's answer wasn't a staff member.");
     } else {
       setError(await res.text());
     }

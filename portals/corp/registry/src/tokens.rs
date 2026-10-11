@@ -3,7 +3,7 @@
 use std::{
     collections::HashMap,
     str::FromStr,
-    sync::Mutex,
+    sync::{Mutex, PoisonError},
     time::{Duration, Instant},
 };
 
@@ -90,14 +90,14 @@ impl TokenStore {
             .bind(install.uuid())
             .execute(&self.pool)
             .await?;
-        self.cache.lock().unwrap().retain(|_, (id, _)| *id != install);
+        self.cache.lock().unwrap_or_else(PoisonError::into_inner).retain(|_, (id, _)| *id != install);
         Ok(done.rows_affected() > 0)
     }
 
     /// Whether `token` is `install`'s current pull token.
     pub async fn check(&self, install: InstallId, token: &str) -> Result<bool, sqlx::Error> {
         let hash = token_hash(token);
-        if let Some((id, at)) = self.cache.lock().unwrap().get(&hash) {
+        if let Some((id, at)) = self.cache.lock().unwrap_or_else(PoisonError::into_inner).get(&hash) {
             if at.elapsed() < CACHE_FOR {
                 return Ok(*id == install);
             }
@@ -107,7 +107,7 @@ impl TokenStore {
             .fetch_optional(&self.pool)
             .await?;
         let Some(id) = id.map(InstallId::from_uuid) else { return Ok(false) };
-        self.cache.lock().unwrap().insert(hash, (id, Instant::now()));
+        self.cache.lock().unwrap_or_else(PoisonError::into_inner).insert(hash, (id, Instant::now()));
         Ok(id == install)
     }
 }

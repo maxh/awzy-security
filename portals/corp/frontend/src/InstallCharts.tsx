@@ -11,6 +11,7 @@ const WINDOWS = {
   MONTH: { label: "30 days", ms: 30 * 86_400_000, bucketMs: 7_200_000 },
 } as const;
 type Span = keyof typeof WINDOWS;
+const SPANS: readonly Span[] = ["DAY", "WEEK", "MONTH"];
 
 /** The install's heartbeats over time: one chart per figure, worst value per bucket. */
 export function InstallCharts({ id }: { id: string }) {
@@ -25,7 +26,7 @@ export function InstallCharts({ id }: { id: string }) {
           size="xs"
           value={span}
           onChange={(v) => startTransition(() => setSpan(v))}
-          data={(Object.keys(WINDOWS) as Span[]).map((value) => ({ value, label: WINDOWS[value].label }))}
+          data={SPANS.map((value) => ({ value, label: WINDOWS[value].label }))}
         />
       }
     >

@@ -60,7 +60,7 @@ const LINKED = { outline: "2px solid var(--mantine-color-yellow-5)", borderRadiu
 /** The shortest justification awzy-challenge accepts. */
 const MIN_JUSTIFICATION = 20;
 
-const STATUS_COLOR = { PENDING: "yellow", PASSED: "teal", REJECTED: "red", EXPIRED: "gray" } as const;
+const STATUS_COLOR: Record<string, string> = { PENDING: "yellow", PASSED: "teal", REJECTED: "red", EXPIRED: "gray" };
 
 type Ref = { readonly type: string; readonly id: string } | null | undefined;
 
@@ -460,7 +460,7 @@ function Challenges({
                     <Table.Td style={{ whiteSpace: "nowrap" }}>{c.createdAt ? formatTime(c.createdAt) : ""}</Table.Td>
                     <Table.Td>{requestLabel(c)}</Table.Td>
                     <Table.Td>
-                      <Badge color={STATUS_COLOR[c.status as keyof typeof STATUS_COLOR] ?? "gray"} variant="light">
+                      <Badge color={STATUS_COLOR[c.status] ?? "gray"} variant="light">
                         {c.status.toLowerCase()}
                       </Badge>
                     </Table.Td>
@@ -519,7 +519,7 @@ function PendingChallenge({
   `);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const needs = (kind: string) => c.kinds.includes(kind as never) && !c.passed.includes(kind as never);
+  const needs = (kind: Pending["kinds"][number]) => c.kinds.includes(kind) && !c.passed.includes(kind);
 
   const justify = () =>
     commit({

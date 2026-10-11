@@ -31,6 +31,9 @@ export function ago(utc: string | null | undefined, now = Date.now()): string {
 }
 
 /** The release channels staff choose from, for a Select. */
+/** The release channels' names, for narrowing a Select's value without a cast. */
+export const CHANNEL_NAMES = ["FAST", "STABLE", "PINNED"] as const;
+
 export const CHANNELS = [
   { value: "FAST", label: "fast" },
   { value: "STABLE", label: "stable" },

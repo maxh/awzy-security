@@ -52,7 +52,7 @@ fn me() -> Actor {
 fn probe_entities(resource: &str, folder: &str) -> Vec<Entity> {
     let res = |id: &str, parents: &[&str]| Entity {
         uid: Some(r("Resource", id)),
-        attrs: Some(json_to_struct(json!({ "sensitivity": "internal" }).as_object().unwrap().clone())),
+        attrs: Some(json_to_struct(serde_json::Map::from_iter([("sensitivity".to_string(), json!("internal"))]))),
         parents: parents.iter().map(|p| r("Resource", p)).collect(),
     };
     vec![res(resource, &[folder]), res(folder, &["freshness:root"]), res("freshness:root", &[])]
@@ -118,11 +118,11 @@ async fn time_until(
         let res = pdp.check(req.clone()).await?.into_inner();
         let now = since.elapsed();
         if reflects(&res) {
-            first.get_or_insert(now);
-            run_start.get_or_insert(now);
+            let first = *first.get_or_insert(now);
+            let settled = *run_start.get_or_insert(now);
             run += 1;
             if run >= SETTLED {
-                return Ok(Timing { first: first.unwrap(), settled: run_start.unwrap() });
+                return Ok(Timing { first, settled });
             }
         } else {
             run = 0;
@@ -219,9 +219,10 @@ fn background(
                         resource: Some(r("Resource", &format!("load:{}", i % 50))),
                         entities: vec![Entity {
                             uid: Some(r("Resource", &format!("load:{}", i % 50))),
-                            attrs: Some(json_to_struct(
-                                json!({ "sensitivity": "internal" }).as_object().unwrap().clone(),
-                            )),
+                            attrs: Some(json_to_struct(serde_json::Map::from_iter([(
+                                "sensitivity".to_string(),
+                                json!("internal"),
+                            )]))),
                             parents: vec![],
                         }],
                         human_present: Some(true),
@@ -256,9 +257,9 @@ fn report(name: &str, target: &str, timings: &[Timing]) {
     println!(
         "{name:28} target {target:>6}   first: median {:>8.1} ms, max {:>8.1} ms   settled: median {:>8.1} ms, max {:>8.1} ms",
         ms(mid(&first)),
-        ms(*first.last().unwrap()),
+        ms(first.last().copied().unwrap_or_default()),
         ms(mid(&settled)),
-        ms(*settled.last().unwrap()),
+        ms(settled.last().copied().unwrap_or_default()),
     );
 }
 

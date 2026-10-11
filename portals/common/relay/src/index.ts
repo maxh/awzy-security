@@ -6,6 +6,7 @@ import {
   RecordSource,
   Store,
   type FetchFunction,
+  type GraphQLSingularResponse,
   type RequestParameters,
   type SubscribeFunction,
 } from "relay-runtime";
@@ -32,6 +33,19 @@ function operationBody(operation: RequestParameters, sendQueryText: boolean) {
     : { query: operation.text ?? "" };
 }
 
+/** Whether `v` is a GraphQL response: data, errors, or both, as the server sent it. */
+function isGraphQLResponse(v: unknown): v is GraphQLSingularResponse {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+  const errors = "errors" in v ? v.errors : undefined;
+  const errorsOk =
+    errors === undefined ||
+    (Array.isArray(errors) &&
+      errors.every(
+        (e: unknown) => typeof e === "object" && e !== null && "message" in e && typeof e.message === "string",
+      ));
+  return ("data" in v || errors !== undefined) && errorsOk;
+}
+
 /**
  * Relay environment for a portal backend: queries and mutations over HTTP POST,
  * subscriptions over graphql-ws on the same path, each sent by its persisted ID.
@@ -53,13 +67,15 @@ export function createEnvironment(endpoint = "/graphql", options: EnvironmentOpt
       options.onUnauthorized?.();
       throw new Error("Your session has expired. Signing in again.");
     }
-    const body = (await res.json()) as { data?: unknown; errors?: { message: string }[] };
+    const body: unknown = await res.json();
+    if (!isGraphQLResponse(body)) throw new Error("The portal's answer isn't a GraphQL response.");
     // Pages don't handle partial data, so any error fails the whole query, with the server's
     // reasons. The page's error boundary shows them.
-    if (body.errors?.length) {
-      throw new Error([...new Set(body.errors.map((e) => e.message))].join("\n"));
+    const errors = "errors" in body ? (body.errors ?? []) : [];
+    if (errors.length) {
+      throw new Error([...new Set(errors.map((e) => e.message))].join("\n"));
     }
-    return body as never;
+    return body;
   };
 
   const wsUrl = new URL(endpoint, window.location.href);
@@ -71,7 +87,8 @@ export function createEnvironment(endpoint = "/graphql", options: EnvironmentOpt
       ws.subscribe(
         { operationName: operation.name, ...operationBody(operation, sendQueryText), variables },
         {
-          next: (value) => sink.next(value as never),
+          next: (value) =>
+            isGraphQLResponse(value) ? sink.next(value) : sink.error(new Error("Not a GraphQL response.")),
           error: (err) => sink.error(err instanceof Error ? err : new Error(String(err))),
           complete: () => sink.complete(),
         },
