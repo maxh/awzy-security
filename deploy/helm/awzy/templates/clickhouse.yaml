@@ -70,6 +70,10 @@ spec:
       {{- end }}
       securityContext:
         runAsNonRoot: true
+        # distroless's nonroot, by number: the image names its user, and the kubelet can't check
+        # that a name isn't root, so it refuses to start the container.
+        runAsUser: 65532
+        runAsGroup: 65532
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: migrate
