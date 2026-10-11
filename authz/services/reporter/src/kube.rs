@@ -181,16 +181,20 @@ pub fn release_state(app: &Value) -> ReleaseState {
         Some("Missing") => ReleaseHealth::Missing,
         _ => ReleaseHealth::Unknown,
     };
-    let conditions: Vec<&Value> = status["conditions"].as_array().map(|c| c.iter().collect()).unwrap_or_default();
-    let condition = |kind: &str| conditions.iter().filter(move |c| c["type"] == kind);
+    let conditions = status["conditions"].as_array().map(Vec::as_slice).unwrap_or_default();
+    // A condition of `kind`, whose message (when `says` is given) contains it.
+    let has = |kind: &str, says: Option<&str>| {
+        conditions
+            .iter()
+            .any(|c| c["type"] == kind && says.is_none_or(|s| c["message"].as_str().is_some_and(|m| m.contains(s))))
+    };
     // The chart refuses to render until bootstrap reaches its level (ADR 0098).
-    let waits_for_bootstrap = condition("ComparisonError")
-        .any(|c| c["message"].as_str().is_some_and(|m| m.contains("needs bootstrap level")));
+    let waits_for_bootstrap = has("ComparisonError", Some("needs bootstrap level"));
     let operation = &status["operationState"];
     let sync_failing = matches!(operation["phase"].as_str(), Some("Failed" | "Error"))
         || (operation["phase"] == "Running"
             && operation["message"].as_str().is_some_and(|m| m.contains("completed unsuccessfully")))
-        || condition("SyncError").next().is_some();
+        || has("SyncError", None);
     let blocked_by = if waits_for_bootstrap {
         Some(ReleaseBlocker::BootstrapTooOld)
     } else if sync_failing {
