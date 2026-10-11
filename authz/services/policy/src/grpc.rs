@@ -113,7 +113,21 @@ impl PolicyService for Service {
         let unchanged = |a: &Option<crate::store::PolicyBundle>| matches!(a, Some(b) if b.version == known);
         if unchanged(&active) && req.wait_seconds > 0 {
             // Wakes for a new mode too, so the caller reads it straight after (ADR 0077).
-            self.0.changed().wait_after(seen, awzy_store::changes::wait_for(Some(req.wait_seconds.into()))).await;
+            let store = self.0.clone();
+            // The install's mode as it was, so a change to it also ends the wait.
+            let mode_then = store.enforcement(crate::store::INSTALL_SCOPE).await.ok().map(|e| e.changed_at);
+            let check = || {
+                let store = store.clone();
+                async move {
+                    let bundle_moved = !matches!(store.active().await, Ok(Some(b)) if b.version == known);
+                    bundle_moved
+                        || store.enforcement(crate::store::INSTALL_SCOPE).await.ok().map(|e| e.changed_at) != mode_then
+                }
+            };
+            self.0
+                .changed()
+                .wait_until(seen, awzy_store::changes::wait_for(Some(req.wait_seconds.into())), check)
+                .await;
             active = self.0.active().await.map_err(status)?;
         }
         let res = match active {

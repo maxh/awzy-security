@@ -54,7 +54,12 @@ async fn principals(
     let seen = store.principals_changed().current();
     let mut current = store.version().await.map_err(fail)?;
     if p.known == Some(current) && p.wait.unwrap_or(0) > 0 {
-        store.principals_changed().wait_after(seen, awzy_store::changes::wait_for(p.wait)).await;
+        let known = p.known;
+        let check = || {
+            let store = store.clone();
+            async move { store.version().await.map_or(true, |v| Some(v) != known) }
+        };
+        store.principals_changed().wait_until(seen, awzy_store::changes::wait_for(p.wait), check).await;
         current = store.version().await.map_err(fail)?;
     }
     if p.known == Some(current) {

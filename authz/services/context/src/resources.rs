@@ -693,7 +693,14 @@ async fn resource_changes(State(store): State<ContextStore>, Query(p): Query<Cha
     let mut answer = read(store.clone()).await;
     if let Ok((_, ids, false)) = &answer {
         if ids.is_empty() && p.after.is_some() && p.wait.unwrap_or(0) > 0 {
-            store.resources_changed().wait_after(seen, awzy_store::changes::wait_for(p.wait)).await;
+            let after = p.after;
+            let check = || {
+                let store = store.clone();
+                async move {
+                    store.resource_changes(after, 1).await.map_or(true, |(_, ids, reset)| reset || !ids.is_empty())
+                }
+            };
+            store.resources_changed().wait_until(seen, awzy_store::changes::wait_for(p.wait), check).await;
             answer = read(store.clone()).await;
         }
     }

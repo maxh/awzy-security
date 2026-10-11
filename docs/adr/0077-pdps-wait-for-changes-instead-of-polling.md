@@ -22,7 +22,8 @@ containment in under 200 ms.
   moves (`awzy_principals`), a resource or the work linking it changes (`awzy_resources`), and a
   bundle is published or the enforcement mode changes (`awzy_policy`). Each service follows its
   channels with `awzy_store::changes::Changes`, and a request that would answer "unchanged" waits
-  on it instead, up to 25 seconds (below common idle timeouts).
+  on it instead, up to 25 seconds (below common idle timeouts). While waiting it also checks for
+  itself once a second, so a lost notification costs a second, not the whole wait.
 - **Long-polls, not new streams**, so the existing calls keep their shape:
   `/v1/principals?known=<v>&wait=25`, and `GetActive` with `wait_seconds` (an additive protobuf
   field). The PDP asks again as soon as it's answered, so a change reaches it as it's committed.

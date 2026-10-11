@@ -32,6 +32,29 @@ impl Changes {
         let _ = tokio::time::timeout(max, rx.wait_for(|n| *n > seen)).await;
     }
 
+    /// Waits up to `max` for `changed` to say what the caller answers from has moved: woken by
+    /// a notification, and checking at least every second besides, so a lost notification (or
+    /// a process that isn't following the channel) costs a second, not the whole wait.
+    pub async fn wait_until<F, Fut>(&self, seen: u64, max: Duration, mut changed: F)
+    where
+        F: FnMut() -> Fut,
+        Fut: std::future::Future<Output = bool>,
+    {
+        let deadline = tokio::time::Instant::now() + max;
+        let mut seen = seen;
+        loop {
+            let left = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if left.is_zero() {
+                return;
+            }
+            self.wait_after(seen, left.min(RECHECK)).await;
+            seen = self.current();
+            if changed().await {
+                return;
+            }
+        }
+    }
+
     /// Moves the counter, waking every waiter.
     pub fn changed(&self) {
         self.tx.send_modify(|n| *n += 1);
@@ -58,6 +81,9 @@ impl Changes {
         }
     }
 }
+
+/// How often a waiter checks for itself, notification or not.
+const RECHECK: Duration = Duration::from_secs(1);
 
 /// The longest a long-poll may wait: below common proxy and load balancer idle timeouts.
 pub const MAX_WAIT: Duration = Duration::from_secs(25);
@@ -86,6 +112,21 @@ mod tests {
         tokio::time::timeout(Duration::from_millis(100), changes.wait_after(seen, Duration::from_secs(10)))
             .await
             .expect("no wait for a change already seen");
+    }
+
+    #[tokio::test]
+    async fn a_change_no_one_notified_is_still_found_within_a_second() {
+        let changes = Changes::default();
+        let started = std::time::Instant::now();
+        let mut calls = 0;
+        changes
+            .wait_until(changes.current(), Duration::from_secs(10), || {
+                calls += 1;
+                let found = calls >= 2;
+                async move { found }
+            })
+            .await;
+        assert!(started.elapsed() < Duration::from_secs(3), "found on the second check, about a second in");
     }
 
     #[tokio::test]
