@@ -585,7 +585,9 @@ type Mutation {
 	"""
 	createPolicyDraft(input: CreatePolicyDraftInput!): CreatePolicyDraftPayload!
 	"""
-	Makes a draft the active bundle. PDPs pick it up within about 10 seconds.
+	Makes a draft the active bundle. Every PDP picks it up as it's published. A draft that would
+	lock the signed-in person out of administering policies isn't published unless they accept
+	it.
 	"""
 	publishPolicyBundle(input: PublishPolicyBundleInput!): PublishPolicyBundlePayload!
 	"""
@@ -842,10 +844,22 @@ input PublishPolicyBundleInput {
 	A draft bundle's QID.
 	"""
 	policyBundleQid: ID!
+	"""
+	Publish even though the draft would stop the signed-in person administering policies.
+	"""
+	acceptLockout: Boolean! = false
 }
 
 type PublishPolicyBundlePayload {
-	bundle: PolicyBundle!
+	"""
+	The bundle, now active. Null when publishing waits for `acceptLockout`.
+	"""
+	bundle: PolicyBundle
+	"""
+	Set, and nothing published, when the draft would deny the signed-in person `administer` on
+	the policies area: they couldn't fix it from the portal afterwards, only by break-glass.
+	"""
+	wouldLockYouOut: String
 }
 
 type Query {

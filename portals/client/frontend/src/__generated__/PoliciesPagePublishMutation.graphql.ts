@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<083016076afa5e837a58acd8f8c8c7bf>>
+ * @generated SignedSource<<6749616d18dc81321badcea6968dd716>>
  * @lightSyntaxTransform
  */
 
@@ -10,6 +10,7 @@
 import { ConcreteRequest } from 'relay-runtime';
 export type PolicyBundleStatus = "ACTIVE" | "DRAFT" | "SUPERSEDED" | "%future added value";
 export type PublishPolicyBundleInput = {
+  acceptLockout?: boolean;
   policyBundleQid: string;
 };
 export type PoliciesPagePublishMutation$variables = {
@@ -21,7 +22,8 @@ export type PoliciesPagePublishMutation$data = {
       readonly id: string;
       readonly publishedAt: string | null | undefined;
       readonly status: PolicyBundleStatus;
-    };
+    } | null | undefined;
+    readonly wouldLockYouOut: string | null | undefined;
   };
 };
 export type PoliciesPagePublishMutation = {
@@ -83,6 +85,13 @@ v1 = [
           }
         ],
         "storageKey": null
+      },
+      {
+        "alias": null,
+        "args": null,
+        "kind": "ScalarField",
+        "name": "wouldLockYouOut",
+        "storageKey": null
       }
     ],
     "storageKey": null
@@ -106,16 +115,16 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "d4c5eb6d5ad1b4eabec2a5741237b0a7",
+    "cacheID": "24d3283630f83f10782cdde3b420478c",
     "id": null,
     "metadata": {},
     "name": "PoliciesPagePublishMutation",
     "operationKind": "mutation",
-    "text": "mutation PoliciesPagePublishMutation(\n  $input: PublishPolicyBundleInput!\n) {\n  publishPolicyBundle(input: $input) {\n    bundle {\n      id\n      status\n      publishedAt\n    }\n  }\n}\n"
+    "text": "mutation PoliciesPagePublishMutation(\n  $input: PublishPolicyBundleInput!\n) {\n  publishPolicyBundle(input: $input) {\n    bundle {\n      id\n      status\n      publishedAt\n    }\n    wouldLockYouOut\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "d72419a7fb337fd6c5ecb13de0696d26";
+(node as any).hash = "576c158e1854d37fb6fbef467a9b2028";
 
 export default node;

@@ -47,7 +47,9 @@ replaced.
   with today's people and resources, and lists every request whose verdict would change, most
   frequent first. That's what you'd break before you break it.
 - **Publish:** signs the draft and makes it active. Every PDP picks it up as soon as it's
-  published, usually within a second.
+  published, usually within a second. If the draft would stop you administering policies, the
+  portal says which policy would do it and publishes only if you confirm: afterwards, only a
+  break-glass rollback could undo it.
 - **Awzy Bot,** when your install turns it on: ask it why something was denied, or to draft a
   policy. It searches and explains decisions and reads the active policies, as you, and only ever
   drafts: a person publishes. It runs on your cloud's own model service.

@@ -187,11 +187,18 @@ pub struct CreatePolicyDraftPayload {
 pub struct PublishPolicyBundleInput {
     /// A draft bundle's QID.
     pub policy_bundle_qid: ID,
+    /// Publish even though the draft would stop the signed-in person administering policies.
+    #[graphql(default)]
+    pub accept_lockout: bool,
 }
 
 #[derive(SimpleObject)]
 pub struct PublishPolicyBundlePayload {
-    pub bundle: PolicyBundle,
+    /// The bundle, now active. Null when publishing waits for `acceptLockout`.
+    pub bundle: Option<PolicyBundle>,
+    /// Set, and nothing published, when the draft would deny the signed-in person `administer` on
+    /// the policies area: they couldn't fix it from the portal afterwards, only by break-glass.
+    pub would_lock_you_out: Option<String>,
 }
 
 #[derive(Default)]
@@ -214,7 +221,9 @@ impl PolicyMutation {
         })
     }
 
-    /// Makes a draft the active bundle. PDPs pick it up within about 10 seconds.
+    /// Makes a draft the active bundle. Every PDP picks it up as it's published. A draft that would
+    /// lock the signed-in person out of administering policies isn't published unless they accept
+    /// it.
     async fn publish_policy_bundle(
         &self,
         ctx: &Context<'_>,
@@ -222,9 +231,56 @@ impl PolicyMutation {
     ) -> Result<PublishPolicyBundlePayload> {
         let viewer = require(ctx, Administer, PortalArea::Policies).await?;
         let id: PolicyBundleId = input.policy_bundle_qid.parse()?;
+        if !input.accept_lockout {
+            if let Some(why) = locks_out(ctx, &viewer, id).await? {
+                return Ok(PublishPolicyBundlePayload { bundle: None, would_lock_you_out: Some(why) });
+            }
+        }
         let bundle = publish(policy_client(ctx)?, id, &viewer.actor()).await?;
-        Ok(PublishPolicyBundlePayload { bundle: PolicyBundle(bundle) })
+        Ok(PublishPolicyBundlePayload { bundle: Some(PolicyBundle(bundle)), would_lock_you_out: None })
     }
+}
+
+/// Why draft `id` would deny `viewer` administering policies, as the PDPs would decide it with the
+/// directory they hold, or None when it wouldn't. A challenge isn't a lockout: it can be passed.
+async fn locks_out(ctx: &Context<'_>, viewer: &crate::access::Viewer, id: PolicyBundleId) -> Result<Option<String>> {
+    let services = ctx.data::<crate::Services>()?;
+    let draft = get(policy_client(ctx)?, id).await?.ok_or("no such policy bundle")?;
+    let pdp = awzy_pdp::Pdp::new(&draft.schema, &draft.policies)?;
+    let replayer = match &services.context {
+        Some(context) => awzy_pdp::replay::Replayer::from_context(context.base()).await?,
+        None => awzy_pdp::replay::Replayer::without_context(),
+    };
+    let area = PortalArea::Policies.as_str();
+    let check = awzy_model::Check {
+        principal: viewer.subject.clone(),
+        action: Administer.as_str().into(),
+        resource: awzy_model::EntityRef::new(awzy_model::entity_type::PORTAL_AREA, area),
+        context: serde_json::json!({ "client": "portal" }).as_object().expect("object").clone(),
+        on_behalf_of: viewer.on_behalf_of.clone(),
+        human_present: viewer.human_present,
+        always_enforced: true,
+    };
+    let mut entities = viewer.entities.clone();
+    entities.push(serde_json::json!({
+        "uid": { "type": awzy_model::entity_type::PORTAL_AREA, "id": area },
+        "attrs": { "sensitivity": "confidential" },
+        "parents": [],
+    }));
+    let decision = replayer.decide(&pdp, &check, serde_json::Value::Array(entities)).await?;
+    Ok((decision.verdict == awzy_model::Verdict::Deny).then(|| {
+        let why = if decision.policies.is_empty() {
+            "no policy in it permits that".to_string()
+        } else {
+            format!("{} would deny it", decision.policies.join(", "))
+        };
+        format!(
+            "Publishing version {} would stop {} administering policies here: {why}. Only a break-glass \
+             rollback could undo it.",
+            draft.version,
+            viewer.actor().label()
+        )
+    }))
 }
 
 #[cfg(test)]
@@ -444,6 +500,27 @@ pub(crate) mod tests {
             serde_json::json!({ "type": "Human", "id": "alice" })
         );
         assert_eq!(published["publishPolicyBundle"]["bundle"]["publishedBy"]["id"], "alice");
+
+        // A draft that would stop alice administering policies waits for her to accept it.
+        let locking = run(format!(
+            "mutation {{ createPolicyDraft(input: {{ schema: {}, policies: {} }}) {{ bundle {{ id }} }} }}",
+            gql(awzy_pdp::DEFAULT_SCHEMA),
+            gql(&format!(
+                "{}\n@id(\"no-portal\")\nforbid (principal, action, resource is PortalArea);",
+                awzy_pdp::DEFAULT_POLICIES
+            ))
+        ))
+        .await;
+        let locking = locking["createPolicyDraft"]["bundle"]["id"].as_str().unwrap().to_string();
+        let held = run(format!(
+            "mutation {{ publishPolicyBundle(input: {{ policyBundleQid: \"{locking}\" }}) {{ bundle {{ status }} wouldLockYouOut }} }}"
+        ))
+        .await;
+        assert!(held["publishPolicyBundle"]["bundle"].is_null());
+        let why = held["publishPolicyBundle"]["wouldLockYouOut"].as_str().unwrap();
+        assert!(why.contains("no-portal would deny it") && why.contains("break-glass"), "{why}");
+        let still = run("{ activePolicyBundle { id } }".into()).await;
+        assert_eq!(still["activePolicyBundle"]["id"], id.as_str(), "nothing was published");
     }
 
     /// Only the security group runs the portal (base.cedar), even in monitor mode.

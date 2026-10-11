@@ -98,6 +98,14 @@ impl Replayer {
         Self::new(Arc::new(Principals::none()), Arc::new(Resources::none()))
     }
 
+    /// The request decided under `pdp`, with the entities the caller already has (`inline`, in
+    /// Cedar's entity JSON) besides what awzy-context knows: for asking how a draft would treat
+    /// someone signed in now, from their token's entities.
+    pub async fn decide(&self, pdp: &Pdp, req: &Check, inline: Value) -> anyhow::Result<Decision> {
+        let assembled = assemble(&self.principals, &self.resources, req, inline).await?;
+        evaluate(pdp, req, &assembled)
+    }
+
     /// The request decided under `before` and under `after`, on the same entities.
     pub async fn compare(&self, before: &Pdp, after: &Pdp, req: &Check) -> anyhow::Result<(Decision, Decision)> {
         let assembled = assemble(&self.principals, &self.resources, req, Value::Array(vec![])).await?;
