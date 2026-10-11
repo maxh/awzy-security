@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<e59bdf5932871a86f2434b796e9d2219>>
+ * @generated SignedSource<<4285a09938b8370fe1d3c1f4580e7851>>
+ * @relayHash d6eb1b872c1fba9ca148ebe470b2f38d
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID da289075fcc5fda934cdda9a0ec0b7be4103e2ee4aed99d58a1405941839c5f6
 
 import { ConcreteRequest } from 'relay-runtime';
 export type PoliciesPageAwzyBotQuery$variables = Record<PropertyKey, never>;
@@ -45,12 +48,11 @@ return {
     "selections": (v0/*:: as any*/)
   },
   "params": {
-    "cacheID": "d6eb1b872c1fba9ca148ebe470b2f38d",
-    "id": null,
+    "id": "da289075fcc5fda934cdda9a0ec0b7be4103e2ee4aed99d58a1405941839c5f6",
     "metadata": {},
     "name": "PoliciesPageAwzyBotQuery",
     "operationKind": "query",
-    "text": "query PoliciesPageAwzyBotQuery {\n  awzyBotEnabled\n}\n"
+    "text": null
   }
 };
 })();

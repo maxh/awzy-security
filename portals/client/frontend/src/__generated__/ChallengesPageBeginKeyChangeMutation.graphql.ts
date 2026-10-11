@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<abf9706c62cd906d32a54403552537f7>>
+ * @generated SignedSource<<7078d0458ddef4526efa138312112843>>
+ * @relayHash 77c28ba0e1478b7c3cf723bc4fca1f0e
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 629eee1e69d9906ef3459a0fc5d76bf06568fbf795a6abe82ce05073c420ca84
 
 import { ConcreteRequest } from 'relay-runtime';
 export type ChallengesPageBeginKeyChangeMutation$variables = Record<PropertyKey, never>;
@@ -66,12 +69,11 @@ return {
     "selections": (v0/*:: as any*/)
   },
   "params": {
-    "cacheID": "77c28ba0e1478b7c3cf723bc4fca1f0e",
-    "id": null,
+    "id": "629eee1e69d9906ef3459a0fc5d76bf06568fbf795a6abe82ce05073c420ca84",
     "metadata": {},
     "name": "ChallengesPageBeginKeyChangeMutation",
     "operationKind": "mutation",
-    "text": "mutation ChallengesPageBeginKeyChangeMutation {\n  beginSecurityKeyChange {\n    ceremonyQid\n    optionsJson\n  }\n}\n"
+    "text": null
   }
 };
 })();

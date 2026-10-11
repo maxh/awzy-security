@@ -4,8 +4,8 @@ awzy_service(
     name = "backend",
     crate_name = "awzy_corp_portal",
     binary_name = "awzy-corp-portal",
-    # Embedded by sqlx::migrate!.
-    compile_data = glob(["migrations/*.sql"]),
+    # Embedded by sqlx::migrate! and include_str!.
+    compile_data = glob(["migrations/*.sql"]) + ["//portals/corp/frontend:persisted_queries.json"],
     deps = [
         "//libs/heartbeat",
         "//libs/model",

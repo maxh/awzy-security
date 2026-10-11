@@ -78,12 +78,26 @@ fn schema_builder() -> async_graphql::SchemaBuilder<CorpPortalQuery, CorpPortalM
         .limit_complexity(awzy_portal::MAX_QUERY_COMPLEXITY)
 }
 
+/// The frontend's queries by ID, from the Relay compiler (ADR 0088).
+const PERSISTED_QUERIES: &str =
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../frontend/persisted_queries.json"));
+
+/// The corp portal resolves its frontend's IDs but also runs query text: it holds no client data,
+/// and staff point local frontends at production (ADR 0024).
+fn persisted_queries() -> awzy_portal::PersistedQueries {
+    awzy_portal::PersistedQueries::new(PERSISTED_QUERIES, false)
+        .expect("persisted_queries.json is the Relay compiler's")
+}
+
 /// `/graphql` behind sign-in, the sign-in routes under `/auth`, and heartbeat intake at
 /// `/v1/heartbeat`.
 pub fn router(auth: Auth, store: FleetStore) -> Router {
     let signed_in = middleware::from_fn_with_state(auth.clone(), auth::require_staff);
-    let graphql = get(|| async { Html(GraphiQLSource::build().endpoint("/graphql").finish()) })
-        .merge(post(graphql).layer(signed_in).with_state(schema_with(store.clone())));
+    let graphql = get(|| async { Html(GraphiQLSource::build().endpoint("/graphql").finish()) }).merge(
+        post(graphql)
+            .layer(signed_in)
+            .with_state(schema_builder().data(store.clone()).extension(persisted_queries()).finish()),
+    );
     Router::new().route("/graphql", graphql).merge(auth::routes(auth)).merge(fleet::intake_routes(store))
 }
 
@@ -106,6 +120,16 @@ mod tests {
 
     use super::*;
     use crate::auth::{hash_password, StaffAccount};
+
+    #[test]
+    fn the_frontends_queries_are_embedded_and_parse() {
+        let queries: std::collections::HashMap<String, String> =
+            serde_json::from_str(super::PERSISTED_QUERIES).unwrap();
+        assert!(!queries.is_empty());
+        for text in queries.values() {
+            async_graphql::parser::parse_query(text).unwrap();
+        }
+    }
 
     #[tokio::test]
     async fn api_version_query() {

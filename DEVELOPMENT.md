@@ -671,7 +671,9 @@ Vite proxies `/graphql` and `/auth/config` there, so the browser sees one origin
 backend needs no CORS. You sign in with that install's IdP, and the backend authorizes you as it
 would anyone else. The IdP needs a separate client (`VITE_AWZY_CLIENT_ID`) that allows
 `https://localhost:5173/auth/callback` as a redirect URI (`http://` without the mkcert files). Only register it for our own staging and
-demo installs. A client's install shouldn't accept localhost redirects.
+demo installs. A client's install shouldn't accept localhost redirects. Those installs also set
+`clientPortal.persistedQueriesOnly: false`; otherwise the deployed portal refuses any query your
+local frontend adds or changes ([ADR 0088](docs/adr/0088-the-client-portal-runs-only-its-own-queries.md)).
 
 The corp frontend works the same way (`cd portals/corp/frontend`, Vite on :5174, local backend on
 :8090), against awzy's own corp deployments. It needs no IdP client: corp sign-in is a session

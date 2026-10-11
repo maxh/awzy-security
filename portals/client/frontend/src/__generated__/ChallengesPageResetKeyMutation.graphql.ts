@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<3f9c255cf2d87ab92e3546a5b2ddf94d>>
+ * @generated SignedSource<<494c686ab098df3bb1ae60ed4f62d9ce>>
+ * @relayHash 50b279c9b124cf92d1858a7a29859865
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID a824dba4f516b9624189e3ca2ee2f669ff098f9747683496ebd9cb2005986da0
 
 import { ConcreteRequest } from 'relay-runtime';
 export type ResetSecurityKeyInput = {
@@ -89,12 +92,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "50b279c9b124cf92d1858a7a29859865",
-    "id": null,
+    "id": "a824dba4f516b9624189e3ca2ee2f669ff098f9747683496ebd9cb2005986da0",
     "metadata": {},
     "name": "ChallengesPageResetKeyMutation",
     "operationKind": "mutation",
-    "text": "mutation ChallengesPageResetKeyMutation(\n  $input: ResetSecurityKeyInput!\n) {\n  resetSecurityKey(input: $input) {\n    securityKey {\n      id\n    }\n  }\n}\n"
+    "text": null
   }
 };
 })();

@@ -7,6 +7,9 @@ load("@npm//portals/corp/frontend:vite/package_json.bzl", vite_bin = "bin")
 
 npm_link_all_packages()
 
+# The backend embeds the Relay compiler's query IDs (ADR 0088).
+exports_files(["persisted_queries.json"])
+
 # One copy of the sources in bazel-bin, shared by every target below. Letting each JS rule
 # copy its own would create conflicting copy actions once the Vite build runs unsandboxed.
 copy_to_bin(
@@ -14,6 +17,7 @@ copy_to_bin(
     srcs = glob(["src/**/*.ts", "src/**/*.tsx"], allow_empty = True) + [
         "index.html",
         "package.json",
+        "persisted_queries.json",
         "relay.config.json",
         "schema.graphql",
         "tsconfig.json",

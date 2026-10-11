@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<0aedafa8ea689eda87aab32939d81b8d>>
+ * @generated SignedSource<<156bb08be4f9fccee505c5dd611a2127>>
+ * @relayHash d6a53fbf18cee798575701a9f42c0b1e
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID d04aff19184255e894771aee7960001ca44469f5b83e6eb6cc0de982364c332a
 
 import { ConcreteRequest } from 'relay-runtime';
 export type ChallengeKind = "APPROVAL" | "BIOMETRIC" | "JUSTIFICATION" | "VERIFICATION" | "%future added value";
@@ -130,12 +133,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "d6a53fbf18cee798575701a9f42c0b1e",
-    "id": null,
+    "id": "d04aff19184255e894771aee7960001ca44469f5b83e6eb6cc0de982364c332a",
     "metadata": {},
     "name": "ChallengesPageFinishVerificationMutation",
     "operationKind": "mutation",
-    "text": "mutation ChallengesPageFinishVerificationMutation(\n  $input: FinishChallengeVerificationInput!\n) {\n  finishChallengeVerification(input: $input) {\n    challenge {\n      id\n      status\n      kinds\n      passed\n      grantExpiresAt\n    }\n  }\n}\n"
+    "text": null
   }
 };
 })();

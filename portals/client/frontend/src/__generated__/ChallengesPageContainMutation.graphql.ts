@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<1b80ced4c9840e37548c146f4a3be265>>
+ * @generated SignedSource<<19f88dd64157b157c93112745a3190ad>>
+ * @relayHash 6a7e349057284fced35207ad4bcee167
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 22b26285ee1b9e4337c952e97e71cb09fe7b98551af4750b835a5cfba129db79
 
 import { ConcreteRequest } from 'relay-runtime';
 export type ContainPrincipalInput = {
@@ -94,12 +97,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "6a7e349057284fced35207ad4bcee167",
-    "id": null,
+    "id": "22b26285ee1b9e4337c952e97e71cb09fe7b98551af4750b835a5cfba129db79",
     "metadata": {},
     "name": "ChallengesPageContainMutation",
     "operationKind": "mutation",
-    "text": "mutation ChallengesPageContainMutation(\n  $input: ContainPrincipalInput!\n) {\n  containPrincipal(input: $input) {\n    containment {\n      id\n    }\n  }\n}\n"
+    "text": null
   }
 };
 })();

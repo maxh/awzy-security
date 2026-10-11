@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<bb5e709cc0bef366337cf47690f5f050>>
+ * @generated SignedSource<<3ecd53577384d8dc5916fd4443f75fb8>>
+ * @relayHash 14d359a1ba6287bb0627b01b70216fe4
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 8f048a9a8908d94a3d89918bc831be93784d2c8ee7daf45de0aca96507bdfe60
 
 import { ConcreteRequest } from 'relay-runtime';
 export type RemoveSecurityKeyInput = {
@@ -97,12 +100,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "14d359a1ba6287bb0627b01b70216fe4",
-    "id": null,
+    "id": "8f048a9a8908d94a3d89918bc831be93784d2c8ee7daf45de0aca96507bdfe60",
     "metadata": {},
     "name": "ChallengesPageRemoveKeyMutation",
     "operationKind": "mutation",
-    "text": "mutation ChallengesPageRemoveKeyMutation(\n  $input: RemoveSecurityKeyInput!\n) {\n  removeSecurityKey(input: $input) {\n    securityKey {\n      id\n    }\n  }\n}\n"
+    "text": null
   }
 };
 })();

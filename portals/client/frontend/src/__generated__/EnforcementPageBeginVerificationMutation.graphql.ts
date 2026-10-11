@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<c028ee41abc64dbfdb3da9019851387c>>
+ * @generated SignedSource<<20c9bde5e5d9e94e7d5c8e63973bdb1e>>
+ * @relayHash a0374ce306476892f8bd5da902318141
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 5b5e8f13053ef2308fad3b65c7adbeb77ab02eb4f45e8536a21a69f2b58e0280
 
 import { ConcreteRequest } from 'relay-runtime';
 export type BeginChallengeVerificationInput = {
@@ -84,12 +87,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "a0374ce306476892f8bd5da902318141",
-    "id": null,
+    "id": "5b5e8f13053ef2308fad3b65c7adbeb77ab02eb4f45e8536a21a69f2b58e0280",
     "metadata": {},
     "name": "EnforcementPageBeginVerificationMutation",
     "operationKind": "mutation",
-    "text": "mutation EnforcementPageBeginVerificationMutation(\n  $input: BeginChallengeVerificationInput!\n) {\n  beginChallengeVerification(input: $input) {\n    ceremonyQid\n    optionsJson\n  }\n}\n"
+    "text": null
   }
 };
 })();

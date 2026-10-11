@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<b40b841d54da0a188b65abafb21dbbf5>>
+ * @generated SignedSource<<e4f5c6e6c41ec59fd261f7b2c98ca8fc>>
+ * @relayHash ca61b032e1c00e628816acf8f2c901e8
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID b6503b365c8c7bdfc04c05b805e844a68bbb6e4e9711f64ac763f6dd1c1e7764
 
 import { ConcreteRequest } from 'relay-runtime';
 import { FragmentRefs } from "relay-runtime";
@@ -261,12 +264,11 @@ return {
     ]
   },
   "params": {
-    "cacheID": "ca61b032e1c00e628816acf8f2c901e8",
-    "id": null,
+    "id": "b6503b365c8c7bdfc04c05b805e844a68bbb6e4e9711f64ac763f6dd1c1e7764",
     "metadata": {},
     "name": "DecisionsPageQuery",
     "operationKind": "query",
-    "text": "query DecisionsPageQuery(\n  $filter: DecisionFilter\n) {\n  ...DecisionsPage_decisions_Vt7Yj\n}\n\nfragment DecisionsPage_decisions_Vt7Yj on Query {\n  decisions(filter: $filter, first: 50) {\n    edges {\n      node {\n        id\n        at\n        principal {\n          type\n          id\n        }\n        onBehalfOf {\n          human {\n            type\n            id\n          }\n        }\n        action\n        resource {\n          type\n          id\n        }\n        verdict\n        mode\n        challenges\n        policies\n        __typename\n      }\n      cursor\n    }\n    pageInfo {\n      endCursor\n      hasNextPage\n    }\n  }\n}\n"
+    "text": null
   }
 };
 })();

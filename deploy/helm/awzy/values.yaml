@@ -86,6 +86,9 @@ clientPortal:
     # Entra): e.g. email. Empty: sub.
     subjectClaim: ""
   publicUrl: ""
+  # GraphQL runs only the portal's own pages' queries (ADR 0088). Only awzy's own staging and demo
+  # installs turn it off, so a local frontend can run against them (ADR 0024).
+  persistedQueriesOnly: true
   # Public hostname; when set, the portal is served through the Gateway below.
   hostname: ""
   # Awzy Bot (ADR 0048): the Policies page's assistant, with Claude on the install's own

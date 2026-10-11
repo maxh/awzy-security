@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<454faf0198df3e984f0268818e16e739>>
+ * @generated SignedSource<<00a7e82859172952333350fdb1a0ecc5>>
+ * @relayHash 2b21e90d7cc221025f1e7c14a2d32732
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 13d994fa913a0e4aeac508f06a5007a8966476607d3a307671e0722e58d31fe5
 
 import { ConcreteRequest } from 'relay-runtime';
 export type MetricWindow = "DAY" | "MONTH" | "WEEK" | "%future added value";
@@ -222,12 +225,11 @@ return {
     ]
   },
   "params": {
-    "cacheID": "2b21e90d7cc221025f1e7c14a2d32732",
-    "id": null,
+    "id": "13d994fa913a0e4aeac508f06a5007a8966476607d3a307671e0722e58d31fe5",
     "metadata": {},
     "name": "InstallChartsQuery",
     "operationKind": "query",
-    "text": "query InstallChartsQuery(\n  $id: ID!\n  $window: MetricWindow!\n) {\n  node(id: $id) {\n    __typename\n    ... on Install {\n      metricHistory(window: $window) {\n        at\n        decisionsPerSecond\n        pdpP99Ms\n        errorRate\n        kafkaLag\n        clickhouseDiskUsedPercent\n        containmentFeedAgeSeconds\n        policySyncAgeSeconds\n        principalsSyncAgeSeconds\n        connectorSyncAgeSeconds\n        gatewayPdpUnreachable\n        degraded\n      }\n    }\n    id\n  }\n}\n"
+    "text": null
   }
 };
 })();

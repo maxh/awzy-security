@@ -1,11 +1,14 @@
 /**
- * @generated SignedSource<<5b7e398612be602be50862c30252bd2f>>
+ * @generated SignedSource<<29f9538abd8860d542aa0ac9e4bceb8e>>
+ * @relayHash 90b983b606363dd533c5dde9d8c07196
  * @lightSyntaxTransform
  */
 
 /* tslint:disable */
 /* eslint-disable */
 // @ts-nocheck
+
+// @relayRequestID 5ee2d2afc89e5ce99b0c267bb817333580968c9efd05b015f620ccc4547cb11b
 
 import { ConcreteRequest } from 'relay-runtime';
 export type InvestigationStatus = "CLOSED" | "DONE" | "NEEDS_REVIEW" | "%future added value";
@@ -136,12 +139,11 @@ return {
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "cacheID": "90b983b606363dd533c5dde9d8c07196",
-    "id": null,
+    "id": "5ee2d2afc89e5ce99b0c267bb817333580968c9efd05b015f620ccc4547cb11b",
     "metadata": {},
     "name": "InvestigationsPageCloseMutation",
     "operationKind": "mutation",
-    "text": "mutation InvestigationsPageCloseMutation(\n  $input: CloseInvestigationInput!\n) {\n  closeInvestigation(input: $input) {\n    investigation {\n      id\n      status\n      closedBy {\n        label\n      }\n      closedAt\n      closeReason\n    }\n  }\n}\n"
+    "text": null
   }
 };
 })();
