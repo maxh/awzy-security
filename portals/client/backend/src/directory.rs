@@ -408,6 +408,7 @@ mod tests {
         let services = Services {
             pdp: Some(testing::pdp().await),
             context: Some(super::ContextClient::new(fake_context(seen.clone()).await)),
+            context_api: None,
             ..Default::default()
         };
         let schema = crate::schema_with(services);

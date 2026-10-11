@@ -11,12 +11,8 @@ use crate::{
 async fn services() -> Services {
     Services {
         policy: Some(serve_fake_policy(FakePolicy::default()).await),
-        challenge: None,
-        clickhouse: None,
         pdp: Some(testing::pdp().await),
-        context: None,
-        bot: None,
-        activity: Default::default(),
+        ..Default::default()
     }
 }
 
