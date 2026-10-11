@@ -92,6 +92,8 @@ resource "aws_ecs_task_definition" "corp" {
       portMappings = [{ containerPort = 8080, protocol = "tcp" }]
       environment = [
         { name = "AWZY_CORP_PORTAL_ACCOUNTS_FILE", value = "${local.accounts_dir}/accounts.json" },
+        # awzy's agents reach /mcp at the portal's own hostname (DNS-rebinding protection).
+        { name = "AWZY_CORP_PORTAL_MCP_ALLOWED_HOSTS", value = local.hostname },
         { name = "AWZY_CORP_PORTAL_PUBLIC_URL", value = "https://${local.hostname}" },
         { name = "AWZY_LOG_FORMAT", value = "json" },
         # deploy-corp.sh's migrate task applies migrations; the service only checks (ADR 0087).
