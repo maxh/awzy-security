@@ -2,21 +2,11 @@
 //! `app.kubernetes.io/part-of=awzy`, the ClickHouse StatefulSets the Altinity operator makes, and
 //! their Pods. Read-only, and only in the namespaces the chart grants (a Role per namespace).
 //!
-//! Plain HTTPS calls with the pod's service account token, rather than a full Kubernetes client
-//! library: the reporter needs three list calls.
+//! Through `awzy_kube`, as the reporter's service account: three list calls.
 
-use anyhow::Context;
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use http_body_util::{BodyExt, Full};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
-use rustls_pki_types::{pem::PemObject, CertificateDer};
 use serde_json::Value;
 
-const SA_DIR: &str = "/var/run/secrets/kubernetes.io/serviceaccount";
 const AWZY: &str = "app.kubernetes.io/part-of=awzy";
 const CLICKHOUSE: &str = "clickhouse.altinity.com/chi";
 
@@ -44,71 +34,22 @@ pub struct Pod {
     pub image_tag: Option<String>,
 }
 
-pub struct KubeApi {
-    base: String,
-    token: Token,
-    client: Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>,
-}
-
-enum Token {
-    /// Re-read on every call: projected service account tokens rotate.
-    File(String),
-    #[cfg(test)]
-    Fixed(String),
-}
+pub struct KubeApi(awzy_kube::KubeApi);
 
 impl KubeApi {
-    /// From inside a pod: the API server from KUBERNETES_SERVICE_HOST, trusting the cluster CA.
+    /// From inside a pod, as the reporter's service account.
     pub fn in_cluster() -> anyhow::Result<Self> {
-        let host =
-            std::env::var("KUBERNETES_SERVICE_HOST").context("not running in Kubernetes (KUBERNETES_SERVICE_HOST)")?;
-        let port = std::env::var("KUBERNETES_SERVICE_PORT").unwrap_or_else(|_| "443".into());
-        let host = if host.contains(':') { format!("[{host}]") } else { host };
-        let ca = std::fs::read(format!("{SA_DIR}/ca.crt")).context("reading the cluster CA")?;
-        let _ = rustls::crypto::ring::default_provider().install_default();
-        let mut roots = rustls::RootCertStore::empty();
-        for cert in CertificateDer::pem_slice_iter(&ca) {
-            roots.add(cert?)?;
-        }
-        let tls = rustls::ClientConfig::builder().with_root_certificates(roots).with_no_client_auth();
-        let https = hyper_rustls::HttpsConnectorBuilder::new().with_tls_config(tls).https_only().enable_http1().build();
-        Ok(Self {
-            base: format!("https://{host}:{port}"),
-            token: Token::File(format!("{SA_DIR}/token")),
-            client: Client::builder(TokioExecutor::new()).build(https),
-        })
+        Ok(Self(awzy_kube::KubeApi::in_cluster()?))
     }
 
     /// Against a fake API server over plain HTTP.
     #[cfg(test)]
     pub fn for_test(base: String) -> Self {
-        let https =
-            hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_or_http().enable_http1().build();
-        Self {
-            base,
-            token: Token::Fixed("test-token".into()),
-            client: Client::builder(TokioExecutor::new()).build(https),
-        }
+        Self(awzy_kube::KubeApi::for_test(base))
     }
 
     async fn list(&self, path: &str, selector: &str) -> anyhow::Result<Vec<Value>> {
-        let token = match &self.token {
-            Token::File(path) => std::fs::read_to_string(path).context("reading the service account token")?,
-            #[cfg(test)]
-            Token::Fixed(t) => t.clone(),
-        };
-        let url = format!("{}{path}?labelSelector={}", self.base, selector.replace('=', "%3D").replace('/', "%2F"));
-        let req = axum::http::Request::get(&url)
-            .header("authorization", format!("Bearer {}", token.trim()))
-            .body(Full::new(Bytes::new()))?;
-        let res = tokio::time::timeout(std::time::Duration::from_secs(5), self.client.request(req))
-            .await
-            .context("timed out")??;
-        let status = res.status();
-        let body = res.into_body().collect().await?.to_bytes();
-        anyhow::ensure!(status.is_success(), "GET {path}: {status}: {}", String::from_utf8_lossy(&body));
-        let list: Value = serde_json::from_slice(&body)?;
-        Ok(list["items"].as_array().cloned().unwrap_or_default())
+        Ok(self.0.list(path, selector).await?)
     }
 
     /// awzy's Deployments and the ClickHouse StatefulSets in `namespace`.

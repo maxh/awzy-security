@@ -1,0 +1,8 @@
+load("//tools:rust.bzl", "awzy_rust_library")
+
+# The Kubernetes API from inside a pod, as its service account (#223).
+awzy_rust_library(
+    name = "kube",
+    crate_name = "awzy_kube",
+    deps = ["//libs/http"],
+)

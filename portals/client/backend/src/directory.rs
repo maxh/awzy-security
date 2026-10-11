@@ -6,11 +6,6 @@ use async_graphql::{Context, InputObject, Object, Result, SimpleObject};
 use awzy_portal::{Actor, UtcTimestamp};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use http_body_util::{BodyExt, Full};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 
@@ -20,7 +15,7 @@ use crate::access::{require, PortalAction, PortalArea};
 #[derive(Clone)]
 pub struct ContextClient {
     base: String,
-    client: Client<HttpConnector, Full<Bytes>>,
+    client: awzy_http::Client,
     /// This portal's service token for awzy-context (ADR 0055).
     tokens: awzy_service_auth::TokenSource,
 }
@@ -34,7 +29,7 @@ impl ContextClient {
     pub fn new(base: String) -> Self {
         Self {
             base: base.trim_end_matches('/').to_string(),
-            client: Client::builder(TokioExecutor::new()).build_http(),
+            client: awzy_http::client(),
             tokens: awzy_service_auth::TokenSource::from_env(),
         }
     }
@@ -46,7 +41,7 @@ impl ContextClient {
         actor: Option<&str>,
         body: Option<Value>,
     ) -> anyhow::Result<(u16, Bytes)> {
-        let mut req = axum::http::Request::builder()
+        let mut req = awzy_http::Request::builder()
             .method(method)
             .uri(format!("{}{path}", self.base))
             .header("content-type", "application/json");
@@ -57,10 +52,9 @@ impl ContextClient {
         if let Some(authorization) = self.tokens.authorization("awzy-context")? {
             req = req.header("authorization", authorization);
         }
-        let req = req.body(Full::new(body.map(|b| Bytes::from(b.to_string())).unwrap_or_default()))?;
-        let res = tokio::time::timeout(std::time::Duration::from_secs(10), self.client.request(req)).await??;
-        let status = res.status().as_u16();
-        Ok((status, res.into_body().collect().await?.to_bytes()))
+        let req = req.body(body.map(|b| awzy_http::Body::from(b.to_string())).unwrap_or_default())?;
+        let res = awzy_http::send(&self.client, req, std::time::Duration::from_secs(10)).await?;
+        Ok((res.status.as_u16(), res.body))
     }
 
     pub(crate) async fn get<T: DeserializeOwned>(&self, path: &str) -> anyhow::Result<T> {

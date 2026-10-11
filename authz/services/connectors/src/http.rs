@@ -1,30 +1,24 @@
-//! A small JSON-over-HTTPS client: the connector's requests to Google and to awzy-context.
+//! A small JSON-over-HTTPS client on `awzy_http`: the connectors' requests to Google, Jira, and
+//! awzy-context.
 
 use std::time::Duration;
 
 use anyhow::Context;
-use axum::http::{header, HeaderValue, Method, Request, StatusCode};
+pub use awzy_http::encode;
+use awzy_http::{header, HeaderValue, Method, Request, StatusCode};
 use bytes::Bytes;
-use http_body_util::{BodyExt, Full};
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
 use serde_json::Value;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Clone)]
 pub struct Http {
-    client: Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>,
+    client: awzy_http::Client,
 }
 
 impl Default for Http {
     fn default() -> Self {
-        let _ = rustls::crypto::ring::default_provider().install_default();
-        let https =
-            hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_or_http().enable_http1().build();
-        Self { client: Client::builder(TokioExecutor::new()).build(https) }
+        Self { client: awzy_http::client() }
     }
 }
 
@@ -37,7 +31,7 @@ pub enum Body<'a> {
 
 impl Http {
     /// Sends one request with `headers` and returns the status and the JSON body (`Null` when
-    /// empty or not JSON).
+    /// empty or not JSON). The timeout covers the whole response, body included.
     pub async fn send(
         &self,
         method: Method,
@@ -60,40 +54,9 @@ impl Http {
                 Bytes::from(f)
             }
         };
-        let res = tokio::time::timeout(TIMEOUT, self.client.request(req.body(Full::new(bytes))?))
+        let res = awzy_http::send(&self.client, req.body(awzy_http::Body::new(bytes))?, TIMEOUT)
             .await
-            .with_context(|| format!("{method} {} timed out", without_query(url)))?
-            .with_context(|| format!("{method} {}", without_query(url)))?;
-        let status = res.status();
-        let body = res.into_body().collect().await?.to_bytes();
-        Ok((status, serde_json::from_slice(&body).unwrap_or(Value::Null)))
-    }
-}
-
-/// For error messages: query strings carry page tokens, and none of them help.
-fn without_query(url: &str) -> &str {
-    url.split('?').next().unwrap_or(url)
-}
-
-/// Percent-encodes a query parameter value.
-pub fn encode(v: &str) -> String {
-    let mut out = String::with_capacity(v.len());
-    for b in v.bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
-            _ => out.push_str(&format!("%{b:02X}")),
-        }
-    }
-    out
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn encodes_reserved_characters() {
-        assert_eq!(encode("a b/c=d&e"), "a%20b%2Fc%3Dd%26e");
-        assert_eq!(encode("trashed = false"), "trashed%20%3D%20false");
+            .with_context(|| format!("{method} {}", url.split('?').next().unwrap_or(url)))?;
+        Ok((res.status, serde_json::from_slice(&res.body).unwrap_or(Value::Null)))
     }
 }
