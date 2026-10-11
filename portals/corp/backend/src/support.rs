@@ -290,7 +290,7 @@ pub struct SupportSession(pub Session);
 
 #[Object]
 impl SupportSession {
-    async fn id(&self) -> ID {
+    pub async fn id(&self) -> ID {
         ID(self.0.id.to_string())
     }
 
