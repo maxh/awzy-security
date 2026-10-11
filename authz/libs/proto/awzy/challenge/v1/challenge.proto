@@ -5,6 +5,7 @@ syntax = "proto3";
 package awzy.challenge.v1;
 
 import "awzy/authz/v1/authz.proto";
+import "awzy/authz/v1/qid.proto";
 import "google/protobuf/timestamp.proto";
 
 service ChallengeService {
@@ -81,9 +82,9 @@ enum ChallengeStatus {
 
 message Challenge {
   // QID: challenge_<uuid>.
-  string qid = 1;
+  string qid = 1 [(awzy.authz.v1.qid) = "challenge"];
   // The decision that opened it (QID: decision_<uuid>).
-  string decision_qid = 2;
+  string decision_qid = 2 [(awzy.authz.v1.qid) = "decision"];
   awzy.authz.v1.EntityRef principal = 3;
   // Set when a service account acted for a person.
   awzy.authz.v1.EntityRef on_behalf_of = 4;
@@ -113,7 +114,7 @@ message Challenge {
 
 message ResolveRequest {
   // The challenge verdict's decision (QID: decision_<uuid>).
-  string decision_qid = 1;
+  string decision_qid = 1 [(awzy.authz.v1.qid) = "decision"];
   awzy.authz.v1.EntityRef principal = 2;
   awzy.authz.v1.EntityRef on_behalf_of = 3;
   string action = 4;
@@ -143,7 +144,7 @@ message ResolveResponse {
   // Required kinds this request has a live grant for.
   repeated awzy.authz.v1.ChallengeKind passed = 1;
   // The pending challenge for the kinds not yet passed, when `open` and some remain.
-  string challenge_qid = 2;
+  string challenge_qid = 2 [(awzy.authz.v1.qid) = "challenge"];
   // An approver rejected this request recently: the PDP denies it.
   bool rejected = 3;
   // The asking policies a live grant answers. The PDP sets these aside, and only these.
@@ -157,14 +158,14 @@ message ReportBreakGlassRequest {
   string reason = 2;
   // The version restored, and the bundle that now republishes it.
   int64 restored_version = 3;
-  string policy_bundle_qid = 4;
+  string policy_bundle_qid = 4 [(awzy.authz.v1.qid) = "policy_bundle"];
   int64 version = 5;
 }
 
 message ReportBreakGlassResponse {}
 
 message GetChallengeRequest {
-  string challenge_qid = 1;
+  string challenge_qid = 1 [(awzy.authz.v1.qid) = "challenge"];
 }
 
 message GetChallengeResponse {
@@ -185,7 +186,7 @@ message ListChallengesResponse {
 }
 
 message JustifyRequest {
-  string challenge_qid = 1;
+  string challenge_qid = 1 [(awzy.authz.v1.qid) = "challenge"];
   // The signed-in person answering.
   // Deprecated: use `answered_by_actor`, which this repeats as text (`Human::alice`).
   string answered_by = 2;
@@ -199,7 +200,7 @@ message JustifyResponse {
 }
 
 message DecideRequest {
-  string challenge_qid = 1;
+  string challenge_qid = 1 [(awzy.authz.v1.qid) = "challenge"];
   // The signed-in person deciding: a Human ID.
   // Deprecated: use `decided_by_actor`, which this repeats as text (`Human::alice`).
   string decided_by = 2;
@@ -218,7 +219,7 @@ message DecideResponse {
 
 message Containment {
   // QID: containment_<uuid>.
-  string qid = 1;
+  string qid = 1 [(awzy.authz.v1.qid) = "containment"];
   awzy.authz.v1.EntityRef principal = 2;
   string reason = 3;
   // Deprecated: use `created_by_actor`, which this repeats as text (`Human::alice`).
@@ -255,7 +256,7 @@ message ContainResponse {
 }
 
 message LiftRequest {
-  string containment_qid = 1;
+  string containment_qid = 1 [(awzy.authz.v1.qid) = "containment"];
   // Deprecated: use `lifted_by_actor`, which this repeats as text (`Human::alice`).
   string lifted_by = 2;
   string reason = 3;
@@ -264,7 +265,7 @@ message LiftRequest {
 }
 
 message RequestLiftRequest {
-  string containment_qid = 1;
+  string containment_qid = 1 [(awzy.authz.v1.qid) = "containment"];
   // Who asks: a person, or an agent and the person it acts for.
   awzy.authz.v1.Actor requested_by_actor = 2;
   // Why it should be lifted.
@@ -317,12 +318,12 @@ message WatchContainmentsResponse {
 
 message SecurityKey {
   // QID: security_key_<uuid>.
-  string qid = 1;
+  string qid = 1 [(awzy.authz.v1.qid) = "security_key"];
   // The person whose key it is, by their Human entity ID (the IdP's user name), not a QID.
   string human_id = 2;
   string name = 3;
   // The key that authorized adding this one; empty for a person's first key.
-  string added_with_qid = 4;
+  string added_with_qid = 4 [(awzy.authz.v1.qid) = "security_key"];
   google.protobuf.Timestamp created_at = 5;
   google.protobuf.Timestamp last_used_at = 6;
   google.protobuf.Timestamp removed_at = 7;
@@ -335,7 +336,7 @@ message SecurityKey {
 // A browser's navigator.credentials.get() response.
 message Assertion {
   // QID: ceremony_<uuid>, from the Begin call it answers.
-  string ceremony_qid = 1;
+  string ceremony_qid = 1 [(awzy.authz.v1.qid) = "ceremony"];
   bytes credential_id = 2;
   bytes client_data_json = 3;
   bytes authenticator_data = 4;
@@ -357,7 +358,7 @@ message BeginKeyChangeRequest {
 
 message BeginKeyChangeResponse {
   // QID: ceremony_<uuid>.
-  string ceremony_qid = 1;
+  string ceremony_qid = 1 [(awzy.authz.v1.qid) = "ceremony"];
   // PublicKeyCredentialRequestOptions as JSON, binary fields base64url.
   string options_json = 2;
 }
@@ -369,13 +370,13 @@ message BeginKeyRegistrationRequest {
 }
 
 message BeginKeyRegistrationResponse {
-  string ceremony_qid = 1;
+  string ceremony_qid = 1 [(awzy.authz.v1.qid) = "ceremony"];
   // PublicKeyCredentialCreationOptions as JSON, binary fields base64url.
   string options_json = 2;
 }
 
 message FinishKeyRegistrationRequest {
-  string ceremony_qid = 1;
+  string ceremony_qid = 1 [(awzy.authz.v1.qid) = "ceremony"];
   string human_id = 2;
   // What the person calls the key, e.g. "YubiKey on my keychain".
   string name = 3;
@@ -389,7 +390,7 @@ message FinishKeyRegistrationResponse {
 
 message RemoveSecurityKeyRequest {
   // QID: security_key_<uuid>.
-  string security_key_qid = 1;
+  string security_key_qid = 1 [(awzy.authz.v1.qid) = "security_key"];
   string human_id = 2;
   // An assertion over a BeginKeyChange ceremony, from any of the person's keys.
   Assertion authorization = 3;
@@ -401,7 +402,7 @@ message RemoveSecurityKeyResponse {
 
 message ResetSecurityKeyRequest {
   // QID: security_key_<uuid>.
-  string security_key_qid = 1;
+  string security_key_qid = 1 [(awzy.authz.v1.qid) = "security_key"];
   // Deprecated: use `removed_by_actor`, which this repeats as text (`Human::alice`).
   string removed_by = 2;
   // The admin removing it (ADR 0060).
@@ -414,12 +415,12 @@ message ResetSecurityKeyResponse {
 
 message BeginVerificationRequest {
   // QID: challenge_<uuid>. Must ask for verification and be sent to human_id.
-  string challenge_qid = 1;
+  string challenge_qid = 1 [(awzy.authz.v1.qid) = "challenge"];
   string human_id = 2;
 }
 
 message BeginVerificationResponse {
-  string ceremony_qid = 1;
+  string ceremony_qid = 1 [(awzy.authz.v1.qid) = "ceremony"];
   // PublicKeyCredentialRequestOptions as JSON, binary fields base64url.
   string options_json = 2;
 }
@@ -449,7 +450,7 @@ enum SupportSessionStatus {
 // What awzy staff asked for, as the corp portal sent it.
 message SupportRequest {
   // QID: support_session_<uuid>, minted by the corp portal.
-  string qid = 1;
+  string qid = 1 [(awzy.authz.v1.qid) = "support_session"];
   // The staff member, as the corp portal names them.
   string requested_by = 2;
   // Portal areas, e.g. "decisions", "policies".
@@ -493,7 +494,7 @@ message ListSupportSessionsResponse {
 }
 
 message GetSupportSessionRequest {
-  string qid = 1;
+  string qid = 1 [(awzy.authz.v1.qid) = "support_session"];
 }
 
 message GetSupportSessionResponse {
@@ -501,7 +502,7 @@ message GetSupportSessionResponse {
 }
 
 message DecideSupportSessionRequest {
-  string qid = 1;
+  string qid = 1 [(awzy.authz.v1.qid) = "support_session"];
   bool approve = 2;
   // With `approve`: the areas, a subset of those asked for, and for how long, at most what was
   // asked for.
@@ -515,7 +516,7 @@ message DecideSupportSessionResponse {
 }
 
 message EndSupportSessionRequest {
-  string qid = 1;
+  string qid = 1 [(awzy.authz.v1.qid) = "support_session"];
   awzy.authz.v1.Actor ended_by_actor = 2;
 }
 
@@ -524,7 +525,7 @@ message EndSupportSessionResponse {
 }
 
 message RecordSupportActionRequest {
-  string qid = 1;
+  string qid = 1 [(awzy.authz.v1.qid) = "support_session"];
   // The GraphQL operation's name, e.g. "DecisionsPageQuery".
   string operation = 2;
 }
