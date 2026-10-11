@@ -29,7 +29,7 @@ use rmcp::{
 
 use crate::{
     access::{self, PortalAction, PortalArea, Surface, Viewer},
-    decisions::{self, DecisionRow, SearchParams, Verdict},
+    decisions::{self, DecisionRow, SearchParams},
     policies::{self, DraftOutcome},
     Services,
 };
