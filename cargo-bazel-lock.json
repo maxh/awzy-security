@@ -1,5 +1,5 @@
 {
-  "checksum": "b47a1ea5678471c465efaf77e99725e2724fe2898128179f056aa557c339c221",
+  "checksum": "35ecf6677c3ac613235f31d2328e3930e42026b187f527f1bcd3027e52109615",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -1628,6 +1628,109 @@
         }
       ],
       "version": "1.148.0"
+    },
+    "aws-sdk-kms 1.123.0": {
+      "common_attrs": {
+        "crate_features": [
+          "behavior-version-latest",
+          "rt-tokio"
+        ],
+        "deps": [
+          {
+            "id": "arc-swap 1.9.2",
+            "target": "arc_swap"
+          },
+          {
+            "id": "aws-credential-types 1.3.0",
+            "target": "aws_credential_types"
+          },
+          {
+            "id": "aws-runtime 1.10.0",
+            "target": "aws_runtime"
+          },
+          {
+            "id": "aws-smithy-async 1.3.0",
+            "target": "aws_smithy_async"
+          },
+          {
+            "id": "aws-smithy-http 0.64.1",
+            "target": "aws_smithy_http"
+          },
+          {
+            "id": "aws-smithy-json 0.63.1",
+            "target": "aws_smithy_json"
+          },
+          {
+            "id": "aws-smithy-observability 0.3.0",
+            "target": "aws_smithy_observability"
+          },
+          {
+            "id": "aws-smithy-runtime 1.16.0",
+            "target": "aws_smithy_runtime"
+          },
+          {
+            "id": "aws-smithy-runtime-api 1.19.0",
+            "target": "aws_smithy_runtime_api"
+          },
+          {
+            "id": "aws-smithy-schema 0.2.1",
+            "target": "aws_smithy_schema"
+          },
+          {
+            "id": "aws-smithy-types 1.8.1",
+            "target": "aws_smithy_types"
+          },
+          {
+            "id": "aws-types 1.6.0",
+            "target": "aws_types"
+          },
+          {
+            "id": "bytes 1.12.1",
+            "target": "bytes"
+          },
+          {
+            "id": "fastrand 2.5.0",
+            "target": "fastrand"
+          },
+          {
+            "alias": "http_1x",
+            "id": "http 1.5.0",
+            "target": "http"
+          },
+          {
+            "id": "regex-lite 0.1.9",
+            "target": "regex_lite"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "aws_sdk_kms",
+      "license": "Apache-2.0",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "name": "aws-sdk-kms",
+      "package_url": "https://github.com/awslabs/aws-sdk-rust",
+      "repository": {
+        "Http": {
+          "sha256": "0bbe8833a7ad3b970f2a6a856939c9cb171942dcdfd2ab65f2db3a8baaf73cc1",
+          "url": "https://static.crates.io/crates/aws-sdk-kms/1.123.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "aws_sdk_kms",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.123.0"
     },
     "aws-sdk-sso 1.114.0": {
       "common_attrs": {
@@ -4808,7 +4911,13 @@
             "target": "thiserror"
           }
         ],
-        "edition": "2021"
+        "edition": "2021",
+        "proc_macro_deps": [
+          {
+            "id": "async-trait 0.1.92",
+            "target": "async_trait"
+          }
+        ]
       },
       "library_target_name": "awzy_signing",
       "license": "UNLICENSED",
@@ -4818,6 +4927,54 @@
         {
           "Library": {
             "crate_name": "awzy_signing",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
+    "awzy-signing-aws 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "aws-config 1.12.0",
+            "target": "aws_config"
+          },
+          {
+            "id": "aws-sdk-kms 1.123.0",
+            "target": "aws_sdk_kms"
+          },
+          {
+            "id": "aws-smithy-http-client 1.5.0",
+            "target": "aws_smithy_http_client"
+          },
+          {
+            "id": "p256 0.13.2",
+            "target": "p256"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "tokio 1.53.2",
+            "target": "tokio"
+          }
+        ],
+        "edition": "2021",
+        "proc_macro_deps": [
+          {
+            "id": "async-trait 0.1.92",
+            "target": "async_trait"
+          }
+        ]
+      },
+      "library_target_name": "awzy_signing_aws",
+      "license": "UNLICENSED",
+      "name": "awzy-signing-aws",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "awzy_signing_aws",
             "crate_root": "src/lib.rs"
           }
         }
@@ -27199,6 +27356,7 @@
     "async-trait 0.1.92",
     "aws-config 1.12.0",
     "aws-sdk-bedrockruntime 1.148.0",
+    "aws-sdk-kms 1.123.0",
     "aws-smithy-http-client 1.5.0",
     "aws-smithy-types 1.8.1",
     "axum 0.8.9",
@@ -27273,6 +27431,7 @@
     "awzy-server 0.1.0": "libs/server",
     "awzy-service-auth 0.1.0": "authz/libs/service-auth",
     "awzy-signing 0.1.0": "authz/libs/signing",
+    "awzy-signing-aws 0.1.0": "authz/libs/signing-aws",
     "awzy-store 0.1.0": "libs/store",
     "awzy-synthetic 0.1.0": "authz/demo/synthetic",
     "awzy-telemetry 0.1.0": "libs/telemetry"
