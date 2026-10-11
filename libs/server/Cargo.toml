@@ -11,6 +11,8 @@ serde_json.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 hyper-util = { workspace = true, features = ["server-auto", "service"] }
+pprof.workspace = true
+serde.workspace = true
 tokio = { workspace = true, features = ["rt", "sync", "time"] }
 tracing.workspace = true
 

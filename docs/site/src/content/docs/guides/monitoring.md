@@ -120,6 +120,13 @@ ready, a Job that failed, or an object that's gone. `kubectl -n awzy-ops get app
 json | jq '.status.resources[] | select(.health.status != "Healthy")'` names them; then look at
 those pods' events and logs.
 
+## CPU profiles
+
+When a service uses more CPU than its load explains, a profile shows where. Set `AWZY_PROFILING=on`
+on its Deployment, and `GET /debug/profile?seconds=30` on its port 8080 samples it for that long
+and answers with the functions that took the most samples. It's off by default: a profile names
+the code's functions, and costs CPU while it runs. Turn it off again when you're done.
+
 ## What awzy sees, and what you see
 
 Two views start from the same `/metrics`, for different people.
