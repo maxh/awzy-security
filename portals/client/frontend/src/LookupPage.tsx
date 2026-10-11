@@ -4,7 +4,7 @@ import { IconSearch } from "@tabler/icons-react";
 import { type ReactNode, Suspense, useState } from "react";
 import { graphql, useLazyLoadQuery } from "react-relay";
 
-import { Hidden } from "./format";
+import { Hidden, prettyJson, prettyObject } from "./format";
 import type { LookupPagePrincipalQuery, PrincipalType } from "./__generated__/LookupPagePrincipalQuery.graphql";
 import type { LookupPageResourceQuery } from "./__generated__/LookupPageResourceQuery.graphql";
 import type { LookupPageSearchQuery } from "./__generated__/LookupPageSearchQuery.graphql";
@@ -121,7 +121,7 @@ function Principal({ type, id }: { type: PrincipalType; id: string }) {
           <Text size="sm" fw={500}>
             Attributes
           </Text>
-          {p.attributes == null ? <Hidden /> : <Code block>{JSON.stringify(JSON.parse(p.attributes), null, 2)}</Code>}
+          {p.attributes == null ? <Hidden /> : <Code block>{prettyObject(p.attributes)}</Code>}
         </div>
       </Stack>
     </Section>
@@ -264,10 +264,7 @@ function Resource({ id }: { id: string }) {
           {row("Labels", r.labels.join(", ") || "none")}
           {row("Folders above", r.folders.join(" › ") || "none")}
           {row("Assigned to work on it", r.assignees.join(", ") || "nobody")}
-          {row(
-            "Sharing",
-            r.sharing == null ? <Hidden /> : <Code block>{JSON.stringify(JSON.parse(r.sharing), null, 2)}</Code>,
-          )}
+          {row("Sharing", r.sharing == null ? <Hidden /> : <Code block>{prettyJson(r.sharing)}</Code>)}
           {r.url &&
             row(
               "Open",

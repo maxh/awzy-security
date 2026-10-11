@@ -11,7 +11,7 @@ mod scalars;
 pub use actor::Actor;
 pub use persisted::{PersistedQueries, PersistedQueriesError};
 pub use qid::Qid;
-pub use scalars::UtcTimestamp;
+pub use scalars::{JsonObject, JsonString, UtcTimestamp};
 
 /// The deepest query either portal runs. Deep enough for the frontends' Relay queries and
 /// GraphiQL's introspection; a query that nests further (`Actor.onBehalfOf` recurses) is refused

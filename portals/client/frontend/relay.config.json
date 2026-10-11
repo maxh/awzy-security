@@ -8,6 +8,8 @@
     "**/__generated__/**"
   ],
   "customScalarTypes": {
+    "JSONObject": "Record<string, unknown>",
+    "JSONString": "string",
     "Qid": "string",
     "UtcTimestamp": "string"
   },

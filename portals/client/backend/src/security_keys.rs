@@ -12,7 +12,7 @@ use awzy_authz_proto::challenge::v1::{
     ResetSecurityKeyRequest, SecurityKey as WireKey,
 };
 use awzy_model::{CeremonyId, ChallengeId, SecurityKeyId};
-use awzy_portal::{Qid, UtcTimestamp};
+use awzy_portal::{JsonString, Qid, UtcTimestamp};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 
 use crate::{
@@ -69,7 +69,7 @@ pub struct WebAuthnCeremony {
     pub ceremony_qid: Qid<CeremonyId>,
     /// The options for `navigator.credentials.create()` or `.get()`, as WebAuthn's JSON (binary
     /// fields base64url).
-    pub options_json: String,
+    pub options_json: JsonString,
 }
 
 /// A `navigator.credentials.get()` response.
@@ -143,7 +143,10 @@ pub struct SecurityKeyPayload {
 }
 
 fn ceremony(ceremony_qid: String, options_json: String) -> Result<WebAuthnCeremony> {
-    Ok(WebAuthnCeremony { ceremony_qid: Qid(ceremony_qid.parse::<CeremonyId>()?), options_json })
+    Ok(WebAuthnCeremony {
+        ceremony_qid: Qid(ceremony_qid.parse::<CeremonyId>()?),
+        options_json: JsonString::parse_text(options_json)?,
+    })
 }
 
 fn key(k: Option<WireKey>) -> Result<SecurityKeyPayload> {

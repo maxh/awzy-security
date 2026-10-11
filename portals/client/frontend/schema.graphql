@@ -383,7 +383,7 @@ type Decision implements Node {
 	"""
 	The request context, as JSON text. Null when a policy hides it (ADR 0103).
 	"""
-	context: String
+	context: JSONObject
 	"""
 	Explain the principal's check: the source of each determining policy, from the bundle the
 	decision was made under.
@@ -578,7 +578,7 @@ type HeartbeatExport {
 	The last heartbeat, as JSON, byte for byte the fields that were sent. None before the
 	first, which goes out within a minute of awzy-reporter starting.
 	"""
-	heartbeat: String
+	heartbeat: JSONObject
 }
 
 """
@@ -674,6 +674,10 @@ enum InvestigationVerdict {
 	BENIGN
 	INCONCLUSIVE
 }
+
+scalar JSONObject
+
+scalar JSONString
 
 input JustifyChallengeInput {
 	challengeQid: Qid!
@@ -999,7 +1003,7 @@ type PrincipalDetail {
 	Its Cedar attributes, as JSON: `active`, a service account's `owner` and `ai`. Null when a
 	policy hides them (ADR 0103).
 	"""
-	attributes: String
+	attributes: JSONObject
 	"""
 	Every group above it, nested groups included.
 	"""
@@ -1183,7 +1187,7 @@ type Query {
 	settings it was started with, with no client data. For those who may administer the
 	enforcement area, to review before sending it to awzy support.
 	"""
-	diagnosticsBundle: String!
+	diagnosticsBundle: JSONString!
 	"""
 	The repairs this install defines; empty where it defines none. For those who may
 	administer the enforcement area.
@@ -1302,7 +1306,7 @@ type ResourceDetail {
 	Who it's shared with, as JSON (the connector's sharing entries). Null when a policy hides
 	it (ADR 0103).
 	"""
-	sharing: String
+	sharing: JSONString
 	labels: [String!]!
 	url: String
 	"""
@@ -1550,7 +1554,7 @@ type WebAuthnCeremony {
 	The options for `navigator.credentials.create()` or `.get()`, as WebAuthn's JSON (binary
 	fields base64url).
 	"""
-	optionsJson: String!
+	optionsJson: JSONString!
 }
 
 """

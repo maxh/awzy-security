@@ -14,7 +14,7 @@ use awzy_authz_proto::policy::v1::{
     get_bundle_request::Key, policy_service_client::PolicyServiceClient, GetBundleRequest,
 };
 use awzy_model::DecisionId;
-use awzy_portal::UtcTimestamp;
+use awzy_portal::{JsonObject, UtcTimestamp};
 use chrono::{DateTime, Duration, Utc};
 use uuid::Uuid;
 
@@ -160,8 +160,9 @@ impl Decision {
     }
 
     /// The request context, as JSON text. Null when a policy hides it (ADR 0103).
-    async fn context(&self) -> Option<&str> {
-        Some(&self.0.context)
+    async fn context(&self) -> Option<JsonObject> {
+        // A context that isn't an object (a decision logged before contexts were) reads as empty.
+        Some(serde_json::from_str(&self.0.context).ok().and_then(JsonObject::from_json).unwrap_or_default())
     }
 
     /// Explain the principal's check: the source of each determining policy, from the bundle the

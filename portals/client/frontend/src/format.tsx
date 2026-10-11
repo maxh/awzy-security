@@ -39,6 +39,11 @@ export function prettyJson(text: string): string {
   }
 }
 
+/** A JSONObject, indented for reading. */
+export function prettyObject(o: Record<string, unknown>): string {
+  return JSON.stringify(o, null, 2);
+}
+
 /** "12s ago", "4m ago", "3h ago", or the date for anything older than a day. */
 export function ago(utc: string, now = Date.now()): string {
   const s = Math.max(0, Math.round((now - new Date(utc).getTime()) / 1000));

@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 
 use async_graphql::{Context, Object, Result};
+use awzy_portal::JsonString;
 use chrono::Utc;
 use serde_json::json;
 
@@ -33,7 +34,7 @@ impl DiagnosticsQuery {
     /// A diagnostics bundle as JSON: each service's status, the portal's release, and which
     /// settings it was started with, with no client data. For those who may administer the
     /// enforcement area, to review before sending it to awzy support.
-    async fn diagnostics_bundle(&self, ctx: &Context<'_>) -> Result<String> {
+    async fn diagnostics_bundle(&self, ctx: &Context<'_>) -> Result<JsonString> {
         require(ctx, PortalAction::Administer, PortalArea::Enforcement).await?;
         let services = ctx.data::<Services>()?;
         let bundle = json!({
@@ -43,7 +44,8 @@ impl DiagnosticsQuery {
             "features": { "awzyBot": services.bot.is_some() },
             "settings": settings(std::env::vars()),
         });
-        Ok(serde_json::to_string_pretty(&bundle)?)
+        // Pretty, since the admin reads it before sending it.
+        Ok(JsonString::parse_text(serde_json::to_string_pretty(&bundle)?)?)
     }
 }
 
