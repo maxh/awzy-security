@@ -20,6 +20,9 @@ async fn main() -> anyhow::Result<()> {
     };
     let applied = awzy_clickhouse::migrate(&client, &settings).await?;
     tracing::info!(?applied, "ClickHouse schema is current");
+    // How long decisions and events are kept; unset or 0 keeps them all.
+    let days = std::env::var("AWZY_CLICKHOUSE_RETENTION_DAYS").ok().map(|d| d.parse::<u32>()).transpose()?;
+    awzy_clickhouse::ensure_retention(&client, days.filter(|d| *d > 0)).await?;
     // ADR 0042: the reporter's read-only user, when the install gives it a password.
     if let Ok(password) = std::env::var("AWZY_CLICKHOUSE_REPORTER_PASSWORD") {
         awzy_clickhouse::ensure_reporter_user(&client, awzy_clickhouse::REPORTER_USER, &password).await?;

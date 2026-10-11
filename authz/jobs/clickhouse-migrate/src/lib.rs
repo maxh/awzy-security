@@ -16,7 +16,35 @@ const MIGRATIONS: &[(u32, &str, &str)] = &[
     (5, "events", include_str!("../migrations/0005_events.sql")),
     (6, "human_policy_ids", include_str!("../migrations/0006_human_policy_ids.sql")),
     (7, "principal", include_str!("../migrations/0007_principal.sql")),
+    (8, "by_resource", include_str!("../migrations/0008_by_resource.sql")),
 ];
+
+/// The tables whose rows expire after the install's retention.
+const RETAINED: &[&str] = &["decisions", "events"];
+
+/// Sets how many days `decisions` and `events` keep their rows, or with None keeps them all. Run on
+/// every sync, since an install can change it; it alters a table only when its TTL differs, and
+/// leaves rewriting old parts to ClickHouse's merges rather than all at once.
+pub async fn ensure_retention(client: &Client, days: Option<u32>) -> anyhow::Result<()> {
+    for table in RETAINED {
+        let engine: String = client
+            .query("SELECT engine_full FROM system.tables WHERE database = currentDatabase() AND name = ?")
+            .bind(*table)
+            .fetch_one()
+            .await?;
+        let current = engine.contains(" TTL ");
+        let alter = match days {
+            Some(d) if !engine.contains(&format!("toIntervalDay({d})")) => {
+                format!("ALTER TABLE {table} MODIFY TTL toDateTime(at) + INTERVAL {d} DAY")
+            }
+            None if current => format!("ALTER TABLE {table} REMOVE TTL"),
+            _ => continue,
+        };
+        client.query(&alter).with_setting("materialize_ttl_after_modify", "0").execute().await?;
+        tracing::info!(table, ?days, "ClickHouse retention set");
+    }
+    Ok(())
+}
 
 /// Values substituted into migrations.
 #[derive(Debug, Clone)]
@@ -255,6 +283,21 @@ mod tests {
         let every: Vec<u32> = MIGRATIONS.iter().map(|(v, ..)| *v).collect();
         assert_eq!(migrate(&client, &settings).await.unwrap(), every);
         assert!(migrate(&client, &settings).await.unwrap().is_empty(), "migrations apply once");
+
+        let ttl = |table: &'static str| {
+            let client = client.clone();
+            async move {
+                let q = "SELECT engine_full FROM system.tables WHERE database = currentDatabase() AND name = ?";
+                client.query(q).bind(table).fetch_one::<String>().await.unwrap()
+            }
+        };
+        ensure_retention(&client, Some(400)).await.unwrap();
+        assert!(
+            ttl("decisions").await.contains("toIntervalDay(400)") && ttl("events").await.contains("toIntervalDay(400)")
+        );
+        ensure_retention(&client, Some(400)).await.unwrap();
+        ensure_retention(&client, None).await.unwrap();
+        assert!(!ttl("decisions").await.contains(" TTL "), "kept forever again");
 
         let pdp = awzy_pdp::Pdp::with_defaults().unwrap();
         let req = awzy_model::Check {

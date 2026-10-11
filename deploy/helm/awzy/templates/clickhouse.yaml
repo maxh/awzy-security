@@ -85,6 +85,8 @@ spec:
             - name: AWZY_CLICKHOUSE_PASSWORD
               valueFrom: { secretKeyRef: { name: {{ $ch.passwordSecret }}, key: password } }
             - { name: AWZY_CLICKHOUSE_KAFKA_BROKERS, value: {{ .Values.kafka.brokers | quote }} }
+            # How many days decisions and events are kept; 0 keeps them all.
+            - { name: AWZY_CLICKHOUSE_RETENTION_DAYS, value: {{ $ch.retentionDays | default 0 | quote }} }
             # Optional until bootstrap has made it; without it the reporter's user is left alone.
             - name: AWZY_CLICKHOUSE_REPORTER_PASSWORD
               valueFrom: { secretKeyRef: { name: {{ $ch.reporterPasswordSecret }}, key: password, optional: true } }
