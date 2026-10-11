@@ -1,0 +1,6 @@
+{{- /* This release needs a bootstrap at least this new (ADR 0096). Failing here stops Argo CD
+before it applies anything, so the install keeps running the release it has, and the
+Application shows this message. */ -}}
+{{- if lt (int .Values.bootstrap.level) (int .Values.bootstrap.required) }}
+{{- fail (printf "chart %s needs bootstrap level %d or later, and this install's bootstrap is at %d: apply the cloud layer and bootstrap from awzy %s (INSTALL.md, \"Upgrades\"). The install keeps running its current release until then." .Chart.Version (int .Values.bootstrap.required) (int .Values.bootstrap.level) .Chart.AppVersion) }}
+{{- end }}

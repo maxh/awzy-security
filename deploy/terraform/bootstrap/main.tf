@@ -26,6 +26,12 @@ terraform {
 locals {
   c = var.install_contract
 
+  # What this bootstrap (and the install contract it reads) provides, as one number the chart checks
+  # before it installs (ADR 0096). Raise it when a chart starts needing something new from here or
+  # from the cloud layer (a Secret, a key, a value), and raise the chart's bootstrap.required to
+  # match in the same change; tools/ci/check-bootstrap-level.sh keeps the two equal.
+  bootstrap_level = 1
+
   namespaces = {
     system = "awzy-system"
     data   = "awzy-data"
