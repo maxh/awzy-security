@@ -9,6 +9,14 @@ const target = new URL("../src/content/docs/guides/install.md", import.meta.url)
 let body = readFileSync(source, "utf8");
 // The first heading is the page title, from the frontmatter below.
 body = body.replace(/^# .*\n+/, "");
+// Notes for people reading the repository, between <!-- repo-only --> and <!-- /repo-only -->.
+body = body.replace(/<!-- repo-only[\s\S]*?<!-- \/repo-only -->\n?/g, "");
+// The site is for people installing awzy; the repository's developer and planning docs aren't
+// written for them, so a link to one fails the build instead of reaching the page.
+const internal = [...body.matchAll(/\]\((DEVELOPMENT\.md|docs\/(?:plans|adr)\/)[^)]*\)/g)].map((m) => m[0]);
+if (internal.length) {
+  throw new Error(`INSTALL.md links the repository's internal docs on the public site: ${internal.join(", ")}. Link a docs page instead, or mark the text <!-- repo-only -->.`);
+}
 // [text](path) where path isn't a URL or an anchor: a file in the repository.
 body = body.replace(/\]\((?!https?:|#|mailto:)([^)]+)\)/g, (_, path) => `](${repo}${path.replace(/^\.\//, "")})`);
 
