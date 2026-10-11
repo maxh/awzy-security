@@ -107,16 +107,24 @@ function Policies({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => 
           status
           publishedAt
         }
+        wouldLockYouOut
       }
     }
   `);
   const [publishError, setPublishError] = useState<string | null>(null);
+  // A draft that would stop the signed-in person administering policies, held until they accept it.
+  const [lockout, setLockout] = useState<{ id: string; why: string } | null>(null);
   const [dryRun, setDryRun] = useState<{ id: string; version: number } | null>(null);
-  const publish = (id: string) =>
+  const publish = (id: string, acceptLockout = false) =>
     commitPublish({
-      variables: { input: { policyBundleQid: id } },
-      onCompleted: () => {
+      variables: { input: { policyBundleQid: id, acceptLockout } },
+      onCompleted: ({ publishPolicyBundle: res }) => {
         setPublishError(null);
+        if (res.wouldLockYouOut) {
+          setLockout({ id, why: res.wouldLockYouOut });
+          return;
+        }
+        setLockout(null);
         onChanged();
       },
       onError: (e) => setPublishError(e.message),
@@ -148,6 +156,21 @@ function Policies({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => 
         {publishError && (
           <Alert color="red" title="Publish failed" m="md">
             {publishError}
+          </Alert>
+        )}
+        {lockout && (
+          <Alert color="orange" title="This would lock you out" m="md">
+            <Stack gap="xs">
+              <Text size="sm">{lockout.why}</Text>
+              <Group gap="xs">
+                <Button size="xs" color="red" loading={isPublishing} onClick={() => publish(lockout.id, true)}>
+                  Publish anyway
+                </Button>
+                <Button size="xs" variant="default" onClick={() => setLockout(null)}>
+                  Cancel
+                </Button>
+              </Group>
+            </Stack>
           </Alert>
         )}
         <Table.ScrollContainer minWidth={720}>

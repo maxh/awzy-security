@@ -52,7 +52,7 @@ pub enum PortalAction {
 }
 
 impl PortalAction {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::View => "view",
             Self::Administer => "administer",
@@ -74,7 +74,7 @@ pub enum PortalArea {
 }
 
 impl PortalArea {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Decisions => "decisions",
             Self::Policies => "policies",

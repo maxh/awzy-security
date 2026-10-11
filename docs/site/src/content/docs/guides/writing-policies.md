@@ -57,6 +57,6 @@ Every field, with its type and who sets it: [Domain model](/reference/domain-mod
 
 Write a draft in the client portal's Policies page (or ask Awzy Bot for one), run a dry run to
 see what would change, then publish. Every PDP picks up the new bundle as soon as it's published,
-usually within a second. If a bad
-bundle locks your admins out, an enrolled admin can roll back with a break-glass key, which works
-even when the IdP or the portal is the problem.
+usually within a second. Publishing warns you first if the draft would stop you administering
+policies. If a bad bundle locks your admins out anyway, an enrolled admin can roll back with a
+break-glass key, which works even when the IdP or the portal is the problem.
