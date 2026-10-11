@@ -1,8 +1,10 @@
+import { routeQuery } from "@awzy/relay/routes";
 import { PageHeader, PageLoader, Section, StatusBadge, type Tone } from "@awzy/ui";
 import { Alert, Button, Drawer, Group, Modal, Stack, Table, Text, Textarea } from "@mantine/core";
+import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { IconSparkles } from "@tabler/icons-react";
 import { Suspense, useState } from "react";
-import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
+import { graphql, type PreloadedQuery, useLazyLoadQuery, useMutation, usePreloadedQuery } from "react-relay";
 
 import { AwzyBotPanel } from "./AwzyBotPanel";
 import { DryRunReport } from "./DryRunReport";
@@ -10,7 +12,11 @@ import type { PoliciesPageCreateDraftMutation } from "./__generated__/PoliciesPa
 import type { PoliciesPagePublishMutation } from "./__generated__/PoliciesPagePublishMutation.graphql";
 import type { PoliciesPageAwzyBotQuery } from "./__generated__/PoliciesPageAwzyBotQuery.graphql";
 import type { PoliciesPageQuery } from "./__generated__/PoliciesPageQuery.graphql";
+import PoliciesPageQueryNode from "./__generated__/PoliciesPageQuery.graphql";
 import { formatTime } from "./format";
+
+/** Started by the route's loader as navigation begins (ADR 0099). */
+export const loadPoliciesPage = routeQuery<PoliciesPageQuery>(PoliciesPageQueryNode);
 
 const STATUS: Record<string, { label: string; tone: Tone }> = {
   ACTIVE: { label: "Active", tone: "success" },
@@ -18,11 +24,14 @@ const STATUS: Record<string, { label: string; tone: Tone }> = {
   SUPERSEDED: { label: "Superseded", tone: "neutral" },
 };
 
+const route = getRouteApi("/policies");
+
 export function PoliciesPage() {
-  // Bumped after a mutation to refetch the bundle list.
-  const [fetchKey, setFetchKey] = useState(0);
+  const queryRef = route.useLoaderData();
+  const router = useRouter();
   const [botOpen, setBotOpen] = useState(false);
-  const onChanged = () => setFetchKey((k) => k + 1);
+  // After a mutation: the loader loads the bundle list again.
+  const onChanged = () => void router.invalidate();
   return (
     <Stack gap="md">
       <PageHeader
@@ -46,7 +55,7 @@ export function PoliciesPage() {
         <AwzyBotPanel onDraftSaved={onChanged} />
       </Drawer>
       <Suspense fallback={<PageLoader />}>
-        <Policies fetchKey={fetchKey} onChanged={onChanged} />
+        <Policies queryRef={queryRef} onChanged={onChanged} />
       </Suspense>
     </Stack>
   );
@@ -69,8 +78,8 @@ function AskAwzyBotButton({ onClick }: { onClick: () => void }) {
   ) : null;
 }
 
-function Policies({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => void }) {
-  const data = useLazyLoadQuery<PoliciesPageQuery>(
+function Policies({ queryRef, onChanged }: { queryRef: PreloadedQuery<PoliciesPageQuery>; onChanged: () => void }) {
+  const data = usePreloadedQuery<PoliciesPageQuery>(
     graphql`
       query PoliciesPageQuery {
         canPublish: viewerCan(action: ADMINISTER, area: POLICIES)
@@ -96,8 +105,7 @@ function Policies({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => 
         }
       }
     `,
-    {},
-    { fetchKey, fetchPolicy: "store-and-network" },
+    queryRef,
   );
   const [commitPublish, isPublishing] = useMutation<PoliciesPagePublishMutation>(graphql`
     mutation PoliciesPagePublishMutation($input: PublishPolicyBundleInput!) {

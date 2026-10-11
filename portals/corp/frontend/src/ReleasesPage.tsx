@@ -1,15 +1,23 @@
+import { routeQuery } from "@awzy/relay/routes";
 import { EmptyState, PageHeader, PageLoader, Section, StatusBadge, type Tone } from "@awzy/ui";
 import { Anchor, Group, Table, Text } from "@mantine/core";
 import { IconPackage } from "@tabler/icons-react";
-import { Link } from "@tanstack/react-router";
+import { getRouteApi, Link } from "@tanstack/react-router";
 import { Suspense } from "react";
-import { graphql, useLazyLoadQuery } from "react-relay";
+import { graphql, type PreloadedQuery, usePreloadedQuery } from "react-relay";
 
 import type { ReleasesPageQuery } from "./__generated__/ReleasesPageQuery.graphql";
+import ReleasesPageQueryNode from "./__generated__/ReleasesPageQuery.graphql";
 import { channelLabel, formatTime, healthOf } from "./format";
 
+/** Started by the route's loader as navigation begins (ADR 0099). */
+export const loadReleasesPage = routeQuery<ReleasesPageQuery>(ReleasesPageQueryNode);
+
 /** What each release channel names, and which chart versions are running where: the rollout view. */
+const route = getRouteApi("/releases");
+
 export function ReleasesPage() {
+  const queryRef = route.useLoaderData();
   return (
     <>
       <PageHeader
@@ -17,14 +25,14 @@ export function ReleasesPage() {
         description="The version each channel names, and which chart versions installs are running, and where."
       />
       <Suspense fallback={<PageLoader />}>
-        <Releases />
+        <Releases queryRef={queryRef} />
       </Suspense>
     </>
   );
 }
 
-function Releases() {
-  const data = useLazyLoadQuery<ReleasesPageQuery>(
+function Releases({ queryRef }: { queryRef: PreloadedQuery<ReleasesPageQuery> }) {
+  const data = usePreloadedQuery<ReleasesPageQuery>(
     graphql`
       query ReleasesPageQuery {
         channels {
@@ -59,8 +67,7 @@ function Releases() {
         }
       }
     `,
-    {},
-    { fetchPolicy: "store-and-network" },
+    queryRef,
   );
   return (
     <>

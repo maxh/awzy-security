@@ -1,30 +1,39 @@
+import { routeQuery } from "@awzy/relay/routes";
 import { EmptyState, PageHeader, PageLoader, Section, StatusBadge, type Tone } from "@awzy/ui";
 import { Button, SimpleGrid, Stack, Table, Text } from "@mantine/core";
 import { IconPlugConnected } from "@tabler/icons-react";
-import { Suspense, useState } from "react";
-import { graphql, useLazyLoadQuery } from "react-relay";
+import { getRouteApi, useRouter } from "@tanstack/react-router";
+import { Suspense } from "react";
+import { graphql, type PreloadedQuery, usePreloadedQuery } from "react-relay";
 
 import type { ConnectorsPageQuery } from "./__generated__/ConnectorsPageQuery.graphql";
+import ConnectorsPageQueryNode from "./__generated__/ConnectorsPageQuery.graphql";
 import { Time } from "./format";
+
+/** Started by the route's loader as navigation begins (ADR 0099). */
+export const loadConnectorsPage = routeQuery<ConnectorsPageQuery>(ConnectorsPageQueryNode, "network-only");
 
 const LABELS: Record<string, string> = { drive: "Google Drive", jira: "Jira" };
 
 /** The systems of record awzy reads, and whether each is syncing. */
+const route = getRouteApi("/connectors");
+
 export function ConnectorsPage() {
-  const [fetchKey, setFetchKey] = useState(0);
+  const queryRef = route.useLoaderData();
+  const router = useRouter();
   return (
     <>
       <PageHeader
         title="Connectors"
         description="The systems awzy reads resources, sharing, and work from, read-only, and whether each is syncing."
         actions={
-          <Button size="xs" variant="default" onClick={() => setFetchKey((k) => k + 1)}>
+          <Button size="xs" variant="default" onClick={() => void router.invalidate()}>
             Check again
           </Button>
         }
       />
       <Suspense fallback={<PageLoader />}>
-        <Connectors fetchKey={fetchKey} />
+        <Connectors queryRef={queryRef} />
       </Suspense>
     </>
   );
@@ -40,8 +49,8 @@ function health(c: ConnectorRow): { tone: Tone; label: string } {
   return age > 2 * c.intervalSecs + 60 ? { tone: "warning", label: "Stale" } : { tone: "success", label: "Syncing" };
 }
 
-function Connectors({ fetchKey }: { fetchKey: number }) {
-  const { connectors } = useLazyLoadQuery<ConnectorsPageQuery>(
+function Connectors({ queryRef }: { queryRef: PreloadedQuery<ConnectorsPageQuery> }) {
+  const { connectors } = usePreloadedQuery<ConnectorsPageQuery>(
     graphql`
       query ConnectorsPageQuery {
         connectors {
@@ -60,8 +69,7 @@ function Connectors({ fetchKey }: { fetchKey: number }) {
         }
       }
     `,
-    {},
-    { fetchKey, fetchPolicy: "network-only" },
+    queryRef,
   );
   if (connectors.length === 0) {
     return (

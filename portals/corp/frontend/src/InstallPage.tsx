@@ -1,22 +1,30 @@
+import { routeQuery } from "@awzy/relay/routes";
 import { EmptyState, PageHeader, PageLoader, Section, Stat, StatusBadge } from "@awzy/ui";
 import { Alert, Button, Group, Modal, Select, SimpleGrid, Stack, Table, Text, TextInput } from "@mantine/core";
 import { IconArchive, IconBox, IconHistory, IconPin } from "@tabler/icons-react";
-import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { Suspense, useState } from "react";
-import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
+import { graphql, type PreloadedQuery, useMutation, usePreloadedQuery } from "react-relay";
 
 import type { InstallPageQuery } from "./__generated__/InstallPageQuery.graphql";
 import type { InstallPageReleaseMutation, ReleaseChannel } from "./__generated__/InstallPageReleaseMutation.graphql";
+import InstallPageQueryNode from "./__generated__/InstallPageQuery.graphql";
 import type { InstallPageRetireMutation } from "./__generated__/InstallPageRetireMutation.graphql";
 import { ago, CHANNELS, channelLabel, formatTime, healthOf, shortDigest } from "./format";
 import { InstallCharts } from "./InstallCharts";
 
+/** Started by the route's loader as navigation begins (ADR 0099). */
+export const loadInstallPage = routeQuery<InstallPageQuery>(InstallPageQueryNode);
+
 /** One install: the deployed units inside it, its numbers, and its upgrade history. */
+const route = getRouteApi("/installs/$installId");
+
 export function InstallPage() {
-  const { installId } = useParams({ from: "/installs/$installId" });
+  const { installId } = route.useParams();
+  const queryRef = route.useLoaderData();
   return (
     <Suspense fallback={<PageLoader />}>
-      <Install id={installId} />
+      <Install id={installId} queryRef={queryRef} />
     </Suspense>
   );
 }
@@ -27,8 +35,8 @@ function num(v: number | null | undefined, unit = "", digits = 1): string {
 
 const back = { label: "Installs", renderRoot: (props: Record<string, unknown>) => <Link to="/installs" {...props} /> };
 
-function Install({ id }: { id: string }) {
-  const data = useLazyLoadQuery<InstallPageQuery>(
+function Install({ id, queryRef }: { id: string; queryRef: PreloadedQuery<InstallPageQuery> }) {
+  const data = usePreloadedQuery<InstallPageQuery>(
     graphql`
       query InstallPageQuery($id: ID!) {
         node(id: $id) {
@@ -74,8 +82,7 @@ function Install({ id }: { id: string }) {
         }
       }
     `,
-    { id },
-    { fetchPolicy: "store-and-network" },
+    queryRef,
   );
   const i = data.node;
   if (!i || i.client === undefined) {

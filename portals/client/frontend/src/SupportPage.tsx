@@ -1,16 +1,22 @@
+import { routeQuery } from "@awzy/relay/routes";
 import { EmptyState, PageHeader, PageLoader, Section, StatusBadge, type Tone } from "@awzy/ui";
 import { Alert, Button, Checkbox, Group, Modal, NumberInput, Stack, Table, Text } from "@mantine/core";
+import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { IconLifebuoy } from "@tabler/icons-react";
 import { Suspense, useState } from "react";
-import { graphql, useLazyLoadQuery, useRelayEnvironment } from "react-relay";
+import { graphql, type PreloadedQuery, useLazyLoadQuery, usePreloadedQuery, useRelayEnvironment } from "react-relay";
 
 import type { SupportPageBannerQuery } from "./__generated__/SupportPageBannerQuery.graphql";
 import type { SupportPageDecideMutation } from "./__generated__/SupportPageDecideMutation.graphql";
 import type { SupportPageEndMutation } from "./__generated__/SupportPageEndMutation.graphql";
 import type { SupportPageQuery, SupportSessionStatus } from "./__generated__/SupportPageQuery.graphql";
+import SupportPageQueryNode from "./__generated__/SupportPageQuery.graphql";
 import { formatTime } from "./format";
 import { mutate, passChallenge } from "./securityKeyChallenge";
 import { webAuthnMessage } from "./webauthn";
+
+/** Started by the route's loader as navigation begins (ADR 0099). */
+export const loadSupportPage = routeQuery<SupportPageQuery>(SupportPageQueryNode, "network-only");
 
 const decide = graphql`
   mutation SupportPageDecideMutation($input: DecideSupportSessionInput!) {
@@ -42,12 +48,15 @@ const STATUS: Record<string, { label: string; tone: Tone }> = {
 };
 const statusOf = (s: SupportSessionStatus) => STATUS[s] ?? { label: s, tone: "neutral" as Tone };
 
+const route = getRouteApi("/support");
+
 /**
  * Support sessions (ADR 0095): awzy staff ask, in awzy's corp portal, to view named areas of this
  * portal; an admin approves or rejects each here, and can end an active one.
  */
 export function SupportPage() {
-  const [fetchKey, setFetchKey] = useState(0);
+  const queryRef = route.useLoaderData();
+  const router = useRouter();
   return (
     <>
       <PageHeader
@@ -55,7 +64,7 @@ export function SupportPage() {
         description="awzy support asks here before looking inside your portal. An approved session is read-only, limited to the areas you choose, ends on its own, and records everything it opens."
       />
       <Suspense fallback={<PageLoader />}>
-        <Sessions fetchKey={fetchKey} onChanged={() => setFetchKey((k) => k + 1)} />
+        <Sessions queryRef={queryRef} onChanged={() => void router.invalidate()} />
       </Suspense>
     </>
   );
@@ -63,8 +72,8 @@ export function SupportPage() {
 
 type Session = SupportPageQuery["response"]["supportSessions"][number];
 
-function Sessions({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => void }) {
-  const data = useLazyLoadQuery<SupportPageQuery>(
+function Sessions({ queryRef, onChanged }: { queryRef: PreloadedQuery<SupportPageQuery>; onChanged: () => void }) {
+  const data = usePreloadedQuery<SupportPageQuery>(
     graphql`
       query SupportPageQuery {
         canDecide: viewerCan(action: ADMINISTER, area: ENFORCEMENT)
@@ -88,8 +97,7 @@ function Sessions({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => 
         }
       }
     `,
-    {},
-    { fetchKey, fetchPolicy: "network-only" },
+    queryRef,
   );
   const environment = useRelayEnvironment();
   const [approving, setApproving] = useState<Session | null>(null);

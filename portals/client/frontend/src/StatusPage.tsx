@@ -1,16 +1,25 @@
+import { routeQuery } from "@awzy/relay/routes";
 import { PageHeader, PageLoader, Section, StatusBadge } from "@awzy/ui";
 import { Alert, Anchor, Button, Code, Group, ScrollArea, Stack, Table, Text } from "@mantine/core";
+import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { Suspense, useState } from "react";
-import { fetchQuery, graphql, useLazyLoadQuery, useRelayEnvironment } from "react-relay";
+import { fetchQuery, graphql, type PreloadedQuery, usePreloadedQuery, useRelayEnvironment } from "react-relay";
 
 import { prettyJson, Time } from "./format";
 import type { StatusPageExportQuery } from "./__generated__/StatusPageExportQuery.graphql";
 import type { StatusPageDiagnosticsQuery } from "./__generated__/StatusPageDiagnosticsQuery.graphql";
 import type { StatusPageQuery } from "./__generated__/StatusPageQuery.graphql";
+import StatusPageQueryNode from "./__generated__/StatusPageQuery.graphql";
+
+/** Started by the route's loader as navigation begins (ADR 0099). */
+export const loadStatusPage = routeQuery<StatusPageQuery>(StatusPageQueryNode, "network-only");
+
+const route = getRouteApi("/status");
 
 /** Whether each of awzy's services is ready, as the portal finds them: a first look at what's wrong. */
 export function StatusPage() {
-  const [fetchKey, setFetchKey] = useState(0);
+  const queryRef = route.useLoaderData();
+  const router = useRouter();
   return (
     <>
       <PageHeader
@@ -18,14 +27,14 @@ export function StatusPage() {
         description="Whether each of awzy's services in your install is ready, and the release it runs, as the portal reaches them."
       />
       <Suspense fallback={<PageLoader />}>
-        <Status fetchKey={fetchKey} onRefresh={() => setFetchKey((k) => k + 1)} />
+        <Status queryRef={queryRef} onRefresh={() => void router.invalidate()} />
       </Suspense>
     </>
   );
 }
 
-function Status({ fetchKey, onRefresh }: { fetchKey: number; onRefresh: () => void }) {
-  const data = useLazyLoadQuery<StatusPageQuery>(
+function Status({ queryRef, onRefresh }: { queryRef: PreloadedQuery<StatusPageQuery>; onRefresh: () => void }) {
+  const data = usePreloadedQuery<StatusPageQuery>(
     graphql`
       query StatusPageQuery {
         canGenerateDiagnostics: viewerCan(action: ADMINISTER, area: ENFORCEMENT)
@@ -38,8 +47,7 @@ function Status({ fetchKey, onRefresh }: { fetchKey: number; onRefresh: () => vo
         }
       }
     `,
-    {},
-    { fetchKey, fetchPolicy: "network-only" },
+    queryRef,
   );
   const down = data.installStatus.filter((c) => !c.ready);
   return (

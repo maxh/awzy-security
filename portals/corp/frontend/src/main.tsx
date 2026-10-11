@@ -22,7 +22,7 @@ function App({ initial }: { initial: Staff | null }) {
   return (
     <StaffContext.Provider value={staff}>
       <RelayEnvironmentProvider environment={environment}>
-        <RouterProvider router={router} />
+        <RouterProvider router={router} context={{ environment }} />
       </RelayEnvironmentProvider>
     </StaffContext.Provider>
   );

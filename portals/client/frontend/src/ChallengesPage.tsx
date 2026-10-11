@@ -1,3 +1,4 @@
+import { routeQuery } from "@awzy/relay/routes";
 import { PageHeader } from "@awzy/ui";
 import {
   Alert,
@@ -16,13 +17,16 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
+import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   commitMutation,
   fetchQuery,
   graphql,
+  type PreloadedQuery,
   useLazyLoadQuery,
   useMutation,
+  usePreloadedQuery,
   useRelayEnvironment,
   useSubscription,
 } from "react-relay";
@@ -34,6 +38,7 @@ import type { ChallengesPageDecideMutation } from "./__generated__/ChallengesPag
 import type { ChallengesPageJustifyMutation } from "./__generated__/ChallengesPageJustifyMutation.graphql";
 import type { ChallengesPageLiftMutation } from "./__generated__/ChallengesPageLiftMutation.graphql";
 import type { ChallengesPageQuery } from "./__generated__/ChallengesPageQuery.graphql";
+import ChallengesPageQueryNode from "./__generated__/ChallengesPageQuery.graphql";
 import type { ChallengesPageBeginKeyChangeMutation } from "./__generated__/ChallengesPageBeginKeyChangeMutation.graphql";
 import type { ChallengesPageBeginRegistrationMutation } from "./__generated__/ChallengesPageBeginRegistrationMutation.graphql";
 import type { ChallengesPageChallengeUpdatedSubscription } from "./__generated__/ChallengesPageChallengeUpdatedSubscription.graphql";
@@ -46,6 +51,9 @@ import type { ChallengesPageRemoveKeyMutation } from "./__generated__/Challenges
 import type { ChallengesPageResetKeyMutation } from "./__generated__/ChallengesPageResetKeyMutation.graphql";
 import { entityLabel, formatTime } from "./format";
 import { createCredential, getAssertion, webAuthnAvailable, webAuthnMessage } from "./webauthn";
+
+/** Started by the route's loader as navigation begins (ADR 0099). */
+export const loadChallengesPage = routeQuery<ChallengesPageQuery>(ChallengesPageQueryNode);
 
 /** The challenge a notification linked to (`/challenges?challenge=<qid>`), highlighted. Read as
  * the page renders, since signing in restores the link only after the app loads. */
@@ -200,12 +208,20 @@ async function authorizeKeyChange(environment: Environment) {
   return getAssertion(c.ceremonyQid, c.optionsJson);
 }
 
+const route = getRouteApi("/challenges");
+
 /** Challenges (ADR 0054): answer your own; admins approve requests and manage containments. */
 export function ChallengesPage() {
+  const queryRef = route.useLoaderData();
+  const router = useRouter();
+  // Only for the admin section's query, which loads only for those who administer challenges.
   const [fetchKey, setFetchKey] = useState(0);
   // Kept outside Suspense so the refetch after submitting doesn't clear it.
   const [answered, setAnswered] = useState<Answered | null>(null);
-  const refresh = () => setFetchKey((k) => k + 1);
+  const refresh = () => {
+    void router.invalidate();
+    setFetchKey((k) => k + 1);
+  };
   useLive(refresh);
   return (
     <Stack gap="md">
@@ -216,6 +232,7 @@ export function ChallengesPage() {
       {answered && <AnsweredNotice answered={answered} onClose={() => setAnswered(null)} />}
       <Suspense fallback={<Loading />}>
         <Challenges
+          queryRef={queryRef}
           fetchKey={fetchKey}
           onChanged={refresh}
           onAnswered={(a) => {
@@ -301,15 +318,17 @@ function AnsweredNotice({ answered: j, onClose }: { answered: Answered; onClose:
 }
 
 function Challenges({
+  queryRef,
   fetchKey,
   onChanged,
   onAnswered,
 }: {
+  queryRef: PreloadedQuery<ChallengesPageQuery>;
   fetchKey: number;
   onChanged: () => void;
   onAnswered: (a: Answered) => void;
 }) {
-  const data = useLazyLoadQuery<ChallengesPageQuery>(
+  const data = usePreloadedQuery<ChallengesPageQuery>(
     graphql`
       query ChallengesPageQuery {
         canAdminister: viewerCan(action: ADMINISTER, area: CHALLENGES)
@@ -383,8 +402,7 @@ function Challenges({
         }
       }
     `,
-    {},
-    { fetchKey, fetchPolicy: "store-and-network" },
+    queryRef,
   );
   // A notification's link names one challenge: bring it into view once it's on the page.
   const linked = linkedChallenge();
