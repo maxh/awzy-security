@@ -178,7 +178,7 @@ the cluster on it.
   test tag pushed unsigned, then deleted.
 - **A decision:** port-forward the PDP and ask it something (the request shape is in
   [DEVELOPMENT.md](DEVELOPMENT.md#pdp)). The PDP takes only callers with a Kubernetes
-  service-account token for its audience (ADR 0054), so make one for the backend's account:
+  service-account token for its audience, so make one for the backend's account:
   ```sh
   kubectl -n awzy-system port-forward svc/awzy-pdp 8080:8080 &
   token=$(kubectl -n awzy-system create token awzy --audience awzy-pdp --duration 10m)
