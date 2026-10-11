@@ -8,8 +8,8 @@
 use std::time::Duration;
 
 use awzy_model::{ChallengeId, ChallengeKind};
-use serde_json::{json, Value};
-use sqlx::{PgPool, Row};
+use serde::{Deserialize, Serialize};
+use sqlx::{types::Json, PgPool, Row};
 use uuid::Uuid;
 
 use crate::{
@@ -52,25 +52,95 @@ fn label(r: &awzy_model::EntityRef) -> String {
     format!("{}::{}", r.kind, r.id)
 }
 
-/// The details every challenge message needs.
-fn challenge_details(c: &Challenge) -> Value {
-    json!({
-        "challenge_qid": c.id.to_string(),
-        "principal": label(&c.request.principal),
-        "on_behalf_of": c.request.on_behalf_of.as_ref().map(label),
-        "action": c.request.action,
-        "resource": label(&c.request.resource),
-        "kinds": c.kinds.iter().map(|k| k.as_str()).collect::<Vec<_>>(),
-    })
+/// What one notification says, as `notifications.details` keeps it (#221). Its `kind` is also a
+/// column of its own.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Notice {
+    /// A challenge to answer, or, for an `approver`, a request to approve.
+    ChallengeOpened {
+        #[serde(flatten)]
+        challenge: ChallengeNotice,
+        #[serde(default)]
+        approver: bool,
+    },
+    /// An approver's decision, for the person the challenge went to.
+    ChallengeDecided {
+        #[serde(flatten)]
+        challenge: ChallengeNotice,
+        approved: bool,
+        decided_by: Option<String>,
+        /// Whether that left nothing else to pass.
+        passed: bool,
+    },
+    Containment {
+        containment_qid: String,
+        principal: String,
+        created_by: String,
+        monitor: bool,
+    },
+    LiftRequested {
+        containment_qid: String,
+        principal: String,
+        requested_by: String,
+        reason: String,
+    },
+    BreakGlass(BreakGlass),
+}
+
+impl Notice {
+    fn kind(&self) -> &'static str {
+        match self {
+            Notice::ChallengeOpened { .. } => "challenge_opened",
+            Notice::ChallengeDecided { .. } => "challenge_decided",
+            Notice::Containment { .. } => "containment",
+            Notice::LiftRequested { .. } => "lift_requested",
+            Notice::BreakGlass(_) => "break_glass",
+        }
+    }
+}
+
+/// A challenge, as every message about one names it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ChallengeNotice {
+    pub challenge_qid: String,
+    pub principal: String,
+    pub on_behalf_of: Option<String>,
+    pub action: String,
+    pub resource: String,
+    pub kinds: Vec<String>,
+}
+
+impl ChallengeNotice {
+    fn of(c: &Challenge) -> Self {
+        Self {
+            challenge_qid: c.id.to_string(),
+            principal: label(&c.request.principal),
+            on_behalf_of: c.request.on_behalf_of.as_ref().map(label),
+            action: c.request.action.clone(),
+            resource: label(&c.request.resource),
+            kinds: c.kinds.iter().map(|k| k.as_str().to_string()).collect(),
+        }
+    }
+}
+
+/// A break-glass rollback (ADR 0022), as the PDP reported it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BreakGlass {
+    pub key_id: String,
+    pub reason: String,
+    pub restored_version: i64,
+    pub policy_bundle_qid: String,
+    pub version: i64,
 }
 
 impl ChallengeStore {
-    async fn record(&self, kind: &str, to: &Recipient, details: &Value) -> Result<(), StoreError> {
+    async fn record(&self, to: &Recipient, notice: &Notice) -> Result<(), StoreError> {
         sqlx::query("INSERT INTO notifications (id, kind, recipient, details) VALUES ($1, $2, $3, $4)")
             .bind(Uuid::now_v7())
-            .bind(kind)
+            .bind(notice.kind())
             .bind(to.to_text())
-            .bind(sqlx::types::Json(details))
+            .bind(Json(notice))
             .execute(self.pool())
             .await?;
         Ok(())
@@ -83,25 +153,21 @@ impl ChallengeStore {
             return Ok(());
         }
         let c = self.get(id).await?;
-        let details = challenge_details(&c);
+        let opened = |approver| Notice::ChallengeOpened { challenge: ChallengeNotice::of(&c), approver };
         let for_answerer = c.kinds.contains(ChallengeKind::Justification)
             || c.kinds.contains(ChallengeKind::Verification)
             || c.kinds.contains(ChallengeKind::Biometric);
         if let (true, Some(answerer)) = (for_answerer, c.answerer_id.as_deref()) {
-            self.record("challenge_opened", &Recipient::Human(answerer.into()), &details).await?;
+            self.record(&Recipient::Human(answerer.into()), &opened(false)).await?;
         }
         if c.kinds.contains(ChallengeKind::Approval) {
             let parties: Vec<&str> =
                 [c.request.principal.id.as_str()].into_iter().chain(c.answerer_id.as_deref()).collect();
             // Never ask someone to approve their own request.
             if let Some(owner) = resource_owner.filter(|o| !parties.contains(o)) {
-                let mut details = details.clone();
-                details["approver"] = json!(true);
-                self.record("challenge_opened", &Recipient::Human(owner.into()), &details).await?;
+                self.record(&Recipient::Human(owner.into()), &opened(true)).await?;
             }
-            let mut details = details;
-            details["approver"] = json!(true);
-            self.record("challenge_opened", &Recipient::Security, &details).await?;
+            self.record(&Recipient::Security, &opened(true)).await?;
         }
         Ok(())
     }
@@ -109,19 +175,21 @@ impl ChallengeStore {
     /// An approver decided: the person the challenge went to learns whether to retry.
     pub async fn notify_decided(&self, c: &Challenge, approved: bool) -> Result<(), StoreError> {
         let Some(answerer) = c.answerer_id.as_deref().filter(|_| self.notify) else { return Ok(()) };
-        let mut details = challenge_details(c);
-        details["approved"] = json!(approved);
-        details["decided_by"] = json!(c.decided_by);
-        details["passed"] = json!(c.status == crate::ChallengeStatus::Passed);
-        self.record("challenge_decided", &Recipient::Human(answerer.into()), &details).await
+        let notice = Notice::ChallengeDecided {
+            challenge: ChallengeNotice::of(c),
+            approved,
+            decided_by: c.decided_by.clone(),
+            passed: c.status == crate::ChallengeStatus::Passed,
+        };
+        self.record(&Recipient::Human(answerer.into()), &notice).await
     }
 
     /// A break-glass rollback (ADR 0022): the security team, every time.
-    pub async fn notify_break_glass(&self, details: &Value) -> Result<(), StoreError> {
+    pub async fn notify_break_glass(&self, rollback: BreakGlass) -> Result<(), StoreError> {
         if !self.notify {
             return Ok(());
         }
-        self.record("break_glass", &Recipient::Security, details).await
+        self.record(&Recipient::Security, &Notice::BreakGlass(rollback)).await
     }
 
     /// Someone asked for a containment to be lifted: the security team decides.
@@ -134,13 +202,13 @@ impl ChallengeStore {
         if !self.notify {
             return Ok(());
         }
-        let details = json!({
-            "containment_qid": c.id.to_string(),
-            "principal": label(&c.principal),
-            "requested_by": requested_by,
-            "reason": reason,
-        });
-        self.record("lift_requested", &Recipient::Security, &details).await
+        let notice = Notice::LiftRequested {
+            containment_qid: c.id.to_string(),
+            principal: label(&c.principal),
+            requested_by: requested_by.to_string(),
+            reason: reason.to_string(),
+        };
+        self.record(&Recipient::Security, &notice).await
     }
 
     /// A containment, applied or only recorded: the security team, never the contained person.
@@ -148,76 +216,67 @@ impl ChallengeStore {
         if !self.notify {
             return Ok(());
         }
-        let details = json!({
-            "containment_qid": c.id.to_string(),
-            "principal": label(&c.principal),
-            "created_by": c.created_by,
-            "monitor": c.monitor,
-        });
-        self.record("containment", &Recipient::Security, &details).await
+        let notice = Notice::Containment {
+            containment_qid: c.id.to_string(),
+            principal: label(&c.principal),
+            created_by: c.created_by.clone(),
+            monitor: c.monitor,
+        };
+        self.record(&Recipient::Security, &notice).await
     }
 }
 
 /// The text of one message, with its link into the client portal.
-pub fn render(kind: &str, details: &Value, portal_url: &str) -> String {
+pub fn render(notice: &Notice, portal_url: &str) -> String {
     let portal = portal_url.trim_end_matches('/');
-    let s = |k: &str| details[k].as_str().unwrap_or("").to_string();
-    let challenges_link = format!("{portal}/challenges?challenge={}", s("challenge_qid"));
-    let who = match details["on_behalf_of"].as_str() {
-        Some(human) => format!("{} for {human}", s("principal")),
-        None => s("principal"),
+    let request = |c: &ChallengeNotice| {
+        let who = match &c.on_behalf_of {
+            Some(human) => format!("{} for {human}", c.principal),
+            None => c.principal.clone(),
+        };
+        format!("{who} wants to {} {}", c.action, c.resource)
     };
-    let request = format!("{who} wants to {} {}", s("action"), s("resource"));
-    match kind {
-        "challenge_opened" if details["approver"] == true => {
-            format!("awzy asks for an approval. {request}. Review it: {challenges_link}")
+    let challenges_link = |c: &ChallengeNotice| format!("{portal}/challenges?challenge={}", c.challenge_qid);
+    match notice {
+        Notice::ChallengeOpened { challenge: c, approver: true } => {
+            format!("awzy asks for an approval. {}. Review it: {}", request(c), challenges_link(c))
         }
-        "challenge_opened" => {
-            let kinds: Vec<&str> =
-                details["kinds"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
-            let what = match (kinds.contains(&"justification"), kinds.contains(&"verification")) {
+        Notice::ChallengeOpened { challenge: c, approver: false } => {
+            let has = |k: &str| c.kinds.iter().any(|x| x == k);
+            let what = match (has("justification"), has("verification")) {
                 (true, true) => "a reason and your security key",
                 (true, false) => "a reason",
                 _ => "your security key",
             };
-            format!("awzy needs {what} before this can go ahead: {request}. Answer it: {challenges_link}")
+            format!("awzy needs {what} before this can go ahead: {}. Answer it: {}", request(c), challenges_link(c))
         }
-        "challenge_decided" => {
-            let by = details["decided_by"].as_str().map(|b| format!(" by {b}")).unwrap_or_default();
-            if details["approved"] == true && details["passed"] == true {
-                format!("Approved{by}: {request}. Retry it now; the approval holds for a while. {challenges_link}")
-            } else if details["approved"] == true {
-                format!("Approved{by}: {request}. Something else is still needed: {challenges_link}")
-            } else {
-                format!("Not approved{by}: {request}. {challenges_link}")
+        Notice::ChallengeDecided { challenge: c, approved, decided_by, passed } => {
+            let by = decided_by.as_ref().map(|b| format!(" by {b}")).unwrap_or_default();
+            let (request, link) = (request(c), challenges_link(c));
+            match (approved, passed) {
+                (true, true) => {
+                    format!("Approved{by}: {request}. Retry it now; the approval holds for a while. {link}")
+                }
+                (true, false) => format!("Approved{by}: {request}. Something else is still needed: {link}"),
+                (false, _) => format!("Not approved{by}: {request}. {link}"),
             }
         }
-        "containment" => {
+        Notice::Containment { principal, created_by, monitor, .. } => {
             let link = format!("{portal}/challenges");
-            if details["monitor"] == true {
-                format!(
-                    "awzy would have contained {} (automated containments are in monitor). Review it: {link}",
-                    s("principal")
-                )
+            if *monitor {
+                format!("awzy would have contained {principal} (automated containments are in monitor). Review it: {link}")
             } else {
-                format!("{} is contained by {}. Review it: {link}", s("principal"), s("created_by"))
+                format!("{principal} is contained by {created_by}. Review it: {link}")
             }
         }
-        "lift_requested" => format!(
-            "{} asks to lift the containment of {}: \"{}\". Lift it, or leave it, on the Challenges page: {portal}/challenges",
-            s("requested_by"),
-            s("principal"),
-            s("reason")
+        Notice::LiftRequested { principal, requested_by, reason, .. } => format!(
+            "{requested_by} asks to lift the containment of {principal}: \"{reason}\". Lift it, or leave it, on the Challenges page: {portal}/challenges"
         ),
-        "break_glass" => format!(
+        Notice::BreakGlass(b) => format!(
             "Break-glass: key {} rolled policy back to version {} (now active as version {}), outside the \
              portal and your IdP. Reason given: \"{}\". Review it: {portal}/policies",
-            s("key_id"),
-            details["restored_version"],
-            details["version"],
-            s("reason")
+            b.key_id, b.restored_version, b.version, b.reason
         ),
-        other => format!("awzy: {other}. {portal}"),
     }
 }
 
@@ -255,14 +314,13 @@ impl Worker {
         let mut sent = 0;
         for row in &rows {
             let id: Uuid = row.try_get("id")?;
-            let kind: String = row.try_get("kind")?;
             let attempts: i32 = row.try_get("attempts")?;
-            let details: sqlx::types::Json<Value> = row.try_get("details")?;
-            let text = render(&kind, &details.0, &self.portal_url);
-            let outcome = match Recipient::parse(row.try_get("recipient")?) {
-                Some(Recipient::Human(id)) => self.slack.to_human(&id, &text).await,
-                Some(Recipient::Security) => self.slack.to_security(&text).await,
-                None => Err(anyhow::anyhow!("unknown recipient")),
+            let notice: Result<Json<Notice>, _> = row.try_get("details");
+            let outcome = match (notice, Recipient::parse(row.try_get("recipient")?)) {
+                (Err(e), _) => Err(anyhow::anyhow!("unreadable notification: {e}")),
+                (Ok(n), Some(Recipient::Human(id))) => self.slack.to_human(&id, &render(&n.0, &self.portal_url)).await,
+                (Ok(n), Some(Recipient::Security)) => self.slack.to_security(&render(&n.0, &self.portal_url)).await,
+                (Ok(_), None) => Err(anyhow::anyhow!("unknown recipient")),
             };
             match outcome {
                 Ok(()) => {
@@ -297,33 +355,47 @@ impl Worker {
 mod tests {
     use super::*;
 
-    fn opened(kinds: &[&str], approver: bool) -> Value {
-        json!({ "challenge_qid": "challenge_1", "principal": "ServiceAccount::sales-genie",
-                "on_behalf_of": "Human::nora", "action": "read", "resource": "Resource::plan",
-                "kinds": kinds, "approver": approver })
+    fn challenge(kinds: &[&str]) -> ChallengeNotice {
+        ChallengeNotice {
+            challenge_qid: "challenge_1".into(),
+            principal: "ServiceAccount::sales-genie".into(),
+            on_behalf_of: Some("Human::nora".into()),
+            action: "read".into(),
+            resource: "Resource::plan".into(),
+            kinds: kinds.iter().map(|k| k.to_string()).collect(),
+        }
+    }
+
+    fn opened(kinds: &[&str], approver: bool) -> Notice {
+        Notice::ChallengeOpened { challenge: challenge(kinds), approver }
     }
 
     #[test]
     fn messages_say_whats_waiting_and_link_to_the_portal() {
         let portal = "https://awzy.example.com/";
-        let reason = render("challenge_opened", &opened(&["justification"], false), portal);
+        let reason = render(&opened(&["justification"], false), portal);
         assert!(reason.contains("needs a reason"), "{reason}");
         assert!(
             reason.contains("ServiceAccount::sales-genie for Human::nora wants to read Resource::plan"),
             "{reason}"
         );
         assert!(reason.ends_with("https://awzy.example.com/challenges?challenge=challenge_1"), "{reason}");
-        let key = render("challenge_opened", &opened(&["verification"], false), portal);
+        let key = render(&opened(&["verification"], false), portal);
         assert!(key.contains("your security key"), "{key}");
-        let approval = render("challenge_opened", &opened(&["approval"], true), portal);
+        let approval = render(&opened(&["approval"], true), portal);
         assert!(approval.starts_with("awzy asks for an approval"), "{approval}");
     }
 
     #[test]
     fn a_break_glass_rollback_tells_the_security_team_what_and_why() {
-        let details = json!({ "key_id": "sha256:0123456789abcdef", "reason": "forbid-all locked us out",
-            "restored_version": 4, "policy_bundle_qid": "policy_bundle_1", "version": 6 });
-        let text = render("break_glass", &details, "https://p/");
+        let rollback = BreakGlass {
+            key_id: "sha256:0123456789abcdef".into(),
+            reason: "forbid-all locked us out".into(),
+            restored_version: 4,
+            policy_bundle_qid: "policy_bundle_1".into(),
+            version: 6,
+        };
+        let text = render(&Notice::BreakGlass(rollback), "https://p/");
         assert!(text.starts_with("Break-glass: key sha256:0123456789abcdef rolled policy back to version 4"), "{text}");
         assert!(text.contains("now active as version 6") && text.contains("\"forbid-all locked us out\""), "{text}");
         assert!(text.ends_with("https://p/policies"), "{text}");
@@ -331,9 +403,13 @@ mod tests {
 
     #[test]
     fn a_lift_request_says_who_asks_and_why() {
-        let details = json!({ "containment_qid": "containment_1", "principal": "Human::nora",
-            "requested_by": "ServiceAccount::ops-bot for Human::alice", "reason": "reviewed: a false positive" });
-        let text = render("lift_requested", &details, "https://p");
+        let lift = Notice::LiftRequested {
+            containment_qid: "containment_1".into(),
+            principal: "Human::nora".into(),
+            requested_by: "ServiceAccount::ops-bot for Human::alice".into(),
+            reason: "reviewed: a false positive".into(),
+        };
+        let text = render(&lift, "https://p");
         assert!(
             text.starts_with("ServiceAccount::ops-bot for Human::alice asks to lift the containment of Human::nora"),
             "{text}"
@@ -343,17 +419,34 @@ mod tests {
 
     #[test]
     fn decisions_and_containments_read_plainly() {
-        let mut d = opened(&["approval"], false);
-        d["approved"] = json!(false);
-        d["decided_by"] = json!("Human::priya");
-        assert!(render("challenge_decided", &d, "https://p").starts_with("Not approved by Human::priya"));
-        d["approved"] = json!(true);
-        d["passed"] = json!(true);
-        assert!(render("challenge_decided", &d, "https://p").contains("Retry it now"));
+        let decided = |approved, passed| Notice::ChallengeDecided {
+            challenge: challenge(&["approval"]),
+            approved,
+            decided_by: Some("Human::priya".into()),
+            passed,
+        };
+        assert!(render(&decided(false, false), "https://p").starts_with("Not approved by Human::priya"));
+        assert!(render(&decided(true, true), "https://p").contains("Retry it now"));
 
-        let would = json!({ "containment_qid": "containment_1", "principal": "Human::nora",
-                            "created_by": "AwzyService::awzy-reasoner", "monitor": true });
-        assert!(render("containment", &would, "https://p").contains("would have contained Human::nora"));
+        let would = Notice::Containment {
+            containment_qid: "containment_1".into(),
+            principal: "Human::nora".into(),
+            created_by: "AwzyService::awzy-reasoner".into(),
+            monitor: true,
+        };
+        assert!(render(&would, "https://p").contains("would have contained Human::nora"));
+    }
+
+    /// What's stored reads back as it was written, its kind beside the rest.
+    #[test]
+    fn a_notice_round_trips_through_its_stored_form() {
+        let notice = opened(&["approval"], true);
+        let stored = serde_json::to_value(&notice).unwrap();
+        assert_eq!(
+            (stored["kind"].as_str(), stored["challenge_qid"].as_str()),
+            (Some("challenge_opened"), Some("challenge_1"))
+        );
+        assert_eq!(serde_json::from_value::<Notice>(stored).unwrap(), notice);
     }
 
     #[test]

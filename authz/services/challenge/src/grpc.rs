@@ -367,14 +367,14 @@ impl ChallengeService for Service {
         if !req.policy_bundle_qid.is_empty() {
             qid::<PolicyBundleId>(&req.policy_bundle_qid)?;
         }
-        let details = serde_json::json!({
-            "key_id": req.key_id,
-            "reason": req.reason,
-            "restored_version": req.restored_version,
-            "policy_bundle_qid": req.policy_bundle_qid,
-            "version": req.version,
-        });
-        self.store.notify_break_glass(&details).await.map_err(status)?;
+        let rollback = crate::notify::BreakGlass {
+            key_id: req.key_id,
+            reason: req.reason,
+            restored_version: req.restored_version,
+            policy_bundle_qid: req.policy_bundle_qid,
+            version: req.version,
+        };
+        self.store.notify_break_glass(rollback).await.map_err(status)?;
         Ok(Response::new(ReportBreakGlassResponse {}))
     }
 
