@@ -99,7 +99,7 @@ pub async fn get(mut policy: PolicyClient, id: PolicyBundleId) -> anyhow::Result
 
 /// The bundle the PDPs enforce, if one has been published.
 pub async fn active(mut policy: PolicyClient) -> anyhow::Result<Option<WireBundle>> {
-    Ok(policy.get_active(GetActiveRequest { known_version: 0 }).await?.into_inner().bundle)
+    Ok(policy.get_active(GetActiveRequest { known_version: 0, wait_seconds: 0 }).await?.into_inner().bundle)
 }
 
 /// Newest first.

@@ -148,36 +148,59 @@ pub(crate) fn context_get(url: &str, tokens: &TokenSource) -> anyhow::Result<axu
     Ok(req.body(Empty::new())?)
 }
 
-/// Polls awzy-context's `/v1/principals` every `every`, forever. Failures keep the snapshot in
-/// hand and are retried.
+/// Follows awzy-context's `/v1/principals` forever: each request waits there for the snapshot
+/// to move (ADR 0077), so a change reaches this PDP as it's made. Failures keep the snapshot in
+/// hand and are retried after `every`.
 pub async fn sync_principals(principals: Arc<Principals>, endpoint: String, every: Duration) {
     let client: Client<HttpConnector, Empty<Bytes>> = Client::builder(TokioExecutor::new()).build_http();
     let tokens = TokenSource::from_env();
     loop {
-        match sync_once(&principals, &endpoint, &client, &tokens).await {
+        // Nothing to wait against until the first snapshot.
+        let wait = principals.is_ready().then_some(WAIT);
+        match sync_waiting(&principals, &endpoint, &client, &tokens, wait).await {
             Ok(_) => crate::metrics::PRINCIPALS_SYNC.succeeded(),
             Err(error) => {
                 crate::metrics::PRINCIPALS_SYNC.failed();
                 tracing::warn!(%error, %endpoint, "principals sync failed; keeping the current snapshot");
+                tokio::time::sleep(every).await;
+                continue;
             }
         }
-        tokio::time::sleep(every).await;
+        if wait.is_none() {
+            tokio::time::sleep(every).await;
+        }
     }
 }
 
-/// One poll. Returns true when a new snapshot was loaded.
+/// How long awzy-context holds a request when nothing has changed.
+const WAIT: Duration = Duration::from_secs(25);
+
+/// One request, answered at once. Returns true when a new snapshot was loaded.
 pub async fn sync_once(
     principals: &Principals,
     endpoint: &str,
     client: &Client<HttpConnector, Empty<Bytes>>,
     tokens: &TokenSource,
 ) -> anyhow::Result<bool> {
+    sync_waiting(principals, endpoint, client, tokens, None).await
+}
+
+/// One request, which awzy-context holds up to `wait` for the snapshot to move.
+pub async fn sync_waiting(
+    principals: &Principals,
+    endpoint: &str,
+    client: &Client<HttpConnector, Empty<Bytes>>,
+    tokens: &TokenSource,
+    wait: Option<Duration>,
+) -> anyhow::Result<bool> {
     let known = principals.is_ready().then(|| principals.version());
-    let url = match known {
-        Some(v) => format!("{endpoint}/v1/principals?known={v}"),
-        None => format!("{endpoint}/v1/principals"),
+    let url = match (known, wait) {
+        (Some(v), Some(w)) => format!("{endpoint}/v1/principals?known={v}&wait={}", w.as_secs()),
+        (Some(v), None) => format!("{endpoint}/v1/principals?known={v}"),
+        (None, _) => format!("{endpoint}/v1/principals"),
     };
-    let res = tokio::time::timeout(Duration::from_secs(10), client.request(context_get(&url, tokens)?)).await??;
+    let limit = Duration::from_secs(10) + wait.unwrap_or_default();
+    let res = tokio::time::timeout(limit, client.request(context_get(&url, tokens)?)).await??;
     anyhow::ensure!(res.status().is_success(), "{url} returned {}", res.status());
     let body: Value = serde_json::from_slice(&res.into_body().collect().await?.to_bytes())?;
     let version = body["version"].as_i64().ok_or_else(|| anyhow::anyhow!("no version in the principals snapshot"))?;

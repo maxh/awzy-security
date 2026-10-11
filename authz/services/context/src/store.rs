@@ -1,9 +1,13 @@
 //! Postgres storage for people, groups, and service accounts, and the snapshot the PDPs load
 //! (ADR 0031, ADR 0033).
 
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
 use awzy_model::entity_type;
+use awzy_store::changes::Changes;
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 use sqlx::{postgres::PgRow, PgPool, Postgres, Row, Transaction};
@@ -163,7 +167,13 @@ type DirectoryGroupRow = (String, DateTime<Utc>, i64, i64, Vec<String>);
 #[derive(Clone)]
 pub struct ContextStore {
     pool: PgPool,
+    /// Moves when the principals snapshot or the resource change log does (ADR 0077).
+    principals_changed: Arc<Changes>,
+    resources_changed: Arc<Changes>,
 }
+
+/// How long the resource change log keeps a change. A PDP further behind drops its whole cache.
+const KEEP_CHANGES: &str = "1 hour";
 
 pub(crate) async fn bump(tx: &mut Transaction<'_, Postgres>) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE snapshot_version SET version = version + 1").execute(&mut **tx).await?;
@@ -172,7 +182,61 @@ pub(crate) async fn bump(tx: &mut Transaction<'_, Postgres>) -> Result<(), sqlx:
 
 impl ContextStore {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        Self { pool, principals_changed: Arc::default(), resources_changed: Arc::default() }
+    }
+
+    /// Follows the Postgres notifications that move [`Self::principals_changed`] and
+    /// [`Self::resources_changed`], and prunes the change log, forever.
+    pub async fn follow_changes(self) {
+        tokio::spawn(self.principals_changed.clone().follow(self.pool.clone(), "awzy_principals"));
+        tokio::spawn(self.resources_changed.clone().follow(self.pool.clone(), "awzy_resources"));
+        loop {
+            let pruned = sqlx::query(&format!(
+                "DELETE FROM resource_changes WHERE changed_at < now() - interval '{KEEP_CHANGES}'"
+            ))
+            .execute(&self.pool)
+            .await;
+            if let Err(error) = pruned {
+                tracing::warn!(%error, "couldn't prune the resource change log");
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(600)).await;
+        }
+    }
+
+    pub fn principals_changed(&self) -> &Changes {
+        &self.principals_changed
+    }
+
+    pub fn resources_changed(&self) -> &Changes {
+        &self.resources_changed
+    }
+
+    /// Resources whose entity may have changed after `after` in the change log, up to `limit`:
+    /// the new cursor, their IDs, and whether the log no longer reaches back to `after` (the
+    /// caller then drops everything it cached). Without `after`, just the cursor to start from.
+    pub async fn resource_changes(
+        &self,
+        after: Option<i64>,
+        limit: i64,
+    ) -> Result<(i64, Vec<String>, bool), sqlx::Error> {
+        let (oldest, newest): (Option<i64>, Option<i64>) =
+            sqlx::query_as("SELECT min(seq), max(seq) FROM resource_changes").fetch_one(&self.pool).await?;
+        let Some(after) = after else { return Ok((newest.unwrap_or(0), vec![], false)) };
+        if oldest.is_some_and(|o| o > after + 1) || newest.is_some_and(|n| n < after) {
+            // Pruned past the caller's cursor, or the log was recreated beneath it.
+            return Ok((newest.unwrap_or(0), vec![], true));
+        }
+        let rows: Vec<(i64, String)> =
+            sqlx::query_as("SELECT seq, resource_id FROM resource_changes WHERE seq > $1 ORDER BY seq LIMIT $2")
+                .bind(after)
+                .bind(limit)
+                .fetch_all(&self.pool)
+                .await?;
+        let cursor = rows.last().map_or(after, |(seq, _)| *seq);
+        let mut ids: Vec<String> = rows.into_iter().map(|(_, id)| id).collect();
+        ids.sort();
+        ids.dedup();
+        Ok((cursor, ids, false))
     }
 
     /// For the other stores in this crate ([`crate::resources`]).

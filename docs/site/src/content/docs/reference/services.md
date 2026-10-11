@@ -78,7 +78,7 @@ The policy decision point: evaluates your Cedar policies for each check.
   - the active policy bundle and enforcement mode, from awzy-policy;
   - people, groups, service accounts, and risk scores, from awzy-context's snapshot;
   - who is contained, streamed from awzy-challenge;
-  - resources, fetched from awzy-context and cached briefly.
+  - resources, fetched from awzy-context and cached until awzy-context says they changed.
 - **Writes:** every decision to `awzy.decisions.v1`. When a challenge needs opening, it calls
   awzy-challenge's `Resolve`.
 
@@ -103,7 +103,7 @@ Policy bundles and enforcement modes.
     for automated containments;
   - `BreakGlassRollback`: a rollback signed with an admin's break-glass key.
 - **Stores:** Postgres `awzy_policy`.
-- **Called by:** each PDP, which polls for the active bundle and mode; the client portal; and
+- **Called by:** each PDP, which waits on it for a new bundle or mode, so a publish reaches every PDP as it's made; the client portal; and
   awzy-reasoner, which reads the automated-containments mode.
 
 ### awzy-context

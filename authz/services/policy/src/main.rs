@@ -7,7 +7,7 @@ use sqlx::postgres::PgPoolOptions;
 async fn main() -> anyhow::Result<()> {
     awzy_telemetry::init("awzy-policy");
     let url = std::env::var("AWZY_POSTGRES_URL").context("AWZY_POSTGRES_URL is not set")?;
-    let pool = PgPoolOptions::new().max_connections(5).connect(&url).await?;
+    let pool = PgPoolOptions::new().max_connections(6).connect(&url).await?;
     let mut store = awzy_policy::PolicyStore::new(pool);
     match std::env::var("AWZY_POLICY_SIGNING_KEY_FILE") {
         Ok(path) => {
@@ -34,7 +34,11 @@ async fn main() -> anyhow::Result<()> {
             None
         }
     };
+    let store = Arc::new(store);
+    // Wakes PDPs waiting for a new bundle or mode (ADR 0077).
+    let following = store.clone();
+    tokio::spawn(async move { following.follow_changes().await });
     // Who may call which methods (ADR 0055).
     let access = awzy_policy::Access::from_env()?;
-    awzy_server::serve("awzy-policy", awzy_policy::router(Arc::new(store), break_glass, &access)).await
+    awzy_server::serve("awzy-policy", awzy_policy::router(store, break_glass, &access)).await
 }

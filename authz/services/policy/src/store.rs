@@ -1,6 +1,9 @@
 //! Postgres storage for policy bundles.
 
+use std::sync::Arc;
+
 use awzy_model::{EnforcementMode, PolicyBundleId};
+use awzy_store::changes::Changes;
 use chrono::{DateTime, Utc};
 use sqlx::{postgres::PgRow, PgPool, Row};
 use uuid::Uuid;
@@ -110,12 +113,23 @@ pub enum StoreError {
 pub struct PolicyStore {
     pool: PgPool,
     signer: Option<awzy_signing::BundleSigner>,
+    /// Moves when a bundle is published or the enforcement mode changes (ADR 0077).
+    changed: Arc<Changes>,
 }
 
 impl PolicyStore {
     /// Publishes unsigned bundles until `with_signer`. PDPs that verify reject those.
     pub fn new(pool: PgPool) -> Self {
-        Self { pool, signer: None }
+        Self { pool, signer: None, changed: Arc::default() }
+    }
+
+    /// Follows the Postgres notifications that move [`Self::changed`], forever.
+    pub async fn follow_changes(&self) {
+        self.changed.clone().follow(self.pool.clone(), "awzy_policy").await
+    }
+
+    pub fn changed(&self) -> &Changes {
+        &self.changed
     }
 
     pub fn with_signer(mut self, signer: awzy_signing::BundleSigner) -> Self {

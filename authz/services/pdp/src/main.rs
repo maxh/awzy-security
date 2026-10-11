@@ -36,8 +36,10 @@ async fn main() -> anyhow::Result<()> {
     if let Ok(endpoint) = std::env::var("AWZY_CONTEXT_ADDR") {
         let principals = Arc::new(awzy_pdp::principals::Principals::awaiting_sync());
         let resources = Arc::new(awzy_pdp::resources::Resources::from_context(endpoint.clone()));
-        state = state.with_principals(principals.clone()).with_resources(resources);
+        state = state.with_principals(principals.clone()).with_resources(resources.clone());
+        // Both wait on awzy-context for changes rather than polling (ADR 0077).
         tokio::spawn(awzy_pdp::principals::sync_principals(principals, endpoint, Duration::from_secs(5)));
+        tokio::spawn(resources.follow_changes());
     }
 
     // Containments and challenges (ADR 0054). Without it, challenge verdicts carry no

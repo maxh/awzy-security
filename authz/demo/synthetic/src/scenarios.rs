@@ -499,6 +499,8 @@ mod tests {
             PgPoolOptions::new().max_connections(5).connect_with(options).await.unwrap(),
         );
         store.migrate().await.unwrap();
+        // As awzy-context's main does: wakes the PDP's waiting requests (ADR 0077).
+        tokio::spawn(store.clone().follow_changes());
         let context = serve(awzy_context::router(store, "scim", &awzy_context::Access::off())).await;
         let company = generate(Profile::Demo, 1);
         let client = ContextClient::new(&context, "scim");
