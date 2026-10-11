@@ -95,6 +95,11 @@ tonic-prost = "0.14"
 tonic-prost-build = "0.14"
 tower-http = { version = "0.7", features = ["cors", "fs"] }
 tracing = "0.1"
+# OpenTelemetry traces, off unless OTEL_EXPORTER_OTLP_ENDPOINT is set (libs/telemetry, ADR 0097).
+opentelemetry = "0.31"
+opentelemetry_sdk = "0.31"
+opentelemetry-otlp = { version = "0.31", default-features = false, features = ["grpc-tonic", "trace"] }
+tracing-opentelemetry = "0.32"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 uuid = { version = "1", features = ["serde", "v7"] }
 
