@@ -394,12 +394,20 @@ function Challenges({
     if (linked && linkedShown) document.getElementById(linked)?.scrollIntoView({ block: "center" });
   }, [linked, linkedShown]);
   const recent = data.recent.filter((c) => c.status !== "PENDING");
+  const linkedRecent = linked && !linkedShown ? data.recent.find((c) => c.id === linked) : undefined;
   const hasKeys = data.mySecurityKeys.length > 0;
   // When the page loaded: a pass that has since run out no longer invites a retry.
   const [loadedAt] = useState(() => Date.now());
 
   return (
     <Stack gap="lg">
+      {linked && !linkedShown && (
+        <Alert color="gray" title="That challenge isn't waiting for you">
+          {linkedRecent
+            ? `It's ${linkedRecent.status.toLowerCase()}${linkedRecent.decidedBy ? `, by ${linkedRecent.decidedBy.label}` : ""}.`
+            : "It was answered or ran out, or it's for someone else."}
+        </Alert>
+      )}
       <Stack gap="xs">
         <Title order={4}>Waiting for you</Title>
         {data.pending.length === 0 ? (
@@ -420,42 +428,42 @@ function Challenges({
       {!data.canAdminister && data.toApprove.length > 0 && (
         <Stack gap="xs">
           <Title order={4}>Waiting for your approval</Title>
-          <Table>
-            <Table.Tbody>
-              {data.toApprove.map((c) => (
-                <Approval key={c.id} challenge={c} onChanged={onChanged} />
-              ))}
-            </Table.Tbody>
-          </Table>
+          <Stack gap="sm">
+            {data.toApprove.map((c) => (
+              <Approval key={c.id} challenge={c} onChanged={onChanged} />
+            ))}
+          </Stack>
         </Stack>
       )}
 
       {recent.length > 0 && (
         <Stack gap="xs">
           <Title order={4}>Recent</Title>
-          <Table>
-            <Table.Tbody>
-              {recent.map((c) => (
-                <Table.Tr key={c.id}>
-                  <Table.Td style={{ whiteSpace: "nowrap" }}>{c.createdAt ? formatTime(c.createdAt) : ""}</Table.Td>
-                  <Table.Td>{requestLabel(c)}</Table.Td>
-                  <Table.Td>
-                    <Badge color={STATUS_COLOR[c.status as keyof typeof STATUS_COLOR] ?? "gray"} variant="light">
-                      {c.status.toLowerCase()}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td c="dimmed">
-                    {c.status === "PASSED" && c.grantExpiresAt
-                      ? Date.parse(c.grantExpiresAt) > loadedAt
-                        ? `retry the request before ${formatTime(c.grantExpiresAt)}`
-                        : `was allowed until ${formatTime(c.grantExpiresAt)}`
-                      : ""}
-                    {c.status === "REJECTED" && c.decidedBy ? `rejected by ${c.decidedBy.label}` : ""}
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+          <Table.ScrollContainer minWidth={560}>
+            <Table>
+              <Table.Tbody>
+                {recent.map((c) => (
+                  <Table.Tr key={c.id}>
+                    <Table.Td style={{ whiteSpace: "nowrap" }}>{c.createdAt ? formatTime(c.createdAt) : ""}</Table.Td>
+                    <Table.Td>{requestLabel(c)}</Table.Td>
+                    <Table.Td>
+                      <Badge color={STATUS_COLOR[c.status as keyof typeof STATUS_COLOR] ?? "gray"} variant="light">
+                        {c.status.toLowerCase()}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td c="dimmed">
+                      {c.status === "PASSED" && c.grantExpiresAt
+                        ? Date.parse(c.grantExpiresAt) > loadedAt
+                          ? `retry the request before ${formatTime(c.grantExpiresAt)}`
+                          : `was allowed until ${formatTime(c.grantExpiresAt)}`
+                        : ""}
+                      {c.status === "REJECTED" && c.decidedBy ? `rejected by ${c.decidedBy.label}` : ""}
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
         </Stack>
       )}
 
@@ -665,22 +673,26 @@ function SecurityKeys({ keys, onChanged }: { keys: ReadonlyArray<Key>; onChanged
           : "Add your first one here; after that, adding or removing a key takes a touch of one you have."}
       </Text>
       {keys.length > 0 && (
-        <Table>
-          <Table.Tbody>
-            {keys.map((k) => (
-              <Table.Tr key={k.id}>
-                <Table.Td>{k.name}</Table.Td>
-                <Table.Td c="dimmed">{k.createdAt ? `added ${formatTime(k.createdAt)}` : ""}</Table.Td>
-                <Table.Td c="dimmed">{k.lastUsedAt ? `last used ${formatTime(k.lastUsedAt)}` : "never used"}</Table.Td>
-                <Table.Td>
-                  <Button size="xs" variant="light" color="red" disabled={busy} onClick={() => remove(k)}>
-                    Remove
-                  </Button>
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+        <Table.ScrollContainer minWidth={560}>
+          <Table>
+            <Table.Tbody>
+              {keys.map((k) => (
+                <Table.Tr key={k.id}>
+                  <Table.Td>{k.name}</Table.Td>
+                  <Table.Td c="dimmed">{k.createdAt ? `added ${formatTime(k.createdAt)}` : ""}</Table.Td>
+                  <Table.Td c="dimmed">
+                    {k.lastUsedAt ? `last used ${formatTime(k.lastUsedAt)}` : "never used"}
+                  </Table.Td>
+                  <Table.Td>
+                    <Button size="xs" variant="light" color="red" disabled={busy} onClick={() => remove(k)}>
+                      Remove
+                    </Button>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
       {webAuthnAvailable() ? (
         <Group align="flex-end">
@@ -772,21 +784,23 @@ function ResetKeys() {
         (found.length === 0 ? (
           <Text c="dimmed">No security keys.</Text>
         ) : (
-          <Table>
-            <Table.Tbody>
-              {found.map((k) => (
-                <Table.Tr key={k.id}>
-                  <Table.Td>{k.name}</Table.Td>
-                  <Table.Td c="dimmed">{k.createdAt ? `added ${formatTime(k.createdAt)}` : ""}</Table.Td>
-                  <Table.Td>
-                    <Button size="xs" variant="light" color="red" onClick={() => reset(k.id)}>
-                      Remove
-                    </Button>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+          <Table.ScrollContainer minWidth={560}>
+            <Table>
+              <Table.Tbody>
+                {found.map((k) => (
+                  <Table.Tr key={k.id}>
+                    <Table.Td>{k.name}</Table.Td>
+                    <Table.Td c="dimmed">{k.createdAt ? `added ${formatTime(k.createdAt)}` : ""}</Table.Td>
+                    <Table.Td>
+                      <Button size="xs" variant="light" color="red" onClick={() => reset(k.id)}>
+                        Remove
+                      </Button>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
         ))}
       {error && (
         <Alert color="red" title="Not done">
@@ -850,13 +864,11 @@ function Admin({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => voi
         {approvals.length === 0 ? (
           <Text c="dimmed">No requests are waiting for approval.</Text>
         ) : (
-          <Table>
-            <Table.Tbody>
-              {approvals.map((c) => (
-                <Approval key={c.id} challenge={c} onChanged={onChanged} />
-              ))}
-            </Table.Tbody>
-          </Table>
+          <Stack gap="sm">
+            {approvals.map((c) => (
+              <Approval key={c.id} challenge={c} onChanged={onChanged} />
+            ))}
+          </Stack>
         )}
       </Stack>
       <Containments containments={data.containments} onChanged={onChanged} />
@@ -892,42 +904,43 @@ function Approval({ challenge: c, onChanged }: { challenge: AdminPending | ToApp
     });
 
   return (
-    <Table.Tr id={c.id} style={c.id === linkedChallenge() ? LINKED : undefined}>
-      <Table.Td style={{ whiteSpace: "nowrap" }}>{c.createdAt ? formatTime(c.createdAt) : ""}</Table.Td>
-      <Table.Td>
-        <Stack gap={4}>
-          <Text>{requestLabel(c)}</Text>
-          {c.justification && (
-            <Text size="sm" c="dimmed">
-              “{c.justification}”
-            </Text>
-          )}
-          {error && (
-            <Text size="sm" c="red">
-              {error}
-            </Text>
-          )}
-        </Stack>
-      </Table.Td>
-      <Table.Td>
-        <TextInput
-          size="xs"
-          placeholder="Note (optional)"
-          value={note}
-          onChange={(e) => setNote(e.currentTarget.value)}
-        />
-      </Table.Td>
-      <Table.Td>
-        <Group gap="xs" wrap="nowrap">
-          <Button size="xs" color="teal" loading={isSaving} onClick={() => decide(true)}>
-            Approve
-          </Button>
-          <Button size="xs" color="red" variant="light" loading={isSaving} onClick={() => decide(false)}>
-            Reject
-          </Button>
+    <Card withBorder id={c.id} style={c.id === linkedChallenge() ? LINKED : undefined}>
+      <Stack gap="xs">
+        <Group justify="space-between" gap="xs">
+          <Text fw={600}>{requestLabel(c)}</Text>
+          <Text size="sm" c="dimmed">
+            {c.createdAt ? formatTime(c.createdAt) : ""}
+          </Text>
         </Group>
-      </Table.Td>
-    </Table.Tr>
+        {c.justification && (
+          <Text size="sm" c="dimmed">
+            “{c.justification}”
+          </Text>
+        )}
+        <Group gap="xs" align="flex-end">
+          <TextInput
+            size="xs"
+            placeholder="Note (optional)"
+            value={note}
+            onChange={(e) => setNote(e.currentTarget.value)}
+            style={{ flex: "1 1 200px" }}
+          />
+          <Group gap="xs" wrap="nowrap">
+            <Button size="xs" color="teal" loading={isSaving} onClick={() => decide(true)}>
+              Approve
+            </Button>
+            <Button size="xs" color="red" variant="light" loading={isSaving} onClick={() => decide(false)}>
+              Reject
+            </Button>
+          </Group>
+        </Group>
+        {error && (
+          <Text size="sm" c="red">
+            {error}
+          </Text>
+        )}
+      </Stack>
+    </Card>
   );
 }
 
@@ -1012,39 +1025,41 @@ function Containments({
       {containments.length === 0 ? (
         <Text c="dimmed">No one is contained.</Text>
       ) : (
-        <Table>
-          <Table.Tbody>
-            {containments.map((c) => (
-              <Table.Tr key={c.id}>
-                <Table.Td>
-                  {c.principal ? entityLabel(c.principal) : ""}
-                  {c.monitor && (
-                    <Badge ml="xs" variant="light" color="gray">
-                      Would contain
-                    </Badge>
-                  )}
-                </Table.Td>
-                <Table.Td>{c.reason}</Table.Td>
-                <Table.Td c="dimmed" style={{ whiteSpace: "nowrap" }}>
-                  {c.createdBy?.label}
-                  {c.createdAt ? `, ${formatTime(c.createdAt)}` : ""}
-                </Table.Td>
-                <Table.Td>
-                  <Group gap="xs" wrap="nowrap">
+        <Table.ScrollContainer minWidth={560}>
+          <Table>
+            <Table.Tbody>
+              {containments.map((c) => (
+                <Table.Tr key={c.id}>
+                  <Table.Td>
+                    {c.principal ? entityLabel(c.principal) : ""}
                     {c.monitor && (
-                      <Button size="xs" color="red" variant="light" loading={isContaining} onClick={() => confirm(c)}>
-                        Contain
-                      </Button>
+                      <Badge ml="xs" variant="light" color="gray">
+                        Would contain
+                      </Badge>
                     )}
-                    <Button size="xs" variant="light" onClick={() => setLifting(c)}>
-                      {c.monitor ? "Dismiss" : "Lift"}
-                    </Button>
-                  </Group>
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+                  </Table.Td>
+                  <Table.Td>{c.reason}</Table.Td>
+                  <Table.Td c="dimmed" style={{ whiteSpace: "nowrap" }}>
+                    {c.createdBy?.label}
+                    {c.createdAt ? `, ${formatTime(c.createdAt)}` : ""}
+                  </Table.Td>
+                  <Table.Td>
+                    <Group gap="xs" wrap="nowrap">
+                      {c.monitor && (
+                        <Button size="xs" color="red" variant="light" loading={isContaining} onClick={() => confirm(c)}>
+                          Contain
+                        </Button>
+                      )}
+                      <Button size="xs" variant="light" onClick={() => setLifting(c)}>
+                        {c.monitor ? "Dismiss" : "Lift"}
+                      </Button>
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
       <Group align="flex-end">
         <Select
