@@ -29,9 +29,11 @@ output "install_contract" {
       url = ""
     }
     kms_key_id = google_kms_crypto_key.data.id
-    # awzy-policy signs with the key version; the PDPs and gateways trust the public key (ADR 0092).
+    # awzy-policy signs with the key version, by its name (projects/…/cryptoKeyVersions/N; the
+    # data source's id is a //cloudkms.googleapis.com URI); the PDPs and gateways trust the public
+    # key (ADR 0092).
     policy_signing = {
-      kms_key        = data.google_kms_crypto_key_version.policy_signing.id
+      kms_key        = data.google_kms_crypto_key_version.policy_signing.name
       public_key_pem = data.google_kms_crypto_key_version.policy_signing.public_key[0].pem
     }
     # Workload Identity Federation grants these principals directly; no annotations needed.
