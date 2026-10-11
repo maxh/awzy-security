@@ -9,6 +9,19 @@ resource "aws_secretsmanager_secret" "connector" {
   recovery_window_in_days = 0
 }
 
+# A first value, "unset", so External Secrets can read each secret before an admin sets it: a
+# secret with no value at all fails its ExternalSecret, and with it every sync of the release.
+# The connectors read a credential only once their connector is on. The portal's writes replace
+# it, and Terraform never writes it again.
+resource "aws_secretsmanager_secret_version" "connector_initial" {
+  for_each      = aws_secretsmanager_secret.connector
+  secret_id     = each.value.id
+  secret_string = "unset"
+  lifecycle {
+    ignore_changes = [secret_string, version_stages]
+  }
+}
+
 data "aws_iam_policy_document" "portal_connector_secrets" {
   statement {
     actions   = ["secretsmanager:PutSecretValue"]
