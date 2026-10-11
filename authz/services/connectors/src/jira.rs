@@ -41,6 +41,8 @@ pub struct JiraConfig {
     /// Project keys in scope; empty means every project the account can browse.
     pub projects: Vec<String>,
     pub interval: Duration,
+    /// Counts an issue's watchers as working on it, like its assignee. Costs a call per issue.
+    pub watchers: bool,
 }
 
 impl JiraConfig {
@@ -61,6 +63,7 @@ impl JiraConfig {
             token: token.trim().to_string(),
             projects: projects.split(',').map(str::trim).filter(|p| !p.is_empty()).map(str::to_string).collect(),
             interval: Duration::from_secs(interval),
+            watchers: std::env::var("AWZY_CONNECTORS_JIRA_WATCHERS").as_deref() == Ok("true"),
         }))
     }
 
@@ -121,13 +124,23 @@ pub fn description_urls(adf: &Value) -> Vec<String> {
 }
 
 /// An issue as a work item. `links` is every URL it cites: its description's and its remote links'.
-pub fn work_item(issue: &Value, links: &[String]) -> Value {
+/// `watchers`: the issue's watchers, counted as working on it beside its assignee (an empty slice
+/// when that setting is off). Anyone whose email Jira hides is counted, not guessed.
+pub fn work_item(issue: &Value, links: &[String], watchers: &[Value]) -> Value {
     let fields = &issue["fields"];
     let key = issue["key"].as_str().unwrap_or_default();
     let done = fields["status"]["statusCategory"]["key"].as_str() == Some("done");
-    let assignee = &fields["assignee"];
-    let email = assignee["emailAddress"].as_str().filter(|e| !e.is_empty()).map(str::to_lowercase);
-    let unmapped = u8::from(email.is_none() && assignee.is_object());
+    let people: Vec<&Value> = std::iter::once(&fields["assignee"]).filter(|a| a.is_object()).chain(watchers).collect();
+    let mut emails = BTreeSet::new();
+    let mut unmapped = 0u64;
+    for person in people {
+        match person["emailAddress"].as_str().filter(|e| !e.is_empty()) {
+            Some(email) => {
+                emails.insert(email.to_lowercase());
+            }
+            None => unmapped += 1,
+        }
+    }
     let resources: BTreeSet<String> =
         links.iter().filter_map(|u| drive_file_id(u)).map(|id| drive::resource_id(&id)).collect();
     let other_links = links.iter().filter(|u| drive_file_id(u).is_none()).count();
@@ -137,7 +150,7 @@ pub fn work_item(issue: &Value, links: &[String]) -> Value {
         "kind": "ticket",
         "title": format!("{key}: {}", fields["summary"].as_str().unwrap_or_default()),
         "state": if done { "closed" } else { "open" },
-        "assignees": email.into_iter().collect::<Vec<_>>(),
+        "assignees": emails,
         "resources": resources,
         "attributes": {
             "key": key,
@@ -254,7 +267,13 @@ impl JiraSync {
         links.extend(
             remote.as_array().into_iter().flatten().filter_map(|l| l["object"]["url"].as_str().map(str::to_string)),
         );
-        Ok(work_item(issue, &links))
+        let watchers = if self.cfg.watchers {
+            let res = self.call(Method::GET, &format!("/rest/api/3/issue/{}/watchers", encode(id)), None).await?;
+            res["watchers"].as_array().cloned().unwrap_or_default()
+        } else {
+            vec![]
+        };
+        Ok(work_item(issue, &links, &watchers))
     }
 
     async fn write(&self, issues: &[Value]) -> anyhow::Result<usize> {
@@ -341,6 +360,23 @@ mod tests {
     }
 
     #[test]
+    fn watchers_count_as_working_on_it_once_each() {
+        let issue = json!({ "id": "10002", "key": "ENG-3", "fields": {
+            "summary": "Rollout", "status": { "statusCategory": { "key": "indeterminate" } },
+            "assignee": { "accountId": "a", "emailAddress": "Priya@larkspur.example" },
+            "issuetype": { "name": "Task" }, "project": { "key": "ENG" } } });
+        let watchers = [
+            json!({ "accountId": "a", "emailAddress": "priya@larkspur.example" }),
+            json!({ "accountId": "b", "emailAddress": "sam@larkspur.example" }),
+            json!({ "accountId": "c" }),
+        ];
+        let w = work_item(&issue, &[], &watchers);
+        assert_eq!(w["assignees"], json!(["priya@larkspur.example", "sam@larkspur.example"]));
+        assert_eq!(w["attributes"]["unmapped_assignees"].as_u64(), Some(1), "the hidden email is counted");
+        assert_eq!(work_item(&issue, &[], &[])["assignees"], json!(["priya@larkspur.example"]));
+    }
+
+    #[test]
     fn a_done_issue_is_closed_and_a_hidden_email_is_counted_not_guessed() {
         let issue = json!({ "id": "10001", "key": "FIN-7", "fields": {
             "summary": "Q3 audit", "status": { "statusCategory": { "key": "done" } },
@@ -348,6 +384,7 @@ mod tests {
         let w = work_item(
             &issue,
             &["https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOp/edit".into(), "https://x.example".into()],
+            &[],
         );
         assert_eq!(
             (w["id"].as_str(), w["state"].as_str(), w["title"].as_str()),
@@ -452,6 +489,7 @@ mod tests {
             token: "t".into(),
             projects: vec!["FIN".into()],
             interval: Duration::from_secs(300),
+            watchers: false,
         };
         let mut sync = JiraSync::new(cfg, http, context);
 

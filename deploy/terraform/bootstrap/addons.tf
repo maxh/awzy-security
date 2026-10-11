@@ -181,6 +181,7 @@ resource "helm_release" "config" {
           url      = var.jira == null ? "" : nonsensitive(var.jira.url)
           user     = var.jira == null ? "" : nonsensitive(var.jira.user)
           projects = var.jira == null ? [] : nonsensitive(var.jira.projects)
+          watchers = var.jira == null ? false : nonsensitive(var.jira.watchers)
         }
       }
     }
