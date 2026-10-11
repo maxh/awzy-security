@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Holds both portals' GraphQL schemas to the conventions in AGENTS.md (ADR 0013, 0058):
+// Holds both portals' GraphQL schemas to the conventions in AGENTS.md (ADR 0013, 0058, 0100):
 //
 // - An object with `id: ID!` implements Node, so Relay can refetch it with `node(id)`, and a Node
 //   has `id: ID!`.

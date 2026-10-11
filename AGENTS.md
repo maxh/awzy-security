@@ -79,7 +79,7 @@ bazel build --config=lint //...                    # clippy
   service parses it into the typed ID where the request arrives (ADR 0101).
   GraphQL objects keep `id`, which Relay requires (ADR 0058), and an object with an `id: ID!`
   implements `Node`, so `node(id)` refetches it. `tools/ci/check-graphql-schemas.mjs`, run by
-  `pnpm lint`, holds both schemas to these and to `UtcTimestamp` for times.
+  `pnpm lint`, holds both schemas to these and to `UtcTimestamp` for times (ADR 0100).
 - **Humans** are `human` in every name, and several are `humans`: code, wire fields, schema
   attributes, policy IDs, routes, GraphQL (`shared_humans`, `human_id`, `answering_human`). Never
   `person` or `people` in a name; prose can say "the person" (ADR 0074).
