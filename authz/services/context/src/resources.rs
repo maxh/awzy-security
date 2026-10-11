@@ -1,4 +1,4 @@
-//! Resources and work items (demo plan step 2): what accessors act on, and what they're working
+//! Resources and work items (demo plan step 2): what principals act on, and what they're working
 //! on. Connectors write them through `/v1/resources` and `/v1/work-items`, one at a time or in
 //! batches; the PDP reads a resource and its ancestors as Cedar entities at
 //! `/v1/resources/{id}/entities` (demo plan step 3), with who is assigned to work on it (step 4,

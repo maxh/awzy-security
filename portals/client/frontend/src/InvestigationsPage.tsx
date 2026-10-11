@@ -16,7 +16,7 @@ export function InvestigationsPage() {
     <>
       <PageHeader
         title="Investigations"
-        description="awzy-reasoner looks into the accessors it flags with a model on your own cloud. Its findings are checked in code before they can do anything (ADR 0067, 0071)."
+        description="awzy-reasoner looks into the principals it flags with a model on your own cloud. Its findings are checked in code before they can do anything (ADR 0067, 0071)."
       />
       <Stack gap="md">
         <SegmentedControl
@@ -103,7 +103,7 @@ function Investigations({
       <EmptyState
         icon={<IconSearch size={22} />}
         title={status ? "Nothing waiting for review" : "No investigations yet"}
-        description="awzy-reasoner investigates accessors whose risk is elevated or who had a challenge rejected, once investigations are turned on."
+        description="awzy-reasoner investigates principals whose risk is elevated or who had a challenge rejected, once investigations are turned on."
       />
     );
   }
@@ -115,7 +115,7 @@ function Investigations({
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Finished</Table.Th>
-              <Table.Th>Accessor</Table.Th>
+              <Table.Th>Principal</Table.Th>
               <Table.Th>Verdict</Table.Th>
               <Table.Th>Risk</Table.Th>
               <Table.Th>Containment</Table.Th>
@@ -255,7 +255,7 @@ function Detail({
         {i.containment === "RECOMMEND"
           ? "recommended, and sent to automated containments (applied only when they're enforced)."
           : i.containment === "PROPOSE"
-            ? "proposed for you to decide: the accessor is privileged. Contain them on the Challenges page if you agree."
+            ? "proposed for you to decide: the principal is privileged. Contain them on the Challenges page if you agree."
             : "none."}
       </Text>
       <Text size="xs" c="dimmed">

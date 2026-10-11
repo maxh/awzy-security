@@ -58,7 +58,7 @@ permit (
 );
 
 // Everyone answers the challenges sent to them in the client portal. Seeing every challenge and
-// containing accessors is `administer`, the security team's above.
+// containing principals is `administer`, the security team's above.
 @id("humans-answer-their-challenges")
 permit (principal is Human, action == Action::"view", resource == PortalArea::"challenges");
 

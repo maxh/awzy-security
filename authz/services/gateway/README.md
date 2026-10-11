@@ -16,9 +16,9 @@ account, on-behalf-of person, and task annotations. The MCP proxy is the first P
   Teams, email), and the caller retries with the ID once it passes, or gets a final deny when it
   expires
 - When the PDP can't be reached, replays only recent allows for tools in a fail-open tier
-  ([ADR 0030](../../../docs/adr/0030-gateway-outage-fallback.md)), and never for an accessor
+  ([ADR 0030](../../../docs/adr/0030-gateway-outage-fallback.md)), and never for a principal
   contained before the outage: it follows awzy-challenge's containment feed
-  (`AWZY_CHALLENGE_ADDR`) and forgets a contained accessor's allows as soon as the list names them
+  (`AWZY_CHALLENGE_ADDR`) and forgets a contained principal's allows as soon as the list names them
 
 What's built so far: [platform plan](../../../docs/platform-plan.md#built-so-far). Running it locally:
 [DEVELOPMENT.md](../../../DEVELOPMENT.md#mcp-gateway-first-enforcement-point).

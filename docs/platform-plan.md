@@ -4,7 +4,7 @@ One product and two portals. **awzy-authz** is a single-tenant authorization sys
 
 ## Summary
 
-Beyond Zero moves the trust boundary from the application to *one action on one resource*. Every request from a human or an agent gets an allow, deny, or challenge verdict at machine speed. Static policies set the floor and a reasoning layer sets the ceiling. Doing this well needs more than a policy engine. The client cloud also needs services that build and maintain context: who the accessor is, what the data is, what the accessor is supposed to be working on, and what they have done recently.
+Beyond Zero moves the trust boundary from the application to *one action on one resource*. Every request from a human or an agent gets an allow, deny, or challenge verdict at machine speed. Static policies set the floor and a reasoning layer sets the ceiling. Doing this well needs more than a policy engine. The client cloud also needs services that build and maintain context: who the principal is, what the data is, what the principal is supposed to be working on, and what they have done recently.
 
 This plan uses two standard authorization terms. A **policy decision point (PDP)** evaluates policy and returns allow, deny, or challenge; in awzy that is awzy-pdp, a gRPC service. A **policy enforcement point (PEP)** intercepts a request, asks the PDP, and applies the verdict; in awzy that is awzy-gateway, the SDKs, or an Envoy filter. There is one PDP and there can be many PEPs. They differ in how much work the client does to install them and to map each request to a resource and an action.
 
@@ -24,7 +24,7 @@ One line per decision, for readers who won't read the whole plan. Details are in
 | --- | --- | --- |
 | Decision service | One PDP (awzy-pdp, Cedar, gRPC) for every access path | Decided |
 | First PEP | The MCP proxy in awzy-gateway; the next PEP follows the first design partner ([ADR 0019](adr/0019-mcp-proxy-is-the-first-pep.md)) | Decided |
-| Identity | PEPs validate IdP tokens; agents act through token exchange that names the agent and its human ([Accessor identity](#accessor-identity)) | Decided |
+| Identity | PEPs validate IdP tokens; agents act through token exchange that names the agent and its human ([Principal identity](#principal-identity)) | Decided |
 | Principals | `Human` and `ServiceAccount` (any non-human identity, including AI agents). Delegation is per request; a service account acting for a person gets at most what that person could do ([ADR 0016](adr/0016-human-and-serviceaccount-principals.md)) | Decided |
 | Rollout | Every install, policy set, and automated containment starts in monitor mode ([Enforcement modes](#enforcement-modes)) | Decided |
 | Data stores | Managed Postgres, Kafka, and Valkey; ClickHouse in the cluster ([Data layer](#data-layer)) | Decided |
@@ -48,13 +48,13 @@ What runs today in `github.com/maxh/awzy-security`, tested with `bazel test //..
 | awzy-policy | Versioned bundles in Postgres; strict validation before a draft is stored; publish supersedes the active bundle. The install's enforcement mode, with an append-only history of switches. Bundles signed at publish (ECDSA P-256, `authz/libs/signing`); PDPs given a verify key refuse unsigned or altered bundles and stay not-ready. Break-glass rollback signed by admin keys enrolled at install (`awzy-break-glass`), independent of the IdP, PDP, and portal. Not yet: KMS-backed signing, admin alerts for break-glass, dry-run, policy-set and containment modes |
 | Decision log | PDP to Kafka (`awzy.decisions.v1`, partitioned by subject) to ClickHouse through a Kafka-engine table and a materialized view. Migrations by `awzy-clickhouse-migrate` |
 | awzy-intake | App events in awzy's own schema and AWS CloudTrail log files, normalized into one event schema and acknowledged once on Kafka (`awzy.events.v1`), then into ClickHouse's `events` table the same way as decisions. Not yet: mapping source identities to people and service accounts, other clouds' audit logs, DLP and agent traces, Helm |
-| Client portal | GraphQL: decision search (Relay connection over ClickHouse), explain-decision with the source of the determining policies, policy drafts and publish, and a dry-run of any draft against the last week's requests ([ADR 0049](adr/0049-policy-dry-run-replays-recent-requests.md)). Pages: Decisions with an explain drawer, Policies with an editor, Enforcement with would-deny rates and the monitor/enforce switch, Challenges where anyone answers the challenges sent to them and the security team approves requests and contains or lifts accessors, Investigations where the security team reads awzy-reasoner's findings and closes them once reviewed ([ADR 0071](adr/0071-investigations-run-on-the-reasoners-flags-and-are-kept-in-awzy-context.md)). MCP at `/mcp` with eight tools. Awzy Bot on the Policies page explains decisions and drafts policies with Claude on the install's own Bedrock, its tools checked as the signed-in person; off by default ([ADR 0048](adr/0048-awzy-bot-on-the-installs-own-model-service.md)). Sign-in through the client's IdP (OIDC with PKCE in the browser, bearer tokens for MCP); every portal and MCP operation checked with the PDP as `view` or `administer` on a `PortalArea`, applied even in monitor mode ([ADR 0020](adr/0020-the-portal-is-authorized-by-the-pdp.md)); changes attributed to the signed-in person or agent |
-| awzy-gateway | MCP proxy at `/mcp/{upstream}`, the first PEP ([ADR 0019](adr/0019-mcp-proxy-is-the-first-pep.md)): each `tools/call` checked as `call` on `McpTool`; blocked calls return tool errors; the caller's token is never forwarded. During a PDP outage only recent allows for tools listed in a fail-open tier are replayed ([ADR 0030](adr/0030-gateway-outage-fallback.md)), never for an accessor contained before the outage: the gateway follows awzy-challenge's containment feed and forgets their allows. Not yet: HTTP reverse proxy, tiers from a signed bundle |
+| Client portal | GraphQL: decision search (Relay connection over ClickHouse), explain-decision with the source of the determining policies, policy drafts and publish, and a dry-run of any draft against the last week's requests ([ADR 0049](adr/0049-policy-dry-run-replays-recent-requests.md)). Pages: Decisions with an explain drawer, Policies with an editor, Enforcement with would-deny rates and the monitor/enforce switch, Challenges where anyone answers the challenges sent to them and the security team approves requests and contains or lifts principals, Investigations where the security team reads awzy-reasoner's findings and closes them once reviewed ([ADR 0071](adr/0071-investigations-run-on-the-reasoners-flags-and-are-kept-in-awzy-context.md)). MCP at `/mcp` with eight tools. Awzy Bot on the Policies page explains decisions and drafts policies with Claude on the install's own Bedrock, its tools checked as the signed-in person; off by default ([ADR 0048](adr/0048-awzy-bot-on-the-installs-own-model-service.md)). Sign-in through the client's IdP (OIDC with PKCE in the browser, bearer tokens for MCP); every portal and MCP operation checked with the PDP as `view` or `administer` on a `PortalArea`, applied even in monitor mode ([ADR 0020](adr/0020-the-portal-is-authorized-by-the-pdp.md)); changes attributed to the signed-in person or agent |
+| awzy-gateway | MCP proxy at `/mcp/{upstream}`, the first PEP ([ADR 0019](adr/0019-mcp-proxy-is-the-first-pep.md)): each `tools/call` checked as `call` on `McpTool`; blocked calls return tool errors; the caller's token is never forwarded. During a PDP outage only recent allows for tools listed in a fail-open tier are replayed ([ADR 0030](adr/0030-gateway-outage-fallback.md)), never for a principal contained before the outage: the gateway follows awzy-challenge's containment feed and forgets their allows. Not yet: HTTP reverse proxy, tiers from a signed bundle |
 | Identity | `authz/libs/identity` validates bearer tokens for the gateway and the portal (JWKS with ES256 or RS256; RFC 8693 `act` for delegation). `tools/dev-idp` is a development-only OIDC provider. Keys fetched over HTTPS (plain HTTP only to loopback), with an optional private CA. Not yet: a token exchange endpoint for IdPs without one |
 | Build | Bazel 8 monorepo; linux/amd64 images for every service built from macOS; each portal image carries its frontend. Not yet: arm64 images, release builds, registry push, Helm, Terraform |
 | awzy-context | People and groups provisioned by the client's IdP over SCIM 2.0 (Okta, Entra ID, Google Workspace), nested groups included, served to PDPs as a versioned snapshot; PDPs take principals and their groups from it, and deactivated people are denied ([ADR 0031](adr/0031-people-and-groups-from-the-idp-over-scim.md)). Service accounts registered for policies ([ADR 0033](adr/0033-service-account-registry-in-awzy-context.md)). Resources and work items written by connectors; PDPs load resources and their parent folders by ID through a local cache, and unknown or unclassified ones are marked `unclassified` ([ADR 0044](adr/0044-pdp-loads-resources-from-awzy-context.md)). Policies see `context.assigned`: whether the principal has open work that links the resource or a folder above it, checked for an agent and the person it acts for alike ([ADR 0046](adr/0046-work-assignment-as-context-assigned.md)). Resources without a label are classified in the background by rules: content markings, then names and folders; a label is only ever raised ([ADR 0047](adr/0047-metadata-first-classification-rules.md)). A resource's entity carries its owner and its effective sharing, its own and its folders', and the base policies permit by them: owners and those it's shared with read, writers write, owners approve ([ADR 0061](adr/0061-ownership-and-sharing-in-the-resource-entity.md)). Not yet: the model step for what rules can't place, Valkey, and the change feed |
 | Corp portal | Install registry and heartbeat intake from each install's awzy-reporter ([ADR 0026](adr/0026-install-registry-and-heartbeats.md)). Pages: Fleet (health per install), Install (services, latest numbers, and 30 days of charts; [ADR 0041](adr/0041-fleet-health-history-in-the-corp-portal-postgres.md)), Releases. Password sign-in for demos ([ADR 0025](adr/0025-corp-portal-passwords-for-demos-and-testing.md)). Not yet: alerting, Kafka lag and ClickHouse disk from the reporter, support sessions, MCP |
-| awzy-challenge | Challenges and containments in Postgres, over gRPC ([ADR 0054](adr/0054-challenges-and-containments-over-grpc.md)). The PDP opens a challenge on an enforced challenge verdict, honors it once passed (the exact request, for 15 minutes), and returns its ID to the PEP. Justification by the person responsible; approval by someone else whom the PDP allows to `approve`, a person or an agent a client policy names, never for its own owner or on crown jewels ([ADR 0065](adr/0065-agents-approve-people-verify.md)); a rejection denies. Containments with a human lift, pushed to every PDP over a gRPC stream with a heartbeat; a contained accessor is denied before policy. Answered on the client portal's Challenges page. Verification by security key: WebAuthn, ES256 only, checked by awzy's own narrow verifier; a first key enrolls on the person's sign-in, later changes need a key they have ([ADR 0059](adr/0059-security-keys-for-verification-challenges.md)). People are told what's waiting for them in the client's own Slack, with links into the client portal: the answerer about a justification or security key, the resource's owner and the security team about an approval, the answerer about the decision, and the security team about containments; recorded first and sent with retries ([ADR 0073](adr/0073-awzy-challenge-tells-people-whats-waiting-for-them.md)). Not yet: biometric, the LLM justification check, email and Teams prompts, lift by challenge, Valkey |
+| awzy-challenge | Challenges and containments in Postgres, over gRPC ([ADR 0054](adr/0054-challenges-and-containments-over-grpc.md)). The PDP opens a challenge on an enforced challenge verdict, honors it once passed (the exact request, for 15 minutes), and returns its ID to the PEP. Justification by the person responsible; approval by someone else whom the PDP allows to `approve`, a person or an agent a client policy names, never for its own owner or on crown jewels ([ADR 0065](adr/0065-agents-approve-people-verify.md)); a rejection denies. Containments with a human lift, pushed to every PDP over a gRPC stream with a heartbeat; a contained principal is denied before policy. Answered on the client portal's Challenges page. Verification by security key: WebAuthn, ES256 only, checked by awzy's own narrow verifier; a first key enrolls on the person's sign-in, later changes need a key they have ([ADR 0059](adr/0059-security-keys-for-verification-challenges.md)). People are told what's waiting for them in the client's own Slack, with links into the client portal: the answerer about a justification or security key, the resource's owner and the security team about an approval, the answerer about the decision, and the security team about containments; recorded first and sent with retries ([ADR 0073](adr/0073-awzy-challenge-tells-people-whats-waiting-for-them.md)). Not yet: biometric, the LLM justification check, email and Teams prompts, lift by challenge, Valkey |
 | awzy-reasoner | Deterministic risk scores every 15 minutes from ClickHouse's decisions and events, written to awzy-context and picked up by the PDPs with the principals snapshot ([ADR 0056](adr/0056-awzy-scores-principals-risk-and-the-pdp-uses-it.md)): the last day against the principal's own month and its team's day, denials, and resources neither it nor its team had opened in a month ([ADR 0064](adr/0064-unfamiliar-territory-raises-risk-and-high-risk-operations-need-a-key.md)). Base policies challenge everything above 80, and high-risk operations (`crown_jewels` tools) above 40 with a security key. Automated containments: a person whose risk is elevated, who had a challenge rejected, and who tried to move data out in the same day is contained, under its own `automated-containments` mode, which starts in monitor ([ADR 0066](adr/0066-the-reasoner-contains-people-automatically-in-its-own-mode.md)). Investigations: a model's findings checked in code, gated in CI against a model that follows every injection, and measured against Bedrock on demand ([ADR 0067](adr/0067-investigations-are-checked-findings-measured-against-a-compromised-model.md)). Investigations run on the reasoner's flags (an elevated score or a rejected challenge), at most once a day per principal and within a monthly token budget, on cases built from ClickHouse, awzy-challenge, and awzy-context, and are kept in awzy-context; off until the client turns them on ([ADR 0071](adr/0071-investigations-run-on-the-reasoners-flags-and-are-kept-in-awzy-context.md)). Not yet: an automation score, the lifted-on-review measure |
 | awzy-connectors | Google Drive: every shared drive its member account can see, with its files, folders, and sharing, as resources in awzy-context. Full crawl on start, then each drive's change feed; members by group name through the Admin directory; only the client's own domain counts as everyone, and outside shares are counted. Metadata only, read-only scopes ([ADR 0069](adr/0069-google-drive-connector-reads-shared-drive-metadata.md)). Jira: issues as work items, assignees by email, linked to the Drive files they cite, so `context.assigned` has real work behind it ([ADR 0070](adr/0070-jira-connector-writes-open-issues-as-work-items.md)). Not yet: My Drives, Drive Labels, content excerpts, keyless credentials, Helm, watchers and other trackers |
 | Not started | any AWS deployment |
@@ -63,11 +63,11 @@ What runs today in `github.com/maxh/awzy-security`, tested with `bazel test //..
 
 ### Why a design partner adopts awzy
 
-A policy engine on its own is a commodity: OPA, Amazon Verified Permissions, and hosted authorization services already evaluate policy per request. awzy has to win on what they lack. That is per-action decisions for humans and AI agents alike, driven by context about the accessor and the data, with challenges and containments instead of a flat deny. The PDP is the same gRPC service whatever the access path. Which PEP ships first depends on where the first design partner's risk is.
+A policy engine on its own is a commodity: OPA, Amazon Verified Permissions, and hosted authorization services already evaluate policy per request. awzy has to win on what they lack. That is per-action decisions for humans and AI agents alike, driven by context about the principal and the data, with challenges and containments instead of a flat deny. The PDP is the same gRPC service whatever the access path. Which PEP ships first depends on where the first design partner's risk is.
 
 ### What a design partner should see succeed
 
-- Every request on the access path they chose first is checked per action, with the accessor (and, for a service account acting for someone, that person) recorded, and adds no noticeable latency.
+- Every request on the access path they chose first is checked per action, with the principal (and, for a service account acting for someone, that person) recorded, and adds no noticeable latency.
 - They watch awzy's verdicts in monitor mode until the would-deny rate looks right to them, then switch to enforcement themselves.
 - Policies reference team, work assignment, and data sensitivity that stay current without manual entry.
 - Risky agent behavior turns into a challenge, then an automatic containment, with evidence a security admin can review.
@@ -89,7 +89,7 @@ The paper describes four cooperating components in a feedback loop. Each one map
 
 | Paper component | What it must do | awzy service(s) |
 | --- | --- | --- |
-| Autonomous governance (enterprise world model) | Keep a live model of **who** (accessors, roles, owners of service accounts), **what** (data sensitivity and type), and **how** (work assignments, usual sharing patterns). Turn unstructured sources into static attributes. | awzy-context awzy-connectors |
+| Autonomous governance (enterprise world model) | Keep a live model of **who** (principals, roles, owners of service accounts), **what** (data sensitivity and type), and **how** (work assignments, usual sharing patterns). Turn unstructured sources into static attributes. | awzy-context awzy-connectors |
 | Event intake | Ingest server-side logs, client-side signals (DLP, endpoint), and agent activity (prompts, plans, tool calls). Write to a hot cache for decisions and a long-term store for analysis. | awzy-intake |
 | Reasoning engine, fast | Attribute-based policy evaluation at access time, per resource and action. Verdict: allow, deny, challenge. | awzy-pdp |
 | Reasoning engine, slow | Peer-group baselines, anomaly detection, activity windows before and after an action, AI-run investigations. Output becomes risk attributes. | awzy-reasoner |
@@ -122,8 +122,8 @@ Each store has one job. Postgres holds things that change and need transactions.
 ### ClickHouse in detail
 
 - **Ingest:** Kafka table engines with materialized views write `decisions`, `events`, and `agent_steps` tables. No custom ingest service is needed.
-- **Layout:** `MergeTree` tables ordered by `(subject_type, subject_id, at)` so "everything this accessor did in the last hour" reads a narrow range. A bloom-filter index on `id` serves explain-decision. A second projection ordered by `resource_id` answers "who touched this resource" (not built yet).
-- **Baselines:** materialized views keep per-accessor and per-peer-group rollups (hourly counts by action and sensitivity tier). The reasoner compares against these instead of scanning raw rows. This is how the paper's "500 percent more files than their peer group" check stays cheap.
+- **Layout:** `MergeTree` tables ordered by `(subject_type, subject_id, at)` so "everything this principal did in the last hour" reads a narrow range. A bloom-filter index on `id` serves explain-decision. A second projection ordered by `resource_id` answers "who touched this resource" (not built yet).
+- **Baselines:** materialized views keep per-principal and per-peer-group rollups (hourly counts by action and sensitivity tier). The reasoner compares against these instead of scanning raw rows. This is how the paper's "500 percent more files than their peer group" check stays cheap.
 - **Retention:** TTL moves data older than 30 days to an object-storage disk (S3, GCS, or Blob) and deletes it after the client's retention period. The decision audit trail keeps its own longer TTL.
 - **Not on the hot path:** awzy-pdp never queries ClickHouse. The reasoner turns ClickHouse results into attributes, and those reach the PDP through Valkey and the snapshot feed.
 - **Schema in the monorepo:** table definitions and migrations live in `authz/jobs/clickhouse-migrate/` and are applied by `awzy-clickhouse-migrate` as a Kubernetes Job on each release. Per-install settings such as the brokers ClickHouse reaches are filled into placeholders.
@@ -162,11 +162,11 @@ Classifying resources, checking justifications, and running investigations is an
 - **When budget or quota runs out:** classification queues and new resources get a default tier the client sets. Justification challenges fall back to approval, and investigations run in risk order.
 - **Measure it.** Phase 2 measures model cost per thousand resources and writes it here next to the infrastructure cost.
 
-## Accessor identity
+## Principal identity
 
-Every decision is about one accessor, so the PDP must be able to trust the accessor's identity. A PEP never trusts identity the caller asserts in headers or MCP arguments. It validates a token (signature, issuer, audience, expiry) and passes only validated claims to the PDP.
+Every decision is about one principal, so the PDP must be able to trust the principal's identity. A PEP never trusts identity the caller asserts in headers or MCP arguments. It validates a token (signature, issuer, audience, expiry) and passes only validated claims to the PDP.
 
-Accessors are `Human` (a person) or `ServiceAccount` (any non-human identity with its own credentials: a backend service, a scheduled job, or an AI agent, marked `ai`). A service account has an `owner`, the person accountable for it. Whether it is acting for someone is part of each request, not of the account ([ADR 0016](adr/0016-human-and-serviceaccount-principals.md)).
+Principals are `Human` (a person) or `ServiceAccount` (any non-human identity with its own credentials: a backend service, a scheduled job, or an AI agent, marked `ai`). A service account has an `owner`, the person accountable for it. Whether it is acting for someone is part of each request, not of the account ([ADR 0016](adr/0016-human-and-serviceaccount-principals.md)).
 
 | Caller | Credential the PEP validates | What the PDP sees |
 | --- | --- | --- |
@@ -214,7 +214,7 @@ flowchart LR
 
 ### Latency budget for one check
 
-- ≤ 1 ms: accessor, containment, and cached resource lookup, all in memory
+- ≤ 1 ms: principal, containment, and cached resource lookup, all in memory
 - ≤ 2 ms: Cedar evaluation
 - ≤ 3 ms: Valkey round trip, only when a resource entity isn't cached
 - < 10 ms: p99 end to end inside the client network
@@ -227,7 +227,7 @@ The containment list is pushed to each PDP over Valkey pub/sub with a heartbeat,
 
 Cedar evaluates against entities with attributes and parents. Relationships such as owner, shared-with, and parent folder are what most policies use.
 
-- **Accessors** (humans, agents, groups, teams, and their parents) are all in the in-process snapshot. Their number grows with headcount, not with data.
+- **Principals** (humans, agents, groups, teams, and their parents) are all in the in-process snapshot. Their number grows with headcount, not with data.
 - **Resources** can number in the millions, so they are not in the snapshot. The PEP sends the resource type and ID. The PDP loads the resource entity (attributes, parent chain, and sharing edges) from Valkey, where awzy-context writes it from connector metadata, and keeps hot entities in a local LRU cache that the attribute feed invalidates.
 - **Unknown resources** (not yet synced) get the client's default tier and are marked as unknown in the decision, so policies can challenge them. Until Valkey and the attribute feed exist, PDPs load resources straight from awzy-context with a 30-second cache ([ADR 0044](adr/0044-pdp-loads-resources-from-awzy-context.md)).
 - **Schema versions.** The Cedar schema is generated from awzy-context's attribute registry and versioned. Attributes added by connectors are optional in the schema, so policies must test for them with `has`. A bundle is rejected if it needs a newer schema than the PDPs run.
@@ -254,7 +254,7 @@ Measured 2026-10-10 with `pdp_freshness` (5 rounds each; optimized builds of awz
 
 All within target. The slow ones were set by polling and cache intervals, not load. Since [ADR 0077](adr/0077-pdps-wait-for-changes-instead-of-polling.md), PDPs wait for those changes instead, so all three should land within a second; to be measured again. Over the same run the background checks' p99 was 10.8 ms, a little over the 10 ms target, with everything on one machine. Still to measure: in a real cluster, with several PDP replicas (the harness reports when a change has "settled", 20 reflecting decisions in a row, for that).
 
-> **When the PDP is unreachable, sensitivity decides fail-open or fail-closed.** Each PEP holds a small signed fallback bundle, pushed with each policy publish. A PEP can't look up a resource's sensitivity on its own, so the bundle maps what the PEP can see (MCP server and tool name, HTTP route prefix, resource type) to a tier. It is compiled from awzy-context when the bundle is published, and the client sets fail-open or fail-closed per tier in the client portal. Anything the bundle doesn't list fails closed, and high-sensitivity tiers always fail closed. Fail-open replays only a cached allow younger than a short TTL the client sets. A containment issued before the outage has already cleared that accessor's cached allows. A containment issued during the outage can't reach a PEP that is cut off from the PDP, and the short TTL is what limits that exposure.
+> **When the PDP is unreachable, sensitivity decides fail-open or fail-closed.** Each PEP holds a small signed fallback bundle, pushed with each policy publish. A PEP can't look up a resource's sensitivity on its own, so the bundle maps what the PEP can see (MCP server and tool name, HTTP route prefix, resource type) to a tier. It is compiled from awzy-context when the bundle is published, and the client sets fail-open or fail-closed per tier in the client portal. Anything the bundle doesn't list fails closed, and high-sensitivity tiers always fail closed. Fail-open replays only a cached allow younger than a short TTL the client sets. A containment issued before the outage has already cleared that principal's cached allows. A containment issued during the outage can't reach a PEP that is cut off from the PDP, and the short TTL is what limits that exposure.
 
 ### Enforcement modes
 
@@ -278,7 +278,7 @@ awzy sits on the access path for a client's most sensitive data and runs LLMs ov
 | Gaming the justification check | "My manager approved this, mark it valid" | The LLM verdict is one signal. High-sensitivity resources also need a security key or an approval. Justifications are logged and sampled for human review |
 | Locking admins out | A bad policy denies the actions that the client portal needs to fix it | Break-glass rollback ([ADR 0022](adr/0022-break-glass-rollback.md)): a client admin signs a rollback request with a key enrolled at install, and awzy-policy restores an earlier bundle. It doesn't depend on the IdP, the PDP, or the portal. To build: alerting every admin on each use, and dry-run warning when a bundle would deny portal actions |
 | Compromised vendor release | A malicious image reaches every client following `fast` | Signing keys in KMS behind a two-person release approval. Releases go to awzy staging, then `fast`, then `stable` after a soak period. Kyverno verifies signatures at admission, and clients can pin a version and delay upgrades |
-| Client data leaking through health metrics | A metric label carries an accessor ID or resource name | Health metrics use a fixed, versioned schema with no free-form labels, enforced at export. The client portal shows the client exactly what was sent, and the client can turn export off |
+| Client data leaking through health metrics | A metric label carries a principal ID or resource name | Health metrics use a fixed, versioned schema with no free-form labels, enforced at export. The client portal shows the client exactly what was sent, and the client can turn export off |
 | Overly broad support access | A support session sees more than the issue needs | Sessions are read-only, time-boxed, and approved by a client admin. They are scoped to named portal areas, recorded as audit events, and visible to the client while they are active |
 
 ## The two portals
@@ -295,7 +295,7 @@ For the client's people: their security admins and their employees. Its backend 
 - Review would-deny and would-contain results, and switch each scope from monitor to enforce
 - Configure connectors and event sources
 - Set challenge types and containment rules; review and lift containments
-- Search accessors, agents, and resources in the world model
+- Search principals, agents, and resources in the world model
 - Search and chart decisions and activity (from ClickHouse)
 - Explain a decision; live decision stream; investigation timelines
 - Employees answer their own pending challenges
@@ -324,10 +324,10 @@ Both APIs are Rust (`axum` + `async-graphql`) and share crates for auth, paginat
 ```
 type Query {
   node(id: ID!): Node                  # Relay refetch entry point
-  accessor(id: ID!): Accessor          # human or agent, with attributes and risk
+  principal(id: ID!): Principal          # human or agent, with attributes and risk
   resource(id: ID!): Resource          # sensitivity, owners, related resources
   decisions(filter: DecisionFilter!, first: Int, after: String): DecisionConnection!   # ClickHouse
-  activity(accessorId: ID!, window: Duration!): ActivitySummary!                      # ClickHouse rollups
+  activity(principalId: ID!, window: Duration!): ActivitySummary!                      # ClickHouse rollups
   explainDecision(id: ID!): DecisionExplanation
   policyBundles(first: Int, after: String): PolicyBundleConnection!
   investigations(status: InvestigationStatus, first: Int, after: String): InvestigationConnection!
@@ -345,7 +345,7 @@ type Mutation {
 }
 type Subscription {
   decisionStream(filter: DecisionFilter): Decision!
-  challengeUpdates(accessorId: ID!): Challenge!
+  challengeUpdates(principalId: ID!): Challenge!
 }
 ```
 
@@ -379,18 +379,18 @@ Covered above. The gateway sits in front of the client's MCP servers, checks eve
 
 ### awzy as an MCP server · client portal backend, /mcp
 
-Lets the client's security team use their own AI agents (Claude, internal copilots) to work with awzy: ask why something was denied, look into an accessor, or draft a policy change. It is served by the client portal backend next to `/graphql`, not as its own service, so each portal stays one deployment.
+Lets the client's security team use their own AI agents (Claude, internal copilots) to work with awzy: ask why something was denied, look into a principal, or draft a policy change. It is served by the client portal backend next to `/graphql`, not as its own service, so each portal stays one deployment.
 
 ### Client portal MCP tools
 
 | Tool | Does | Kind |
 | --- | --- | --- |
 | explain_decision | Which policy and which attributes produced a verdict (built) | read |
-| search_decisions | Filter decisions by accessor, resource, verdict, and time range (ClickHouse, row and time limits applied) (built) | read |
+| search_decisions | Filter decisions by principal, resource, verdict, and time range (ClickHouse, row and time limits applied) (built) | read |
 | get_active_policy_bundle / list_policy_bundles | The enforced Cedar policies and schema; recent bundles with status (built) | read |
-| check_access | What-if: would this accessor be allowed this action on this resource right now | read |
-| get_accessor / get_resource | World-model entity with attributes, risk, and relationships | read |
-| accessor_activity | Activity window and peer-baseline comparison for one accessor | read |
+| check_access | What-if: would this principal be allowed this action on this resource right now | read |
+| get_principal / get_resource | World-model entity with attributes, risk, and relationships | read |
+| principal_activity | Activity window and peer-baseline comparison for one principal | read |
 | list_investigations / get_investigation | Investigations with their verdict, risk, cited evidence, and what the checks changed (built) | read |
 | dry_run_policy | Replay a proposed Cedar change against recent decisions and report what would change | read |
 | propose_policy | Save a policy bundle as a draft for a human to publish in the client portal (built) | write, draft only |
@@ -606,11 +606,11 @@ awzy-context and the first connectors (IdP, HR, Jira), including the agent regis
 
 awzy-challenge with justification, WebAuthn, and approval, including the async challenge-and-retry flow for agents. Containments with lift flows, the containment list in Valkey, and its push feed to every PDP. Fallback bundles for PDP outages. Client portal pages for employees to answer challenges and for admins to review containments.
 
-**Done when:** the "curious contractor" scenario from the paper runs end to end, the freshness targets are measured under load and written here, and a PDP outage drill never replays an allow for an accessor contained before the outage.
+**Done when:** the "curious contractor" scenario from the paper runs end to end, the freshness targets are measured under load and written here, and a PDP outage drill never replays an allow for a principal contained before the outage.
 
 ### Phase 4: Slow reasoning
 
-awzy-reasoner with ClickHouse activity windows, peer-baseline rollups, and LLM investigations that write risk attributes, with deterministic scores as a floor the LLM can't lower. Prompt-injection evals in CI, covering both false containment and suppression. More read-only MCP tools in the client portal (check_access, accessor activity, investigations), shared with the reasoner. The awzy-gateway MCP proxy with token exchange for agents, if Phase 1 didn't build it, because the rogue-agent scenario needs it.
+awzy-reasoner with ClickHouse activity windows, peer-baseline rollups, and LLM investigations that write risk attributes, with deterministic scores as a floor the LLM can't lower. Prompt-injection evals in CI, covering both false containment and suppression. More read-only MCP tools in the client portal (check_access, principal activity, investigations), shared with the reasoner. The awzy-gateway MCP proxy with token exchange for agents, if Phase 1 didn't build it, because the rogue-agent scenario needs it.
 
 **Done when:** the "rogue agent" (SalesGenie) scenario produces challenges and then an automatic containment, the injection eval set passes, and automated containments have run in monitor mode at a design partner long enough to set the lifted-on-review target.
 

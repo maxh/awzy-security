@@ -48,9 +48,9 @@ pub fn server_of(tool: &str) -> &'static str {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Why {
-    /// Linked from the accessor's open work: an account, a ticket, a statement of work.
+    /// Linked from the principal's open work: an account, a ticket, a statement of work.
     Assigned,
-    /// A document of the accessor's own team.
+    /// A document of the principal's own team.
     Team,
     /// Ordinary but out of pattern: another team's document.
     Noise,

@@ -40,7 +40,7 @@ impl EntityRef {
     }
 }
 
-/// One action by one accessor on one resource: the unit Beyond Zero authorizes.
+/// One action by one principal on one resource: the unit Beyond Zero authorizes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AccessRequest {
     pub subject: EntityRef,
@@ -339,7 +339,7 @@ impl DecisionRecord {
     }
 }
 
-/// One thing an accessor did, as an app or audit log recorded it rather than as a decision:
+/// One thing a principal did, as an app or audit log recorded it rather than as a decision:
 /// awzy-intake normalizes each source into this and sends it to Kafka (`awzy.events.v1`), where
 /// ClickHouse picks it up. Empty strings mean the source didn't say.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -72,6 +72,9 @@ bazel build --config=lint //...                    # clippy
 - **Humans** are `human` in every name, and several are `humans`: code, wire fields, schema
   attributes, policy IDs, routes, GraphQL (`shared_humans`, `human_id`, `answering_human`). Never
   `person` or `people` in a name; prose can say "the person" (ADR 0074).
+- **Principals:** who a check is about (a `Human` or a `ServiceAccount`) is a *principal*, as
+  Cedar calls it, in names and prose alike. Not "accessor", the Beyond Zero paper's word; the
+  decision API's `subject` field keeps its name.
 - **Who did something** is an `Actor` (an entity and the person it acted for), never a string:
   `awzy_model::Actor`, `awzy.authz.v1.Actor` in protobuf, the `Actor` type in GraphQL (ADR 0060).
 - **Names** are specific and easy to grep (`ClientPortalSchema`, `CorpPortalQuery`, not `Query`).

@@ -1,4 +1,4 @@
-//! Contained accessors, from awzy-challenge's containment feed.
+//! Contained principals, from awzy-challenge's containment feed.
 //!
 //! The PDP follows `WatchContainments` and keeps the active list in memory, so a normal check
 //! makes no network call for it. The feed sends a heartbeat every half second; if none has
@@ -68,7 +68,7 @@ impl Containments {
         self.loaded.load(Ordering::Acquire)
     }
 
-    /// Replaces the list: `(accessor, containment QID)` pairs.
+    /// Replaces the list: `(principal, containment QID)` pairs.
     pub fn load(&self, active: impl IntoIterator<Item = (EntityRef, String)>) {
         self.active.store(Arc::new(active.into_iter().map(|(who, id)| (key(&who), id)).collect()));
         self.heard();
@@ -136,7 +136,7 @@ impl Containments {
     }
 }
 
-/// The containment feed's freshness (target: applied within 2 s), and how many accessors are
+/// The containment feed's freshness (target: applied within 2 s), and how many principals are
 /// contained. Without awzy-challenge there's no feed to report.
 impl awzy_server::metrics::Source for Containments {
     fn render(&self, out: &mut String) {
@@ -150,7 +150,7 @@ impl awzy_server::metrics::Source for Containments {
         );
         out.push_str("# TYPE awzy_pdp_containment_feed_age_seconds gauge\n");
         out.push_str(&format!("awzy_pdp_containment_feed_age_seconds {:.3}\n", age.as_secs_f64()));
-        out.push_str("# HELP awzy_pdp_containments_active Accessors contained right now.\n");
+        out.push_str("# HELP awzy_pdp_containments_active Principals contained right now.\n");
         out.push_str("# TYPE awzy_pdp_containments_active gauge\n");
         out.push_str(&format!("awzy_pdp_containments_active {}\n", self.active.load().len()));
     }

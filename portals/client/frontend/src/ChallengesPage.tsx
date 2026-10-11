@@ -889,8 +889,8 @@ function Containments({
   onChanged: () => void;
 }) {
   const [contain, isContaining] = useMutation<ChallengesPageContainMutation>(graphql`
-    mutation ChallengesPageContainMutation($input: ContainAccessorInput!) {
-      containAccessor(input: $input) {
+    mutation ChallengesPageContainMutation($input: ContainPrincipalInput!) {
+      containPrincipal(input: $input) {
         containment {
           id
         }
@@ -953,9 +953,9 @@ function Containments({
     <Stack gap="xs">
       <Title order={4}>Containments</Title>
       <Text size="sm" c="dimmed">
-        A contained accessor is denied everything until a person lifts it. Every PDP applies a change within seconds. In
-        monitor mode it's recorded as a would-deny. While automated containments are in monitor, the ones awzy-reasoner
-        would have made are listed as "Would contain": contain the person, or dismiss the record.
+        A contained principal is denied everything until a person lifts it. Every PDP applies a change within seconds.
+        In monitor mode it's recorded as a would-deny. While automated containments are in monitor, the ones
+        awzy-reasoner would have made are listed as "Would contain": contain the person, or dismiss the record.
       </Text>
       {containments.length === 0 ? (
         <Text c="dimmed">No one is contained.</Text>

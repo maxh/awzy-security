@@ -4,7 +4,7 @@
 //! challenge. A `forbid` policy annotated `@challenge("<kind>")` turns a deny into a challenge.
 //! It never calls a model or ClickHouse: everything it needs arrives as entity attributes, from
 //! the enforcement point or, with awzy-context, from its principals snapshot ([`principals`]) and
-//! the resource lookup ([`resources`]). With awzy-challenge, contained accessors are denied
+//! the resource lookup ([`resources`]). With awzy-challenge, contained principals are denied
 //! ([`containments`]) and enforced challenges are opened and honored once passed ([`challenges`]).
 
 pub mod challenges;
@@ -147,7 +147,7 @@ impl Pdp {
         Self::new(DEFAULT_SCHEMA, DEFAULT_POLICIES)
     }
 
-    /// Parses Cedar entity JSON (accessors, teams, resources) against the schema.
+    /// Parses Cedar entity JSON (principals, teams, resources) against the schema.
     pub fn entities(&self, mut json: serde_json::Value) -> anyhow::Result<Entities> {
         if !self.unknown_resource_attrs.is_empty() {
             for e in json.as_array_mut().into_iter().flatten() {
@@ -344,7 +344,7 @@ pub struct AppState {
     pub resources: Arc<resources::Resources>,
     /// Checks callers' service tokens (ADR 0055). Off in tests and local runs.
     pub service_auth: Arc<awzy_service_auth::Verifier>,
-    /// Contained accessors from awzy-challenge, if configured.
+    /// Contained principals from awzy-challenge, if configured.
     pub containments: Arc<containments::Containments>,
     /// Opens and resolves enforced challenges, if configured.
     pub challenges: Arc<challenges::ChallengeResolver>,
@@ -450,7 +450,7 @@ impl AppState {
         // Loaded after the lookup, which may wait on awzy-context, so a sync isn't held up.
         let pdp = self.pdp.load_full();
         let mut decision = match assembled {
-            // A contained accessor, or a delegated request for a contained person, is denied
+            // A contained principal, or a delegated request for a contained person, is denied
             // before any policy is evaluated. The containment IDs explain it.
             None => Decision { policies: contained, ..replay::unregistered() },
             Some(replay::Assembled::Unregistered) => replay::unregistered(),

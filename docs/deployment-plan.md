@@ -182,11 +182,11 @@ Dashboards and alert rules live in the repository as code, so every install, inc
 | --- | --- | --- |
 | Steady-state checks | PDP throughput and latency with a warm cache | p99 under 10 ms at 1,500 checks/s for 30 minutes, client-side; 5,000/s bursts under 25 ms |
 | Cold resources | Checks on resources outside the local cache, so every one goes to Valkey | p99 under 10 ms, and Valkey time within its 3 ms budget |
-| Snapshot size | PDP memory, startup time, and feed apply time at 10k and 100k accessors | 10k: under 512 MB per pod and 30 s startup; 100k measured |
+| Snapshot size | PDP memory, startup time, and feed apply time at 10k and 100k principals | 10k: under 512 MB per pod and 30 s startup; 100k measured |
 | Containment propagation | Time from writing a containment to the first deny on every PDP pod, under load | Within the proposed 2 s, or the target is revised |
 | Attribute freshness | Time from an attribute change to every PDP snapshot | Within the proposed 60 s, or the target is revised |
 | Ingest | Decisions and events per second through Kafka into ClickHouse | 1,500 decisions/s and 3,000 events/s with consumer lag under 60 s |
-| Failure drills | ElastiCache failover, PDP pod loss, ClickHouse down then replay from Kafka, PDP unreachable from the PEP | Decisions continue as designed, no decision records are lost, and no allow is replayed for a contained accessor |
+| Failure drills | ElastiCache failover, PDP pod loss, ClickHouse down then replay from Kafka, PDP unreachable from the PEP | Decisions continue as designed, no decision records are lost, and no allow is replayed for a contained principal |
 | Upgrade under load | `helm upgrade` to the next release, and a node drain, during steady-state load ([ADR 0072](adr/0072-deploys-are-zero-downtime.md)) | Zero failed checks and zero failed tool calls |
 
 > **Target load (proposed):** 1,500 checks/s sustained and 5,000/s bursts, sized for 10,000 employees and 500 agents. The reasoning and the full list of targets are in the [demo plan](demo-plan.md#scale-and-performance); revise them with a design partner's numbers.
@@ -196,7 +196,7 @@ Dashboards and alert rules live in the repository as code, so every install, inc
 - A budget alert on each of the two organizations from step 1, before anything else is created.
 - The `loadgen` node pool and any scale-test node pools stay at zero between runs. Karpenter scales them up only for a test.
 - MSK, Aurora, EKS control planes, and ElastiCache cost money even when idle. Between test periods, the example install can be destroyed and recreated from Terraform. That is also a useful test of the install.
-- Managed Grafana charges per active user and managed Prometheus charges per sample ingested. Keep metric cardinality down: no per-accessor or per-resource labels. That rule is already in the health export schema.
+- Managed Grafana charges per active user and managed Prometheus charges per sample ingested. Keep metric cardinality down: no per-principal or per-resource labels. That rule is already in the health export schema.
 - Write the measured monthly cost of the idle example install into the platform plan. It is the first real number for the `small` profile.
 
 ## Open questions

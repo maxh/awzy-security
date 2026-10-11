@@ -25,7 +25,7 @@ IdP (over SCIM) and from connectors to your apps.
 | `McpServer`, `McpTool` | An MCP server behind awzy-gateway, and its tools (`<server>/<tool>`) | `sensitivity` |
 | `PortalArea` | An area of the client portal: `decisions`, `policies`, `enforcement`, `directory`, `challenges`, `investigations` | `sensitivity` |
 
-`Human` and `ServiceAccount` are the **accessors**: the subject of every check. See
+`Human` and `ServiceAccount` are the **principals**: the subject of every check. See
 [People, agents, and delegation](/concepts/principals-and-delegation/). A resource's sharing
 attributes include what it inherits from the folders above it, and every attribute marked
 optional in the schema may be missing, so test it with `has` first.
@@ -52,7 +52,7 @@ awzy-context doesn't know yet is treated the same way.
 
 awzy-reasoner scores each person and service account from 0 to 100 every 15 minutes, from their
 recent activity against their own and their team's usual, and stores the score with its reasons.
-A check sees its own accessor's score as `context.risk_score`. See
+A check sees its own principal's score as `context.risk_score`. See
 [Risk scores](/concepts/risk/).
 
 ### Work items
@@ -80,10 +80,10 @@ claimed; the first two come from the request's own fields and its validated toke
 
 | Field | Type | Set by | What it is |
 | --- | --- | --- | --- |
-| `risk_score` | `Long` | awzy | The accessor's risk, 0 to 100. awzy-reasoner's score replaces whatever the caller sent; before it has scored the accessor, the caller's value or `0` |
+| `risk_score` | `Long` | awzy | The principal's risk, 0 to 100. awzy-reasoner's score replaces whatever the caller sent; before it has scored the principal, the caller's value or `0` |
 | `human_present` | `Bool` | awzy | Whether a person is there to answer a challenge now: yes for a `Human`, no for a service account unless the enforcement point says so |
 | `on_behalf_of` | `Human`, optional | awzy | The person a service account acts for, from its validated token. Absent when it acts on its own authority |
-| `assigned` | `Bool`, optional | awzy | Whether the accessor is on open work that links the resource. Absent when awzy doesn't know |
+| `assigned` | `Bool`, optional | awzy | Whether the principal is on open work that links the resource. Absent when awzy doesn't know |
 | `client` | `String`, optional | The enforcement point | The calling software, such as `browser`, `cli`, or `mcp` (awzy-gateway sets `mcp`). A hint that an agent may be using a person's own credentials |
 | `approving_for` | `Human`, optional | awzy-challenge | Only on an `approve` check: the person who answers for the challenged request. An agent never approves for its own owner, and without this field it can't approve at all |
 
@@ -102,7 +102,7 @@ A decision's **verdict** is `allow`, `deny`, or `challenge`. A challenge lists o
 | `approval` | Someone policy allows approves it |
 | `biometric` | Reserved; not issued yet |
 
-Passing a challenge creates a **grant**: the exact request (same accessor, action, and resource)
+Passing a challenge creates a **grant**: the exact request (same principal, action, and resource)
 is allowed for 15 minutes, so the caller can retry it. A rejected challenge denies the request
 until it expires. A decision also records its **mode**: in `monitor` the verdict is recorded but
 the request is allowed. See [Monitor, then enforce](/concepts/monitor-and-enforce/).
@@ -113,14 +113,14 @@ the request is allowed. See [Monitor, then enforce](/concepts/monitor-and-enforc
 | --- | --- | --- |
 | Decision | `decision_` | One verdict on one check, with the policies that produced it. See [How awzy decides](/concepts/how-awzy-decides/) |
 | Policy bundle | `policy_bundle_` | A signed, versioned set of your Cedar policies: a `draft`, the one `active` bundle, or `superseded` by a later one. See [Writing policies](/guides/writing-policies/) |
-| Challenge | `challenge_` | What an accessor must pass before retrying: a justification, a security key, or an approval |
-| Containment | `containment_` | An accessor whose access is revoked until someone lifts it. See [Challenges and containment](/concepts/challenges-and-containment/) |
+| Challenge | `challenge_` | What a principal must pass before retrying: a justification, a security key, or an approval |
+| Containment | `containment_` | A principal whose access is revoked until someone lifts it. See [Challenges and containment](/concepts/challenges-and-containment/) |
 | Security key | `security_key_` | A person's registered WebAuthn key, used to answer verification challenges |
-| Event | `event_` | One thing an accessor did, as an app or cloud audit log recorded it |
+| Event | `event_` | One thing a principal did, as an app or cloud audit log recorded it |
 | Enforcement change | | A switch between monitor and enforce: which mode, who switched it, and when. Kept as an append-only history |
 | Break-glass event | | A rollback signed with an admin's break-glass key, outside the portal and your IdP: which key, why, and which bundle version it restored |
-| Risk score | | One per accessor, replaced on each scoring run, with the reasons behind it |
-| Investigation | `investigation_` | A model's look into one accessor the reasoner flagged: what it found, the evidence it cited, and what awzy's checks let it do. Off until you turn investigations on |
+| Risk score | | One per principal, replaced on each scoring run, with the reasons behind it |
+| Investigation | `investigation_` | A model's look into one principal the reasoner flagged: what it found, the evidence it cited, and what awzy's checks let it do. Off until you turn investigations on |
 
 All of them stay in your cloud account.
 
@@ -134,7 +134,7 @@ shows it as `alice`, or `sales-genie for alice`. An actor is one of:
 | --- | --- |
 | `Human` | A person, by your IdP's ID |
 | `ServiceAccount` | One of your service accounts, usually acting for a person |
-| `AwzyService` | One of awzy's own components, such as `awzy-reasoner` containing a risky accessor, or `awzy-bot` drafting a policy for someone |
+| `AwzyService` | One of awzy's own components, such as `awzy-reasoner` containing a risky principal, or `awzy-bot` drafting a policy for someone |
 | `BreakGlassKey` | A break-glass key, by its fingerprint. Who held it isn't known |
 
 In the APIs, an actor is `{subject, on_behalf_of}`, with each part a type and ID.

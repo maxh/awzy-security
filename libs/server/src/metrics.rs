@@ -2,7 +2,7 @@
 //!
 //! Every service gets requests by route, method, and status class, with a latency histogram, and
 //! `awzy_build_info`. A service adds its own metrics as a [`Source`]. Labels are bounded sets,
-//! never an accessor's, resource's, or policy's ID: metrics leave for whatever backend the client
+//! never a principal's, resource's, or policy's ID: metrics leave for whatever backend the client
 //! chose, and per-entity numbers belong in ClickHouse.
 
 use std::{

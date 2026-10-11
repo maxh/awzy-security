@@ -83,7 +83,7 @@ Injected into the activity at fixed times, from the paper unless noted:
 
 | Scenario | What happens | What awzy should do |
 | --- | --- | --- |
-| **The curious contractor** | Stolen contractor credentials are used to open sensitive documents unrelated to the contractor's statement of work | High-risk accessor, low subject-matter crossover: a document-owner approval challenge |
+| **The curious contractor** | Stolen contractor credentials are used to open sensitive documents unrelated to the contractor's statement of work | High-risk principal, low subject-matter crossover: a document-owner approval challenge |
 | **The rogue agent** | SalesGenie, prompted by a Northeast financial-services rep whose risk is rising, queries the highly confidential strategic plan; the rep then tries to export data | No valid work assignment: two challenges (the human confirms the agent's action, then asks the data owner); failing them, plus the slower analysis of recent accesses and exfiltration logs, leads to an automatic containment |
 | **The suddenly foolish administrator** | An admin asks basic questions about the system, then runs high-risk operations in rapid, agent-like succession | Risk attribute plus high-risk operation: a security-key challenge |
 | **The peer outlier** | One analyst opens about five times as many files as usual, and as the peer group, in a morning | The reasoner raises risk past 80, and everything the analyst opens asks for a security key |

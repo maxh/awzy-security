@@ -213,7 +213,7 @@ type CloseInvestigationPayload {
 	investigation: Investigation!
 }
 
-input ContainAccessorInput {
+input ContainPrincipalInput {
 	subject: EntityRefInput!
 	reason: String!
 }
@@ -234,7 +234,7 @@ type Containment {
 	liftedBy: Actor
 	liftReason: String
 	"""
-	Recorded but not applied: awzy-reasoner would have contained this accessor, and automated
+	Recorded but not applied: awzy-reasoner would have contained this principal, and automated
 	containments are in monitor (ADR 0066). Lifting it dismisses it.
 	"""
 	monitor: Boolean!
@@ -535,7 +535,7 @@ enum InvestigationContainment {
 	"""
 	NONE
 	"""
-	For a person to decide: the accessor is privileged.
+	For a person to decide: the principal is privileged.
 	"""
 	PROPOSE
 	"""
@@ -617,9 +617,9 @@ type Mutation {
 	"""
 	decideChallenge(input: DecideChallengeInput!): ChallengePayload!
 	"""
-	Revokes an accessor's access until it's lifted. Every PDP applies it within seconds.
+	Revokes a principal's access until it's lifted. Every PDP applies it within seconds.
 	"""
-	containAccessor(input: ContainAccessorInput!): ContainmentPayload!
+	containPrincipal(input: ContainPrincipalInput!): ContainmentPayload!
 	liftContainment(input: LiftContainmentInput!): ContainmentPayload!
 	"""
 	For someone who already has a key: a ceremony whose assertion authorizes adding or

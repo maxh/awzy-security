@@ -13,9 +13,9 @@ Design: [ADR 0054](../../../docs/adr/0054-challenges-and-containments-over-grpc.
 - **Verification:** a touch of a security key the answerer enrolled (WebAuthn, ES256 only;
   [ADR 0059](../../../docs/adr/0059-security-keys-for-verification-challenges.md)). A first key
   enrolls on the person's sign-in; adding or removing one needs a key they already have.
-- **Containments** revoke an accessor's access until a person lifts them. Every PDP follows
+- **Containments** revoke a principal's access until a person lifts them. Every PDP follows
   `WatchContainments` (the whole list on change, with a heartbeat every 500 ms) and denies
-  contained accessors without evaluating policy.
+  contained principals without evaluating policy.
 - Durable state in Postgres (`AWZY_POSTGRES_URL`). Not ready until the containment list has
   loaded.
 

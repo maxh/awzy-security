@@ -1,6 +1,6 @@
 # awzy-context · world model
 
-Owns the entity graph: accessors, agents, teams, projects, resources, and edges between them.
+Owns the entity graph: principals, agents, teams, projects, resources, and edges between them.
 Part of [awzy-authz](../../README.md).
 
 Runs LLM preprocessing to classify resource sensitivity and derive work assignments. Publishes

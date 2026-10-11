@@ -122,7 +122,7 @@ async fn activity(args: &[String]) -> anyhow::Result<()> {
     let mut id = 0;
     for d in 0..days {
         if d == 1 {
-            // After the scenarios' day, their accessors' work is ordinary again.
+            // After the scenarios' day, their principals' work is ordinary again.
             detection.actors.clear();
         }
         // The scenarios happen on the first day, among its ordinary accesses.

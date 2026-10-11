@@ -3,7 +3,7 @@ title: People, agents, and delegation
 description: Humans, service accounts, and what an agent may do for a person.
 ---
 
-awzy has two kinds of accessor:
+awzy has two kinds of principal:
 
 - **`Human`**: a person, identified by your IdP. Their groups and whether they're still active
   come from your IdP over SCIM.

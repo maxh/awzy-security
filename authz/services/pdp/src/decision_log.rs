@@ -1,7 +1,7 @@
 //! Sends every decision to Kafka, where ClickHouse picks it up (see authz/jobs/clickhouse-migrate).
 //!
 //! Recording is fire-and-forget: records go into a bounded buffer and a background task
-//! batches them to the topic, partitioned by subject so one accessor's decisions stay in order.
+//! batches them to the topic, partitioned by subject so one principal's decisions stay in order.
 //! When Kafka is slow or down and the buffer fills, records are dropped and counted rather
 //! than slowing decisions down.
 

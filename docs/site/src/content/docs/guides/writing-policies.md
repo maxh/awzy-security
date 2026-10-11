@@ -44,10 +44,10 @@ when { context has on_behalf_of && !context.human_present && context.risk_score 
 
 | Field | What |
 | --- | --- |
-| `risk_score` | The accessor's risk, 0 to 100, from awzy-reasoner. |
+| `risk_score` | The principal's risk, 0 to 100, from awzy-reasoner. |
 | `on_behalf_of` | The person an agent acts for, when it acts for one. |
 | `human_present` | Whether someone is there to answer a challenge. |
-| `assigned` | Whether the accessor has open work on this resource. |
+| `assigned` | Whether the principal has open work on this resource. |
 | `client` | The calling software, such as `browser`, `cli`, or `mcp`, as the enforcement point saw it. Optional. |
 
 Every field, with its type and who sets it: [Domain model](/reference/domain-model/#request-context).
