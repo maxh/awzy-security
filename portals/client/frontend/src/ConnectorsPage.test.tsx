@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { MantineProvider } from "@mantine/core";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RelayEnvironmentProvider } from "react-relay";
 import { createMockEnvironment, MockPayloadGenerator } from "relay-test-utils";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { Configure } from "./ConnectorsPage";
 
@@ -34,6 +34,9 @@ beforeAll(() => {
     disconnect() {}
   };
 });
+
+// Without Vitest globals, Testing Library doesn't unmount between tests by itself.
+afterEach(cleanup);
 
 const JIRA = { name: "JIRA" as const, key: "jira", title: "Jira", credential: "API token" };
 
