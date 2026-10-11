@@ -29,9 +29,11 @@ app.kubernetes.io/name: {{ .name }}
 
 {{/* A Deployment plus ClusterIP Service on 8080 for one awzy service, rolled out without
 downtime (ADR 0072): a new pod is ready before an old one goes, an old one drains before it stops,
-and with more than one replica they spread across nodes and zones and leave one at a time. */}}
+and with more than one replica they spread across nodes and zones and leave one at a time. With
+`autoscaling.enabled`, `replicas` is the minimum and a HorizontalPodAutoscaler sets the count on CPU. */}}
 {{- define "awzy.service" -}}
 {{- $root := .root -}}
+{{- $autoscaling := and .values.autoscaling .values.autoscaling.enabled -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -39,7 +41,10 @@ metadata:
   namespace: {{ .namespace }}
   labels: {{- include "awzy.labels" . | nindent 4 }}
 spec:
+  {{- if not $autoscaling }}
+  {{- /* Left out when autoscaling, or every sync would undo the autoscaler. */}}
   replicas: {{ .values.replicas }}
+  {{- end }}
   strategy:
     type: RollingUpdate
     rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
@@ -155,6 +160,25 @@ spec:
   maxUnavailable: 1
   selector:
     matchLabels: {{- include "awzy.selector" . | nindent 6 }}
+{{- end }}
+{{- if $autoscaling }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .name }}
+  namespace: {{ .namespace }}
+  labels: {{- include "awzy.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: {{ .name }} }
+  minReplicas: {{ .values.replicas }}
+  maxReplicas: {{ .values.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        # Average use as a percentage of the pod's CPU request.
+        target: { type: Utilization, averageUtilization: {{ .values.autoscaling.cpuPercent }} }
 {{- end }}
 {{- end -}}
 
