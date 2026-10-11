@@ -114,7 +114,7 @@ The organization already exists (AWS created it on activation). Apply `deploy/te
 
 Activate advanced features as in step 1, request the account quota increase, and create the member account `awzy-example-install`. Apply SCPs that a cautious client commonly uses, such as denying every Region except us-east-2 and denying IAM users with access keys, so the install is tested against them. Run `aws/state`, then `aws/install` through `examples/example-client`.
 
-**Done when:** EKS, Aurora, MSK, ElastiCache, and S3 exist in the install account, and Terraform state lives only in the example client's organization. So far (2026-10-09): `deploy/terraform/examples/example-client/state` (the state bucket) and `.../org`, which created `awzy-example-install`. SCPs on the root deny every Region but us-east-2 (global services excepted) and deny IAM users and access keys. `examples/example-client/install` calls `aws/install` and plans 81 resources; not applied yet because it costs about $250/month while up.
+**Done when:** EKS, Aurora, MSK, ElastiCache, and S3 exist in the install account, and Terraform state lives only in the example client's organization. So far (2026-10-09): `deploy/terraform/examples/example-client/state` (the state bucket) and `.../org`, which created `awzy-example-install`. SCPs on the root deny every Region but us-east-2 (global services excepted) and deny IAM users and access keys. `examples/example-client/install` calls `aws/install`. Applied on 2026-10-10 (88 resources). The first apply failed only at MSK, which runs KRaft on m5 and m7g brokers alone: the `small` profile now runs `kafka.t3.small` brokers on Kafka 3.9 instead. It costs about $250/month while up, so destroy it between test runs.
 
 ### 4. First install by pull
 
