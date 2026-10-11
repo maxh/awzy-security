@@ -47,7 +47,14 @@ everything (about 15 minutes); later runs are incremental.
 ## The pre-commit hook
 
 `tools/git-hooks/pre-commit` (on with `git config core.hooksPath tools/git-hooks`) checks only
-staged content: rustfmt, oxfmt, and oxlint's rules that don't need types. When it refuses a
-commit, run `tools/fmt` (or fix the oxlint finding it printed), `git add` the files it
-named, and commit again. Don't bypass it with
-`--no-verify` unless the person you're working with asks.
+staged content: rustfmt, oxfmt, and oxlint's rules that don't need types. It never starts Bazel:
+without a rustfmt to hand it skips Rust formatting and says so. When it refuses a commit, run
+`tools/fmt` (or fix the oxlint finding it printed), `git add` the files it named, and commit
+again. Don't bypass it with `--no-verify` unless the person you're working with asks.
+
+## On a pull request
+
+The `fix-prs` workflow (`tools/ci/fix-pr.sh`) runs rustfmt and oxfmt on the files a PR changed,
+re-pins lockfiles, and regenerates schemas, then pushes one `fix: ...` commit to the branch. If
+you can't format locally (no Bazel, or asked not to run it), push and let it format; pull its
+commit before pushing again. It doesn't fix clippy or oxlint findings: those still fail CI.

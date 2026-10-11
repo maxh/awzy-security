@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-  # repin-prs.yml starts CI this way after pushing a re-pinned merge to a PR's branch, since
+  # fix-prs.yml and repin-prs.yml start CI this way after pushing to a PR's branch, since
   # pushes made with the workflow token don't trigger runs.
   workflow_dispatch:
 
