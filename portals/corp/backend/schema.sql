@@ -44,6 +44,18 @@ CREATE TABLE public.installs (
     retired_by text
 );
 
+CREATE TABLE public.licenses (
+    client text NOT NULL,
+    plan text NOT NULL,
+    humans integer NOT NULL,
+    expires_at timestamp with time zone,
+    entitlements text[] DEFAULT '{}'::text[] NOT NULL,
+    updated_by text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT licenses_humans_check CHECK ((humans > 0)),
+    CONSTRAINT licenses_plan_check CHECK ((plan = ANY (ARRAY['trial'::text, 'standard'::text, 'enterprise'::text])))
+);
+
 CREATE TABLE public.release_channel_changes (
     id uuid NOT NULL,
     channel text NOT NULL,
@@ -79,6 +91,9 @@ ALTER TABLE ONLY public.installs
 
 ALTER TABLE ONLY public.installs
     ADD CONSTRAINT installs_token_sha256_key UNIQUE (token_sha256);
+
+ALTER TABLE ONLY public.licenses
+    ADD CONSTRAINT licenses_pkey PRIMARY KEY (client);
 
 ALTER TABLE ONLY public.release_channel_changes
     ADD CONSTRAINT release_channel_changes_pkey PRIMARY KEY (id);

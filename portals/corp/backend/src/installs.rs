@@ -227,6 +227,11 @@ impl Install {
     }
 
     /// The staff member who registered it.
+    /// What the client is licensed for, shared by all its installs; null until staff set it.
+    async fn license(&self, ctx: &Context<'_>) -> Result<Option<crate::licenses::License>> {
+        Ok(store(ctx)?.license(&self.0.client).await?.map(crate::licenses::License))
+    }
+
     async fn created_by(&self) -> Actor {
         Actor(awzy_model::Actor::awzy_staff(&self.0.created_by))
     }

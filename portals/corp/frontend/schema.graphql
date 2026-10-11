@@ -47,6 +47,28 @@ type DeployedService {
 	healthy: Boolean!
 }
 
+"""
+A feature beyond the base product, which a license may include.
+"""
+enum Entitlement {
+	"""
+	Awzy Bot drafting policy in the client portal (ADR 0048).
+	"""
+	AWZY_BOT
+	"""
+	awzy-reasoner's investigations with Claude (ADR 0071).
+	"""
+	INVESTIGATIONS
+	"""
+	The Google Drive connector (ADR 0069).
+	"""
+	DRIVE
+	"""
+	The Jira connector (ADR 0070).
+	"""
+	JIRA
+}
+
 type Install implements Node {
 	"""
 	Support sessions asked for on this install, newest first (ADR 0095).
@@ -84,7 +106,9 @@ type Install implements Node {
 	versionHistory: [VersionSeen!]!
 	"""
 	The staff member who registered it.
+	What the client is licensed for, shared by all its installs; null until staff set it.
 	"""
+	license: License
 	createdBy: Actor!
 	createdAt: UtcTimestamp!
 	"""
@@ -159,6 +183,35 @@ type InstallMetrics {
 	Since the previous heartbeat.
 	"""
 	gatewayPdpUnreachable: Int
+}
+
+type License {
+	client: String!
+	plan: LicensePlan!
+	"""
+	How many people it covers.
+	"""
+	humans: Int!
+	"""
+	Null when it doesn't end.
+	"""
+	expiresAt: UtcTimestamp
+	"""
+	Whether it has ended.
+	"""
+	expired: Boolean!
+	"""
+	Features beyond the base product.
+	"""
+	entitlements: [Entitlement!]!
+	updatedBy: Actor!
+	updatedAt: UtcTimestamp!
+}
+
+enum LicensePlan {
+	TRIAL
+	STANDARD
+	ENTERPRISE
 }
 
 """
@@ -253,6 +306,10 @@ type Mutation {
 	Signs the staff member who asked in to an approved session's client portal.
 	"""
 	signInToSupportSession(supportSessionQid: Qid!): SupportSignIn!
+	"""
+	Sets a client's license, replacing any it had. Shared by all the client's installs.
+	"""
+	setLicense(input: SetLicenseInput!): License!
 }
 
 interface Node {
@@ -398,6 +455,23 @@ input SetInstallReleaseInput {
 
 type SetInstallReleasePayload {
 	install: Install!
+}
+
+input SetLicenseInput {
+	"""
+	The client's slug, as its installs carry it, e.g. acme.
+	"""
+	client: String!
+	plan: LicensePlan!
+	"""
+	How many people it covers: at least one.
+	"""
+	humans: Int!
+	"""
+	When it ends; null for never.
+	"""
+	expiresAt: UtcTimestamp
+	entitlements: [Entitlement!]! = []
 }
 
 type Staff {

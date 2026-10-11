@@ -11,6 +11,7 @@ pub mod alerts;
 pub mod auth;
 pub mod fleet;
 mod installs;
+pub mod licenses;
 pub mod mcp;
 pub mod support;
 
@@ -61,7 +62,12 @@ pub struct CorpPortalQuery(MetaQuery, installs::FleetQuery);
 
 #[derive(MergedObject, Default)]
 #[graphql(name = "Mutation")]
-pub struct CorpPortalMutation(installs::FleetMutation, mcp::McpTokenMutation, support::SupportMutation);
+pub struct CorpPortalMutation(
+    installs::FleetMutation,
+    mcp::McpTokenMutation,
+    support::SupportMutation,
+    licenses::LicenseMutation,
+);
 
 pub type CorpPortalSchema = Schema<CorpPortalQuery, CorpPortalMutation, EmptySubscription>;
 

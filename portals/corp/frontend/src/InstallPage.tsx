@@ -10,6 +10,7 @@ import type { InstallPageReleaseMutation, ReleaseChannel } from "./__generated__
 import type { InstallPageRetireMutation } from "./__generated__/InstallPageRetireMutation.graphql";
 import { ago, CHANNELS, channelLabel, formatTime, healthOf, shortDigest } from "./format";
 import { InstallCharts } from "./InstallCharts";
+import { LicenseSection } from "./LicenseSection";
 import { SupportSection } from "./SupportSection";
 
 /** One install: the deployed units inside it, its numbers, and its upgrade history. */
@@ -74,6 +75,7 @@ function Install({ id, queryRef }: { id: string; queryRef: PreloadedQuery<Instal
               chartVersion
               firstSeenAt
             }
+            ...LicenseSection_install @alias(as: "licenseSection")
           }
         }
       }
@@ -218,6 +220,7 @@ function Install({ id, queryRef }: { id: string; queryRef: PreloadedQuery<Instal
           )}
         </Section>
 
+        {i.licenseSection && <LicenseSection install={i.licenseSection} />}
         <SupportSection installId={id} />
       </Stack>
     </>
