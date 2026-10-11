@@ -44,7 +44,9 @@ export default defineConfig({
             "guides/upgrading",
             "guides/writing-policies",
             "guides/mcp-gateway",
+            "guides/sending-events",
             "guides/optional-features",
+            "guides/break-glass",
           ],
         },
         {

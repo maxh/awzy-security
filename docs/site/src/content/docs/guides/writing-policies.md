@@ -60,5 +60,6 @@ Write a draft in the client portal's Policies page (or ask Awzy Bot for one), ru
 see what would change, then publish. Every PDP picks up the new bundle as soon as it's published,
 usually within a second. Publishing warns you first if the draft would stop you administering
 policies. If a bad bundle locks your admins out anyway, an enrolled admin can roll back with a
-break-glass key, which works even when the IdP or the portal is the problem. Every use is posted
+break-glass key, which works even when the IdP or the portal is the problem. See
+[Break-glass rollback](/guides/break-glass/). Every use is posted
 to your security team's Slack channel, with the key and the reason, when Slack is connected.

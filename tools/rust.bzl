@@ -41,10 +41,11 @@ def awzy_rust_library(name, crate_name, deps = [], test_deps = [], compile_data 
         proc_macro_deps = all_crate_deps(proc_macro_dev = True),
     )
 
-def awzy_service(name, crate_name, binary_name, deps = [], test_deps = [], compile_data = [], extra_binaries = [], frontend = None, test_size = "small", visibility = None):
+def awzy_service(name, crate_name, binary_name, deps = [], test_deps = [], compile_data = [], extra_binaries = [], image_binaries = [], frontend = None, test_size = "small", visibility = None):
     """A deployable service: library crate, unit tests, the `binary_name` executable, and its image.
 
     `extra_binaries` names files in src/bin/ (without .rs) to build as additional binaries.
+    `image_binaries` names those of them the image ships too, beside the service.
     `frontend` is a directory target (a Vite `dist`) to ship in the image; the binary finds it
     through AWZY_PORTAL_STATIC_DIR.
 
@@ -76,7 +77,7 @@ def awzy_service(name, crate_name, binary_name, deps = [], test_deps = [], compi
 
     pkg_tar(
         name = name + "_layer",
-        srcs = [":" + binary_name],
+        srcs = [":" + b for b in [binary_name] + image_binaries],
         package_dir = "/usr/local/bin",
     )
     tars = [":" + name + "_layer"]
