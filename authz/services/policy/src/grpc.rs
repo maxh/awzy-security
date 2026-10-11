@@ -9,13 +9,15 @@ use awzy_authz_proto::{
         policy_service_server::{PolicyService, PolicyServiceServer},
         BreakGlassRollbackRequest, BreakGlassRollbackResponse, BundleStatus as WireStatus, CreateDraftRequest,
         CreateDraftResponse, EnforcementSetting as WireSetting, GetActiveRequest, GetActiveResponse, GetBundleRequest,
-        GetBundleResponse, GetEnforcementRequest, GetEnforcementResponse, ListBundlesRequest, ListBundlesResponse,
-        ListEnforcementChangesRequest, ListEnforcementChangesResponse, PolicyBundle as WireBundle, PublishRequest,
-        PublishResponse, SetEnforcementRequest, SetEnforcementResponse,
+        GetBundleResponse, GetEnforcementRequest, GetEnforcementResponse, GetOutageFallbackRequest,
+        GetOutageFallbackResponse, ListBundlesRequest, ListBundlesResponse, ListEnforcementChangesRequest,
+        ListEnforcementChangesResponse, OutageFallback as WireFallback, PolicyBundle as WireBundle, PublishRequest,
+        PublishResponse, SetEnforcementRequest, SetEnforcementResponse, SetOutageFallbackRequest,
+        SetOutageFallbackResponse,
     },
     prost_types::Timestamp,
 };
-use awzy_model::PolicyBundleId;
+use awzy_model::{OutageFallback, PolicyBundleId};
 use axum::Router;
 use chrono::{DateTime, Utc};
 use tonic::{Request, Response, Status};
@@ -23,16 +25,18 @@ use tonic::{Request, Response, Status};
 use awzy_signing::{break_glass_payload, BundleVerifier};
 
 use crate::{
-    BreakGlassRequest, BundleStatus, EnforcementSetting, PolicyBundle, PolicyStore, StoreError, INSTALL_SCOPE,
+    BreakGlassRequest, BundleStatus, EnforcementSetting, OutageFallbackSetting, PolicyBundle, PolicyStore, StoreError,
+    INSTALL_SCOPE,
 };
 
 /// Who may call which methods (ADR 0055). Each group's callers come from the chart, as
 /// `namespace/service-account`; a method no group names is refused.
 pub struct Access {
     verifier: Arc<awzy_service_auth::Verifier>,
-    /// Reading bundles and the mode: the PDP and the client portal.
+    /// Reading bundles, the mode, and the outage fallback: the PDP, the client portal, and
+    /// awzy-gateway.
     readers: Allowed,
-    /// Drafting, publishing, and switching the mode: the client portal.
+    /// Drafting, publishing, switching the mode, and setting the outage fallback: the client portal.
     writers: Allowed,
 }
 
@@ -58,12 +62,12 @@ impl Access {
     fn guard(&self) -> PathGuard {
         let method = |m: &str| format!("/awzy.policy.v1.PolicyService/{m}");
         let mut rules: Vec<(String, Rule)> =
-            ["GetActive", "GetEnforcement", "ListBundles", "GetBundle", "ListEnforcementChanges"]
+            ["GetActive", "GetEnforcement", "ListBundles", "GetBundle", "ListEnforcementChanges", "GetOutageFallback"]
                 .into_iter()
                 .map(|m| (method(m), Rule::Allow(self.readers.clone())))
                 .collect();
         rules.extend(
-            ["CreateDraft", "Publish", "SetEnforcement"]
+            ["CreateDraft", "Publish", "SetEnforcement", "SetOutageFallback"]
                 .into_iter()
                 .map(|m| (method(m), Rule::Allow(self.writers.clone()))),
         );
@@ -213,6 +217,34 @@ impl PolicyService for Service {
         }))
     }
 
+    async fn get_outage_fallback(
+        &self,
+        req: Request<GetOutageFallbackRequest>,
+    ) -> Result<Response<GetOutageFallbackResponse>, Status> {
+        let known = req.into_inner().known_version;
+        let setting = self.0.outage_fallback().await.map_err(status)?;
+        if setting.version == known {
+            return Ok(Response::new(GetOutageFallbackResponse { fallback: None, unchanged: true }));
+        }
+        Ok(Response::new(GetOutageFallbackResponse { fallback: Some(fallback_to_wire(setting)), unchanged: false }))
+    }
+
+    async fn set_outage_fallback(
+        &self,
+        req: Request<SetOutageFallbackRequest>,
+    ) -> Result<Response<SetOutageFallbackResponse>, Status> {
+        let req = req.into_inner();
+        let by = actor(req.changed_by_actor.clone(), "", "changed_by_actor")?;
+        let fallback = OutageFallback {
+            tools: req.tools.into_iter().collect(),
+            servers: req.servers.into_iter().collect(),
+            fail_open_tiers: req.fail_open_tiers.into_iter().collect(),
+        };
+        let setting = self.0.set_outage_fallback(&fallback, &by).await.map_err(status)?;
+        tracing::info!(version = setting.version, changed_by = %by, fail_open = ?setting.fallback.fail_open_tiers, "outage fallback changed");
+        Ok(Response::new(SetOutageFallbackResponse { fallback: Some(fallback_to_wire(setting)) }))
+    }
+
     async fn break_glass_rollback(
         &self,
         req: Request<BreakGlassRollbackRequest>,
@@ -279,6 +311,7 @@ fn status(e: StoreError) -> Status {
         StoreError::NotFound(_) => Status::not_found(e.to_string()),
         StoreError::NotDraft { .. } => Status::failed_precondition(e.to_string()),
         StoreError::UnknownScope(_) => Status::invalid_argument(e.to_string()),
+        StoreError::InvalidFallback(_) => Status::invalid_argument(e.to_string()),
         StoreError::NonceReused => Status::permission_denied(e.to_string()),
         StoreError::NoRollbackTarget(_) => Status::failed_precondition(e.to_string()),
         StoreError::Db(error) => {
@@ -309,6 +342,22 @@ fn setting_to_wire(s: EnforcementSetting) -> WireSetting {
         scope: s.scope,
         mode: awzy_authz_proto::authz::v1::EnforcementMode::from(s.mode).into(),
         changed_by,
+        changed_by_actor,
+        changed_at: s
+            .changed_at
+            .map(|t| Timestamp { seconds: t.timestamp(), nanos: t.timestamp_subsec_nanos() as i32 }),
+        signature: s.signature.unwrap_or_default(),
+        signing_key_id: s.signing_key_id.unwrap_or_default(),
+    }
+}
+
+fn fallback_to_wire(s: OutageFallbackSetting) -> WireFallback {
+    let (changed_by_actor, _) = awzy_authz_proto::actor_to_wire(s.changed_by.as_deref().unwrap_or(""));
+    WireFallback {
+        version: s.version,
+        tools: s.fallback.tools.into_iter().collect(),
+        servers: s.fallback.servers.into_iter().collect(),
+        fail_open_tiers: s.fallback.fail_open_tiers.into_iter().collect(),
         changed_by_actor,
         changed_at: s
             .changed_at

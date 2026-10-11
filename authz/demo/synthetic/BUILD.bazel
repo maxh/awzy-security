@@ -12,7 +12,9 @@ awzy_service(
     test_size = "medium",
     visibility = ["//tools:demo_only"],
     deps = [
+        "//authz/libs/proto",
         "//authz/libs/service-auth",
+        "//libs/model",
         "//libs/server",
         "//libs/telemetry",
         "//tools/dev-idp",
@@ -22,12 +24,10 @@ awzy_service(
     # awzy-reasoner's scores and containments.
     test_deps = [
         "//authz/libs/classify",
-        "//authz/libs/proto",
         "//authz/services/challenge",
         "//authz/services/context",
         "//authz/services/gateway",
         "//authz/services/pdp",
         "//authz/services/reasoner",
-        "//libs/model",
     ],
 )

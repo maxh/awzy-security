@@ -6,7 +6,8 @@
 //! `directory` sends the synthetic company's people, groups, and service accounts to awzy-context
 //! at AWZY_CONTEXT_URL (default http://127.0.0.1:8084) with the SCIM token in AWZY_SCIM_TOKEN.
 //! `world` sends its resources and work items, which name those people, so it runs after
-//! `directory`; `all` runs both. `--print` writes the company as JSON instead and sends nothing.
+//! `directory`, and with AWZY_POLICY_ADDR sets the demo MCP servers' tool tiers in awzy-policy
+//! unless it has some; `all` runs both. `--print` writes the company as JSON instead and sends nothing.
 //! `drive` serves larkspur-drive, an MCP server over the documents in awzy-context, at
 //! AWZY_LISTEN_ADDR (default 127.0.0.1:8095) `/mcp`, and larkspur-admin, IT's high-risk
 //! operations, at `/admin/mcp`, for awzy-gateway to front (ADR 0050, 0064).
@@ -78,6 +79,12 @@ async fn main() -> anyhow::Result<()> {
     if world {
         let summary = client.push_world(&company, profile).await?;
         tracing::info!(?summary, profile = profile_name, seed, "synthetic resources and work items written");
+        // The demo MCP servers' tiers, unless the demo's portal already has some (ADR 0089).
+        if let Ok(addr) = std::env::var("AWZY_POLICY_ADDR") {
+            if awzy_synthetic::tiers::seed(&addr).await? {
+                tracing::info!("demo MCP tool tiers set in awzy-policy");
+            }
+        }
     }
     Ok(())
 }

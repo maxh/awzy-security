@@ -87,12 +87,11 @@ variable "slack" {
 }
 
 variable "mcp_gateway" {
-  description = "awzy-gateway, the MCP proxy agents call (ADR 0019): its public hostname (null keeps it in-cluster; it needs a DNS record to the load balancer), the MCP servers it fronts as the chart's mcpGateway.upstreams, and the tiers that may fail open while the PDP is unreachable (ADR 0030). Null leaves it off"
+  description = "awzy-gateway, the MCP proxy agents call (ADR 0019): its public hostname (null keeps it in-cluster; it needs a DNS record to the load balancer), and the MCP servers it fronts as the chart's mcpGateway.upstreams. Each tool's tier, and which tiers fail open while the PDP is unreachable, are set in the client portal (ADR 0089). Null leaves it off"
   type = object({
-    hostname        = optional(string)
-    audience        = optional(string, "awzy-gateway")
-    upstreams       = any
-    fail_open_tiers = optional(list(string), [])
+    hostname  = optional(string)
+    audience  = optional(string, "awzy-gateway")
+    upstreams = any
   })
   default = null
 }

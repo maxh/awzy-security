@@ -1,6 +1,9 @@
 {{- $sys := .Values.namespaces.system -}}
 {{- $backend := printf "%s/awzy" $sys -}}
 {{- $portal := printf "%s/awzy" .Values.namespaces.portal -}}
+{{- /* Demo installs: the synthetic company's Job writes its resources (ADR 0063). */ -}}
+{{- $writers := $backend -}}
+{{- if .Values.demoData.enabled }}{{- $writers = printf "%s,%s/awzy-demo-data" $backend $sys -}}{{- end }}
 # awzy-context: people and groups from the client's IdP over SCIM (ADR 0031), served to the PDP
 # at /v1/principals. Only /scim/v2 is public, through the Gateway; the rest is in-cluster, and
 # needs a service token from a caller its group allows (ADR 0055): the install's backend
@@ -9,7 +12,7 @@
   "env" (list
     (dict "name" "AWZY_CONTEXT_DIRECTORY" "value" (printf "%s,%s" $backend $portal))
     (dict "name" "AWZY_CONTEXT_READERS" "value" (printf "%s,%s" $backend $portal))
-    (dict "name" "AWZY_CONTEXT_WRITERS" "value" $backend)
+    (dict "name" "AWZY_CONTEXT_WRITERS" "value" $writers)
     (dict "name" "AWZY_POSTGRES_URL" "valueFrom" (dict "secretKeyRef" (dict "name" "awzy-postgres" "key" "context_url")))
     (dict "name" "AWZY_POSTGRES_MIGRATE" "value" "check")
     (dict "name" "AWZY_SCIM_TOKEN" "valueFrom" (dict "secretKeyRef" (dict "name" .Values.context.scimTokenSecret "key" "token")))

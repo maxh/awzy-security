@@ -18,6 +18,9 @@
 //! awzy-policy signs enforcement mode changes the same way ([`enforcement_payload`]), since
 //! switching an install to monitor changes what's enforced as surely as a bundle does.
 //!
+//! And outage fallback settings ([`fallback_payload`]), since which tools fail open during a PDP
+//! outage decides what's allowed then.
+//!
 //! The same keys sign break-glass requests (see [`break_glass_payload`]), which admins enrolled
 //! at install time send with the `awzy-break-glass` tool.
 //!
@@ -62,6 +65,14 @@ pub fn break_glass_payload(to_version: i64, requested_at_unix: i64, nonce: &str,
 /// when, in Unix seconds. The time lets a PDP refuse an older change offered as the current one.
 pub fn enforcement_payload(scope: &str, mode: &str, changed_by: &str, changed_at_unix: i64) -> Vec<u8> {
     format!("awzy.enforcement.v1\n{scope}\n{mode}\n{changed_by}\n{changed_at_unix}\n").into_bytes()
+}
+
+/// The bytes an outage fallback setting signs (ADR 0089): its version, who set it and when, in
+/// Unix seconds, and the SHA-256 of its content (`OutageFallback::content`). The version lets a
+/// gateway refuse an older setting offered as the current one.
+pub fn fallback_payload(version: i64, changed_by: &str, changed_at_unix: i64, content: &str) -> Vec<u8> {
+    let content = format!("{:x}", Sha256::digest(content.as_bytes()));
+    format!("awzy.fallback.v1\n{version}\n{changed_by}\n{changed_at_unix}\n{content}\n").into_bytes()
 }
 
 /// `sha256:<first 16 hex>` of the public key's DER encoding.
@@ -244,6 +255,26 @@ mod tests {
             enforcement_payload("automated-containments", "enforce", "Human::alice", 1_800_000_000),
             enforcement_payload("install", "enforce", "Human::mallory", 1_800_000_000),
             enforcement_payload("install", "enforce", "Human::alice", 1_800_000_001),
+        ] {
+            assert!(matches!(verifier.verify_payload(&changed, &sig, id), Err(SigningError::BadSignature)));
+        }
+    }
+
+    #[test]
+    fn a_fallback_setting_verifies_only_as_signed() {
+        let signer = BundleSigner::from_key(key(7)).unwrap();
+        let verifier = BundleVerifier::from_keys([*key(7).verifying_key()]).unwrap();
+        let content = "tool drive/search internal\nfail_open internal\n";
+        let sig = signer.sign_payload(&fallback_payload(3, "Human::alice", 1_800_000_000, content));
+        let id = signer.key_id();
+        assert!(verifier
+            .verify_payload(&fallback_payload(3, "Human::alice", 1_800_000_000, content), &sig, id)
+            .is_ok());
+        for changed in [
+            fallback_payload(2, "Human::alice", 1_800_000_000, content),
+            fallback_payload(3, "Human::mallory", 1_800_000_000, content),
+            fallback_payload(3, "Human::alice", 1_800_000_001, content),
+            fallback_payload(3, "Human::alice", 1_800_000_000, "tool drive/search internal\nfail_open public\n"),
         ] {
             assert!(matches!(verifier.verify_payload(&changed, &sig, id), Err(SigningError::BadSignature)));
         }

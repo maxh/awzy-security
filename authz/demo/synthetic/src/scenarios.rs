@@ -298,7 +298,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        activity::{day, server_of, ADMIN, ADMIN_TOOLS, DRIVE},
+        activity::{day, server_of, ADMIN, DRIVE},
         org::{generate, Company, Profile},
         world::{scenario_resources, work_items},
     };
@@ -569,16 +569,12 @@ mod tests {
 
         // larkspur-drive and larkspur-admin, and the gateway in front of them.
         let drive = serve(crate::drive::router(ContextClient::new(&context, "")).merge(crate::admin::router())).await;
-        let admin_tools: serde_json::Map<String, serde_json::Value> =
-            ADMIN_TOOLS.iter().map(|(t, s)| (t.to_string(), serde_json::json!(s))).collect();
         std::env::set_var("AWZY_TEST_GATEWAY_SECRET", "dev-secret");
         let config: awzy_gateway::GatewayConfig = serde_json::from_value(serde_json::json!({
             "token": { "issuer": "https://idp.local", "audience": "awzy-gateway", "hs256_secret_env": "AWZY_TEST_GATEWAY_SECRET" },
-            "upstreams": [{ "name": "larkspur-drive", "url": format!("{drive}/mcp"), "default_sensitivity": "internal",
-                "tools": { "read_document": "internal", "list_folder": "internal" },
+            "upstreams": [{ "name": "larkspur-drive", "url": format!("{drive}/mcp"),
                 "resource_tools": { "read_document": { "argument": "id" }, "list_folder": { "argument": "id" } } },
-              { "name": "larkspur-admin", "url": format!("{drive}/admin/mcp"), "default_sensitivity": "crown_jewels",
-                "tools": admin_tools }],
+              { "name": "larkspur-admin", "url": format!("{drive}/admin/mcp") }],
             "service_account_registry": "awzy-context",
         }))
         .unwrap();
@@ -586,7 +582,12 @@ mod tests {
         let pdp_client = awzy_authz_proto::authz::v1::authorizer_client::AuthorizerClient::new(
             awzy_service_auth::grpc_channel(channel, "awzy-pdp"),
         );
-        let gateway = serve(awzy_gateway::router(awzy_gateway::GatewayState::new(config, pdp_client).unwrap())).await;
+        let gateway = serve(awzy_gateway::router(
+            awzy_gateway::GatewayState::new(config, pdp_client)
+                .unwrap()
+                .with_fallback(Arc::new(awzy_gateway::fallback::Fallback::fixed(crate::tiers::demo_tiers()))),
+        ))
+        .await;
         let driver = Driver::new(&format!("{gateway}/mcp"), b"dev-secret", "https://idp.local", "awzy-gateway");
         let reasoner = awzy_reasoner::context::ContextClient::new(&context, awzy_service_auth::TokenSource::off());
         // awzy-reasoner's containment step, against the real awzy-challenge. Its mode comes from

@@ -2,8 +2,9 @@
 {{- $sys := .Values.namespaces.system }}
 # DEMO INSTALLS ONLY (ADR 0039). Provisions the synthetic company (docs/plans/demo-plan.md) into
 # awzy-context after each sync: people and groups over SCIM, then AI service accounts, then its
-# resources and work items through the batch API. Safe to run again; existing records are
-# replaced.
+# resources and work items through the batch API; then the demo MCP servers' tool tiers into
+# awzy-policy, unless the portal already has some (ADR 0089). Safe to run again; existing records
+# are replaced.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -17,13 +18,14 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
-      # The backend's account: awzy-context allows it to write (ADR 0055).
-      serviceAccountName: awzy
+      # Its own account, which awzy-context and awzy-policy let write on demo installs (ADR 0055).
+      serviceAccountName: awzy-demo-data
       volumes:
         - name: awzy-service-tokens
           projected:
             sources:
               - serviceAccountToken: { audience: awzy-context, expirationSeconds: 600, path: awzy-context }
+              - serviceAccountToken: { audience: awzy-policy, expirationSeconds: 600, path: awzy-policy }
       {{- with .Values.image.pullSecret }}
       imagePullSecrets: [{ name: {{ . }} }]
       {{- end }}
@@ -41,6 +43,7 @@ spec:
           env:
             - { name: AWZY_CONTEXT_URL, value: "http://awzy-context.{{ $sys }}.svc:8080" }
             - { name: AWZY_LOG_FORMAT, value: {{ .Values.logFormat | quote }} }
+            - { name: AWZY_POLICY_ADDR, value: "http://awzy-policy.{{ $sys }}.svc:8080" }
             - name: AWZY_SCIM_TOKEN
               valueFrom: { secretKeyRef: { name: {{ .Values.context.scimTokenSecret }}, key: token } }
           volumeMounts:

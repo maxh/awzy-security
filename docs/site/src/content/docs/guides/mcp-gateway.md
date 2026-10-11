@@ -34,30 +34,32 @@ mcp_gateway = {
 
   upstreams = [
     {
-      name  = "drive"
-      url   = "http://drive-mcp.tools.svc:8080/mcp"
-      tools = { search = "internal", read_document = "internal", share_document = "confidential" }
+      name = "drive"
+      url  = "http://drive-mcp.tools.svc:8080/mcp"
       resource_tools = {
         read_document  = { argument = "id" }
         share_document = { argument = "id", action = "write" }
       }
     }
   ]
-
-  # Tiers whose tools may replay a recent allow while the PDP is unreachable (see below).
-  fail_open_tiers = ["public", "internal"]
 }
 ```
 
 - **`upstreams`:** one per MCP server. Agents reach each at `/mcp/<name>`.
   - `url` is the server's streamable HTTP endpoint.
-  - `tools` gives each tool's sensitivity, and `default_sensitivity` covers the rest. It's
-    `confidential` unless you set it, so a tool the server adds later isn't open to everyone
-    before you've classified it. Your policies see it as `resource.sensitivity` on the tool, and
-    the base policies let everyone call `public` and `internal` tools.
   - `resource_tools` names the tools that act on one resource: `argument` is the tool argument
     holding the resource's ID in awzy-context, and `action` is `read` (the default) or `write`.
-- **`fail_open_tiers`:** see [below](#when-the-pdp-cant-be-reached).
+
+## Classifying tools
+
+Each tool's sensitivity tier is set on the client portal's Enforcement page, under **During a PDP
+outage**: by name, as `<server>/<tool>`, and a default for each server's other tools. A tool you
+haven't classified is `confidential`, so one a server adds later isn't open to everyone before
+you've looked at it. Your policies see the tier as `resource.sensitivity` on the tool, and the
+base policies let everyone call `public` and `internal` tools.
+
+Saving asks for your security key, as switching the enforcement mode does. awzy signs each
+version, and every gateway checks the signature before using it, within seconds.
 
 Agents are checked against the service accounts registered on the client portal's Directory
 page, and any other is denied.
@@ -92,9 +94,9 @@ challenge.
 ## When the PDP can't be reached
 
 An enforcing gateway denies every call while the PDP is unreachable, with one exception you
-choose. A tool listed by name in `tools`, in a tier in `fail_open_tiers`, can still be called by
-someone the PDP allowed to make that same call within the last five minutes. `confidential` and
-`crown_jewels` can never fail open, whatever the configuration says. The gateway follows
+choose on the Enforcement page. A tool classified by name, in a tier you let fail open, can still
+be called by someone the PDP allowed to make that same call within the last five minutes.
+`confidential` and `crown_jewels` can never fail open. The gateway follows
 awzy-challenge's list of who is contained, so it never replays an allow for someone contained
 before the outage.
 

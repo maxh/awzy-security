@@ -17,20 +17,19 @@
 {{- if and .Values.demoData.enabled .Values.demoData.activity.enabled }}
 {{- $drive := printf "http://larkspur-drive.%s.svc:8080" $sys -}}
 {{- $upstreams = concat $upstreams (list
-  (dict "name" "larkspur-drive" "url" (printf "%s/mcp" $drive) "default_sensitivity" "internal"
-    "tools" (dict "read_document" "internal" "list_folder" "internal")
+  (dict "name" "larkspur-drive" "url" (printf "%s/mcp" $drive)
     "resource_tools" (dict "read_document" (dict "argument" "id") "list_folder" (dict "argument" "id")))
-  (dict "name" "larkspur-admin" "url" (printf "%s/admin/mcp" $drive) "default_sensitivity" "crown_jewels"
-    "tools" (dict "reset_password" "confidential" "disable_mfa" "crown_jewels" "rotate_admin_credentials" "crown_jewels" "export_directory" "crown_jewels"))
+  (dict "name" "larkspur-admin" "url" (printf "%s/admin/mcp" $drive))
 ) -}}
 {{- end }}
 {{- $config := dict "token" $token "upstreams" $upstreams "service_account_registry" "awzy-context"
-  "outage" (dict "fail_open_tiers" $g.outage.failOpenTiers "cached_allow_ttl_secs" (int $g.outage.cachedAllowTtlSecs)) -}}
+  "outage" (dict "cached_allow_ttl_secs" (int $g.outage.cachedAllowTtlSecs)) -}}
 {{- /* Where agents reach it, for the OAuth metadata MCP clients sign in with (ADR 0081). */ -}}
 {{- with $g.hostname }}{{- $_ := set $config "public_url" (printf "https://%s" .) }}{{- end }}
 # awzy-gateway: the MCP proxy agents call instead of each MCP server, checking every tool call
 # with awzy-pdp (ADR 0019) and following awzy-challenge's containment feed for outages (ADR 0030).
-# Service accounts come from awzy-context (ADR 0033).
+# Service accounts come from awzy-context (ADR 0033). Each tool's tier, and which tiers fail open
+# during an outage, come from awzy-policy, signed, as the client portal sets them (ADR 0089).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -43,6 +42,8 @@ data:
     (dict "name" "AWZY_CHALLENGE_ADDR" "value" (printf "http://awzy-challenge.%s.svc:8080" $sys))
     (dict "name" "AWZY_GATEWAY_CONFIG" "value" "/etc/awzy/gateway/config.json")
     (dict "name" "AWZY_PDP_ADDR" "value" (printf "http://awzy-pdp.%s.svc:8080" $sys))
+    (dict "name" "AWZY_POLICY_ADDR" "value" (printf "http://awzy-policy.%s.svc:8080" $sys))
+    (dict "name" "AWZY_POLICY_VERIFY_KEY_FILE" "value" "/var/run/secrets/awzy/policy-verify/verify.pem")
 -}}
 {{- /* Forwarded tool calls, recorded as activity (ADR 0084). */ -}}
 {{- if .Values.intake.enabled }}
@@ -53,10 +54,12 @@ data:
 {{- end }}
 ---
 {{ include "awzy.service" (dict "root" . "name" "awzy-gateway" "namespace" $sys "values" $g
-  "tokens" (list "awzy-challenge" "awzy-pdp")
+  "tokens" (list "awzy-challenge" "awzy-pdp" "awzy-policy")
   "env" $env
-  "volumes" (list (dict "name" "config" "configMap" (dict "name" "awzy-gateway")))
-  "mounts" (list (dict "name" "config" "mountPath" "/etc/awzy/gateway" "readOnly" true))) }}
+  "volumes" (list (dict "name" "config" "configMap" (dict "name" "awzy-gateway"))
+    (dict "name" "policy-verify" "secret" (dict "secretName" (required "policy.verifyKeySecret is required" .Values.policy.verifyKeySecret))))
+  "mounts" (list (dict "name" "config" "mountPath" "/etc/awzy/gateway" "readOnly" true)
+    (dict "name" "policy-verify" "mountPath" "/var/run/secrets/awzy/policy-verify" "readOnly" true))) }}
 {{- if $g.hostname }}
 ---
 # Agents outside the cluster reach it at https://<hostname>/mcp/<upstream>.

@@ -1,6 +1,6 @@
 /**
- * @generated SignedSource<<08bed5b6e555826a240a8d828be7f89d>>
- * @relayHash f2df88983a4008959f410fbf030502bf
+ * @generated SignedSource<<ec99b7cd324b6d1ca636c24f4cafdb07>>
+ * @relayHash 0c340448a2c83438c7f5e3330be54198
  * @lightSyntaxTransform
  */
 
@@ -8,7 +8,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-// @relayRequestID 4bd37329f33c75d0581788d1d5569797bf7421ce0c4d19c54f330c544fead1f1
+// @relayRequestID fcec1f400ff7e4f6598509fc9dc00843a065345f4a5733ff97e332e70f390fb5
 
 import { ConcreteRequest } from 'relay-runtime';
 export type ChallengeStatus = "EXPIRED" | "PASSED" | "PENDING" | "REJECTED" | "%future added value";
@@ -22,10 +22,10 @@ export type AssertionInput = {
   credentialId: string;
   signature: string;
 };
-export type EnforcementPageFinishVerificationMutation$variables = {
+export type securityKeyChallengeFinishMutation$variables = {
   input: FinishChallengeVerificationInput;
 };
-export type EnforcementPageFinishVerificationMutation$data = {
+export type securityKeyChallengeFinishMutation$data = {
   readonly finishChallengeVerification: {
     readonly challenge: {
       readonly id: string;
@@ -33,9 +33,9 @@ export type EnforcementPageFinishVerificationMutation$data = {
     };
   };
 };
-export type EnforcementPageFinishVerificationMutation = {
-  response: EnforcementPageFinishVerificationMutation$data;
-  variables: EnforcementPageFinishVerificationMutation$variables;
+export type securityKeyChallengeFinishMutation = {
+  response: securityKeyChallengeFinishMutation$data;
+  variables: securityKeyChallengeFinishMutation$variables;
 };
 
 const node: ConcreteRequest = (function(){
@@ -95,7 +95,7 @@ return {
     "argumentDefinitions": (v0/*:: as any*/),
     "kind": "Fragment",
     "metadata": null,
-    "name": "EnforcementPageFinishVerificationMutation",
+    "name": "securityKeyChallengeFinishMutation",
     "selections": (v1/*:: as any*/),
     "type": "Mutation",
     "abstractKey": null
@@ -104,19 +104,19 @@ return {
   "operation": {
     "argumentDefinitions": (v0/*:: as any*/),
     "kind": "Operation",
-    "name": "EnforcementPageFinishVerificationMutation",
+    "name": "securityKeyChallengeFinishMutation",
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "id": "4bd37329f33c75d0581788d1d5569797bf7421ce0c4d19c54f330c544fead1f1",
+    "id": "fcec1f400ff7e4f6598509fc9dc00843a065345f4a5733ff97e332e70f390fb5",
     "metadata": {},
-    "name": "EnforcementPageFinishVerificationMutation",
+    "name": "securityKeyChallengeFinishMutation",
     "operationKind": "mutation",
     "text": null
   }
 };
 })();
 
-(node as any).hash = "020d0a67ac31be8bf243711c267c834e";
+(node as any).hash = "b925ccd01010098c45e43ee00a5ce285";
 
 export default node;

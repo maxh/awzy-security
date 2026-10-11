@@ -18,6 +18,7 @@ mod enforcement;
 mod investigations;
 mod mcp;
 mod node;
+mod outage;
 mod policies;
 mod security_keys;
 mod status;
@@ -169,6 +170,7 @@ pub struct ClientPortalQuery(
     security_keys::SecurityKeyQuery,
     investigations::InvestigationQuery,
     status::StatusQuery,
+    outage::OutageQuery,
     diagnostics::DiagnosticsQuery,
 );
 
@@ -177,6 +179,7 @@ pub struct ClientPortalQuery(
 pub struct ClientPortalMutation(
     policies::PolicyMutation,
     enforcement::EnforcementMutation,
+    outage::OutageMutation,
     directory::DirectoryMutation,
     awzy_bot::AwzyBotMutation,
     challenges::ChallengeMutation,

@@ -23,6 +23,11 @@ service PolicyService {
   // Every switch of a scope, newest first.
   rpc ListEnforcementChanges(ListEnforcementChangesRequest) returns (ListEnforcementChangesResponse);
 
+  // What enforcement points do while the PDP is unreachable (ADR 0089): each MCP tool's tier and
+  // which tiers fail open. Never set means every tool is unclassified and everything fails closed.
+  rpc GetOutageFallback(GetOutageFallbackRequest) returns (GetOutageFallbackResponse);
+  rpc SetOutageFallback(SetOutageFallbackRequest) returns (SetOutageFallbackResponse);
+
   // Break-glass: republishes an earlier bundle when a bad one locks admins out. Authenticated by
   // a signature from a key enrolled at install time, not by the IdP or the PDP, so it works when
   // either is what's broken. Every use is recorded.
@@ -197,4 +202,51 @@ message BreakGlassRollbackResponse {
   int64 restored_version = 2;
   // The version that was active before; 0 if none.
   int64 replaced_version = 3;
+}
+
+// An outage fallback setting (ADR 0089). awzy-gateway uses its tiers for every check, and its
+// fail-open tiers while the PDP is unreachable.
+message OutageFallback {
+  // Increases with every change; 0 when never set.
+  int64 version = 1;
+  // Each classified tool's tier (public, internal, confidential, crown_jewels), by
+  // `<server>/<tool>`.
+  map<string, string> tools = 2;
+  // The tier of a server's tools not listed in `tools`, by server name. During an outage those
+  // fail closed anyway.
+  map<string, string> servers = 3;
+  // Tiers whose listed tools may replay a recent allow during an outage. Never confidential or
+  // crown_jewels.
+  repeated string fail_open_tiers = 4;
+  // Who set it (ADR 0060); unset when never set.
+  awzy.authz.v1.Actor changed_by_actor = 5;
+  google.protobuf.Timestamp changed_at = 6;
+  // ECDSA P-256 signature (DER) over awzy-signing's fallback_payload, set when awzy-policy has a
+  // signing key.
+  bytes signature = 7;
+  // The key that signed: `sha256:<fingerprint>`.
+  string signing_key_id = 8;
+}
+
+message GetOutageFallbackRequest {
+  // The version the caller has; 0 if none.
+  int64 known_version = 1;
+}
+
+message GetOutageFallbackResponse {
+  // Unset when `unchanged` is true.
+  OutageFallback fallback = 1;
+  bool unchanged = 2;
+}
+
+message SetOutageFallbackRequest {
+  map<string, string> tools = 1;
+  map<string, string> servers = 2;
+  repeated string fail_open_tiers = 3;
+  // Who is setting it (ADR 0060).
+  awzy.authz.v1.Actor changed_by_actor = 4;
+}
+
+message SetOutageFallbackResponse {
+  OutageFallback fallback = 1;
 }

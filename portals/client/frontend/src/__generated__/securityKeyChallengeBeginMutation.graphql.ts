@@ -1,6 +1,6 @@
 /**
- * @generated SignedSource<<20c9bde5e5d9e94e7d5c8e63973bdb1e>>
- * @relayHash a0374ce306476892f8bd5da902318141
+ * @generated SignedSource<<82b093bbb3b7a7dcb15240dde41da412>>
+ * @relayHash 80bf96951f0778c0d6ff30fc96cd6ff7
  * @lightSyntaxTransform
  */
 
@@ -8,24 +8,24 @@
 /* eslint-disable */
 // @ts-nocheck
 
-// @relayRequestID 5b5e8f13053ef2308fad3b65c7adbeb77ab02eb4f45e8536a21a69f2b58e0280
+// @relayRequestID d87fe2f202853a4499e3ee7880800b3c3b6a44131ad08204554b5c1b4ea33bd9
 
 import { ConcreteRequest } from 'relay-runtime';
 export type BeginChallengeVerificationInput = {
   challengeQid: string;
 };
-export type EnforcementPageBeginVerificationMutation$variables = {
+export type securityKeyChallengeBeginMutation$variables = {
   input: BeginChallengeVerificationInput;
 };
-export type EnforcementPageBeginVerificationMutation$data = {
+export type securityKeyChallengeBeginMutation$data = {
   readonly beginChallengeVerification: {
     readonly ceremonyQid: string;
     readonly optionsJson: string;
   };
 };
-export type EnforcementPageBeginVerificationMutation = {
-  response: EnforcementPageBeginVerificationMutation$data;
-  variables: EnforcementPageBeginVerificationMutation$variables;
+export type securityKeyChallengeBeginMutation = {
+  response: securityKeyChallengeBeginMutation$data;
+  variables: securityKeyChallengeBeginMutation$variables;
 };
 
 const node: ConcreteRequest = (function(){
@@ -74,7 +74,7 @@ return {
     "argumentDefinitions": (v0/*:: as any*/),
     "kind": "Fragment",
     "metadata": null,
-    "name": "EnforcementPageBeginVerificationMutation",
+    "name": "securityKeyChallengeBeginMutation",
     "selections": (v1/*:: as any*/),
     "type": "Mutation",
     "abstractKey": null
@@ -83,19 +83,19 @@ return {
   "operation": {
     "argumentDefinitions": (v0/*:: as any*/),
     "kind": "Operation",
-    "name": "EnforcementPageBeginVerificationMutation",
+    "name": "securityKeyChallengeBeginMutation",
     "selections": (v1/*:: as any*/)
   },
   "params": {
-    "id": "5b5e8f13053ef2308fad3b65c7adbeb77ab02eb4f45e8536a21a69f2b58e0280",
+    "id": "d87fe2f202853a4499e3ee7880800b3c3b6a44131ad08204554b5c1b4ea33bd9",
     "metadata": {},
-    "name": "EnforcementPageBeginVerificationMutation",
+    "name": "securityKeyChallengeBeginMutation",
     "operationKind": "mutation",
     "text": null
   }
 };
 })();
 
-(node as any).hash = "eb5e67bb03dd8ad33e72c11d8c782cb1";
+(node as any).hash = "081f92356e2c681879225390e95d9cfa";
 
 export default node;

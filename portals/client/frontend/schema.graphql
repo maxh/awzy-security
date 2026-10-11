@@ -673,6 +673,11 @@ type Mutation {
 	Closes an investigation once a person has reviewed it. It stays, with who closed it and why.
 	"""
 	closeInvestigation(input: CloseInvestigationInput!): CloseInvestigationPayload!
+	"""
+	Replaces the outage fallback setting. Like switching enforcement, policy can ask for a
+	security key first: then nothing changes, and the payload names the challenge to pass.
+	"""
+	setOutageFallback(input: SetOutageFallbackInput!): SetOutageFallbackPayload!
 }
 
 interface Node {
@@ -689,6 +694,24 @@ type OnBehalfOf {
 """
 Information about pagination in a connection
 """
+type OutageFallback {
+	"""
+	0 when never set: every tool is unclassified (confidential) and fails closed.
+	"""
+	version: Int!
+	"""
+	Tools classified by name. Only these can fail open.
+	"""
+	tools: [ToolTier!]!
+	servers: [ServerTier!]!
+	"""
+	Tiers whose listed tools replay a recent allow while the PDP is unreachable.
+	"""
+	failOpenTiers: [SensitivityTier!]!
+	changedBy: Actor
+	changedAt: UtcTimestamp
+}
+
 type PageInfo {
 	"""
 	When paginating backwards, are there more items?
@@ -984,6 +1007,11 @@ type Query {
 	enforcement area, to review before sending it to awzy support.
 	"""
 	diagnosticsBundle: String!
+	"""
+	What awzy-gateway does while the PDP is unreachable: each tool's tier, and which tiers
+	fail open.
+	"""
+	outageFallback: OutageFallback!
 }
 
 input RegisterServiceAccountInput {
@@ -1070,6 +1098,49 @@ type ServiceAccount {
 	updatedAt: UtcTimestamp!
 }
 
+enum SensitivityTier {
+	PUBLIC
+	INTERNAL
+	CONFIDENTIAL
+	CROWN_JEWELS
+}
+
+"""
+The tier of a server's tools that aren't listed by name.
+"""
+type ServerTier {
+	server: String!
+	tier: SensitivityTier!
+}
+
+"""
+The tier of a server's tools that aren't listed by name.
+"""
+input ServerTierInput {
+	server: String!
+	tier: SensitivityTier!
+}
+
+input SetOutageFallbackInput {
+	tools: [ToolTierInput!]!
+	servers: [ServerTierInput!]!
+	"""
+	Never CONFIDENTIAL or CROWN_JEWELS.
+	"""
+	failOpenTiers: [SensitivityTier!]!
+}
+
+type SetOutageFallbackPayload {
+	"""
+	The new setting; null when a challenge must be passed first.
+	"""
+	outageFallback: OutageFallback
+	"""
+	The challenge to pass, then save again.
+	"""
+	challengeQid: ID
+}
+
 input SetEnforcementModeInput {
 	mode: EnforcementMode!
 	"""
@@ -1088,6 +1159,28 @@ type SetEnforcementModePayload {
 	again within its grant.
 	"""
 	challengeQid: ID
+}
+
+"""
+A tool's tier.
+"""
+type ToolTier {
+	"""
+	`<server>/<tool>`, e.g. `drive/search`.
+	"""
+	tool: String!
+	tier: SensitivityTier!
+}
+
+"""
+A tool's tier.
+"""
+input ToolTierInput {
+	"""
+	`<server>/<tool>`, e.g. `drive/search`.
+	"""
+	tool: String!
+	tier: SensitivityTier!
 }
 
 scalar UtcTimestamp
