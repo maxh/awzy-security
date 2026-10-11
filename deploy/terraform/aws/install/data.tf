@@ -74,9 +74,16 @@ resource "aws_rds_cluster_instance" "postgres" {
 # (ADR 0006). Plaintext is allowed inside the VPC because the PDP's Kafka client (rskafka)
 # doesn't use TLS yet; brokers are reachable only from EKS nodes.
 
+# MSK runs KRaft only on m5 and m7g brokers, so the small profile keeps t3.small brokers on 3.9,
+# the last line with ZooKeeper: about a fifth of the cost, and awzy needs nothing KRaft adds.
+locals {
+  kafka_version = var.size_profile == "small" ? "3.9.x" : "4.1.x.kraft"
+  kafka_broker  = var.size_profile == "small" ? "kafka.t3.small" : "kafka.m7g.large"
+}
+
 resource "aws_msk_configuration" "kafka" {
   name              = var.name
-  kafka_versions    = ["4.1.x.kraft"]
+  kafka_versions    = [local.kafka_version]
   server_properties = <<-PROPERTIES
     auto.create.topics.enable=false
     default.replication.factor=2
@@ -87,11 +94,11 @@ resource "aws_msk_configuration" "kafka" {
 
 resource "aws_msk_cluster" "kafka" {
   cluster_name           = var.name
-  kafka_version          = "4.1.x.kraft"
+  kafka_version          = local.kafka_version
   number_of_broker_nodes = length(var.azs)
 
   broker_node_group_info {
-    instance_type   = "kafka.t3.small"
+    instance_type   = local.kafka_broker
     client_subnets  = module.vpc.private_subnets
     security_groups = [aws_security_group.data.id]
     storage_info {
