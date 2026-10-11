@@ -75,6 +75,8 @@ bazel build --config=lint //...                    # clippy
 - **IDs on the wire** (protobuf, GraphQL, JSON): a field holding one of awzy's own QIDs is named
   `_qid` (`string decision_qid`, `challengeQid`; a message's own is `qid`), so it can't be
   mistaken for an ID from the client's systems, which keeps `_id` (`human_id`, `EntityRef.id`).
+  In protobuf a QID field also says its entity, `[(awzy.authz.v1.qid) = "challenge"]`, and the
+  service parses it into the typed ID where the request arrives (ADR 0101).
   GraphQL objects keep `id`, which Relay requires (ADR 0058).
 - **Humans** are `human` in every name, and several are `humans`: code, wire fields, schema
   attributes, policy IDs, routes, GraphQL (`shared_humans`, `human_id`, `answering_human`). Never
