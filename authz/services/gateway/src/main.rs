@@ -22,10 +22,13 @@ async fn main() -> anyhow::Result<()> {
     ));
     // Containments from awzy-challenge, so a PDP outage never replays an allow for a contained
     // principal (ADR 0030). Without it, outages replay as before.
+    // Forwarded tool calls, recorded in awzy-intake (ADR 0084).
+    let activity = awzy_activity::ActivityLog::from_env("awzy-gateway");
     let state = match std::env::var("AWZY_CHALLENGE_ADDR") {
         Ok(addr) => {
             let containments = Arc::new(Containments::awaiting_feed());
-            let state = awzy_gateway::GatewayState::with_containments(config, pdp, containments.clone())?;
+            let state = awzy_gateway::GatewayState::with_containments(config, pdp, containments.clone())?
+                .with_activity(activity);
             let challenge = ChallengeServiceClient::new(awzy_service_auth::grpc_channel(
                 Channel::from_shared(addr)?.connect_lazy(),
                 "awzy-challenge",
@@ -36,7 +39,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Err(_) => {
             tracing::warn!("AWZY_CHALLENGE_ADDR is not set; a PDP outage replays allows without checking containments");
-            awzy_gateway::GatewayState::new(config, pdp)?
+            awzy_gateway::GatewayState::new(config, pdp)?.with_activity(activity)
         }
     };
     awzy_server::metrics::register(std::sync::Arc::new(awzy_gateway::metrics::GatewayMetrics));

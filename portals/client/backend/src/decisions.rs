@@ -504,6 +504,7 @@ mod tests {
             pdp: Some(crate::testing::pdp().await),
             context: None,
             bot: None,
+            activity: Default::default(),
         });
         let alice = crate::testing::human("alice", "security");
         let run = |q: &str| {

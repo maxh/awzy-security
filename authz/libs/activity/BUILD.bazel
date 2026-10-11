@@ -1,0 +1,9 @@
+load("//tools:rust.bzl", "awzy_rust_library")
+
+# What agents do through awzy's own surfaces, sent to awzy-intake as events (ADR 0084).
+awzy_rust_library(
+    name = "activity",
+    crate_name = "awzy_activity",
+    deps = ["//libs/model"],
+    visibility = ["//tools:client_side"],
+)

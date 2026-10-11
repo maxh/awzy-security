@@ -6,6 +6,7 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
+awzy-activity.workspace = true
 anyhow.workspace = true
 base64.workspace = true
 bytes.workspace = true
