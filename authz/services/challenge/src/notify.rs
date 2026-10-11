@@ -116,6 +116,14 @@ impl ChallengeStore {
         self.record("challenge_decided", &Recipient::Human(answerer.into()), &details).await
     }
 
+    /// A break-glass rollback (ADR 0022): the security team, every time.
+    pub async fn notify_break_glass(&self, details: &Value) -> Result<(), StoreError> {
+        if !self.notify {
+            return Ok(());
+        }
+        self.record("break_glass", &Recipient::Security, details).await
+    }
+
     /// A containment, applied or only recorded: the security team, never the contained person.
     pub async fn notify_contained(&self, c: &Containment) -> Result<(), StoreError> {
         if !self.notify {
@@ -176,6 +184,14 @@ pub fn render(kind: &str, details: &Value, portal_url: &str) -> String {
                 format!("{} is contained by {}. Review it: {link}", s("principal"), s("created_by"))
             }
         }
+        "break_glass" => format!(
+            "Break-glass: key {} rolled policy back to version {} (now active as version {}), outside the \
+             portal and your IdP. Reason given: \"{}\". Review it: {portal}/policies",
+            s("key_id"),
+            details["restored_version"],
+            details["version"],
+            s("reason")
+        ),
         other => format!("awzy: {other}. {portal}"),
     }
 }
@@ -276,6 +292,16 @@ mod tests {
         assert!(key.contains("your security key"), "{key}");
         let approval = render("challenge_opened", &opened(&["approval"], true), portal);
         assert!(approval.starts_with("awzy asks for an approval"), "{approval}");
+    }
+
+    #[test]
+    fn a_break_glass_rollback_tells_the_security_team_what_and_why() {
+        let details = json!({ "key_id": "sha256:0123456789abcdef", "reason": "forbid-all locked us out",
+            "restored_version": 4, "policy_bundle_qid": "policy_bundle_1", "version": 6 });
+        let text = render("break_glass", &details, "https://p/");
+        assert!(text.starts_with("Break-glass: key sha256:0123456789abcdef rolled policy back to version 4"), "{text}");
+        assert!(text.contains("now active as version 6") && text.contains("\"forbid-all locked us out\""), "{text}");
+        assert!(text.ends_with("https://p/policies"), "{text}");
     }
 
     #[test]

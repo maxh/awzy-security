@@ -19,6 +19,8 @@ service ChallengeService {
   // Approves or rejects an approval challenge. The approver must be someone else whom the PDP
   // allows to `approve` the resource.
   rpc Decide(DecideRequest) returns (DecideResponse);
+  // awzy-policy reports a break-glass rollback, and the security team is told (ADR 0022).
+  rpc ReportBreakGlass(ReportBreakGlassRequest) returns (ReportBreakGlassResponse);
 
   // Revokes a principal's access until the containment is lifted, or with `monitor` records that
   // it would have (ADR 0066). Idempotent: containing a principal who is already contained in
@@ -133,6 +135,19 @@ message ResolveResponse {
   // The asking policies a live grant answers. The PDP sets these aside, and only these.
   repeated string passed_policies = 4;
 }
+
+message ReportBreakGlassRequest {
+  // The enrolled key that signed the rollback: `sha256:<fingerprint>`.
+  string key_id = 1;
+  // Why, as the admin signed it.
+  string reason = 2;
+  // The version restored, and the bundle that now republishes it.
+  int64 restored_version = 3;
+  string policy_bundle_qid = 4;
+  int64 version = 5;
+}
+
+message ReportBreakGlassResponse {}
 
 message GetChallengeRequest {
   string challenge_qid = 1;

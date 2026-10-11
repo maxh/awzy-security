@@ -45,5 +45,13 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move { following.follow_changes().await });
     // Who may call which methods (ADR 0055).
     let access = awzy_policy::Access::from_env()?;
-    awzy_server::serve("awzy-policy", awzy_policy::router(store, break_glass, &access)).await
+    // awzy-challenge tells the security team of each break-glass rollback (ADR 0022).
+    let reporter = match std::env::var("AWZY_CHALLENGE_ADDR") {
+        Ok(addr) => {
+            let channel = tonic::transport::Channel::from_shared(addr)?.connect_lazy();
+            Some(awzy_policy::BreakGlassReporter::new(awzy_service_auth::grpc_channel(channel, "awzy-challenge")))
+        }
+        Err(_) => None,
+    };
+    awzy_server::serve("awzy-policy", awzy_policy::router(store, break_glass, reporter, &access)).await
 }

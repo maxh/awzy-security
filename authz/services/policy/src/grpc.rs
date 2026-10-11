@@ -73,10 +73,19 @@ impl Access {
     }
 }
 
+/// awzy-challenge, told of each break-glass rollback so the security team hears of it.
+pub type BreakGlassReporter =
+    awzy_authz_proto::challenge::v1::challenge_service_client::ChallengeServiceClient<awzy_service_auth::AuthChannel>;
+
 /// `break_glass`: the public keys enrolled at install time for break-glass rollback. None turns
-/// the RPC off. `access`: who may call which methods.
-pub fn router(store: Arc<PolicyStore>, break_glass: Option<Arc<BundleVerifier>>, access: &Access) -> Router {
-    tonic::service::Routes::new(PolicyServiceServer::new(Service(store, break_glass)))
+/// the RPC off. `reporter`: who to tell of each rollback. `access`: who may call which methods.
+pub fn router(
+    store: Arc<PolicyStore>,
+    break_glass: Option<Arc<BundleVerifier>>,
+    reporter: Option<BreakGlassReporter>,
+    access: &Access,
+) -> Router {
+    tonic::service::Routes::new(PolicyServiceServer::new(Service(store, break_glass, reporter)))
         .into_axum_router()
         .route_layer(axum::middleware::from_fn_with_state(access.guard(), require_by_path))
 }
@@ -84,7 +93,7 @@ pub fn router(store: Arc<PolicyStore>, break_glass: Option<Arc<BundleVerifier>>,
 /// How far a break-glass request's timestamp may be from now.
 const BREAK_GLASS_WINDOW_SECS: i64 = 300;
 
-struct Service(Arc<PolicyStore>, Option<Arc<BundleVerifier>>);
+struct Service(Arc<PolicyStore>, Option<Arc<BundleVerifier>>, Option<BreakGlassReporter>);
 
 #[tonic::async_trait]
 impl PolicyService for Service {
@@ -232,7 +241,22 @@ impl PolicyService for Service {
             to_version: (req.to_version > 0).then_some(req.to_version),
         };
         let out = self.0.break_glass_rollback(&verified).await.map_err(status)?;
-        // TODO: notify every admin (Slack, Teams, email) once notifications exist.
+        // The security team hears of every use. The rollback stands either way.
+        match self.2.clone() {
+            Some(mut reporter) => {
+                let report = awzy_authz_proto::challenge::v1::ReportBreakGlassRequest {
+                    key_id: req.key_id.clone(),
+                    reason: req.reason.clone(),
+                    restored_version: out.restored_version,
+                    policy_bundle_qid: out.bundle.id.to_string(),
+                    version: out.bundle.version,
+                };
+                if let Err(e) = reporter.report_break_glass(report).await {
+                    tracing::error!(error = %e.message(), "couldn't tell the security team about a break-glass rollback");
+                }
+            }
+            None => tracing::warn!("AWZY_CHALLENGE_ADDR is not set; nobody is told about this break-glass rollback"),
+        }
         tracing::error!(
             key_id = %req.key_id,
             reason = %req.reason,
@@ -359,7 +383,7 @@ mod tests {
                 .unwrap()
                 .verifying_key()])
             .unwrap();
-        let app = router(Arc::new(store), Some(Arc::new(enrolled)), &Access::off());
+        let app = router(Arc::new(store), Some(Arc::new(enrolled)), None, &Access::off());
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let mut client = PolicyServiceClient::connect(endpoint.clone()).await.unwrap();
 
