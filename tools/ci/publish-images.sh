@@ -80,15 +80,28 @@ while read -r pkg repo; do
 done <<< "$targets" > "$scripts/plan"
 
 # No upload to the public Rekor log: installs verify against the KMS public key only.
+# Builds are reproducible, so an image whose code didn't change has the digest an earlier release
+# pushed and signed. Signing or attesting it again would append to its `sha256-<digest>.sig` or
+# `.att` tag, which the immutable repositories refuse; skip what's already there, as
+# mirror-images.sh does.
+pubkey="$(pwd)/deploy/release/cosign.pub"
 push_and_sign() {
-  "$scripts/$1.sh" --repository "$registry/$2" --tag "$tag" &&
-    cosign sign --yes --tlog-upload=false --key "$key" "$registry/$2@$3" &&
+  local ref="$registry/$2@$3"
+  "$scripts/$1.sh" --repository "$registry/$2" --tag "$tag" || return 1
+  if cosign verify --key "$pubkey" --insecure-ignore-tlog "$ref" >/dev/null 2>&1; then
+    echo "already signed"
+  else
+    cosign sign --yes --tlog-upload=false --key "$key" "$ref" || return 1
+  fi
+  if cosign verify-attestation --type spdxjson --key "$pubkey" --insecure-ignore-tlog "$ref" >/dev/null 2>&1; then
+    echo "already has its SBOM"
+  else
     syft scan -q --platform linux/amd64 "oci-dir:$4" -o "spdx-json=$scripts/$1.spdx.json" &&
-    cosign attest --yes --tlog-upload=false --key "$key" --type spdxjson --predicate "$scripts/$1.spdx.json" \
-      "$registry/$2@$3"
+      cosign attest --yes --tlog-upload=false --key "$key" --type spdxjson --predicate "$scripts/$1.spdx.json" "$ref"
+  fi
 }
 export -f push_and_sign
-export scripts registry tag key
+export scripts registry tag key pubkey
 failed=0
 xargs -P 6 -L 1 bash -c 'push_and_sign "$0" "$@" > "$scripts/$0.log" 2>&1 || { echo "$0" >> "$scripts/failed"; }' \
   < "$scripts/plan" || failed=1
