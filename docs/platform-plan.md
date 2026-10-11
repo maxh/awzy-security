@@ -193,21 +193,21 @@ flowchart LR
   A --> GW
   GW -->|check| PDP[awzy-pdp<br>Cedar + attributes]
   PDP -->|allow / deny / challenge| GW
-  GW -.challenge.-> CH[awzy-challenge]
-  CH -.grants and containments.-> VK[(Valkey)]
-  VK -.containment feed.-> PDP
+  GW -.->|challenge| CH[awzy-challenge]
+  CH -.->|grants and containments| VK[(Valkey)]
+  VK -.->|containment feed| PDP
   PDP -->|resource entity, cache miss| VK
-  PDP -.decision.-> K[(Kafka)]
+  PDP -.->|decision| K[(Kafka)]
   SRC[App logs, cloud audit logs, DLP, agent traces] -.-> IN[awzy-intake] -.-> K
   K -.-> CHDB[(ClickHouse)]
-  CHDB -.windows and baselines.-> RS[awzy-reasoner]
+  CHDB -.->|windows and baselines| RS[awzy-reasoner]
   K -.-> RS
-  RS -.risk attributes.-> CTX[awzy-context]
-  RS -.containment request.-> CH
+  RS -.->|risk attributes| CTX[awzy-context]
+  RS -.->|containment request| CH
   CON[awzy-connectors<br>IdP, HR, Jira, Drive] -.-> CTX
-  CTX -.write-through.-> VK
-  CTX -.attributes.v1.-> K
-  K -.snapshot updates.-> PDP
+  CTX -.->|write-through| VK
+  CTX -.->|attributes.v1| K
+  K -.->|snapshot updates| PDP
 ```
 
 ### Latency budget for one check
