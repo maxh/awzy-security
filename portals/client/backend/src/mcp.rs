@@ -635,8 +635,8 @@ impl ClientPortalMcp {
             .unwrap_or_default();
         Ok(Json(RequestLiftOut {
             principal,
-            next_step: "Nothing is lifted yet. The security team has been told, and a person decides in the client \
-                        portal's Challenges page."
+            next_step: "Nothing is lifted yet. The security team has been told, and decides on the client portal's \
+                        Challenges page."
                 .into(),
         }))
     }
