@@ -30,6 +30,13 @@ export function ago(utc: string | null | undefined, now = Date.now()): string {
   return new Date(utc).toLocaleDateString();
 }
 
+/** The release channels staff choose from, for a Select. */
+export const CHANNELS = [
+  { value: "FAST", label: "fast" },
+  { value: "STABLE", label: "stable" },
+  { value: "PINNED", label: "pinned" },
+];
+
 export function channelLabel(channel: string, pinned: string | null | undefined): string {
   return channel === "PINNED" ? `pinned ${pinned ?? ""}`.trim() : channel.toLowerCase();
 }

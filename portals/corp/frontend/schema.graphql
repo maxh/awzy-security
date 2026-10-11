@@ -235,6 +235,11 @@ type Mutation {
 	tools, for 30 days, and nothing else here. Shown once.
 	"""
 	mcpToken: String!
+	"""
+	Moves an install to another channel, or pins it to a chart version. It upgrades or rolls
+	back the next time it pulls.
+	"""
+	setInstallRelease(input: SetInstallReleaseInput!): SetInstallReleasePayload!
 }
 
 interface Node {
@@ -346,6 +351,19 @@ input RetireInstallInput {
 }
 
 type RetireInstallPayload {
+	install: Install!
+}
+
+input SetInstallReleaseInput {
+	installQid: ID!
+	channel: ReleaseChannel!
+	"""
+	Required for PINNED, and only then.
+	"""
+	pinnedVersion: String
+}
+
+type SetInstallReleasePayload {
 	install: Install!
 }
 

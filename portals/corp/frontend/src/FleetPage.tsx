@@ -20,7 +20,7 @@ import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
 
 import type { FleetPageQuery } from "./__generated__/FleetPageQuery.graphql";
 import type { FleetPageRegisterMutation, ReleaseChannel } from "./__generated__/FleetPageRegisterMutation.graphql";
-import { ago, channelLabel, formatTime, healthOf } from "./format";
+import { ago, CHANNELS, channelLabel, formatTime, healthOf } from "./format";
 import { McpTokenButton } from "./McpTokenButton";
 
 /** Every registered install, with its health and what it last reported (ADR 0026). */
@@ -199,12 +199,6 @@ function Fleet({ fetchKey, onRegister }: { fetchKey: number; onRegister: () => v
   );
 }
 
-const CHANNELS = [
-  { value: "FAST", label: "fast" },
-  { value: "STABLE", label: "stable" },
-  { value: "PINNED", label: "pinned" },
-];
-
 function RegisterInstall({
   opened,
   onClose,
@@ -336,7 +330,7 @@ function RegisterInstall({
               {channel === "PINNED" && (
                 <TextInput
                   label="Pinned version"
-                  placeholder="0.4.2"
+                  placeholder="0.4.2-g0123456789ab"
                   value={pinned}
                   onChange={(e) => setPinned(e.currentTarget.value)}
                   required

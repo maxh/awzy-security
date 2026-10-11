@@ -136,11 +136,18 @@ impl NewInstall {
         if !["aws", "gcp", "azure"].contains(&self.cloud.as_str()) {
             return invalid("cloud must be aws, gcp, or azure");
         }
-        match (self.channel, &self.pinned_version) {
-            (Channel::Pinned, None) => invalid("a pinned install needs a pinned version"),
-            (Channel::Stable | Channel::Fast, Some(_)) => invalid("only a pinned install has a pinned version"),
-            _ => Ok(()),
-        }
+        check_release(self.channel, self.pinned_version.as_deref())
+    }
+}
+
+/// A pinned install names a chart version; one on stable or fast follows its channel.
+fn check_release(channel: Channel, pinned_version: Option<&str>) -> Result<(), RegisterError> {
+    let invalid = |m: String| Err(RegisterError::Invalid(m));
+    match (channel, pinned_version) {
+        (Channel::Pinned, None) => invalid("a pinned install needs a pinned version".into()),
+        (Channel::Pinned, Some(v)) if !is_chart_version(v) => invalid(format!("{v:?} isn't a chart version")),
+        (Channel::Stable | Channel::Fast, Some(_)) => invalid("only a pinned install has a pinned version".into()),
+        _ => Ok(()),
     }
 }
 
@@ -354,6 +361,27 @@ impl FleetStore {
         .fetch_one(&self.pool)
         .await?;
         Ok(ChannelVersion { channel, chart_version: chart_version.to_string(), changed_by: by.to_string(), changed_at })
+    }
+
+    /// Moves an active install to another channel, or pins it to a chart version. It upgrades or
+    /// rolls back the next time it pulls through the registry.
+    pub async fn set_release(
+        &self,
+        id: InstallId,
+        channel: Channel,
+        pinned_version: Option<&str>,
+    ) -> Result<Option<InstallRecord>, RegisterError> {
+        check_release(channel, pinned_version)?;
+        let row = sqlx::query(&format!(
+            "UPDATE installs SET channel = $2, pinned_version = $3 WHERE id = $1 AND retired_at IS NULL
+             RETURNING {COLUMNS}"
+        ))
+        .bind(id.uuid())
+        .bind(channel.as_str())
+        .bind(pinned_version)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(|r| InstallRecord::from_row(&r)).transpose().map_err(RegisterError::Db)
     }
 
     pub async fn retire(&self, id: InstallId, by: &str) -> Result<Option<InstallRecord>, sqlx::Error> {
@@ -712,6 +740,8 @@ pub(crate) mod tests {
         bad.channel = Channel::Pinned;
         assert!(bad.validate().is_err(), "pinned needs a version");
         bad.pinned_version = Some("0.4.1".into());
+        assert!(bad.validate().is_err(), "a pin names a version CI publishes");
+        bad.pinned_version = Some("0.4.1-g000000000004".into());
         assert!(bad.validate().is_ok());
         bad.cloud = "oracle".into();
         assert!(bad.validate().is_err());
@@ -753,7 +783,20 @@ pub(crate) mod tests {
         assert_ne!(new.id, old.id, "the same client and environment register again, as a new install");
     }
 
-    fn beat(install: InstallId, p99: f64, dps: f64, ready: u32) -> Heartbeat {
+    #[tokio::test]
+    async fn an_install_moves_between_channels_and_pins() {
+        let Some(store) = test_store().await else { return };
+        let (install, _) = store.register(&new_install("acme", "staging"), "max").await.unwrap();
+        let pinned = store.set_release(install.id, Channel::Pinned, Some("0.4.1-g000000000004")).await.unwrap().unwrap();
+        assert_eq!((pinned.channel, pinned.pinned_version.as_deref()), (Channel::Pinned, Some("0.4.1-g000000000004")));
+        let fast = store.set_release(install.id, Channel::Fast, None).await.unwrap().unwrap();
+        assert_eq!((fast.channel, fast.pinned_version), (Channel::Fast, None));
+        assert!(matches!(store.set_release(install.id, Channel::Pinned, None).await, Err(RegisterError::Invalid(_))));
+        store.retire(install.id, "max").await.unwrap();
+        assert!(store.set_release(install.id, Channel::Stable, None).await.unwrap().is_none(), "not once it's retired");
+    }
+
+        fn beat(install: InstallId, p99: f64, dps: f64, ready: u32) -> Heartbeat {
         serde_json::from_value(serde_json::json!({
             "schema_version": 1, "install_qid": install, "sent_at": Utc::now(), "chart_version": "0.5.0",
             "services": [{ "service": "awzy-pdp", "version": "0.5.0", "image_digest": null, "replicas_desired": 2,
