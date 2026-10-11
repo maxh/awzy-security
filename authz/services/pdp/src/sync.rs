@@ -164,9 +164,10 @@ mod tests {
     use awzy_authz_proto::policy::v1::{
         policy_service_server::{PolicyService, PolicyServiceServer},
         CreateDraftRequest, CreateDraftResponse, EnforcementSetting, GetActiveResponse, GetBundleRequest,
-        GetBundleResponse, GetEnforcementResponse, ListBundlesRequest, ListBundlesResponse,
-        ListEnforcementChangesRequest, ListEnforcementChangesResponse, PolicyBundle, PublishRequest, PublishResponse,
-        SetEnforcementRequest, SetEnforcementResponse,
+        GetBundleResponse, GetEnforcementResponse, GetOutageFallbackRequest, GetOutageFallbackResponse,
+        ListBundlesRequest, ListBundlesResponse, ListEnforcementChangesRequest, ListEnforcementChangesResponse,
+        PolicyBundle, PublishRequest, PublishResponse, SetEnforcementRequest, SetEnforcementResponse,
+        SetOutageFallbackRequest, SetOutageFallbackResponse,
     };
     use awzy_model::{Check, EntityRef, Verdict};
     use tonic::{Request, Response, Status};
@@ -228,6 +229,18 @@ mod tests {
             &self,
             _: Request<awzy_authz_proto::policy::v1::BreakGlassRollbackRequest>,
         ) -> Result<Response<awzy_authz_proto::policy::v1::BreakGlassRollbackResponse>, Status> {
+            Err(Status::unimplemented("fake"))
+        }
+        async fn get_outage_fallback(
+            &self,
+            _: Request<GetOutageFallbackRequest>,
+        ) -> Result<Response<GetOutageFallbackResponse>, Status> {
+            Err(Status::unimplemented("fake"))
+        }
+        async fn set_outage_fallback(
+            &self,
+            _: Request<SetOutageFallbackRequest>,
+        ) -> Result<Response<SetOutageFallbackResponse>, Status> {
             Err(Status::unimplemented("fake"))
         }
         async fn list_enforcement_changes(

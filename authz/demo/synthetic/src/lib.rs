@@ -18,4 +18,5 @@ pub mod push;
 mod rng;
 pub mod scenarios;
 pub mod scim;
+pub mod tiers;
 pub mod world;

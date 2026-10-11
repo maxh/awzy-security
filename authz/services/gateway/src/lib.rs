@@ -6,6 +6,7 @@
 
 mod config;
 pub mod containments;
+pub mod fallback;
 mod mcp;
 pub mod metrics;
 

@@ -40,6 +40,7 @@ use awzy_identity::{IdentityError, Principal, Verifier};
 
 use crate::{
     containments::{Containments, Replay},
+    fallback::Fallback,
     GatewayConfig, UpstreamConfig,
 };
 
@@ -62,6 +63,8 @@ struct Inner {
     allows: AllowCache,
     /// Who is contained, so an outage never replays an allow for them (ADR 0030).
     containments: Arc<Containments>,
+    /// Each tool's tier, and which tiers fail open during an outage (ADR 0089).
+    fallback: Arc<Fallback>,
     /// The MCP client each session's `initialize` named, for `context.mcp_client` (ADR 0081).
     sessions: SessionClients,
     /// Where forwarded tool calls are recorded as activity (ADR 0084).
@@ -193,6 +196,7 @@ impl GatewayState {
             last_seen_monitor: AtomicBool::new(false),
             allows,
             containments,
+            fallback: Arc::new(Fallback::awaiting()),
             sessions: SessionClients::default(),
             activity: awzy_activity::ActivityLog::off(),
         })))
@@ -201,6 +205,13 @@ impl GatewayState {
     /// Records each forwarded tool call in awzy-intake (ADR 0084). Call before sharing the state.
     pub fn with_activity(mut self, activity: awzy_activity::ActivityLog) -> Self {
         Arc::get_mut(&mut self.0).expect("not shared yet").activity = activity;
+        self
+    }
+
+    /// Takes tool tiers and fail-open tiers from `fallback`, which [`crate::fallback::follow`]
+    /// keeps current. Without it, every tool is unclassified. Call before sharing the state.
+    pub fn with_fallback(mut self, fallback: Arc<Fallback>) -> Self {
+        Arc::get_mut(&mut self.0).expect("not shared yet").fallback = fallback;
         self
     }
 
@@ -338,7 +349,7 @@ async fn authorize(
     let mut entities: Vec<Entity> = principal.entities.iter().map(entity_from_json).collect();
     entities.push(entity_from_json(&json!({
         "uid": { "type": entity_type::MCP_TOOL, "id": tool_id },
-        "attrs": { "sensitivity": up.sensitivity(tool) },
+        "attrs": { "sensitivity": state.0.fallback.tier(&up.name, tool) },
         "parents": [{ "type": entity_type::MCP_SERVER, "id": up.name }],
     })));
     let call = ToolCheck {
@@ -457,11 +468,9 @@ fn outage(
     id: &Value,
     status: &tonic::Status,
 ) -> Option<Response<Body>> {
-    let outage = &state.0.config.outage;
-    let tier = up.listed_sensitivity(tool);
-    let fail_open = tier.is_some_and(|t| {
-        outage.fail_open_tiers.iter().any(|f| f == t) && !crate::config::ALWAYS_FAIL_CLOSED.contains(&t)
-    });
+    let listed = state.0.fallback.outage_tier(&up.name, tool);
+    let tier = listed.as_ref().map(|(t, _)| t.as_str());
+    let fail_open = listed.as_ref().is_some_and(|(_, open)| *open);
     let who: Vec<&awzy_model::EntityRef> =
         std::iter::once(&principal.subject).chain(principal.on_behalf_of.as_ref()).collect();
     let containment = state.0.containments.replay(&who);
@@ -479,7 +488,9 @@ fn outage(
             crate::metrics::OUTAGE_DENIED.inc();
             tracing::warn!(%status, what = %c.what, tier = ?tier, "awzy-pdp unreachable; denying");
             let why = match (tier, containment) {
-                (None, _) => "it has no sensitivity of its own in the gateway's config, so it fails closed".to_string(),
+                (None, _) => {
+                    "it isn't classified by name in the client portal's outage settings, so it fails closed".to_string()
+                }
                 (Some(t), _) if !fail_open => format!("its tier ({t}) fails closed"),
                 (Some(_), Replay::Contained) => "this caller's access is contained".to_string(),
                 (Some(_), Replay::Unknown) => {
@@ -744,13 +755,6 @@ mod tests {
             upstreams: vec![UpstreamConfig {
                 name: "drive".into(),
                 url: upstream_url,
-                default_sensitivity: "internal".into(),
-                tools: [
-                    ("delete_file".to_string(), "confidential".to_string()),
-                    ("read_file".to_string(), "internal".to_string()),
-                    ("read_document".to_string(), "internal".to_string()),
-                ]
-                .into(),
                 resource_tools: [(
                     "read_document".to_string(),
                     crate::config::ResourceTool { argument: "id".into(), action: "read".into() },
@@ -763,15 +767,30 @@ mod tests {
                 ai: true,
                 groups: vec!["engineering".into()],
             }],
-            outage: crate::config::OutageConfig {
-                fail_open_tiers: vec!["internal".into()],
-                cached_allow_ttl_secs: 300,
-            },
+            outage: crate::config::OutageConfig { cached_allow_ttl_secs: 300 },
             service_account_registry: crate::config::Registry::Config,
             public_url: Some("https://mcp.test".into()),
         };
-        let state = GatewayState::with_containments(config, pdp, containments).unwrap();
+        let state = GatewayState::with_containments(config, pdp, containments)
+            .unwrap()
+            .with_fallback(Arc::new(Fallback::fixed(drive_tiers())));
         (router(state.clone()), down, state)
+    }
+
+    /// What the client portal would set for the test's drive: three tools by name, the rest of
+    /// drive internal, and internal failing open.
+    fn drive_tiers() -> awzy_model::OutageFallback {
+        let mut f = awzy_model::OutageFallback::default();
+        for (tool, tier) in [
+            ("drive/delete_file", "confidential"),
+            ("drive/read_file", "internal"),
+            ("drive/read_document", "internal"),
+        ] {
+            f.tools.insert(tool.into(), tier.into());
+        }
+        f.servers.insert("drive".into(), "internal".into());
+        f.fail_open_tiers.insert("internal".into());
+        f
     }
 
     fn token(sub: &str, act: Option<&str>, groups: &[&str]) -> String {
@@ -973,7 +992,7 @@ mod tests {
 
         let (_, unlisted) = call(&app, Some(&alice), "list_files").await;
         assert!(
-            unlisted["result"]["content"][0]["text"].as_str().unwrap().contains("no sensitivity of its own"),
+            unlisted["result"]["content"][0]["text"].as_str().unwrap().contains("isn't classified by name"),
             "{unlisted}"
         );
 
@@ -1089,16 +1108,5 @@ mod tests {
         }))
         .unwrap();
         assert!(config.validate().unwrap_err().to_string().contains("read or write"));
-    }
-
-    #[test]
-    fn high_sensitivity_tiers_can_never_fail_open() {
-        let config: GatewayConfig = serde_json::from_value(json!({
-            "token": { "issuer": "i", "audience": "a", "hs256_secret_env": "X" },
-            "upstreams": [],
-            "outage": { "fail_open_tiers": ["internal", "crown_jewels"] },
-        }))
-        .unwrap();
-        assert!(config.validate().unwrap_err().to_string().contains("crown_jewels"));
     }
 }

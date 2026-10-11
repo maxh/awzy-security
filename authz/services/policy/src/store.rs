@@ -1,8 +1,11 @@
 //! Postgres storage for policy bundles.
 
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
-use awzy_model::{EnforcementMode, PolicyBundleId};
+use awzy_model::{EnforcementMode, FallbackError, OutageFallback, PolicyBundleId};
 use awzy_store::changes::Changes;
 use chrono::{DateTime, Utc};
 use sqlx::{postgres::PgRow, PgPool, Row};
@@ -109,8 +112,22 @@ pub enum StoreError {
     NoRollbackTarget(Option<i64>),
     #[error("unknown enforcement scope {0:?}; the scopes are \"install\" and \"automated-containments\"")]
     UnknownScope(String),
+    #[error("invalid outage fallback: {0}")]
+    InvalidFallback(#[from] FallbackError),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
+}
+
+/// One version of the outage fallback setting (ADR 0089). Version 0, with no one and no time, is
+/// the setting before anyone made one: nothing classified, everything fails closed.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OutageFallbackSetting {
+    pub version: i64,
+    pub fallback: OutageFallback,
+    pub changed_by: Option<String>,
+    pub changed_at: Option<DateTime<Utc>>,
+    pub signature: Option<Vec<u8>>,
+    pub signing_key_id: Option<String>,
 }
 
 pub struct PolicyStore {
@@ -382,6 +399,68 @@ impl PolicyStore {
         Ok(rows.iter().map(setting_from_row).collect::<Result<_, _>>()?)
     }
 
+    pub async fn outage_fallback(&self) -> Result<OutageFallbackSetting, StoreError> {
+        let row = sqlx::query(&format!(
+            "SELECT {FALLBACK_COLUMNS} FROM outage_fallback_changes ORDER BY version DESC LIMIT 1"
+        ))
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(match row {
+            Some(row) => fallback_from_row(&row)?,
+            None => OutageFallbackSetting {
+                version: 0,
+                fallback: OutageFallback::default(),
+                changed_by: None,
+                changed_at: None,
+                signature: None,
+                signing_key_id: None,
+            },
+        })
+    }
+
+    /// Records a new version, signed when the store has a signer. Two changes at once can't take
+    /// the same version: the second fails, to be made again.
+    pub async fn set_outage_fallback(
+        &self,
+        fallback: &OutageFallback,
+        changed_by: &str,
+    ) -> Result<OutageFallbackSetting, StoreError> {
+        fallback.validate()?;
+        let mut tx = self.pool.begin().await?;
+        // Whole seconds, as signed, so the stored time and the signature agree.
+        let (version, changed_at): (i64, DateTime<Utc>) = sqlx::query_as(
+            "SELECT coalesce(max(version), 0) + 1, date_trunc('second', now()) FROM outage_fallback_changes",
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        let (signature, key_id) = match &self.signer {
+            Some(signer) => {
+                let payload =
+                    awzy_signing::fallback_payload(version, changed_by, changed_at.timestamp(), &fallback.content());
+                (Some(signer.sign_payload(&payload)), Some(signer.key_id().to_string()))
+            }
+            None => (None, None),
+        };
+        let row = sqlx::query(&format!(
+            "INSERT INTO outage_fallback_changes
+               (version, tools, servers, fail_open_tiers, changed_by, changed_at, signature, signing_key_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING {FALLBACK_COLUMNS}"
+        ))
+        .bind(version)
+        .bind(sqlx::types::Json(&fallback.tools))
+        .bind(sqlx::types::Json(&fallback.servers))
+        .bind(fallback.fail_open_tiers.iter().cloned().collect::<Vec<_>>())
+        .bind(changed_by)
+        .bind(changed_at)
+        .bind(signature)
+        .bind(key_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        let setting = fallback_from_row(&row)?;
+        tx.commit().await?;
+        Ok(setting)
+    }
+
     /// Newest first.
     pub async fn list(&self, limit: i64) -> Result<Vec<PolicyBundle>, StoreError> {
         let rows = sqlx::query("SELECT * FROM policy_bundles ORDER BY version DESC LIMIT $1")
@@ -399,6 +478,27 @@ fn check_scope(scope: &str) -> Result<(), StoreError> {
     } else {
         Err(StoreError::UnknownScope(scope.to_string()))
     }
+}
+
+const FALLBACK_COLUMNS: &str =
+    "version, tools, servers, fail_open_tiers, changed_by, changed_at, signature, signing_key_id";
+
+fn fallback_from_row(row: &PgRow) -> Result<OutageFallbackSetting, sqlx::Error> {
+    let tools: sqlx::types::Json<BTreeMap<String, String>> = row.try_get("tools")?;
+    let servers: sqlx::types::Json<BTreeMap<String, String>> = row.try_get("servers")?;
+    let fail_open: Vec<String> = row.try_get("fail_open_tiers")?;
+    Ok(OutageFallbackSetting {
+        version: row.try_get("version")?,
+        fallback: OutageFallback {
+            tools: tools.0,
+            servers: servers.0,
+            fail_open_tiers: fail_open.into_iter().collect::<BTreeSet<_>>(),
+        },
+        changed_by: Some(row.try_get("changed_by")?),
+        changed_at: Some(row.try_get("changed_at")?),
+        signature: row.try_get("signature")?,
+        signing_key_id: row.try_get("signing_key_id")?,
+    })
 }
 
 fn setting_from_row(row: &PgRow) -> Result<EnforcementSetting, sqlx::Error> {
@@ -523,6 +623,39 @@ pub(crate) mod tests {
                 read.signing_key_id.as_deref().unwrap(),
             )
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn the_outage_fallback_starts_closed_and_each_change_is_signed() {
+        let Some(store) = test_store().await else { return };
+        let key = p256::ecdsa::SigningKey::from_bytes(&[3u8; 32].into()).unwrap();
+        let verifier = awzy_signing::BundleVerifier::from_keys([*key.verifying_key()]).unwrap();
+        let store = store.with_signer(awzy_signing::BundleSigner::from_key(key).unwrap());
+        let initial = store.outage_fallback().await.unwrap();
+        assert_eq!((initial.version, initial.fallback), (0, OutageFallback::default()));
+
+        let mut fallback = OutageFallback::default();
+        fallback.tools.insert("drive/search".into(), "internal".into());
+        fallback.fail_open_tiers.insert("internal".into());
+        store.set_outage_fallback(&fallback, "Human::alice").await.unwrap();
+        fallback.servers.insert("admin".into(), "crown_jewels".into());
+        let set = store.set_outage_fallback(&fallback, "Human::bob").await.unwrap();
+        let read = store.outage_fallback().await.unwrap();
+        assert_eq!(read, set);
+        assert_eq!((read.version, &read.fallback), (2, &fallback));
+        let payload =
+            awzy_signing::fallback_payload(2, "Human::bob", read.changed_at.unwrap().timestamp(), &fallback.content());
+        verifier
+            .verify_payload(&payload, read.signature.as_deref().unwrap(), read.signing_key_id.as_deref().unwrap())
+            .unwrap();
+
+        // A tier that must fail closed is refused, and nothing is recorded.
+        fallback.fail_open_tiers.insert("crown_jewels".into());
+        assert!(matches!(
+            store.set_outage_fallback(&fallback, "Human::bob").await,
+            Err(StoreError::InvalidFallback(FallbackError::AlwaysClosed(_)))
+        ));
+        assert_eq!(store.outage_fallback().await.unwrap().version, 2);
     }
 
     #[tokio::test]

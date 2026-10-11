@@ -181,10 +181,10 @@ mcpGateway:
     jwksUrl: ""
     audience: awzy-gateway
     subjectClaim: "" # default: the client portal's
-  # Each: { name, url, default_sensitivity, tools: { <tool>: <tier> }, resource_tools: {...} }
+  # Each: { name, url, resource_tools: {...} }. Each tool's tier, and which tiers fail open during
+  # a PDP outage, are set in the client portal's Enforcement page (ADR 0089).
   upstreams: []
   outage:
-    failOpenTiers: [] # e.g. [public, internal]; confidential and crown_jewels always fail closed
     cachedAllowTtlSecs: 300
   resources:
     requests: { cpu: 100m, memory: 128Mi }

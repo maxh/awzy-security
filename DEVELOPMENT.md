@@ -356,25 +356,28 @@ returns a denied call as an MCP tool error without forwarding it. Other messages
 
 ```sh
 AWZY_LISTEN_ADDR=127.0.0.1:8086 AWZY_GATEWAY_CONFIG=gateway.json AWZY_GATEWAY_DEV_SECRET=dev-secret \
-  AWZY_PDP_ADDR=http://127.0.0.1:8082 bazel run //authz/services/gateway:awzy-gateway
+  AWZY_PDP_ADDR=http://127.0.0.1:8082 AWZY_POLICY_ADDR=http://127.0.0.1:8081 \
+  bazel run //authz/services/gateway:awzy-gateway
 ```
 
 ```json
 {
   "token": { "issuer": "https://idp.local", "audience": "awzy-gateway", "hs256_secret_env": "AWZY_GATEWAY_DEV_SECRET" },
   "upstreams": [
-    { "name": "awzy-portal", "url": "http://127.0.0.1:8080/mcp", "default_sensitivity": "internal",
-      "tools": { "propose_policy": "confidential" } }
+    { "name": "awzy-portal", "url": "http://127.0.0.1:8080/mcp" }
   ],
   "service_accounts": [{ "id": "sales-genie", "owner": "bob", "ai": true, "groups": ["engineering"] }],
-  "outage": { "fail_open_tiers": ["public", "internal"], "cached_allow_ttl_secs": 300 }
+  "outage": { "cached_allow_ttl_secs": 300 }
 }
 ```
 
-If the PDP can't be reached in enforce mode, the gateway replays only a recent allow, for tools
-listed by name in a fail-open tier; everything else fails closed, and `confidential` and
-`crown_jewels` always do ([ADR 0030](docs/adr/0030-gateway-outage-fallback.md)). Without `outage`
-nothing fails open. With `AWZY_CHALLENGE_ADDR`, the gateway follows awzy-challenge's containments:
+Each tool's tier, and which tiers fail open, come from awzy-policy, as the client portal's
+Enforcement page sets them ([ADR 0089](docs/adr/0089-the-outage-fallback-is-set-in-the-portal-and-signed.md)).
+The gateway asks every 10 seconds, and verifies each version when it has
+`AWZY_POLICY_VERIFY_KEY_FILE`. Without `AWZY_POLICY_ADDR`, or before anyone sets them, every tool
+is `confidential`. If the PDP can't be reached in enforce mode, the gateway replays only a recent
+allow, for tools classified by name in a fail-open tier; everything else fails closed, and
+`confidential` and `crown_jewels` always do ([ADR 0030](docs/adr/0030-gateway-outage-fallback.md)). With `AWZY_CHALLENGE_ADDR`, the gateway follows awzy-challenge's containments:
 it forgets a contained principal's recent allows and never replays one for them, and until the first
 list arrives it replays nothing.
 
@@ -392,13 +395,14 @@ AWZY_CONTEXT_URL=http://127.0.0.1:8084 bazel run //authz/demo/synthetic:awzy-syn
 ```
 
 ```json
-{ "name": "larkspur-drive", "url": "http://127.0.0.1:8095/mcp", "default_sensitivity": "internal",
-  "tools": { "read_document": "internal", "list_folder": "internal" },
+{ "name": "larkspur-drive", "url": "http://127.0.0.1:8095/mcp",
   "resource_tools": { "read_document": { "argument": "id" }, "list_folder": { "argument": "id" } } },
-{ "name": "larkspur-admin", "url": "http://127.0.0.1:8095/admin/mcp", "default_sensitivity": "crown_jewels",
-  "tools": { "reset_password": "confidential", "disable_mfa": "crown_jewels",
-             "rotate_admin_credentials": "crown_jewels", "export_directory": "crown_jewels" } }
+{ "name": "larkspur-admin", "url": "http://127.0.0.1:8095/admin/mcp" }
 ```
+
+Their tiers (larkspur-drive's tools internal, larkspur-admin's confidential and crown jewels) go
+into awzy-policy when you provision the company with `AWZY_POLICY_ADDR` set, unless it has some:
+`AWZY_POLICY_ADDR=http://127.0.0.1:8081 bazel run //authz/demo/synthetic:awzy-synthetic -- world`.
 
 The same process serves larkspur-admin at `/admin/mcp`: IT's high-risk operations, which change
 nothing ([ADR 0064](docs/adr/0064-unfamiliar-territory-raises-risk-and-high-risk-operations-need-a-key.md)).

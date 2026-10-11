@@ -3,8 +3,12 @@ use std::sync::Arc;
 use anyhow::Context;
 use awzy_authz_proto::{
     authz::v1::authorizer_client::AuthorizerClient, challenge::v1::challenge_service_client::ChallengeServiceClient,
+    policy::v1::policy_service_client::PolicyServiceClient,
 };
-use awzy_gateway::containments::{self, Containments};
+use awzy_gateway::{
+    containments::{self, Containments},
+    fallback::{self, Fallback},
+};
 use tonic::transport::Channel;
 
 #[tokio::main]
@@ -24,11 +28,15 @@ async fn main() -> anyhow::Result<()> {
     // principal (ADR 0030). Without it, outages replay as before.
     // Forwarded tool calls, recorded in awzy-intake (ADR 0084).
     let activity = awzy_activity::ActivityLog::from_env("awzy-gateway");
+    // Tool tiers and fail-open tiers, set in the client portal and signed by awzy-policy (ADR
+    // 0089). Without awzy-policy every tool is unclassified and outages fail closed.
+    let fallback = Arc::new(Fallback::awaiting());
     let state = match std::env::var("AWZY_CHALLENGE_ADDR") {
         Ok(addr) => {
             let containments = Arc::new(Containments::awaiting_feed());
             let state = awzy_gateway::GatewayState::with_containments(config, pdp, containments.clone())?
-                .with_activity(activity);
+                .with_activity(activity)
+                .with_fallback(fallback.clone());
             let challenge = ChallengeServiceClient::new(awzy_service_auth::grpc_channel(
                 Channel::from_shared(addr)?.connect_lazy(),
                 "awzy-challenge",
@@ -39,9 +47,30 @@ async fn main() -> anyhow::Result<()> {
         }
         Err(_) => {
             tracing::warn!("AWZY_CHALLENGE_ADDR is not set; a PDP outage replays allows without checking containments");
-            awzy_gateway::GatewayState::new(config, pdp)?.with_activity(activity)
+            awzy_gateway::GatewayState::new(config, pdp)?.with_activity(activity).with_fallback(fallback.clone())
         }
     };
+    match std::env::var("AWZY_POLICY_ADDR") {
+        Ok(addr) => {
+            let policy = PolicyServiceClient::new(awzy_service_auth::grpc_channel(
+                Channel::from_shared(addr)?.connect_lazy(),
+                "awzy-policy",
+            ));
+            // The key PDPs verify bundles with; without it, as when run locally, unsigned settings are taken.
+            let verifier = match std::env::var("AWZY_POLICY_VERIFY_KEY_FILE") {
+                Ok(path) => {
+                    let pem = std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?;
+                    Some(Arc::new(awzy_signing::BundleVerifier::from_pem(&pem)?))
+                }
+                Err(_) => {
+                    tracing::warn!("AWZY_POLICY_VERIFY_KEY_FILE is not set; outage fallback settings aren't verified");
+                    None
+                }
+            };
+            tokio::spawn(fallback::follow(fallback, policy, verifier));
+        }
+        Err(_) => tracing::warn!("AWZY_POLICY_ADDR is not set; every tool is unclassified and outages fail closed"),
+    }
     awzy_server::metrics::register(std::sync::Arc::new(awzy_gateway::metrics::GatewayMetrics));
     awzy_server::serve("awzy-gateway", awzy_gateway::router(state)).await
 }

@@ -66,6 +66,9 @@ Whether awzy enforces its verdicts or only records them. See
   listed, so you can check them before you switch.
 - **Automated containments:** a separate switch for the containments awzy-reasoner makes on its
   own. It starts in monitor, where they're only recorded, as "would contain".
+- **During a PDP outage:** each MCP tool's sensitivity tier, which every check by awzy-gateway
+  uses, and which tiers may replay a recent allow if the PDP can't be reached. Saving takes a
+  touch of your security key. See [awzy-gateway](/guides/mcp-gateway/#classifying-tools).
 - **History:** every switch, with who made it.
 
 ### Directory

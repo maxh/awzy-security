@@ -2,15 +2,14 @@ import { EmptyState, PageHeader, PageLoader, Section, Stat, StatusBadge } from "
 import { Alert, Button, Group, Modal, SimpleGrid, Stack, Table, Text } from "@mantine/core";
 import { IconHistory, IconShieldCheck } from "@tabler/icons-react";
 import { Suspense, useState } from "react";
-import { commitMutation, graphql, useLazyLoadQuery, useRelayEnvironment } from "react-relay";
-import type { Environment, GraphQLTaggedNode, MutationParameters } from "relay-runtime";
+import { graphql, useLazyLoadQuery, useRelayEnvironment } from "react-relay";
 
-import type { EnforcementPageBeginVerificationMutation } from "./__generated__/EnforcementPageBeginVerificationMutation.graphql";
-import type { EnforcementPageFinishVerificationMutation } from "./__generated__/EnforcementPageFinishVerificationMutation.graphql";
 import type { EnforcementPageQuery } from "./__generated__/EnforcementPageQuery.graphql";
 import type { EnforcementPageSetModeMutation } from "./__generated__/EnforcementPageSetModeMutation.graphql";
 import { Entity, formatTime, Time } from "./format";
-import { getAssertion, webAuthnMessage } from "./webauthn";
+import { OutageFallbackSection } from "./OutageFallbackSection";
+import { mutate, passChallenge } from "./securityKeyChallenge";
+import { webAuthnMessage } from "./webauthn";
 
 const setMode = graphql`
   mutation EnforcementPageSetModeMutation($input: SetEnforcementModeInput!) {
@@ -26,45 +25,6 @@ const setMode = graphql`
     }
   }
 `;
-
-const beginVerification = graphql`
-  mutation EnforcementPageBeginVerificationMutation($input: BeginChallengeVerificationInput!) {
-    beginChallengeVerification(input: $input) {
-      ceremonyQid
-      optionsJson
-    }
-  }
-`;
-
-const finishVerification = graphql`
-  mutation EnforcementPageFinishVerificationMutation($input: FinishChallengeVerificationInput!) {
-    finishChallengeVerification(input: $input) {
-      challenge {
-        id
-        status
-      }
-    }
-  }
-`;
-
-function mutate<T extends MutationParameters>(
-  environment: Environment,
-  mutation: GraphQLTaggedNode,
-  variables: T["variables"],
-): Promise<T["response"]> {
-  return new Promise((resolve, reject) =>
-    commitMutation<T>(environment, {
-      mutation,
-      variables,
-      onCompleted: (response, errors) => {
-        const first = errors?.[0];
-        if (first) reject(new Error(first.message));
-        else resolve(response);
-      },
-      onError: reject,
-    }),
-  );
-}
 
 /**
  * Monitor or enforce for the whole install (ADR 0007), and what enforcing would change; and the
@@ -165,15 +125,7 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
       const input = { input: { mode, scope } };
       let { setEnforcementMode: res } = await mutate<EnforcementPageSetModeMutation>(environment, setMode, input);
       if (res.challengeQid) {
-        const { beginChallengeVerification: v } = await mutate<EnforcementPageBeginVerificationMutation>(
-          environment,
-          beginVerification,
-          { input: { challengeQid: res.challengeQid } },
-        );
-        const assertion = await getAssertion(v.ceremonyQid, v.optionsJson);
-        await mutate<EnforcementPageFinishVerificationMutation>(environment, finishVerification, {
-          input: { assertion },
-        });
+        await passChallenge(environment, res.challengeQid);
         ({ setEnforcementMode: res } = await mutate<EnforcementPageSetModeMutation>(environment, setMode, input));
       }
       if (!res.enforcement) throw new Error("awzy still asks for a challenge before switching; try again.");
@@ -249,6 +201,8 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
           </Text>
         </Stack>
       </Section>
+
+      <OutageFallbackSection canEdit={data.canSwitch} />
 
       <Modal
         opened={confirmingContainments}

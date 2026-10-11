@@ -18,22 +18,22 @@ rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+tonic.workspace = true
 tracing.workspace = true
+awzy-authz-proto.workspace = true
 awzy-dev-idp.workspace = true
+awzy-model.workspace = true
 awzy-server.workspace = true
 awzy-telemetry.workspace = true
 
 awzy-service-auth.workspace = true
 
 [dev-dependencies]
-awzy-authz-proto.workspace = true
 awzy-challenge.workspace = true
 awzy-classify.workspace = true
 awzy-context.workspace = true
 awzy-gateway.workspace = true
 awzy-pdp.workspace = true
 awzy-reasoner.workspace = true
-awzy-model.workspace = true
 sqlx.workspace = true
-tonic.workspace = true
 uuid.workspace = true

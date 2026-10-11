@@ -16,6 +16,7 @@ awzy-telemetry.workspace = true
 awzy-authz-proto.workspace = true
 awzy-identity.workspace = true
 awzy-model.workspace = true
+awzy-signing.workspace = true
 bytes.workspace = true
 http-body-util.workspace = true
 hyper-util.workspace = true
@@ -27,6 +28,7 @@ tonic.workspace = true
 awzy-service-auth.workspace = true
 
 [dev-dependencies]
+p256.workspace = true
 awzy-challenge.workspace = true
 jsonwebtoken.workspace = true
 sqlx.workspace = true

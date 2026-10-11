@@ -161,7 +161,7 @@ resource "helm_release" "config" {
         hostname  = try(var.mcp_gateway.hostname == null ? "" : var.mcp_gateway.hostname, "")
         auth      = { audience = try(var.mcp_gateway.audience, "awzy-gateway") }
         upstreams = try(var.mcp_gateway.upstreams, [])
-        outage    = { failOpenTiers = try(var.mcp_gateway.fail_open_tiers, []), cachedAllowTtlSecs = 300 }
+        outage    = { cachedAllowTtlSecs = 300 }
       }
       intake = {
         enabled  = var.intake != null

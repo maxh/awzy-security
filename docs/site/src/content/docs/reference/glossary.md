@@ -161,7 +161,7 @@ pass a verification challenge.
 [sensitivity](/reference/domain-model/#sensitivity).
 
 **Sensitivity tier.** One of `sensitivity`'s four values. A setting that holds one says `tier`, such
-as awzy-gateway's `fail_open_tiers`.
+as the tiers that fail open during a PDP outage.
 
 **Service account.** Anything non-human with its own credentials: a backend service, a scheduled
 job, an AI agent. It has an accountable owner, and one that isn't registered is denied.

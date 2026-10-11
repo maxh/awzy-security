@@ -203,6 +203,23 @@ pub struct SetEnforcementModePayload {
     pub challenge_qid: Option<ID>,
 }
 
+/// Whether policy lets `viewer` change what's enforced now (`switch_enforcement`, ADR 0080):
+/// `Some` names the challenge to pass first, as the base policies ask for a security key.
+pub(crate) async fn switch_challenge(ctx: &Context<'_>, viewer: &access::Viewer) -> Result<Option<ID>> {
+    let services = ctx.data::<crate::Services>()?;
+    let switch = "switch_enforcement";
+    match access::authorize_action(services, viewer, Surface::Portal, switch, PortalArea::Enforcement).await {
+        Ok(()) => Ok(None),
+        Err(access::AccessError::Challenged { challenge_qid: Some(qid), .. }) => Ok(Some(ID(qid))),
+        Err(access::AccessError::Challenged { challenges, decision, .. }) => Err(format!(
+            "changing what's enforced needs a {challenges} challenge, and none could be opened: is awzy-challenge \
+             reachable? (decision {decision})"
+        )
+        .into()),
+        Err(e) => Err(e.into()),
+    }
+}
+
 #[derive(Default)]
 pub struct EnforcementMutation;
 
@@ -218,21 +235,8 @@ impl EnforcementMutation {
         input: SetEnforcementModeInput,
     ) -> Result<SetEnforcementModePayload> {
         let viewer = require(ctx, Administer, PortalArea::Enforcement).await?;
-        let services = ctx.data::<crate::Services>()?;
-        let switch = "switch_enforcement";
-        match access::authorize_action(services, &viewer, Surface::Portal, switch, PortalArea::Enforcement).await {
-            Ok(()) => {}
-            Err(access::AccessError::Challenged { challenge_qid: Some(qid), .. }) => {
-                return Ok(SetEnforcementModePayload { enforcement: None, challenge_qid: Some(ID(qid)) })
-            }
-            Err(access::AccessError::Challenged { challenges, decision, .. }) => {
-                return Err(format!(
-                    "switching enforcement needs a {challenges} challenge, and none could be opened: is \
-                     awzy-challenge reachable? (decision {decision})"
-                )
-                .into())
-            }
-            Err(e) => return Err(e.into()),
+        if let Some(challenge_qid) = switch_challenge(ctx, &viewer).await? {
+            return Ok(SetEnforcementModePayload { enforcement: None, challenge_qid: Some(challenge_qid) });
         }
         let setting = set(policy_client(ctx)?, input.scope, input.mode.into(), &viewer.actor()).await?;
         Ok(SetEnforcementModePayload { enforcement: Some(Setting(setting)), challenge_qid: None })

@@ -618,6 +618,11 @@ type Mutation {
 	"""
 	setEnforcementMode(input: SetEnforcementModeInput!): SetEnforcementModePayload!
 	"""
+	Replaces the outage fallback setting. Like switching enforcement, policy can ask for a
+	security key first: then nothing changes, and the payload names the challenge to pass.
+	"""
+	setOutageFallback(input: SetOutageFallbackInput!): SetOutageFallbackPayload!
+	"""
 	Registers a service account, or changes one. Until it's registered, the PDP denies it.
 	"""
 	registerServiceAccount(input: RegisterServiceAccountInput!): RegisterServiceAccountPayload!
@@ -684,6 +689,24 @@ type OnBehalfOf {
 	verdict: Verdict!
 	policies: [String!]!
 	determiningPolicies: [PolicySource!]!
+}
+
+type OutageFallback {
+	"""
+	0 when never set: every tool is unclassified (confidential) and fails closed.
+	"""
+	version: Int!
+	"""
+	Tools classified by name. Only these can fail open.
+	"""
+	tools: [ToolTier!]!
+	servers: [ServerTier!]!
+	"""
+	Tiers whose listed tools replay a recent allow while the PDP is unreachable.
+	"""
+	failOpenTiers: [SensitivityTier!]!
+	changedBy: Actor
+	changedAt: UtcTimestamp
 }
 
 """
@@ -979,6 +1002,11 @@ type Query {
 	"""
 	installStatus: [ComponentStatus!]!
 	"""
+	What awzy-gateway does while the PDP is unreachable: each tool's tier, and which tiers
+	fail open.
+	"""
+	outageFallback: OutageFallback!
+	"""
 	A diagnostics bundle as JSON: each service's status, the portal's release, and which
 	settings it was started with, with no client data. For those who may administer the
 	enforcement area, to review before sending it to awzy support.
@@ -1049,6 +1077,29 @@ type SecurityKeyPayload {
 	securityKey: SecurityKey!
 }
 
+enum SensitivityTier {
+	PUBLIC
+	INTERNAL
+	CONFIDENTIAL
+	CROWN_JEWELS
+}
+
+"""
+The tier of a server's tools that aren't listed by name.
+"""
+type ServerTier {
+	server: String!
+	tier: SensitivityTier!
+}
+
+"""
+The tier of a server's tools that aren't listed by name.
+"""
+input ServerTierInput {
+	server: String!
+	tier: SensitivityTier!
+}
+
 """
 An agent, backend service, or scheduled job, with the person accountable for it.
 """
@@ -1088,6 +1139,48 @@ type SetEnforcementModePayload {
 	again within its grant.
 	"""
 	challengeQid: ID
+}
+
+input SetOutageFallbackInput {
+	tools: [ToolTierInput!]!
+	servers: [ServerTierInput!]!
+	"""
+	Never CONFIDENTIAL or CROWN_JEWELS.
+	"""
+	failOpenTiers: [SensitivityTier!]!
+}
+
+type SetOutageFallbackPayload {
+	"""
+	The new setting; null when a challenge must be passed first.
+	"""
+	outageFallback: OutageFallback
+	"""
+	The challenge to pass, then save again.
+	"""
+	challengeQid: ID
+}
+
+"""
+A tool's tier.
+"""
+type ToolTier {
+	"""
+	`<server>/<tool>`, e.g. `drive/search`.
+	"""
+	tool: String!
+	tier: SensitivityTier!
+}
+
+"""
+A tool's tier.
+"""
+input ToolTierInput {
+	"""
+	`<server>/<tool>`, e.g. `drive/search`.
+	"""
+	tool: String!
+	tier: SensitivityTier!
 }
 
 scalar UtcTimestamp

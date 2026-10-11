@@ -291,8 +291,9 @@ pub(crate) mod tests {
         policy_service_client::PolicyServiceClient,
         policy_service_server::{PolicyService, PolicyServiceServer},
         CreateDraftResponse, EnforcementSetting, GetActiveResponse, GetBundleResponse, GetEnforcementRequest,
-        GetEnforcementResponse, ListBundlesResponse, ListEnforcementChangesRequest, ListEnforcementChangesResponse,
-        PublishResponse, SetEnforcementRequest, SetEnforcementResponse,
+        GetEnforcementResponse, GetOutageFallbackRequest, GetOutageFallbackResponse, ListBundlesResponse,
+        ListEnforcementChangesRequest, ListEnforcementChangesResponse, PublishResponse, SetEnforcementRequest,
+        SetEnforcementResponse, SetOutageFallbackRequest, SetOutageFallbackResponse,
     };
     use tonic::{Request, Response, Status};
 
@@ -394,6 +395,18 @@ pub(crate) mod tests {
             &self,
             _: Request<awzy_authz_proto::policy::v1::BreakGlassRollbackRequest>,
         ) -> Result<Response<awzy_authz_proto::policy::v1::BreakGlassRollbackResponse>, Status> {
+            Err(Status::unimplemented("fake"))
+        }
+        async fn get_outage_fallback(
+            &self,
+            _: Request<GetOutageFallbackRequest>,
+        ) -> Result<Response<GetOutageFallbackResponse>, Status> {
+            Err(Status::unimplemented("fake"))
+        }
+        async fn set_outage_fallback(
+            &self,
+            _: Request<SetOutageFallbackRequest>,
+        ) -> Result<Response<SetOutageFallbackResponse>, Status> {
             Err(Status::unimplemented("fake"))
         }
         async fn list_enforcement_changes(

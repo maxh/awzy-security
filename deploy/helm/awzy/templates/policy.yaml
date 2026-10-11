@@ -1,6 +1,9 @@
 {{- $backend := printf "%s/awzy" .Values.namespaces.system -}}
 {{- $portal := printf "%s/awzy" .Values.namespaces.portal -}}
 {{- $glass := .Values.policy.breakGlassKeysSecret -}}
+{{- /* Demo installs: the synthetic company's Job sets the demo tools' tiers (ADR 0089). */ -}}
+{{- $writers := $portal -}}
+{{- if .Values.demoData.enabled }}{{- $writers = printf "%s,%s/awzy-demo-data" $portal .Values.namespaces.system -}}{{- end }}
 # Who may call which methods (ADR 0055): the PDP and the portal read bundles and the mode; only
 # the portal drafts, publishes, and switches the mode. Break-glass rollback is signed instead.
 # awzy-policy signs each bundle and mode change, and the PDPs check them (ADR 0080).
@@ -8,7 +11,7 @@
     (dict "name" "AWZY_CHALLENGE_ADDR" "value" (printf "http://awzy-challenge.%s.svc:8080" .Values.namespaces.system))
     (dict "name" "AWZY_POLICY_READERS" "value" (printf "%s,%s" $backend $portal))
     (dict "name" "AWZY_POLICY_SIGNING_KEY_FILE" "value" "/var/run/secrets/awzy/policy-signing/signing.pem")
-    (dict "name" "AWZY_POLICY_WRITERS" "value" $portal)
+    (dict "name" "AWZY_POLICY_WRITERS" "value" $writers)
     (dict "name" "AWZY_POSTGRES_URL" "valueFrom" (dict "secretKeyRef" (dict "name" "awzy-postgres" "key" "policy_url")))
     (dict "name" "AWZY_POSTGRES_MIGRATE" "value" "check")
 -}}
