@@ -6,7 +6,7 @@ description: Keep this public repository free of anything that identifies a part
 # Keep deployments out of the repository
 
 This repository is public, and anyone can deploy it (ADR 0053). So nothing in it may identify
-a particular deployment: not awzy's own, not the example client's, not a customer's. That covers
+a particular deployment: not awzy's own, not the example client's, not a real client's. That covers
 files, commit messages, and PR and issue text alike: all of it is public, indexed, and kept
 forever in history.
 
@@ -21,7 +21,7 @@ forever in history.
   (`ssoins-…`, `d-….awsapps.com`), support case and quota request numbers.
 - **Real records:** the QIDs of real installs, decisions, or bundles (`install_<uuid>` from the
   corp portal), install IDs, reporting or pull tokens, and any key or secret.
-- **People and customers:** email addresses, user names, and names of clients or design
+- **People and clients:** email addresses, user names, and names of clients or design
   partners. The synthetic company (Larkspur Capital) and `example-client` are fine; they're
   ours to invent.
 
@@ -31,7 +31,7 @@ forever in history.
   everything Terraform needs: accounts, profiles, buckets, domains, zone IDs.
 - **GitHub Actions variables and secrets** for what CI needs (`AWZY_CORP_*`).
 - **Secrets Manager** for credentials, and the **internal wiki** for runbooks, account maps,
-  case numbers, and customer notes.
+  case numbers, and client notes.
 - **The conversation** with the person you're working with: say the ID there, not in a commit.
 
 ## What is fine

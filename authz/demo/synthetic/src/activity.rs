@@ -79,7 +79,7 @@ pub struct Access {
 }
 
 /// How many documents a person opens on an ordinary day.
-const READS_PER_PERSON: usize = 12;
+const READS_PER_HUMAN: usize = 12;
 /// How many tool calls an agent makes in a day.
 const CALLS_PER_AGENT: usize = 25;
 /// The team whose members run larkspur-admin's operations, and how many each runs a day at most.
@@ -113,7 +113,7 @@ pub fn day(company: &Company, profile: Profile, day: u32) -> Vec<Access> {
     let mut out = Vec::new();
     for (i, p) in company.humans.iter().enumerate() {
         let mine = assigned.get(p.user_name.as_str()).map(Vec::as_slice).unwrap_or_default();
-        for _ in 0..READS_PER_PERSON - 2 + rng.below(5) {
+        for _ in 0..READS_PER_HUMAN - 2 + rng.below(5) {
             let (resource, why) = pick(&mut rng, &mut docs, mine, &by_team[p.team], i, &by_team);
             out.push(Access {
                 minute: minute(&mut rng),

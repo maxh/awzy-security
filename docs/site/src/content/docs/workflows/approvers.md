@@ -45,4 +45,4 @@ Approve what the person needs for their work right now. Reject, or ask them firs
   some other way.
 
 If something looks wrong rather than just unnecessary, reject it and tell your security team. They
-can look at the accessor's activity, and contain them if needed.
+can look at the principal's activity, and contain them if needed.

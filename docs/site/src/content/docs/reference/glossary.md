@@ -159,6 +159,9 @@ pass a verification challenge.
 `crown_jewels`. Set by a label, or by awzy's classifier, and never lowered. See
 [sensitivity](/reference/domain-model/#sensitivity).
 
+**Sensitivity tier.** One of `sensitivity`'s four values. A setting that holds one says `tier`, such
+as awzy-gateway's `fail_open_tiers`.
+
 **Service account.** Anything non-human with its own credentials: a backend service, a scheduled
 job, an AI agent. It has an accountable owner, and one that isn't registered is denied.
 

@@ -42,7 +42,7 @@ pub struct Access {
     pdps: Allowed,
     /// Reading and answering challenges for a person (`answered_by`, `decided_by` are taken as
     /// given): only the client portal, which authenticates that person.
-    humans: Allowed,
+    answerers: Allowed,
     /// Containing and lifting: the client portal, and later awzy-reasoner.
     containers: Allowed,
     /// Following containments, so an outage never replays an allow for a contained principal:
@@ -59,13 +59,13 @@ fn either(a: &Allowed, b: &Allowed) -> Allowed {
 }
 
 impl Access {
-    /// From `AWZY_CHALLENGE_CONTAINERS`, `AWZY_CHALLENGE_GATEWAYS`, `AWZY_CHALLENGE_PDPS`, and
-    /// `AWZY_CHALLENGE_PEOPLE`.
+    /// From `AWZY_CHALLENGE_ANSWERERS`, `AWZY_CHALLENGE_CONTAINERS`, `AWZY_CHALLENGE_GATEWAYS`, and
+    /// `AWZY_CHALLENGE_PDPS`.
     pub fn from_env() -> anyhow::Result<Self> {
         Ok(Self {
             verifier: Arc::new(awzy_service_auth::Verifier::from_env("awzy-challenge")?),
             pdps: Allowed::from_env("AWZY_CHALLENGE_PDPS"),
-            humans: Allowed::from_env("AWZY_CHALLENGE_PEOPLE"),
+            answerers: Allowed::from_env("AWZY_CHALLENGE_ANSWERERS"),
             containers: Allowed::from_env("AWZY_CHALLENGE_CONTAINERS"),
             gateways: Allowed::from_env("AWZY_CHALLENGE_GATEWAYS"),
         })
@@ -77,7 +77,7 @@ impl Access {
         Self {
             verifier: Arc::new(awzy_service_auth::Verifier::off()),
             pdps: nobody(),
-            humans: nobody(),
+            answerers: nobody(),
             containers: nobody(),
             gateways: nobody(),
         }
@@ -92,12 +92,12 @@ impl Access {
         // Following containments: the PDPs, the gateways for their outage fallback, and the client
         // portal for its live Challenges page.
         rules.extend(group(&["WatchContainments"], &either(&either(&self.pdps, &self.gateways), &self.containers)));
-        rules.extend(group(&["WatchChallenges"], &either(&self.humans, &self.containers)));
+        rules.extend(group(&["WatchChallenges"], &either(&self.answerers, &self.containers)));
         // Listing containments: a PDP whose feed is stale, and the portal showing them to admins.
         rules.extend(group(&["ListContainments"], &either(&self.pdps, &self.containers)));
-        rules.extend(group(&["GetChallenge", "Justify", "Decide"], &self.humans));
+        rules.extend(group(&["GetChallenge", "Justify", "Decide"], &self.answerers));
         // Listing challenges: the portal, and awzy-reasoner reading rejections (ADR 0066).
-        rules.extend(group(&["ListChallenges"], &either(&self.humans, &self.containers)));
+        rules.extend(group(&["ListChallenges"], &either(&self.answerers, &self.containers)));
         // Security keys (ADR 0059): only the portal, which authenticates the person they belong to.
         rules.extend(group(
             &[
@@ -110,7 +110,7 @@ impl Access {
                 "BeginVerification",
                 "FinishVerification",
             ],
-            &self.humans,
+            &self.answerers,
         ));
         rules.extend(group(&["Contain", "Lift"], &self.containers));
         PathGuard::new(self.verifier.clone(), rules)

@@ -35,11 +35,11 @@ Leave **automated containments** in monitor for longer, and switch them separate
   for data you're responsible for, with a note. Resource owners can approve their own data too.
   With [Slack connected](/guides/optional-features/#slack-notifications), each request reaches
   your team's channel with a link.
-- **Containments.** Contain an accessor yourself when you see something wrong, and lift a
+- **Containments.** Contain a principal yourself when you see something wrong, and lift a
   containment once you've reviewed it, with what you found. Review awzy-reasoner's
   *Would contain* records: contain the person, or dismiss the record.
 - **Investigations.** On the Investigations page, *Needs review* lists what a model found that a
-  person has to decide: a containment proposed for a privileged accessor, or a benign finding about
+  person has to decide: a containment proposed for a privileged principal, or a benign finding about
   someone the scores flag. Read the evidence and close each one with your conclusion. See
   [Investigations](/concepts/investigations/).
 - **Explaining a decision.** When someone asks why they were blocked, look up the decision by its

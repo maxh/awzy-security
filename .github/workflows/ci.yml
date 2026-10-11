@@ -135,6 +135,9 @@ jobs:
       # (ADR 0072).
       - name: Migrations only expand
         run: tools/ci/check-migrations.sh
+      # One word for each thing (ADR 0074, 0079): human, principal, enforcement point.
+      - name: Names stay consistent
+        run: tools/ci/check-names.sh
       - uses: ./.github/actions/setup-bazel
         with:
           buildbuddy-api-key: ${{ secrets.AWZY_CORP_BUILDBUDDY_API_KEY }}

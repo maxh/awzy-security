@@ -46,5 +46,5 @@ Callers need a service token (ADR 0055) from the group a method belongs to: the 
 challenges and follow containments; only the client portal reads and answers challenges for a
 person, since `answered_by` and `decided_by` are taken as given; the portal and the backend
 contain and lift; MCP gateways follow containments for their outage fallback. The chart sets the
-groups (`AWZY_CHALLENGE_CONTAINERS`, `_GATEWAYS`, `_PDPS`, `_PEOPLE`); the gateway isn't in the
-chart yet, so `_GATEWAYS` is set wherever it's deployed.
+groups (`AWZY_CHALLENGE_ANSWERERS`, `_CONTAINERS`, `_GATEWAYS`, `_PDPS`). In the chart the
+gateway runs as the backend's service account, which `_PDPS` already allows.
