@@ -24,3 +24,4 @@ impl StoreConfig {
 }
 
 pub mod changes;
+pub mod migrations;

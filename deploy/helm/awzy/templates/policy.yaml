@@ -9,6 +9,7 @@
     (dict "name" "AWZY_POLICY_SIGNING_KEY_FILE" "value" "/var/run/secrets/awzy/policy-signing/signing.pem")
     (dict "name" "AWZY_POLICY_WRITERS" "value" $portal)
     (dict "name" "AWZY_POSTGRES_URL" "valueFrom" (dict "secretKeyRef" (dict "name" "awzy-postgres" "key" "policy_url")))
+    (dict "name" "AWZY_POSTGRES_MIGRATE" "value" "check")
 -}}
 {{- $volumes := list
     (dict "name" "policy-signing" "secret" (dict "secretName" (required "policy.signingKeySecret is required" .Values.policy.signingKeySecret)))

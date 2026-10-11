@@ -9,6 +9,12 @@ async fn main() -> anyhow::Result<()> {
     awzy_telemetry::init("awzy-challenge");
     let url = std::env::var("AWZY_POSTGRES_URL").context("AWZY_POSTGRES_URL is not set")?;
     let pool = PgPoolOptions::new().max_connections(5).connect(&url).await?;
+    // `awzy-challenge migrate`: the release Job (ADR 0083).
+    if awzy_store::migrations::requested() {
+        ChallengeStore::new(pool, Lifetimes::default()).migrate().await?;
+        tracing::info!("migrations applied");
+        return Ok(());
+    }
     let defaults = Lifetimes::default();
     let lifetimes = Lifetimes {
         pending: secs("AWZY_CHALLENGE_PENDING_SECS")?.unwrap_or(defaults.pending),
@@ -33,8 +39,7 @@ async fn main() -> anyhow::Result<()> {
         _ => tracing::warn!("AWZY_CHALLENGE_SLACK_TOKEN is not set; nobody is told about challenges"),
     }
     let store = Arc::new(store);
-    // TODO: run migrations from a release Job instead of at startup.
-    store.migrate().await?;
+    store.migrate_on_start().await?;
     if let Some(worker) = worker {
         tokio::spawn(worker.run());
     }

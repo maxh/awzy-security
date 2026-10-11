@@ -1,0 +1,44 @@
+{{- /* Each service's Postgres migrations, applied by its own image (`<binary> migrate`) before the
+services roll, in the same wave as the databases they need (ADR 0083). A migration that fails
+stops the sync instead of crash-looping pods; the services only check the schema
+(AWZY_POSTGRES_MIGRATE=check). It retries until awzy-postgres-databases has made its database. */ -}}
+{{- range $svc := list (dict "name" "awzy-policy" "key" "policy_url") (dict "name" "awzy-context" "key" "context_url") (dict "name" "awzy-challenge" "key" "challenge_url") }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $svc.name }}-migrate
+  namespace: {{ $.Values.namespaces.system }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: awzy
+      {{- with $.Values.image.pullSecret }}
+      imagePullSecrets: [{ name: {{ . }} }]
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        # distroless's nonroot, by number, as the services run.
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: migrate
+          image: {{ include "awzy.image" (dict "root" $ "name" $svc.name) }}
+          args: [migrate]
+          env:
+            - { name: AWZY_LOG_FORMAT, value: {{ $.Values.logFormat | quote }} }
+            - name: AWZY_POSTGRES_URL
+              valueFrom: { secretKeyRef: { name: awzy-postgres, key: {{ $svc.key }} } }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+{{- end }}
