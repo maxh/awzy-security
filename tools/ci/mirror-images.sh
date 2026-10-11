@@ -13,11 +13,18 @@ list=deploy/release/third-party-images.txt
 entries=$(grep -v '^\s*\(#\|$\)' "$list")
 
 if [ "${1:-}" = "--check" ]; then
-  # Every third-party/<name>:<tag> the chart names is in the list (bootstrap reads the list
-  # itself), and no image there comes from anywhere but the release registry.
+  # Every <name>:<tag>@<digest> the chart names is in the list with that digest (bootstrap
+  # reads the list itself), and no image there comes from anywhere but the release registry.
   status=0
-  for ref in $(grep -rhoE 'third-party/[a-z0-9-]+:[A-Za-z0-9._-]+' deploy/helm/awzy/templates | sed 's#^third-party/##' | sort -u); do
-    grep -q "^$ref[[:space:]]" <<< "$entries" || { echo "not in $list: $ref" >&2; status=1; }
+  refs=$(grep -rhoE '"ref" "[^"]+"' deploy/helm/awzy/templates | sed -E 's/^"ref" "(.*)"$/\1/' | sort -u)
+  [ -n "$refs" ] || { echo "found no third-party image refs in the chart" >&2; status=1; }
+  for ref in $refs; do
+    target=${ref%%@*} digest=${ref#*@}
+    if [ "$target" = "$ref" ]; then
+      echo "no digest on $ref; write <name>:<tag>@<digest>" >&2; status=1
+    elif ! grep -qE "^$target[[:space:]]+[^[:space:]]+@$digest\$" <<< "$entries"; then
+      echo "not in $list with that digest: $ref" >&2; status=1
+    fi
   done
   if grep -rnE '^\s*image: *"?[a-z0-9.-]+[/:]' deploy/helm/awzy/templates | grep -v 'include "awzy\.'; then
     echo "images above don't come from the release registry; mirror them ($list)" >&2

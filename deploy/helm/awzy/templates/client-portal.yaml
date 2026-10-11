@@ -4,7 +4,8 @@
 {{- $jwks := $p.auth.jwksUrl -}}
 {{- if .Values.demoIdp.enabled }}
 {{- $issuer = include "awzy.demoIdpIssuer" . -}}
-{{- $jwks = printf "http://awzy-dev-idp.%s.svc:8080/jwks" .Values.namespaces.portal -}}
+{{- /* Through the Gateway: awzy fetches keys only over https. */ -}}
+{{- $jwks = printf "%s/jwks" $issuer -}}
 {{- end }}
 {{- $env := list
   (dict "name" "AWZY_AUTH_ISSUER" "value" (required "clientPortal.auth.issuer is required" $issuer))

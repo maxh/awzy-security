@@ -4,7 +4,8 @@
 {{- end -}}
 
 {{- /* A third-party image mirrored into the release registry and signed (ADR 0057); `ref` is a
-<name>:<tag> from deploy/release/third-party-images.txt. */ -}}
+<name>:<tag>@<digest> from deploy/release/third-party-images.txt. The digest is written out, since
+Kyverno rejects an update to anything whose image has none. */ -}}
 {{- define "awzy.thirdPartyImage" -}}
 {{- required "image.registry is required" .root.Values.image.registry -}}/third-party/{{ .ref }}
 {{- end -}}
