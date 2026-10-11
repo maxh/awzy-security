@@ -1,9 +1,12 @@
 import { EmptyState, oneOf, PageHeader, PageLoader, Section, StatusBadge } from "@awzy/ui";
 import {
+  ActionIcon,
   Alert,
   Anchor,
+  Box,
   Button,
   Code,
+  CopyButton,
   Group,
   Modal,
   Select,
@@ -13,7 +16,7 @@ import {
   TextInput,
   Tooltip,
 } from "@mantine/core";
-import { IconPlus, IconRefresh, IconServer2 } from "@tabler/icons-react";
+import { IconCheck, IconCopy, IconPlus, IconRefresh, IconServer2 } from "@tabler/icons-react";
 import { getRouteApi, Link, useRouter } from "@tanstack/react-router";
 import { type FormEvent, Suspense, useState } from "react";
 import { graphql, type PreloadedQuery, useMutation, usePreloadedQuery } from "react-relay";
@@ -267,22 +270,25 @@ function RegisterInstall({
             They're shown only this once. Store them where the install's bootstrap reads them, in the client's own
             secret store: never in a repository or a chat.
           </Alert>
-          <Text size="sm">Install ID</Text>
-          <Code block>{result.id}</Code>
+          <Text size="sm">Install QID</Text>
+          <Copyable value={result.id} />
           <Text size="sm">Reporting token</Text>
-          <Code block>{result.token}</Code>
+          <Copyable value={result.token} />
           {result.pullToken && (
             <>
               <Text size="sm">Pull token, for the release registry</Text>
-              <Code block>{result.pullToken}</Code>
-              <Text size="sm">All three as the JSON the example bootstrap reads (awzy/install-credentials)</Text>
-              <Code block>
-                {JSON.stringify(
+              <Copyable value={result.pullToken} />
+              <Text size="sm">
+                All three as the JSON the example installs' bootstrap reads (awzy/install-credentials on AWS,
+                awzy-install-credentials on Google Cloud)
+              </Text>
+              <Copyable
+                value={JSON.stringify(
                   { install_id: result.id, pull_token: result.pullToken, reporting_token: result.token },
                   null,
                   2,
                 )}
-              </Code>
+              />
             </>
           )}
           <Group justify="flex-end">
@@ -349,5 +355,33 @@ function RegisterInstall({
         </form>
       )}
     </Modal>
+  );
+}
+
+/** A value shown once, with a button that copies it, so nobody has to select it by hand. */
+function Copyable({ value }: { value: string }) {
+  return (
+    <Box pos="relative">
+      <Code block pr={44}>
+        {value}
+      </Code>
+      <CopyButton value={value}>
+        {({ copied, copy }) => (
+          <Tooltip label={copied ? "Copied" : "Copy"} withArrow position="left">
+            <ActionIcon
+              variant="subtle"
+              color={copied ? "teal" : "gray"}
+              onClick={copy}
+              aria-label="Copy"
+              pos="absolute"
+              top={6}
+              right={6}
+            >
+              {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+            </ActionIcon>
+          </Tooltip>
+        )}
+      </CopyButton>
+    </Box>
   );
 }
