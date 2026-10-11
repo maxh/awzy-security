@@ -52,8 +52,9 @@ pub enum Source {
     /// Each service's base URL, probed directly. For local runs.
     Probe(Vec<(Service, String)>),
     /// The Kubernetes API, in these namespaces. PDP, gateway, and connector pods are scraped on
-    /// `pdp_metrics_port`.
-    Kubernetes { namespaces: Vec<String>, pdp_metrics_port: u16 },
+    /// `pdp_metrics_port`. `release` is the Argo CD Application installing the release, as
+    /// (namespace, name), when the chart lets the reporter read it.
+    Kubernetes { namespaces: Vec<String>, pdp_metrics_port: u16, release: Option<(String, String)> },
 }
 
 #[derive(Debug, Clone)]
@@ -85,7 +86,8 @@ pub fn parse_targets(s: &str) -> anyhow::Result<Vec<(Service, String)>> {
 impl Config {
     /// AWZY_INSTALL_ID, AWZY_REPORTING_TOKEN, AWZY_REPORTER_CORP_PORTAL_URL, optionally AWZY_CHART_VERSION and
     /// AWZY_REPORTER_INTERVAL_SECS (default 60), and the source:
-    /// - in Kubernetes: AWZY_REPORTER_NAMESPACES (comma-separated);
+    /// - in Kubernetes: AWZY_REPORTER_NAMESPACES (comma-separated), and optionally
+    ///   AWZY_REPORTER_RELEASE_APPLICATION (`<namespace>/<name>` of the Argo CD Application);
     /// - otherwise: AWZY_REPORTER_TARGETS (`<service>=<url>,…`).
     pub fn from_env() -> anyhow::Result<Self> {
         let var = |k: &str| std::env::var(k).with_context(|| format!("{k} is not set"));
@@ -101,6 +103,9 @@ impl Config {
                     .filter(|n| !n.is_empty())
                     .collect(),
                 pdp_metrics_port: 8080,
+                release: std::env::var("AWZY_REPORTER_RELEASE_APPLICATION")
+                    .ok()
+                    .and_then(|v| v.split_once('/').map(|(ns, name)| (ns.to_string(), name.to_string()))),
             }
         } else {
             Source::Probe(parse_targets(&var("AWZY_REPORTER_TARGETS")?)?)
@@ -252,7 +257,7 @@ impl Reporter {
     /// first heartbeat has none.
     pub async fn collect(&mut self) -> Heartbeat {
         let (services, endpoints) = match (&self.config.source, &self.kube) {
-            (Source::Kubernetes { namespaces, pdp_metrics_port }, Some(kube)) => {
+            (Source::Kubernetes { namespaces, pdp_metrics_port, .. }, Some(kube)) => {
                 from_kubernetes(kube, &mut self.restarts, namespaces, *pdp_metrics_port).await
             }
             (Source::Probe(targets), _) => (self.probe_all(targets).await, probe_metrics_endpoints(targets)),
@@ -272,6 +277,16 @@ impl Reporter {
         let rates = self.pdp.update(samples, std::time::Instant::now());
         let fresh = self.freshness.update(&scrapes);
         let data = self.data.collect().await;
+        let release = match (&self.config.source, &self.kube) {
+            (Source::Kubernetes { release: Some((ns, name)), .. }, Some(kube)) => match kube.release(ns, name).await {
+                Ok(state) => Some(state),
+                Err(error) => {
+                    tracing::debug!(%error, "couldn't read the release's Application; leaving it out");
+                    None
+                }
+            },
+            _ => None,
+        };
         Heartbeat {
             schema_version: SCHEMA_VERSION,
             install_id: self.config.install_id,
@@ -291,6 +306,7 @@ impl Reporter {
                 gateway_pdp_unreachable: fresh.gateway_unreachable,
             },
             support_sessions: self.support_states.clone(),
+            release,
         }
     }
 
@@ -463,6 +479,7 @@ pub fn router(config: &Config, last: LastSent) -> Router {
 mod tests {
     use std::sync::{Arc, Mutex};
 
+    use awzy_heartbeat::{ReleaseHealth, ReleaseSync};
     use axum::{
         extract::Query,
         http::HeaderMap,
@@ -632,6 +649,12 @@ mod tests {
                     }
                 }),
             );
+        let app = app.route(
+            "/apis/argoproj.io/v1alpha1/namespaces/awzy-ops/applications/awzy",
+            get_route(|| async {
+                Json(json!({ "status": { "sync": { "status": "Synced" }, "health": { "status": "Healthy" } } }))
+            }),
+        );
         serve(app).await
     }
 
@@ -640,8 +663,11 @@ mod tests {
         let pdp = fake_pdp(100).await;
         let port: u16 = pdp.rsplit(':').next().unwrap().parse().unwrap();
         let kube = kube::KubeApi::for_test(fake_kube("127.0.0.1").await);
-        let source =
-            Source::Kubernetes { namespaces: vec!["awzy-system".into(), "awzy-data".into()], pdp_metrics_port: port };
+        let source = Source::Kubernetes {
+            namespaces: vec!["awzy-system".into(), "awzy-data".into()],
+            pdp_metrics_port: port,
+            release: Some(("awzy-ops".into(), "awzy".into())),
+        };
         let mut reporter = Reporter::with_kube(config(source, "http://unused".into()), Some(kube));
 
         reporter.collect().await;
@@ -657,6 +683,8 @@ mod tests {
         let ch = &hb.services[1];
         assert_eq!((ch.version.as_deref(), ch.replicas_ready), (Some("25.8"), 1));
         assert!(hb.metrics.decisions_per_second.unwrap() > 0.0, "the ready PDP pod was scraped");
+        let release = hb.release.expect("the Application was read");
+        assert_eq!((release.sync, release.health), (ReleaseSync::Synced, ReleaseHealth::Healthy));
     }
 
     #[tokio::test]

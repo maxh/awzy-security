@@ -234,4 +234,37 @@ mod tests {
         let err = Check::try_from(CheckRequest::default()).unwrap_err();
         assert_eq!(err.to_string(), "principal is required");
     }
+
+    mod properties {
+        use proptest::prelude::*;
+
+        use super::*;
+
+        /// JSON as enforcement points send context: integers well within f64's exact range,
+        /// finite fractions, strings, and nesting.
+        fn json() -> impl Strategy<Value = Json> {
+            let leaf = prop_oneof![
+                Just(Json::Null),
+                any::<bool>().prop_map(Json::Bool),
+                (-(1i64 << 52)..(1i64 << 52)).prop_map(Json::from),
+                (-1.0e6f64..1.0e6).prop_filter("a fraction", |f| f.fract() != 0.0).prop_map(Json::from),
+                ".*".prop_map(Json::String),
+            ];
+            leaf.prop_recursive(3, 32, 4, |inner| {
+                prop_oneof![
+                    prop::collection::vec(inner.clone(), 0..4).prop_map(Json::Array),
+                    prop::collection::btree_map(".*", inner, 0..4).prop_map(|m| Json::Object(m.into_iter().collect())),
+                ]
+            })
+        }
+
+        proptest! {
+            /// Context survives the trip through protobuf's Struct unchanged, integers included.
+            #[test]
+            fn context_round_trips(m in prop::collection::btree_map(".*", json(), 0..6)) {
+                let m: Map<String, Json> = m.into_iter().collect();
+                prop_assert_eq!(struct_to_json(json_to_struct(m.clone())), m);
+            }
+        }
+    }
 }

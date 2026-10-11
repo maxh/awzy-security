@@ -15,8 +15,8 @@ description: What awzy can and can't see, and how releases reach your install.
   registry with both, third-party images included. Each release's chart carries an SBOM of every
   Rust crate and npm package it's built from.
 - **A heartbeat, and nothing else, to awzy.** The only thing that leaves your install for awzy is
-  a heartbeat to its corp portal: versions, readiness, and a few aggregate numbers, in a fixed
-  schema with no free-form fields. You can turn it off. A diagnostics bundle from the client
+  a heartbeat to its corp portal: versions, readiness, whether the release synced, and a few
+  aggregate numbers, in a fixed schema with no free-form fields. You can turn it off. A diagnostics bundle from the client
   portal reaches awzy only if an admin downloads it and sends it, and holds no data about your
   people, resources, decisions, or policies. How the heartbeat compares with your own monitoring
   is in [Monitoring and alerts](/guides/monitoring/#what-awzy-sees-and-what-you-see).

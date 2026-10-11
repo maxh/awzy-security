@@ -1,7 +1,8 @@
 {{- /*
 awzy-reporter: the install's heartbeat to the corp portal (ADR 0026). The only thing that leaves
 the install for awzy. reporter.enabled=false turns it off; nothing is deployed and nothing is sent.
-It reads the awzy namespaces' workloads with a Role per namespace, never cluster-wide.
+It reads the awzy namespaces' workloads with a Role per namespace, never cluster-wide, and the one
+Argo CD Application that installs the release.
 */ -}}
 {{- $r := .Values.reporter -}}
 {{- if $r.enabled }}
@@ -17,6 +18,10 @@ It reads the awzy namespaces' workloads with a Role per namespace, never cluster
   (dict "name" "AWZY_REPORTER_INTERVAL_SECS" "value" (toString $r.intervalSeconds))
   (dict "name" "AWZY_CHALLENGE_ADDR" "value" (printf "http://awzy-challenge.%s.svc:8080" $sys))
 -}}
+{{- $app := $r.releaseApplication -}}
+{{- if $app.name }}
+{{- $env = append $env (dict "name" "AWZY_REPORTER_RELEASE_APPLICATION" "value" (printf "%s/%s" $app.namespace $app.name)) }}
+{{- end }}
 {{- if .Values.clickhouse.enabled }}
 {{- /* ClickHouse disk use and Kafka lag, with its own read-only ClickHouse user (ADR 0042). */ -}}
 {{- $env = concat $env (list
@@ -56,6 +61,34 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: awzy-reporter
+subjects:
+  - kind: ServiceAccount
+    name: awzy-reporter
+    namespace: {{ $sys }}
+{{- end }}
+{{- if $app.name }}
+---
+# Read-only, and only the Application that installs the release: its sync and health.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: awzy-reporter-release
+  namespace: {{ $app.namespace }}
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    resourceNames: [{{ $app.name | quote }}]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: awzy-reporter-release
+  namespace: {{ $app.namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: awzy-reporter-release
 subjects:
   - kind: ServiceAccount
     name: awzy-reporter

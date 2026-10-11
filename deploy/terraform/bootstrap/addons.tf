@@ -145,6 +145,7 @@ resource "helm_release" "config" {
     ingress = {
       hostname           = var.ingress.hostname
       acmeEmail          = var.ingress.acme_email
+      redirectHostnames  = var.ingress.redirect_hostnames
       serviceAnnotations = local.c.load_balancer.service_annotations
       extraHostnames = {
         mcp    = try(var.mcp_gateway.hostname == null ? "" : var.mcp_gateway.hostname, "")

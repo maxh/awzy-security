@@ -681,7 +681,7 @@ To work on a frontend against a deployed portal instead of a local backend
 ([ADR 0024](docs/adr/0024-local-frontend-against-a-deployed-backend.md)):
 
 ```sh
-AWZY_BACKEND=https://demo.awzysecurity.com VITE_AWZY_CLIENT_ID=awzy-client-portal-dev pnpm dev
+AWZY_BACKEND=https://aws.demo.awzysecurity.com VITE_AWZY_CLIENT_ID=awzy-client-portal-dev pnpm dev
 ```
 
 Vite proxies `/graphql` and `/auth/config` there, so the browser sees one origin and the deployed

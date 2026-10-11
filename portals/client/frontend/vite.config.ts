@@ -27,7 +27,7 @@ const https = existsSync(new URL("localhost.pem", certs))
 
 // The backend the dev server proxies to. Default: `bazel run //portals/client/backend:awzy-client-portal`
 // on :8080. Point it at a deployed portal to run this frontend against real data (ADR 0024):
-//   AWZY_BACKEND=https://demo.awzysecurity.com VITE_AWZY_CLIENT_ID=awzy-client-portal-dev pnpm dev
+//   AWZY_BACKEND=https://aws.demo.awzysecurity.com VITE_AWZY_CLIENT_ID=awzy-client-portal-dev pnpm dev
 export default defineConfig(({ mode }) => {
   const backend = loadEnv(mode, ".", "AWZY_").AWZY_BACKEND ?? "http://localhost:8080";
   // changeOrigin: the deployed backend sees its own Host header, as it would behind its ingress.

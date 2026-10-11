@@ -34,6 +34,50 @@ pub struct Heartbeat {
     /// until when. Nothing else of it: not its areas, its reason, or who decided.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub support_sessions: Vec<SupportSessionState>,
+    /// Whether the install runs the release its channel names, as Argo CD sees it: so awzy sees a
+    /// release that can't install anywhere, not only where someone looks. Absent when the reporter
+    /// can't read it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release: Option<ReleaseState>,
+}
+
+/// The release's state, in closed values only: nothing of Argo CD's messages leaves the install.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReleaseState {
+    pub sync: ReleaseSync,
+    pub health: ReleaseHealth,
+    /// Why the release isn't moving, when Argo CD says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked_by: Option<ReleaseBlocker>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReleaseSync {
+    Synced,
+    OutOfSync,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReleaseHealth {
+    Healthy,
+    Progressing,
+    Degraded,
+    Suspended,
+    Missing,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReleaseBlocker {
+    /// The release needs a newer bootstrap than the install has (ADR 0098): the client applies it.
+    BootstrapTooOld,
+    /// Syncing it fails: an object the API server refuses, or a hook that fails. awzy's to fix.
+    SyncError,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -315,6 +359,27 @@ mod tests {
         let h: Heartbeat = serde_json::from_value(v).map_err(|e| e.to_string())?;
         h.validate(Utc::now()).map_err(|e| e.to_string())?;
         Ok(h)
+    }
+
+    #[test]
+    fn the_release_is_closed_values_and_reporters_without_it_are_still_read() {
+        assert_eq!(parse(sample()).unwrap().release, None);
+        let mut v = sample();
+        v["release"] = json!({ "sync": "out_of_sync", "health": "degraded", "blocked_by": "sync_error" });
+        let h = parse(v.clone()).unwrap();
+        assert_eq!(
+            h.release,
+            Some(ReleaseState {
+                sync: ReleaseSync::OutOfSync,
+                health: ReleaseHealth::Degraded,
+                blocked_by: Some(ReleaseBlocker::SyncError)
+            })
+        );
+        assert_eq!(serde_json::to_value(&h).unwrap()["release"], v["release"]);
+        v["release"]["message"] = json!("ValidatingAdmissionPolicy is invalid");
+        assert!(parse(v.clone()).is_err(), "no free text");
+        v["release"] = json!({ "sync": "half_synced", "health": "healthy" });
+        assert!(parse(v).is_err(), "only the known states");
     }
 
     #[test]

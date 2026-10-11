@@ -94,6 +94,20 @@ spec:
             matchLabels:
               app.kubernetes.io/part-of: awzy
     {{- end }}{{- end }}
+    {{- /* Older names for the client portal, which only redirect to it (below). */}}
+    {{- range $i, $host := .Values.ingress.redirectHostnames }}
+    - name: https-redirect-{{ $i }}
+      protocol: HTTPS
+      port: 443
+      hostname: {{ $host | quote }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: awzy-redirect-{{ $i }}-tls
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- end }}
 ---
 # Plain HTTP only redirects. cert-manager's ACME challenge routes match a longer path, so they
 # still win.
@@ -109,3 +123,20 @@ spec:
     - filters:
         - type: RequestRedirect
           requestRedirect: { scheme: https, statusCode: 301 }
+{{- range $i, $host := .Values.ingress.redirectHostnames }}
+---
+# {{ $host }} is an older name for {{ $.Values.ingress.hostname }}: everything on it redirects there.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: redirect-{{ $i }}
+  namespace: {{ $ops }}
+spec:
+  parentRefs:
+    - { name: awzy, sectionName: https-redirect-{{ $i }} }
+  hostnames: [{{ $host | quote }}]
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect: { hostname: {{ $.Values.ingress.hostname | quote }}, statusCode: 301 }
+{{- end }}

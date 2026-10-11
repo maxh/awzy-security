@@ -129,7 +129,7 @@ Two views start from the same `/metrics`, for different people.
 | **Who sees it** | awzy staff | Your team. awzy has no access |
 | **Where it lives** | awzy's own account | Your account, beside the install |
 | **How the data gets there** | awzy-reporter scrapes the pods, reduces them to a heartbeat, and sends it once a minute: the only thing that leaves your install | Your Prometheus scrapes every pod directly, at full resolution |
-| **What's in it** | A fixed summary: decisions per second, PDP p99, error rate, Kafka lag, ClickHouse disk use, the freshness ages, tool calls during PDP outages, and each service's version and replicas. Never data about your people, resources, decisions, or policies | Every series, per pod: the dashboard, the alerts, traces, and your cloud's metrics for Postgres, Kafka, and Valkey (CloudWatch on AWS) |
+| **What's in it** | A fixed summary: decisions per second, PDP p99, error rate, Kafka lag, ClickHouse disk use, the freshness ages, tool calls during PDP outages, each service's version and replicas, and whether the release synced and its health (Argo CD's states, never its messages). Never data about your people, resources, decisions, or policies | Every series, per pod: the dashboard, the alerts, traces, and your cloud's metrics for Postgres, Kafka, and Valkey (CloudWatch on AWS) |
 | **What it's for** | Seeing the fleet: which installs are healthy, how a release is rolling out, where support should look | Running your install: alerts that reach your on-call, and finding why something is slow |
 
 - **They agree.** The heartbeat's PDP p99 and the dashboard's come from the same histogram; the

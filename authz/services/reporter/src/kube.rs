@@ -1,9 +1,11 @@
 //! Reads the awzy workloads from the Kubernetes API: Deployments labelled
 //! `app.kubernetes.io/part-of=awzy`, the ClickHouse StatefulSets the Altinity operator makes, and
-//! their Pods. Read-only, and only in the namespaces the chart grants (a Role per namespace).
+//! their Pods. Read-only, and only in the namespaces the chart grants (a Role per namespace). Also
+//! the Argo CD Application that installs the release, when the chart grants reading it.
 //!
-//! Through `awzy_kube`, as the reporter's service account: three list calls.
+//! Through `awzy_kube`, as the reporter's service account: three list calls and one get.
 
+use awzy_heartbeat::{ReleaseBlocker, ReleaseHealth, ReleaseState, ReleaseSync};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
@@ -52,6 +54,12 @@ impl KubeApi {
         Ok(self.0.list(path, selector).await?)
     }
 
+    /// The release's sync and health, from the Argo CD Application `name` in `namespace`.
+    pub async fn release(&self, namespace: &str, name: &str) -> anyhow::Result<ReleaseState> {
+        let app = self.0.get(&format!("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/applications/{name}")).await?;
+        Ok(release_state(&app))
+    }
+
     /// awzy's Deployments and the ClickHouse StatefulSets in `namespace`.
     pub async fn workloads(&self, namespace: &str) -> anyhow::Result<Vec<Workload>> {
         let mut out: Vec<Workload> = Vec::new();
@@ -89,6 +97,47 @@ impl KubeApi {
         let clickhouse = self.list(&path, CLICKHOUSE).await?.into_iter().map(|p| pod(&p, "clickhouse".into()));
         Ok(awzy.chain(clickhouse).collect())
     }
+}
+
+/// An Argo CD Application's status as the heartbeat's closed values. Its messages stay here: they
+/// only decide which blocker, if any, to report.
+pub fn release_state(app: &Value) -> ReleaseState {
+    let status = &app["status"];
+    let sync = match status["sync"]["status"].as_str() {
+        Some("Synced") => ReleaseSync::Synced,
+        Some("OutOfSync") => ReleaseSync::OutOfSync,
+        _ => ReleaseSync::Unknown,
+    };
+    let health = match status["health"]["status"].as_str() {
+        Some("Healthy") => ReleaseHealth::Healthy,
+        Some("Progressing") => ReleaseHealth::Progressing,
+        Some("Degraded") => ReleaseHealth::Degraded,
+        Some("Suspended") => ReleaseHealth::Suspended,
+        Some("Missing") => ReleaseHealth::Missing,
+        _ => ReleaseHealth::Unknown,
+    };
+    let conditions = status["conditions"].as_array().map(Vec::as_slice).unwrap_or_default();
+    // A condition of `kind`, whose message (when `says` is given) contains it.
+    let has = |kind: &str, says: Option<&str>| {
+        conditions
+            .iter()
+            .any(|c| c["type"] == kind && says.is_none_or(|s| c["message"].as_str().is_some_and(|m| m.contains(s))))
+    };
+    // The chart refuses to render until bootstrap reaches its level (ADR 0098).
+    let waits_for_bootstrap = has("ComparisonError", Some("needs bootstrap level"));
+    let operation = &status["operationState"];
+    let sync_failing = matches!(operation["phase"].as_str(), Some("Failed" | "Error"))
+        || (operation["phase"] == "Running"
+            && operation["message"].as_str().is_some_and(|m| m.contains("completed unsuccessfully")))
+        || has("SyncError", None);
+    let blocked_by = if waits_for_bootstrap {
+        Some(ReleaseBlocker::BootstrapTooOld)
+    } else if sync_failing {
+        Some(ReleaseBlocker::SyncError)
+    } else {
+        None
+    };
+    ReleaseState { sync, health, blocked_by }
 }
 
 fn count(v: &Value) -> u32 {
@@ -130,6 +179,38 @@ fn tag_of(image: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_release_reports_its_state_and_why_it_is_stuck_but_no_message() {
+        use serde_json::json;
+        let synced = json!({ "status": { "sync": { "status": "Synced" }, "health": { "status": "Healthy" },
+            "operationState": { "phase": "Succeeded", "message": "successfully synced" } } });
+        assert_eq!(
+            release_state(&synced),
+            ReleaseState { sync: ReleaseSync::Synced, health: ReleaseHealth::Healthy, blocked_by: None }
+        );
+
+        // What the example install showed after #208: a sync retrying an object the API refused.
+        let refused = json!({ "status": { "sync": { "status": "OutOfSync" }, "health": { "status": "Degraded" },
+            "operationState": { "phase": "Running", "message": "one or more synchronization tasks completed unsuccessfully, reason: ValidatingAdmissionPolicy \"awzy-client-portal-repairs\" is invalid" } } });
+        assert_eq!(
+            release_state(&refused),
+            ReleaseState {
+                sync: ReleaseSync::OutOfSync,
+                health: ReleaseHealth::Degraded,
+                blocked_by: Some(ReleaseBlocker::SyncError)
+            }
+        );
+
+        let waiting = json!({ "status": { "sync": { "status": "Unknown" }, "health": { "status": "Healthy" },
+            "conditions": [{ "type": "ComparisonError", "message": "chart 0.1.0-gabc needs bootstrap level 3 or later, and this install's bootstrap is at 2" }] } });
+        assert_eq!(release_state(&waiting).blocked_by, Some(ReleaseBlocker::BootstrapTooOld));
+
+        assert_eq!(
+            release_state(&json!({})),
+            ReleaseState { sync: ReleaseSync::Unknown, health: ReleaseHealth::Unknown, blocked_by: None }
+        );
+    }
 
     #[test]
     fn parses_digests_and_tags() {
