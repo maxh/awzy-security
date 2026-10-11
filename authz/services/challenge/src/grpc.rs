@@ -13,9 +13,10 @@ use awzy_authz_proto::{
         FinishVerificationResponse, GetChallengeRequest, GetChallengeResponse, JustifyRequest, JustifyResponse,
         LiftRequest, LiftResponse, ListChallengesRequest, ListChallengesResponse, ListContainmentsRequest,
         ListContainmentsResponse, ListSecurityKeysRequest, ListSecurityKeysResponse, RemoveSecurityKeyRequest,
-        RemoveSecurityKeyResponse, ReportBreakGlassRequest, ReportBreakGlassResponse, ResetSecurityKeyRequest,
-        ResetSecurityKeyResponse, ResolveRequest, ResolveResponse, SecurityKey as WireKey, WatchChallengesRequest,
-        WatchChallengesResponse, WatchContainmentsRequest, WatchContainmentsResponse,
+        RemoveSecurityKeyResponse, ReportBreakGlassRequest, ReportBreakGlassResponse, RequestLiftRequest,
+        RequestLiftResponse, ResetSecurityKeyRequest, ResetSecurityKeyResponse, ResolveRequest, ResolveResponse,
+        SecurityKey as WireKey, WatchChallengesRequest, WatchChallengesResponse, WatchContainmentsRequest,
+        WatchContainmentsResponse,
     },
     challenges_from_wire, challenges_to_wire,
     prost_types::Timestamp,
@@ -117,6 +118,8 @@ impl Access {
             &self.answerers,
         ));
         rules.extend(group(&["Contain", "Lift"], &self.containers));
+        // Asking for a lift: the portal, for whoever signed in to it.
+        rules.extend(group(&["RequestLift"], &self.answerers));
         rules.extend(group(&["ReportBreakGlass"], &self.policies));
         PathGuard::new(self.verifier.clone(), rules)
     }
@@ -296,6 +299,22 @@ impl ChallengeService for Service {
             self.refresh_feed().await;
         }
         Ok(Response::new(ContainResponse { containment: Some(containment_to_wire(c)) }))
+    }
+
+    async fn request_lift(&self, req: Request<RequestLiftRequest>) -> Result<Response<RequestLiftResponse>, Status> {
+        let req = req.into_inner();
+        let requested_by = actor(req.requested_by_actor, "", "requested_by_actor")?;
+        let reason = req.reason.trim();
+        if reason.is_empty() {
+            return Err(Status::invalid_argument("reason is required"));
+        }
+        let c = self.store.containment(qid::<ContainmentId>(&req.containment_qid)?).await.map_err(status)?;
+        if c.lifted_at.is_some() {
+            return Err(Status::failed_precondition(format!("containment {} was already lifted", c.id)));
+        }
+        self.store.notify_lift_requested(&c, &requested_by, reason).await.map_err(status)?;
+        tracing::info!(containment_id = %c.id, requested_by = %requested_by, "lift requested");
+        Ok(Response::new(RequestLiftResponse { containment: Some(containment_to_wire(c)) }))
     }
 
     async fn lift(&self, req: Request<LiftRequest>) -> Result<Response<LiftResponse>, Status> {

@@ -27,6 +27,9 @@ service ChallengeService {
   // that mode returns the active containment.
   rpc Contain(ContainRequest) returns (ContainResponse);
   rpc Lift(LiftRequest) returns (LiftResponse);
+  // Asks for a containment to be lifted, for someone who administers challenges to decide: it
+  // lifts nothing. The security team is told.
+  rpc RequestLift(RequestLiftRequest) returns (RequestLiftResponse);
   // Newest first.
   rpc ListContainments(ListContainmentsRequest) returns (ListContainmentsResponse);
   // The active containments, for a PDP: the whole list on connect and on every change, and a
@@ -247,6 +250,19 @@ message LiftRequest {
   string reason = 3;
   // Who lifted it (ADR 0060).
   awzy.authz.v1.Actor lifted_by_actor = 4;
+}
+
+message RequestLiftRequest {
+  string containment_qid = 1;
+  // Who asks: a person, or an agent and the person it acts for.
+  awzy.authz.v1.Actor requested_by_actor = 2;
+  // Why it should be lifted.
+  string reason = 3;
+}
+
+message RequestLiftResponse {
+  // The containment, still in force.
+  Containment containment = 1;
 }
 
 message LiftResponse {

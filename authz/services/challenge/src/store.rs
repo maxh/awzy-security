@@ -531,6 +531,15 @@ impl ChallengeStore {
         Ok(result)
     }
 
+    pub async fn containment(&self, id: ContainmentId) -> Result<Containment, StoreError> {
+        let row = sqlx::query("SELECT * FROM containments WHERE id = $1")
+            .bind(id.uuid())
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or(StoreError::ContainmentNotFound(id))?;
+        Ok(containment_from_row(&row)?)
+    }
+
     pub async fn lift(&self, id: ContainmentId, lifted_by: &str, reason: &str) -> Result<Containment, StoreError> {
         if reason.trim().is_empty() || lifted_by.is_empty() {
             return Err(StoreError::Invalid("reason and lifted_by are required".into()));
