@@ -141,6 +141,12 @@ variable "demo_data" {
   default     = false
 }
 
+variable "demo_activity" {
+  description = "DEMO INSTALLS ONLY (ADR 0039): the synthetic company's everyday tool calls through awzy-gateway each weekday, so the demo has decisions. Needs demo_data, demo_idp, and mcp_gateway"
+  type        = bool
+  default     = false
+}
+
 variable "reporter" {
   description = "From registering the install in the corp portal (ADR 0026); null turns the reporter off"
   type = object({

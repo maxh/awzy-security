@@ -1,0 +1,71 @@
+{{- if and .Values.demoData.enabled .Values.demoData.activity.enabled }}
+{{- $sys := .Values.namespaces.system }}
+{{- $a := .Values.demoData.activity }}
+{{- if not (and .Values.demoIdp.enabled .Values.mcpGateway.enabled) }}
+{{- fail "demoData.activity needs demoIdp.enabled and mcpGateway.enabled" }}
+{{- end }}
+# DEMO INSTALLS ONLY (ADR 0039). larkspur-drive and larkspur-admin, the synthetic company's MCP
+# servers, behind awzy-gateway (ADR 0050, 0064).
+{{ include "awzy.service" (dict "root" . "name" "larkspur-drive" "image" "awzy-synthetic" "namespace" $sys
+  "values" (dict "replicas" 1 "resources" $a.resources)
+  "args" (list "drive")
+  "tokens" (list "awzy-context")
+  "env" (list
+    (dict "name" "AWZY_CONTEXT_URL" "value" (printf "http://awzy-context.%s.svc:8080" $sys))
+    (dict "name" "AWZY_LISTEN_ADDR" "value" "0.0.0.0:8080")
+  )) }}
+---
+# Only awzy-gateway calls it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: larkspur-drive
+  namespace: {{ $sys }}
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/name: larkspur-drive } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ podSelector: { matchLabels: { app.kubernetes.io/name: awzy-gateway } } }]
+---
+# A generated workday of the company's tool calls through awzy-gateway, scenarios included, so
+# the portal has decisions to show. Tokens are signed as the demo IdP, which the gateway trusts.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: awzy-activity
+  namespace: {{ $sys }}
+spec:
+  schedule: {{ $a.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: awzy
+          {{- with .Values.image.pullSecret }}
+          imagePullSecrets: [{ name: {{ . }} }]
+          {{- end }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: activity
+              image: {{ include "awzy.image" (dict "root" . "name" "awzy-synthetic") }}
+              args: [activity, --profile, {{ .Values.demoData.profile | quote }}, --seed, {{ .Values.demoData.seed | quote }}, --rate, {{ $a.rate | quote }}]
+              env:
+                - { name: AWZY_GATEWAY_URL, value: "http://awzy-gateway.{{ $sys }}.svc:8080" }
+                - { name: AWZY_DEV_IDP_ISSUER, value: {{ include "awzy.demoIdpIssuer" . | quote }} }
+                - { name: AWZY_TOKEN_AUDIENCE, value: {{ .Values.mcpGateway.auth.audience | quote }} }
+                - { name: AWZY_LOG_FORMAT, value: {{ .Values.logFormat | quote }} }
+              resources: {{- toYaml $a.resources | nindent 16 }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+{{- end }}

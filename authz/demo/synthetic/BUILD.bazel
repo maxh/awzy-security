@@ -13,7 +13,9 @@ awzy_service(
     visibility = ["//tools:demo_only"],
     deps = [
         "//authz/libs/service-auth",
+        "//libs/server",
         "//libs/telemetry",
+        "//tools/dev-idp",
     ],
     # The tests score awzy-classify against the generator's ground truth (ADR 0047), and run the
     # scenarios end to end through awzy-context, the PDP, awzy-challenge, and awzy-gateway, with

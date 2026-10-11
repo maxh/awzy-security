@@ -12,7 +12,8 @@
 //! operations, at `/admin/mcp`, for awzy-gateway to front (ADR 0050, 0064).
 //! `activity` makes the company's everyday tool calls on both through the gateway at
 //! AWZY_GATEWAY_URL, `--rate` per second (default 5) for `--days` generated days (default 1),
-//! with tokens signed by the gateway's development secret in AWZY_GATEWAY_DEV_SECRET. The first
+//! with tokens signed by the gateway's development secret in AWZY_GATEWAY_DEV_SECRET, or, on the
+//! demo install, as the dev IdP whose issuer is AWZY_DEV_IDP_ISSUER (ADR 0032). The first
 //! day includes the demo plan's scenarios (`--no-scenarios` leaves them out), and the run reports
 //! how many awzy caught and how much ordinary work it challenged. With AWZY_INTAKE_URL and
 //! AWZY_INTAKE_TOKEN, the scenarios' attempts to move data out go to awzy-intake as they happen.
@@ -38,12 +39,13 @@ async fn main() -> anyhow::Result<()> {
     let command = args.first().map(String::as_str).unwrap_or_default();
     let url = std::env::var("AWZY_CONTEXT_URL").unwrap_or_else(|_| "http://127.0.0.1:8084".into());
     if command == "drive" {
-        let addr = std::env::var("AWZY_LISTEN_ADDR").unwrap_or_else(|_| "127.0.0.1:8095".into());
-        let listener = tokio::net::TcpListener::bind(&addr).await?;
-        tracing::info!(%addr, context = %url, "larkspur-drive serving MCP at /mcp, larkspur-admin at /admin/mcp");
+        if std::env::var("AWZY_LISTEN_ADDR").is_err() {
+            std::env::set_var("AWZY_LISTEN_ADDR", "127.0.0.1:8095");
+        }
+        tracing::info!(context = %url, "larkspur-drive serving MCP at /mcp, larkspur-admin at /admin/mcp");
         let app = awzy_synthetic::drive::router(ContextClient::new(&url, "")).merge(awzy_synthetic::admin::router());
-        axum::serve(listener, app).await?;
-        return Ok(());
+        // With the health routes, so an install can run it as a service.
+        return awzy_server::serve("larkspur-drive", app).await;
     }
     let (directory, world) = match command {
         "activity" => return activity(&args).await,
@@ -98,14 +100,16 @@ async fn activity(args: &[String]) -> anyhow::Result<()> {
 
     let env = |k: &str, default: &str| std::env::var(k).unwrap_or_else(|_| default.to_string());
     let gateway = std::env::var("AWZY_GATEWAY_URL").context("AWZY_GATEWAY_URL is not set")?;
-    let secret = std::env::var("AWZY_GATEWAY_DEV_SECRET").context("AWZY_GATEWAY_DEV_SECRET is not set")?;
     let endpoint = format!("{}/mcp", gateway.trim_end_matches('/'));
-    let driver = Driver::new(
-        &endpoint,
-        secret.as_bytes(),
-        &env("AWZY_TOKEN_ISSUER", "https://idp.local"),
-        &env("AWZY_TOKEN_AUDIENCE", "awzy-gateway"),
-    );
+    let audience = env("AWZY_TOKEN_AUDIENCE", "awzy-gateway");
+    // The demo install's gateway trusts its dev IdP; the local stack's, a shared secret.
+    let driver = match (std::env::var("AWZY_GATEWAY_DEV_SECRET"), std::env::var("AWZY_DEV_IDP_ISSUER")) {
+        (Ok(secret), _) => {
+            Driver::new(&endpoint, secret.as_bytes(), &env("AWZY_TOKEN_ISSUER", "https://idp.local"), &audience)
+        }
+        (Err(_), Ok(issuer)) => Driver::signed_by_dev_idp(&endpoint, &issuer, &audience),
+        _ => bail!("set AWZY_GATEWAY_DEV_SECRET, or AWZY_DEV_IDP_ISSUER to sign as the dev IdP"),
+    };
 
     let with_scenarios = !args.iter().any(|a| a == "--no-scenarios");
 

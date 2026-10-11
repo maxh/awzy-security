@@ -19,6 +19,8 @@ serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+awzy-dev-idp.workspace = true
+awzy-server.workspace = true
 awzy-telemetry.workspace = true
 
 awzy-service-auth.workspace = true

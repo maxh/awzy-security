@@ -92,7 +92,11 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: {{ .name }}
-          image: {{ include "awzy.image" . }}
+          {{- /* `image`: another binary's image, e.g. larkspur-drive runs awzy-synthetic's. */}}
+          image: {{ include "awzy.image" (dict "root" $root "name" (.image | default .name)) }}
+          {{- with .args }}
+          args: {{ toJson . }}
+          {{- end }}
           ports:
             - { name: http, containerPort: 8080 }
           env:
