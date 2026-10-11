@@ -9,6 +9,12 @@ async fn main() -> anyhow::Result<()> {
         .with_user(env("AWZY_CLICKHOUSE_USER")?)
         .with_password(env("AWZY_CLICKHOUSE_PASSWORD")?);
     let database = env("AWZY_CLICKHOUSE_DATABASE")?;
+    // `repair disk-cleanup`: a repair the client portal started (ADR 0102), not a migration.
+    if std::env::args().skip(1).collect::<Vec<_>>() == ["repair", "disk-cleanup"] {
+        let done = awzy_clickhouse::repair::disk_cleanup(&server.with_database(&database)).await?;
+        tracing::info!(detached_parts = done.detached_parts, system_logs = ?done.system_logs, ttls = ?done.ttls_applied, "disk cleanup done");
+        return Ok(());
+    }
     // A new install's ClickHouse has no database yet (the local stack's image makes one).
     server.query(&format!("CREATE DATABASE IF NOT EXISTS {database}")).execute().await?;
     let client = server.with_database(&database);

@@ -27,6 +27,10 @@
 {{- if .Values.reporter.enabled }}
 {{- $env = append $env (dict "name" "AWZY_REPORTER_ADDR" "value" (printf "http://awzy-reporter.%s.svc:8080" $sys)) }}
 {{- end }}
+{{- /* Where the repairs a client admin can start live (ADR 0102); without it, none can. */ -}}
+{{- if .Values.clickhouse.enabled }}
+{{- $env = append $env (dict "name" "AWZY_PORTAL_REPAIRS_NAMESPACE" "value" .Values.namespaces.data) }}
+{{- end }}
 {{- if $p.publicUrl }}
 {{- $env = append $env (dict "name" "AWZY_PORTAL_PUBLIC_URL" "value" $p.publicUrl) }}
 {{- end }}

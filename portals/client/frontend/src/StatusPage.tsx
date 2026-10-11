@@ -13,6 +13,7 @@ import {
 } from "react-relay";
 
 import { prettyJson, Time } from "./format";
+import { Repairs } from "./Repairs";
 import type { StatusPage_heartbeatExport$key } from "./__generated__/StatusPage_heartbeatExport.graphql";
 import type { StatusPageDiagnosticsQuery } from "./__generated__/StatusPageDiagnosticsQuery.graphql";
 import type { StatusPageQuery } from "./__generated__/StatusPageQuery.graphql";
@@ -120,6 +121,11 @@ function Status({ queryRef, onRefresh }: { queryRef: PreloadedQuery<StatusPageQu
         )}
       </Section>
       <HeartbeatExport heartbeatExport={data.heartbeatExport} />
+      {data.canGenerateDiagnostics && (
+        <Suspense fallback={<PageLoader />}>
+          <Repairs />
+        </Suspense>
+      )}
       {data.canGenerateDiagnostics && <Diagnostics />}
     </>
   );
