@@ -60,7 +60,7 @@ fn probe_entities(resource: &str, folder: &str) -> Vec<Entity> {
 
 fn probe_check(resource: &str, folder: &str) -> CheckRequest {
     CheckRequest {
-        subject: Some(r("Human", PROBE)),
+        principal: Some(r("Human", PROBE)),
         action: "read".into(),
         resource: Some(r("Resource", resource)),
         entities: probe_entities(resource, folder),
@@ -214,7 +214,7 @@ fn background(
                 while !*stop.borrow() {
                     let human = if i % 2 == 0 { "alice" } else { "bob" };
                     let req = CheckRequest {
-                        subject: Some(r("Human", human)),
+                        principal: Some(r("Human", human)),
                         action: "read".into(),
                         resource: Some(r("Resource", &format!("load:{}", i % 50))),
                         entities: vec![Entity {
@@ -390,7 +390,7 @@ async fn main() -> anyhow::Result<()> {
             let since = Instant::now();
             let c = challenge
                 .contain(ContainRequest {
-                    subject: Some(r("Human", PROBE)),
+                    principal: Some(r("Human", PROBE)),
                     reason: "freshness measurement".into(),
                     created_by_actor: Some(me()),
                     ..Default::default()
@@ -426,7 +426,7 @@ async fn main() -> anyhow::Result<()> {
         // 5. A resource attribute: the probe document relabeled in awzy-context. The PDP loads it
         // by ID, with no inline entity, through its resource cache (ADR 0044).
         let labeled = CheckRequest {
-            subject: Some(r("Human", PROBE)),
+            principal: Some(r("Human", PROBE)),
             action: "read".into(),
             resource: Some(r("Resource", "freshness:labeled")),
             human_present: Some(true),

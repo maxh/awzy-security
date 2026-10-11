@@ -125,8 +125,8 @@ impl Challenge {
         &self.0.decision_qid
     }
 
-    async fn subject(&self) -> Option<EntityRef> {
-        entity(&self.0.subject)
+    async fn principal(&self) -> Option<EntityRef> {
+        entity(&self.0.principal)
     }
 
     /// Set when a service account acted for a person.
@@ -207,8 +207,8 @@ impl Containment {
         ID(self.0.qid.clone())
     }
 
-    async fn subject(&self) -> Option<EntityRef> {
-        entity(&self.0.subject)
+    async fn principal(&self) -> Option<EntityRef> {
+        entity(&self.0.principal)
     }
 
     async fn reason(&self) -> &str {
@@ -296,7 +296,7 @@ impl ChallengeQuery {
     ) -> Result<Vec<Containment>> {
         require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
         let req =
-            ListContainmentsRequest { active_only, subject: None, limit: self::first(first), include_monitor: true };
+            ListContainmentsRequest { active_only, principal: None, limit: self::first(first), include_monitor: true };
         let list = client(ctx)?.list_containments(req).await.map_err(grpc)?.into_inner().containments;
         Ok(list.into_iter().map(Containment).collect())
     }
@@ -346,7 +346,7 @@ pub struct EntityRefInput {
 
 #[derive(InputObject)]
 pub struct ContainPrincipalInput {
-    pub subject: EntityRefInput,
+    pub principal: EntityRefInput,
     pub reason: String,
 }
 
@@ -407,7 +407,10 @@ impl ChallengeMutation {
     async fn contain_principal(&self, ctx: &Context<'_>, input: ContainPrincipalInput) -> Result<ContainmentPayload> {
         let viewer = require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
         let req = ContainRequest {
-            subject: Some(awzy_authz_proto::authz::v1::EntityRef { r#type: input.subject.kind, id: input.subject.id }),
+            principal: Some(awzy_authz_proto::authz::v1::EntityRef {
+                r#type: input.principal.kind,
+                id: input.principal.id,
+            }),
             reason: input.reason,
             created_by_actor: Some(viewer.actor().into()),
             ..Default::default()
@@ -482,7 +485,7 @@ mod tests {
     async fn open(client: &mut ChallengeClient, who: &str, kind: WireKind) -> String {
         let req = ResolveRequest {
             decision_qid: awzy_model::DecisionId::new().to_string(),
-            subject: Some(awzy_authz_proto::authz::v1::EntityRef { r#type: "Human".into(), id: who.into() }),
+            principal: Some(awzy_authz_proto::authz::v1::EntityRef { r#type: "Human".into(), id: who.into() }),
             on_behalf_of: None,
             action: "read".into(),
             resource: Some(awzy_authz_proto::authz::v1::EntityRef {
@@ -532,8 +535,8 @@ mod tests {
             (human("bob", "engineering"), human("carol", "engineering"), human("alice", "security"));
 
         assert!(run_err(&schema, &bob, "{ challenges { id } }").await.contains("may not administer challenges"));
-        let pending = run(&schema, &alice, "{ challenges(status: PENDING) { id subject { id } } }").await;
-        assert_eq!(pending["challenges"], json!([{ "id": id, "subject": { "id": "bob" } }]));
+        let pending = run(&schema, &alice, "{ challenges(status: PENDING) { id principal { id } } }").await;
+        assert_eq!(pending["challenges"], json!([{ "id": id, "principal": { "id": "bob" } }]));
 
         let decide = format!(
             r#"mutation {{ decideChallenge(input: {{ challengeQid: "{id}", approve: true, note: "ok" }}) {{ challenge {{ status decidedBy {{ id }} }} }} }}"#
@@ -546,15 +549,15 @@ mod tests {
             json!({ "status": "PASSED", "decidedBy": { "id": "alice" } })
         );
 
-        let contain = r#"mutation { containPrincipal(input: { subject: { type: "ServiceAccount", id: "sales-genie" },
+        let contain = r#"mutation { containPrincipal(input: { principal: { type: "ServiceAccount", id: "sales-genie" },
             reason: "bulk export of the pipeline" }) { containment { id createdBy { type id } liftedAt } } }"#;
         assert!(run_err(&schema, &bob, contain).await.contains("may not administer challenges"));
         let c = run(&schema, &alice, contain).await["containPrincipal"]["containment"].clone();
         assert_eq!((&c["createdBy"], &c["liftedAt"]), (&json!({ "type": "Human", "id": "alice" }), &json!(null)));
-        let active = run(&schema, &alice, "{ containments { id subject { type id } } }").await;
+        let active = run(&schema, &alice, "{ containments { id principal { type id } } }").await;
         assert_eq!(
             active["containments"],
-            json!([{ "id": c["id"], "subject": { "type": "ServiceAccount", "id": "sales-genie" } }])
+            json!([{ "id": c["id"], "principal": { "type": "ServiceAccount", "id": "sales-genie" } }])
         );
 
         let lift = format!(

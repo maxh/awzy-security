@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<51e83e56d41b5b5a99834fdaf0bfb9a8>>
+ * @generated SignedSource<<b40b841d54da0a188b65abafb21dbbf5>>
  * @lightSyntaxTransform
  */
 
@@ -13,9 +13,9 @@ export type EnforcementMode = "ENFORCE" | "MONITOR" | "%future added value";
 export type Verdict = "ALLOW" | "CHALLENGE" | "DENY" | "%future added value";
 export type DecisionFilter = {
   mode?: EnforcementMode | null | undefined;
+  principalId?: string | null | undefined;
   resourceId?: string | null | undefined;
   since?: string | null | undefined;
-  subjectId?: string | null | undefined;
   verdict?: Verdict | null | undefined;
 };
 export type DecisionsPageQuery$variables = {
@@ -128,7 +128,7 @@ return {
                     "args": null,
                     "concreteType": "EntityRef",
                     "kind": "LinkedField",
-                    "name": "subject",
+                    "name": "principal",
                     "plural": false,
                     "selections": (v4/*:: as any*/),
                     "storageKey": null
@@ -261,12 +261,12 @@ return {
     ]
   },
   "params": {
-    "cacheID": "a16f3697a7766a6f45a0c761a5dfa67d",
+    "cacheID": "ca61b032e1c00e628816acf8f2c901e8",
     "id": null,
     "metadata": {},
     "name": "DecisionsPageQuery",
     "operationKind": "query",
-    "text": "query DecisionsPageQuery(\n  $filter: DecisionFilter\n) {\n  ...DecisionsPage_decisions_Vt7Yj\n}\n\nfragment DecisionsPage_decisions_Vt7Yj on Query {\n  decisions(filter: $filter, first: 50) {\n    edges {\n      node {\n        id\n        at\n        subject {\n          type\n          id\n        }\n        onBehalfOf {\n          human {\n            type\n            id\n          }\n        }\n        action\n        resource {\n          type\n          id\n        }\n        verdict\n        mode\n        challenges\n        policies\n        __typename\n      }\n      cursor\n    }\n    pageInfo {\n      endCursor\n      hasNextPage\n    }\n  }\n}\n"
+    "text": "query DecisionsPageQuery(\n  $filter: DecisionFilter\n) {\n  ...DecisionsPage_decisions_Vt7Yj\n}\n\nfragment DecisionsPage_decisions_Vt7Yj on Query {\n  decisions(filter: $filter, first: 50) {\n    edges {\n      node {\n        id\n        at\n        principal {\n          type\n          id\n        }\n        onBehalfOf {\n          human {\n            type\n            id\n          }\n        }\n        action\n        resource {\n          type\n          id\n        }\n        verdict\n        mode\n        challenges\n        policies\n        __typename\n      }\n      cursor\n    }\n    pageInfo {\n      endCursor\n      hasNextPage\n    }\n  }\n}\n"
   }
 };
 })();

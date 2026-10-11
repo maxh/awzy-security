@@ -4,7 +4,7 @@
 //! Unlike the PDP's decision log, which drops records rather than slow a decision, intake
 //! answers only after Kafka has every event in the request: a log shipper retries on an error,
 //! so nothing is lost when Kafka is down, at the cost of occasional duplicates. Events are
-//! partitioned by subject so one principal's events stay in order.
+//! partitioned by principal so one principal's events stay in order.
 
 use std::{collections::BTreeMap, time::Duration};
 
@@ -82,7 +82,7 @@ impl EventLog {
 
 fn to_kafka(e: &EventRecord) -> Record {
     Record {
-        key: Some(e.subject_id.clone().into_bytes()),
+        key: Some(e.principal_id.clone().into_bytes()),
         value: Some(serde_json::to_vec(e).expect("EventRecord serializes")),
         headers: BTreeMap::new(),
         timestamp: e.at,
@@ -92,7 +92,7 @@ fn to_kafka(e: &EventRecord) -> Record {
 /// Stable across processes and releases (FNV-1a), unlike std's hasher.
 fn partition_for(e: &EventRecord, partitions: usize) -> usize {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in e.subject_type.bytes().chain([0]).chain(e.subject_id.bytes()) {
+    for b in e.principal_type.bytes().chain([0]).chain(e.principal_id.bytes()) {
         hash = (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
     }
     (hash % partitions as u64) as usize
@@ -103,7 +103,7 @@ pub(crate) mod tests {
     use super::*;
     use awzy_model::EventId;
 
-    pub(crate) fn event(subject: &str) -> EventRecord {
+    pub(crate) fn event(principal: &str) -> EventRecord {
         let now = chrono::Utc::now();
         EventRecord {
             id: EventId::new(),
@@ -111,8 +111,8 @@ pub(crate) mod tests {
             received_at: now,
             source: "app".into(),
             system: "jira".into(),
-            subject_type: "Human".into(),
-            subject_id: subject.into(),
+            principal_type: "Human".into(),
+            principal_id: principal.into(),
             on_behalf_of_type: String::new(),
             on_behalf_of_id: String::new(),
             action: "read".into(),
@@ -125,7 +125,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn one_subjects_events_share_a_partition() {
+    fn one_principals_events_share_a_partition() {
         let a = partition_for(&event("alice"), 6);
         assert_eq!(a, partition_for(&event("alice"), 6));
         assert!(a < 6);

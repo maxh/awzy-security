@@ -16,7 +16,7 @@ pub const MAX_BATCH: usize = 10_000;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct RiskInput {
-    pub subject: EntityRef,
+    pub principal: EntityRef,
     pub score: i32,
     #[serde(default)]
     pub reasons: Vec<String>,
@@ -24,14 +24,14 @@ pub struct RiskInput {
 
 impl RiskInput {
     fn validate(&self) -> Result<(), String> {
-        if ![entity_type::HUMAN, entity_type::SERVICE_ACCOUNT].contains(&self.subject.kind.as_str()) {
-            return Err(format!("{}: only people and service accounts have risk scores", self.subject.kind));
+        if ![entity_type::HUMAN, entity_type::SERVICE_ACCOUNT].contains(&self.principal.kind.as_str()) {
+            return Err(format!("{}: only people and service accounts have risk scores", self.principal.kind));
         }
-        if self.subject.id.trim().is_empty() || self.subject.id.len() > 256 {
-            return Err("subject.id is 1 to 256 characters".into());
+        if self.principal.id.trim().is_empty() || self.principal.id.len() > 256 {
+            return Err("principal.id is 1 to 256 characters".into());
         }
         if !(0..=100).contains(&self.score) {
-            return Err(format!("{}: score is 0 to 100, not {}", self.subject.id, self.score));
+            return Err(format!("{}: score is 0 to 100, not {}", self.principal.id, self.score));
         }
         Ok(())
     }
@@ -48,13 +48,13 @@ impl ContextStore {
         let mut tx = self.pool().begin().await?;
         for r in scores {
             sqlx::query(
-                "INSERT INTO risk_scores (subject_type, subject_id, score, reasons, computed_at)
+                "INSERT INTO risk_scores (principal_type, principal_id, score, reasons, computed_at)
                  VALUES ($1, $2, $3, $4, now())
-                 ON CONFLICT (subject_type, subject_id)
+                 ON CONFLICT (principal_type, principal_id)
                  DO UPDATE SET score = $3, reasons = $4, computed_at = now()",
             )
-            .bind(&r.subject.kind)
-            .bind(&r.subject.id)
+            .bind(&r.principal.kind)
+            .bind(&r.principal.id)
             .bind(r.score)
             .bind(sqlx::types::Json(&r.reasons))
             .execute(&mut *tx)
@@ -68,7 +68,9 @@ impl ContextStore {
     /// Every score, keyed `Type::id`, as the snapshot carries them.
     pub async fn risk_scores(&self) -> Result<serde_json::Map<String, Value>, sqlx::Error> {
         let rows: Vec<(String, String, i32)> =
-            sqlx::query_as("SELECT subject_type, subject_id, score FROM risk_scores").fetch_all(self.pool()).await?;
+            sqlx::query_as("SELECT principal_type, principal_id, score FROM risk_scores")
+                .fetch_all(self.pool())
+                .await?;
         Ok(rows.into_iter().map(|(t, id, score)| (format!("{t}::{id}"), json!(score))).collect())
     }
 }
@@ -100,7 +102,7 @@ mod tests {
     use crate::store::tests::test_store;
 
     fn score(kind: &str, id: &str, score: i32) -> RiskInput {
-        RiskInput { subject: EntityRef::new(kind, id), score, reasons: vec!["test".into()] }
+        RiskInput { principal: EntityRef::new(kind, id), score, reasons: vec!["test".into()] }
     }
 
     #[test]

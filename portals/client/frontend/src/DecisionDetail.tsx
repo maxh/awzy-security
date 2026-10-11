@@ -31,7 +31,7 @@ function DecisionView({ decision }: { decision: DecisionDetail_decision$key }) {
       fragment DecisionDetail_decision on Decision {
         id
         at
-        subject {
+        principal {
           type
           id
         }
@@ -76,7 +76,7 @@ function DecisionView({ decision }: { decision: DecisionDetail_decision$key }) {
       </Group>
 
       <Stack gap={6}>
-        <Field label="Subject" value={entityLabel(d.subject)} />
+        <Field label="Principal" value={entityLabel(d.principal)} />
         {d.onBehalfOf && <Field label="Acting for" value={entityLabel(d.onBehalfOf.human)} />}
         <Field label="Person present" value={d.humanPresent ? "yes" : "no"} />
         <Field label="Action" value={d.action} />
@@ -96,7 +96,7 @@ function DecisionView({ decision }: { decision: DecisionDetail_decision$key }) {
       </Stack>
 
       <Stack gap={6}>
-        <Heading>Why{d.onBehalfOf ? ` (${entityLabel(d.subject)})` : ""}</Heading>
+        <Heading>Why{d.onBehalfOf ? ` (${entityLabel(d.principal)})` : ""}</Heading>
         <PolicyList policies={d.determiningPolicies} />
       </Stack>
 

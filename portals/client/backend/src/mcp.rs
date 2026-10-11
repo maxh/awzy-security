@@ -65,8 +65,8 @@ pub fn router(services: Services, allowed_hosts: Vec<String>) -> Router {
 #[derive(Deserialize, JsonSchema, Default)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct SearchDecisionsParams {
-    /// Only decisions whose subject (user or agent) has this ID, e.g. "alice".
-    pub subject_id: Option<String>,
+    /// Only decisions whose principal (user or agent) has this ID, e.g. "alice".
+    pub principal_id: Option<String>,
     /// Only decisions on the resource with this ID.
     pub resource_id: Option<String>,
     pub verdict: Option<Verdict>,
@@ -126,7 +126,7 @@ pub struct DecisionSummary {
     /// RFC 3339, UTC.
     pub at: String,
     /// `Type::id`, e.g. `Human::alice` or `ServiceAccount::sales-genie`.
-    pub subject: String,
+    pub principal: String,
     /// The person a service account acted for, if the request was delegated.
     pub on_behalf_of: Option<String>,
     /// Whether a person was there to answer a challenge.
@@ -140,7 +140,7 @@ pub struct DecisionSummary {
     pub mode: String,
     /// Every challenge required, when the verdict is challenge.
     pub challenges: Vec<String>,
-    /// IDs of the policies that determined the subject's own check.
+    /// IDs of the policies that determined the principal's own check.
     pub policies: Vec<String>,
     /// For a delegated request: the person's own check (allow, deny, or challenge).
     pub on_behalf_of_verdict: Option<String>,
@@ -171,7 +171,7 @@ pub struct Explanation {
     pub context: String,
     /// One sentence on why the verdict came out as it did.
     pub summary: String,
-    /// Policies that determined the subject's own check.
+    /// Policies that determined the principal's own check.
     pub determining_policies: Vec<PolicySourceOut>,
     /// For a delegated request: policies that determined the person's own check.
     pub on_behalf_of_policies: Vec<PolicySourceOut>,
@@ -251,7 +251,7 @@ pub struct GetInvestigationParams {
 #[derive(Serialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct InvestigationList {
-    /// Each with its subject, verdict, risk, summary, cited evidence, containment, and status.
+    /// Each with its principal, verdict, risk, summary, cited evidence, containment, and status.
     pub investigations: Vec<serde_json::Value>,
 }
 
@@ -284,7 +284,7 @@ impl ClientPortalMcp {
 
     #[tool(
         name = "get_investigation",
-        description = "One investigation by its QID: its subject, why it was opened, the verdict, risk, summary, the evidence it cited, what awzy's checks changed, and whether a person has closed it. Read-only."
+        description = "One investigation by its QID: its principal, why it was opened, the verdict, risk, summary, the evidence it cited, what awzy's checks changed, and whether a person has closed it. Read-only."
     )]
     async fn get_investigation(
         &self,
@@ -298,7 +298,7 @@ impl ClientPortalMcp {
 
     #[tool(
         name = "search_decisions",
-        description = "Search authorization decisions, newest first. Filter by subject, resource, verdict, and time (last 24 hours by default, at most 30 days)."
+        description = "Search authorization decisions, newest first. Filter by principal, resource, verdict, and time (last 24 hours by default, at most 30 days)."
     )]
     async fn search_decisions(
         &self,
@@ -310,7 +310,7 @@ impl ClientPortalMcp {
         let page = decisions::search(
             self.clickhouse()?,
             SearchParams {
-                subject_id: p.subject_id,
+                principal_id: p.principal_id,
                 resource_id: p.resource_id,
                 verdict: p.verdict,
                 mode: p.mode.map(Into::into),
@@ -523,7 +523,7 @@ pub(crate) fn summary_of(row: &DecisionRow) -> DecisionSummary {
     DecisionSummary {
         id: DecisionId::from_uuid(row.id).to_string(),
         at: rfc3339(row.at),
-        subject: format!("{}::{}", row.subject_type, row.subject_id),
+        principal: format!("{}::{}", row.principal_type, row.principal_id),
         on_behalf_of: (!row.on_behalf_of_id.is_empty())
             .then(|| format!("{}::{}", row.on_behalf_of_type, row.on_behalf_of_id)),
         human_present: row.human_present,
@@ -632,8 +632,8 @@ mod tests {
         let row = DecisionRow {
             id: uuid::Uuid::now_v7(),
             at: chrono::Utc::now(),
-            subject_type: "ServiceAccount".into(),
-            subject_id: "ops-bot".into(),
+            principal_type: "ServiceAccount".into(),
+            principal_id: "ops-bot".into(),
             on_behalf_of_type: "Human".into(),
             on_behalf_of_id: "bob".into(),
             human_present: true,

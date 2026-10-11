@@ -26,7 +26,7 @@ pub const MIN_JUSTIFICATION_CHARS: usize = 20;
 /// passed challenge covers exactly this request and nothing else.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequestKey {
-    pub subject: EntityRef,
+    pub principal: EntityRef,
     pub on_behalf_of: Option<EntityRef>,
     pub action: String,
     pub resource: EntityRef,
@@ -88,7 +88,7 @@ impl Challenge {
     fn parties(&self) -> impl Iterator<Item = EntityRef> + '_ {
         let r = &self.request;
         let human = |id: &str| EntityRef::new(awzy_model::entity_type::HUMAN, id);
-        std::iter::once(r.subject.clone()).chain(r.on_behalf_of.clone()).chain(self.answerer_id.as_deref().map(human))
+        std::iter::once(r.principal.clone()).chain(r.on_behalf_of.clone()).chain(self.answerer_id.as_deref().map(human))
     }
 
     fn ensure_answerable(&self, kind: ChallengeKind) -> Result<(), StoreError> {
@@ -121,7 +121,7 @@ pub struct Resolution {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Containment {
     pub id: ContainmentId,
-    pub subject: EntityRef,
+    pub principal: EntityRef,
     pub reason: String,
     pub created_by: String,
     pub created_at: DateTime<Utc>,
@@ -178,7 +178,7 @@ pub enum StoreError {
 }
 
 /// Matches one request's rows; binds $1..$7 in [`bind_request`] order.
-const REQUEST_MATCH: &str = "subject_type = $1 AND subject_id = $2 AND on_behalf_of_type = $3 \
+const REQUEST_MATCH: &str = "principal_type = $1 AND principal_id = $2 AND on_behalf_of_type = $3 \
     AND on_behalf_of_id = $4 AND action = $5 AND resource_type = $6 AND resource_id = $7";
 
 fn bind_request<'q>(
@@ -186,8 +186,8 @@ fn bind_request<'q>(
     r: &'q RequestKey,
 ) -> sqlx::query::Query<'q, Postgres, sqlx::postgres::PgArguments> {
     let (obo_type, obo_id) = r.on_behalf_of.as_ref().map_or(("", ""), |h| (h.kind.as_str(), h.id.as_str()));
-    q.bind(&r.subject.kind)
-        .bind(&r.subject.id)
+    q.bind(&r.principal.kind)
+        .bind(&r.principal.id)
         .bind(obo_type)
         .bind(obo_id)
         .bind(&r.action)
@@ -255,10 +255,10 @@ impl ChallengeStore {
                  AND status = 'pending' AND expires_at <= now()"
             );
             bind_request(sqlx::query(&expire), request).execute(&mut *tx).await?;
-            let insert = "INSERT INTO challenges (subject_type, subject_id, on_behalf_of_type, on_behalf_of_id, \
+            let insert = "INSERT INTO challenges (principal_type, principal_id, on_behalf_of_type, on_behalf_of_id, \
                     action, resource_type, resource_id, id, decision_id, kinds, status, answerer_id, expires_at) \
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', $11, now() + make_interval(secs => $12)) \
-                 ON CONFLICT (subject_type, subject_id, on_behalf_of_type, on_behalf_of_id, action, resource_type, \
+                 ON CONFLICT (principal_type, principal_id, on_behalf_of_type, on_behalf_of_id, action, resource_type, \
                     resource_id) WHERE status = 'pending' \
                  DO UPDATE SET kinds = ARRAY(SELECT DISTINCT k FROM unnest(challenges.kinds || EXCLUDED.kinds) AS k \
                     ORDER BY k) \
@@ -420,31 +420,31 @@ impl ChallengeStore {
         Ok(c)
     }
 
-    /// Contains `subject`, or with `monitor` records that it would have (ADR 0066). Returns the
+    /// Contains `principal`, or with `monitor` records that it would have (ADR 0066). Returns the
     /// containment and whether it is new: a principal already contained in that mode keeps their
     /// active containment.
     pub async fn contain(
         &self,
-        subject: &EntityRef,
+        principal: &EntityRef,
         reason: &str,
         created_by: &str,
         monitor: bool,
     ) -> Result<(Containment, bool), StoreError> {
-        if subject.kind.is_empty() || subject.id.is_empty() {
-            return Err(StoreError::Invalid("subject type and id are required".into()));
+        if principal.kind.is_empty() || principal.id.is_empty() {
+            return Err(StoreError::Invalid("principal type and id are required".into()));
         }
         if reason.trim().is_empty() || created_by.is_empty() {
             return Err(StoreError::Invalid("reason and created_by are required".into()));
         }
         let mut tx = self.pool.begin().await?;
         let inserted = sqlx::query(
-            "INSERT INTO containments (id, subject_type, subject_id, reason, created_by, monitor) \
+            "INSERT INTO containments (id, principal_type, principal_id, reason, created_by, monitor) \
              VALUES ($1, $2, $3, $4, $5, $6) \
-             ON CONFLICT (subject_type, subject_id, monitor) WHERE lifted_at IS NULL DO NOTHING RETURNING *",
+             ON CONFLICT (principal_type, principal_id, monitor) WHERE lifted_at IS NULL DO NOTHING RETURNING *",
         )
         .bind(ContainmentId::new().uuid())
-        .bind(&subject.kind)
-        .bind(&subject.id)
+        .bind(&principal.kind)
+        .bind(&principal.id)
         .bind(reason.trim())
         .bind(created_by)
         .bind(monitor)
@@ -461,10 +461,10 @@ impl ChallengeStore {
             None => {
                 let row = sqlx::query(
                     "SELECT * FROM containments \
-                     WHERE subject_type = $1 AND subject_id = $2 AND monitor = $3 AND lifted_at IS NULL",
+                     WHERE principal_type = $1 AND principal_id = $2 AND monitor = $3 AND lifted_at IS NULL",
                 )
-                .bind(&subject.kind)
-                .bind(&subject.id)
+                .bind(&principal.kind)
+                .bind(&principal.id)
                 .bind(monitor)
                 .fetch_one(&mut *tx)
                 .await?;
@@ -506,19 +506,19 @@ impl ChallengeStore {
     pub async fn containments(
         &self,
         active_only: bool,
-        subject: Option<&EntityRef>,
+        principal: Option<&EntityRef>,
         limit: i64,
         include_monitor: bool,
     ) -> Result<Vec<Containment>, StoreError> {
         let rows = sqlx::query(
             "SELECT * FROM containments WHERE (NOT $1 OR lifted_at IS NULL) \
-                AND ($2::text IS NULL OR (subject_type = $2 AND subject_id = $3)) \
+                AND ($2::text IS NULL OR (principal_type = $2 AND principal_id = $3)) \
                 AND ($5 OR NOT monitor) \
              ORDER BY created_at DESC LIMIT $4",
         )
         .bind(active_only)
-        .bind(subject.map(|s| s.kind.as_str()))
-        .bind(subject.map(|s| s.id.as_str()))
+        .bind(principal.map(|s| s.kind.as_str()))
+        .bind(principal.map(|s| s.id.as_str()))
         .bind(limit)
         .bind(include_monitor)
         .fetch_all(&self.pool)
@@ -614,7 +614,10 @@ fn challenge_from_row(row: &PgRow) -> Result<Challenge, sqlx::Error> {
         id: ChallengeId::from_uuid(row.try_get("id")?),
         decision_id: DecisionId::from_uuid(row.try_get("decision_id")?),
         request: RequestKey {
-            subject: EntityRef::new(row.try_get::<String, _>("subject_type")?, row.try_get::<String, _>("subject_id")?),
+            principal: EntityRef::new(
+                row.try_get::<String, _>("principal_type")?,
+                row.try_get::<String, _>("principal_id")?,
+            ),
             on_behalf_of,
             action: row.try_get("action")?,
             resource: EntityRef::new(
@@ -639,7 +642,10 @@ fn challenge_from_row(row: &PgRow) -> Result<Challenge, sqlx::Error> {
 fn containment_from_row(row: &PgRow) -> Result<Containment, sqlx::Error> {
     Ok(Containment {
         id: ContainmentId::from_uuid(row.try_get("id")?),
-        subject: EntityRef::new(row.try_get::<String, _>("subject_type")?, row.try_get::<String, _>("subject_id")?),
+        principal: EntityRef::new(
+            row.try_get::<String, _>("principal_type")?,
+            row.try_get::<String, _>("principal_id")?,
+        ),
         reason: row.try_get("reason")?,
         created_by: row.try_get("created_by")?,
         created_at: row.try_get("created_at")?,
@@ -680,8 +686,13 @@ pub(crate) mod tests {
         Some(store)
     }
 
-    pub(crate) fn request(subject: EntityRef, on_behalf_of: Option<EntityRef>) -> RequestKey {
-        RequestKey { subject, on_behalf_of, action: "read".into(), resource: EntityRef::new("Resource", "board-deck") }
+    pub(crate) fn request(principal: EntityRef, on_behalf_of: Option<EntityRef>) -> RequestKey {
+        RequestKey {
+            principal,
+            on_behalf_of,
+            action: "read".into(),
+            resource: EntityRef::new("Resource", "board-deck"),
+        }
     }
 
     fn alice() -> EntityRef {

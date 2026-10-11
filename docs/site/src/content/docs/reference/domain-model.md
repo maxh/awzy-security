@@ -25,7 +25,7 @@ IdP (over SCIM) and from connectors to your apps.
 | `McpServer`, `McpTool` | An MCP server behind awzy-gateway, and its tools (`<server>/<tool>`) | `sensitivity` |
 | `PortalArea` | An area of the client portal: `decisions`, `policies`, `enforcement`, `directory`, `challenges`, `investigations` | `sensitivity` |
 
-`Human` and `ServiceAccount` are the **principals**: the subject of every check. See
+`Human` and `ServiceAccount` are the **principals**: who every check is about. See
 [People, agents, and delegation](/concepts/principals-and-delegation/). A resource's sharing
 attributes include what it inherits from the folders above it, and every attribute marked
 optional in the schema may be missing, so test it with `has` first.

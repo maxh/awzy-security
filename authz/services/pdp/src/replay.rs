@@ -6,7 +6,7 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use awzy_model::{AccessRequest, Decision, DecisionId, EnforcementMode, Verdict};
+use awzy_model::{Check, Decision, DecisionId, EnforcementMode, Verdict};
 use bytes::Bytes;
 use http_body_util::Empty;
 use hyper_util::{
@@ -28,7 +28,7 @@ pub(crate) enum Assembled {
     Ready {
         entities: Value,
         assignees: Option<Arc<HashSet<String>>>,
-        /// awzy-reasoner's scores for the subject and the person it acts for (ADR 0056).
+        /// awzy-reasoner's scores for the principal and the person it acts for (ADR 0056).
         risk: std::collections::HashMap<String, i64>,
     },
 }
@@ -38,13 +38,13 @@ pub(crate) enum Assembled {
 pub(crate) async fn assemble(
     principals: &Principals,
     resources: &Resources,
-    req: &AccessRequest,
+    req: &Check,
     inline: Value,
 ) -> anyhow::Result<Assembled> {
-    if principals.is_unregistered(&req.subject) {
+    if principals.is_unregistered(&req.principal) {
         return Ok(Assembled::Unregistered);
     }
-    let who: Vec<&awzy_model::EntityRef> = std::iter::once(&req.subject).chain(req.on_behalf_of.as_ref()).collect();
+    let who: Vec<&awzy_model::EntityRef> = std::iter::once(&req.principal).chain(req.on_behalf_of.as_ref()).collect();
     let entities = principals.merge(inline, &who);
     let merged = resources.merge(entities, &req.resource).await?;
     let risk = principals.risk_of(&who);
@@ -63,7 +63,7 @@ pub(crate) fn unregistered() -> Decision {
     }
 }
 
-fn evaluate(pdp: &Pdp, req: &AccessRequest, assembled: &Assembled) -> anyhow::Result<Decision> {
+fn evaluate(pdp: &Pdp, req: &Check, assembled: &Assembled) -> anyhow::Result<Decision> {
     match assembled {
         Assembled::Unregistered => Ok(unregistered()),
         Assembled::Ready { entities, assignees, risk } => {
@@ -99,12 +99,7 @@ impl Replayer {
     }
 
     /// The request decided under `before` and under `after`, on the same entities.
-    pub async fn compare(
-        &self,
-        before: &Pdp,
-        after: &Pdp,
-        req: &AccessRequest,
-    ) -> anyhow::Result<(Decision, Decision)> {
+    pub async fn compare(&self, before: &Pdp, after: &Pdp, req: &Check) -> anyhow::Result<(Decision, Decision)> {
         let assembled = assemble(&self.principals, &self.resources, req, Value::Array(vec![])).await?;
         Ok((evaluate(before, req, &assembled)?, evaluate(after, req, &assembled)?))
     }
@@ -116,9 +111,9 @@ mod tests {
     use awzy_model::EntityRef;
     use serde_json::json;
 
-    fn request(subject: &str) -> AccessRequest {
-        AccessRequest {
-            subject: EntityRef::new("Human", subject),
+    fn request(principal: &str) -> Check {
+        Check {
+            principal: EntityRef::new("Human", principal),
             action: "read".into(),
             resource: EntityRef::new("Resource", "board-deck"),
             context: Default::default(),
@@ -159,7 +154,7 @@ mod tests {
     #[tokio::test]
     async fn an_unregistered_service_account_is_denied_under_both() {
         let mut req = request("alice");
-        req.subject = EntityRef::new("ServiceAccount", "nobody-registered-me");
+        req.principal = EntityRef::new("ServiceAccount", "nobody-registered-me");
         let pdp = Pdp::with_defaults().unwrap();
         let (b, a) = with_humans().compare(&pdp, &pdp, &req).await.unwrap();
         assert_eq!((b.verdict, a.verdict), (Verdict::Deny, Verdict::Deny));

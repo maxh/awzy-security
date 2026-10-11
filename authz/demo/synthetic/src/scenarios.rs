@@ -60,7 +60,7 @@ pub fn curious_contractor() -> Vec<Step> {
         scenario: "curious-contractor",
         access: Access {
             minute,
-            subject: sam.clone(),
+            principal: sam.clone(),
             on_behalf_of: None,
             human_present: true,
             team: "contractors-quarry-labs",
@@ -88,9 +88,9 @@ pub const REASONER_CONTAINS_AT: u32 = 15 * 60 + 30;
 /// (ADR 0066), and from then on neither she nor SalesGenie acting for her gets anything.
 pub fn rogue_agent(company: &Company, profile: Profile) -> Vec<Step> {
     let nora = cast("sales-northeast-finserv").expect("cast");
-    let access = |minute: u32, subject: &str, on_behalf_of: Option<String>, resource: String| Access {
+    let access = |minute: u32, principal: &str, on_behalf_of: Option<String>, resource: String| Access {
         minute,
-        subject: subject.into(),
+        principal: principal.into(),
         on_behalf_of,
         human_present: true,
         team: "sales-northeast-finserv",
@@ -119,10 +119,10 @@ pub fn rogue_agent(company: &Company, profile: Profile) -> Vec<Step> {
     let account =
         linked.iter().find(|r| r.starts_with("synthetic:doc:")).or(linked.first()).cloned().expect("Nora has accounts");
     let tool = if account.starts_with("synthetic:folder:") { LIST } else { READ };
-    for (minute, subject, on_behalf_of) in
+    for (minute, principal, on_behalf_of) in
         [(15 * 60 + 45, "sales-genie", Some(nora.clone())), (15 * 60 + 46, nora.as_str(), None)]
     {
-        let a = Access { tool, ..access(minute, subject, on_behalf_of, account.clone()) };
+        let a = Access { tool, ..access(minute, principal, on_behalf_of, account.clone()) };
         steps.push(step(a, Expect::Deny));
     }
     steps
@@ -162,7 +162,7 @@ pub fn foolish_admin() -> Vec<Step> {
         scenario: "foolish-admin",
         access: Access {
             minute,
-            subject: lee.clone(),
+            principal: lee.clone(),
             on_behalf_of: None,
             human_present: true,
             team: "it-admin",
@@ -203,7 +203,7 @@ pub fn peer_outlier(company: &Company, profile: Profile) -> Vec<Step> {
         scenario: "peer-outlier",
         access: Access {
             minute,
-            subject: riley.clone(),
+            principal: riley.clone(),
             on_behalf_of: None,
             human_present: true,
             team: "finance",
@@ -261,7 +261,7 @@ pub struct Detection {
 impl Detection {
     /// Scoring a day with `steps` in it.
     pub fn new(steps: &[Step]) -> Self {
-        Self { actors: steps.iter().map(|s| s.access.subject.clone()).collect(), ..Self::default() }
+        Self { actors: steps.iter().map(|s| s.access.principal.clone()).collect(), ..Self::default() }
     }
 
     pub fn add_step(&mut self, step: &Step, outcome: &Outcome) {
@@ -274,7 +274,7 @@ impl Detection {
     /// Counts `access` if it's ordinary work. The scenarios' own principals don't count on the day:
     /// once awzy flags the foolish administrator, his routine operations ask for his key too.
     pub fn add_ordinary(&mut self, access: &Access, outcome: &Outcome) {
-        if self.actors.contains(&access.subject) {
+        if self.actors.contains(&access.principal) {
             return;
         }
         if matches!(access.why, Why::Assigned | Why::Team | Why::Admin) {
@@ -314,13 +314,13 @@ mod tests {
         let contained = |s: &Step| s.scenario == "rogue-agent" && s.expect == Expect::Deny;
         for step in all(&c, Profile::Demo)
             .into_iter()
-            .filter(|s| s.access.tool == READ && s.access.subject != outlier && !contained(s))
+            .filter(|s| s.access.tool == READ && s.access.principal != outlier && !contained(s))
         {
             assert!(docs.contains(&step.access.resource), "{} is a scenario document", step.access.resource);
-            let who = step.access.on_behalf_of.as_ref().unwrap_or(&step.access.subject);
+            let who = step.access.on_behalf_of.as_ref().unwrap_or(&step.access.principal);
             let linked = work
                 .iter()
-                .filter(|w| w.assignees.contains(who) || w.assignees.contains(&step.access.subject))
+                .filter(|w| w.assignees.contains(who) || w.assignees.contains(&step.access.principal))
                 .any(|w| w.resources.contains(&step.access.resource));
             assert!(!linked, "{} isn't linked from {who}'s work", step.access.resource);
         }
@@ -335,7 +335,7 @@ mod tests {
         d.add_step(&steps[0], &Outcome::Blocked("challenge".into()));
         d.add_step(&steps[1], &Outcome::Ran);
         let mut ordinary = steps[0].access.clone();
-        ordinary.subject = "someone.else@larkspur.example".into();
+        ordinary.principal = "someone.else@larkspur.example".into();
         ordinary.why = Why::Team;
         d.add_ordinary(&ordinary, &Outcome::Blocked("challenge".into()));
         d.add_ordinary(&ordinary, &Outcome::Ran);
@@ -353,7 +353,7 @@ mod tests {
     fn reasoner_view(company: &Company, days: u32, minute: u32, scenarios: bool) -> (History, Opened) {
         let principal = |a: &Access| -> Principal {
             let kind = if a.on_behalf_of.is_some() || !a.human_present { "ServiceAccount" } else { "Human" };
-            (kind.to_string(), a.subject.clone())
+            (kind.to_string(), a.principal.clone())
         };
         let mut history = History::new();
         let (mut before, mut last_day): (BTreeMap<String, Openers>, BTreeMap<String, Openers>) = Default::default();

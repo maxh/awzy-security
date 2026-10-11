@@ -85,15 +85,15 @@ struct ExfiltrationRow {
 // A person's own events, and their agents' on their behalf.
 const EXFILTRATION_QUERY: &str = "
 SELECT
-    if(on_behalf_of_type = 'Human', on_behalf_of_id, subject_id) AS human,
-    if(on_behalf_of_type = 'Human', subject_id, '') AS agent,
+    if(on_behalf_of_type = 'Human', on_behalf_of_id, principal_id) AS human,
+    if(on_behalf_of_type = 'Human', principal_id, '') AS agent,
     action,
     resource_id,
     system
 FROM events
 WHERE at > fromUnixTimestamp64Milli(?, 'UTC') AND at <= fromUnixTimestamp64Milli(?, 'UTC')
   AND has(?, action)
-  AND (subject_type = 'Human' OR on_behalf_of_type = 'Human')
+  AND (principal_type = 'Human' OR on_behalf_of_type = 'Human')
 ORDER BY at
 LIMIT 10000";
 
@@ -156,7 +156,7 @@ impl Containments {
             let by = if c.decided_by.is_empty() { String::new() } else { format!(" by {}", c.decided_by) };
             rejected.entry(c.answerer_id.clone()).or_default().push(format!(
                 "{} {} {} rejected{by} ({})",
-                label(&c.subject),
+                label(&c.principal),
                 c.action,
                 label(&c.resource),
                 c.qid
@@ -167,10 +167,10 @@ impl Containments {
             ListContainmentsRequest { active_only: false, limit: MOST, include_monitor: true, ..Default::default() };
         let mut decided = BTreeSet::new();
         for c in self.challenge.clone().list_containments(req).await?.into_inner().containments {
-            let Some(subject) = c.subject.filter(|s| s.r#type == "Human") else { continue };
+            let Some(principal) = c.principal.filter(|s| s.r#type == "Human") else { continue };
             let lifted_recently = c.lifted_at.as_ref().is_some_and(|t| t.seconds > since);
             if c.lifted_at.is_none() || lifted_recently {
-                decided.insert(subject.id);
+                decided.insert(principal.id);
             }
         }
         Ok(Evidence { rejected, exfiltration: BTreeMap::new(), decided })
@@ -179,7 +179,7 @@ impl Containments {
     /// Contains `p`, or records that it would have when `mode` is monitor.
     pub async fn contain(&self, p: &Proposal, mode: EnforcementMode) -> anyhow::Result<()> {
         let req = ContainRequest {
-            subject: Some(EntityRef::new("Human", p.human.as_str()).into()),
+            principal: Some(EntityRef::new("Human", p.human.as_str()).into()),
             reason: p.reason.clone(),
             created_by_actor: Some(awzy_model::Actor::awzy("awzy-reasoner").into()),
             monitor: mode == EnforcementMode::Monitor,

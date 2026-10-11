@@ -55,7 +55,7 @@ function Report({ draftQid }: { draftQid: string }) {
             decisions
             requests
             examples {
-              subjectId
+              principalId
               onBehalfOfId
               action
               resourceId
@@ -121,7 +121,7 @@ function Report({ draftQid }: { draftQid: string }) {
               {c.examples.map((e, i) => (
                 <Table.Tr key={i}>
                   <Table.Td>
-                    {e.subjectId}
+                    {e.principalId}
                     {e.onBehalfOfId ? ` for ${e.onBehalfOfId}` : ""}
                   </Table.Td>
                   <Table.Td>{e.action}</Table.Td>

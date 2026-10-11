@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<f1d91c42fecd893fee64933cfd5fc084>>
+ * @generated SignedSource<<ce58c38bdf1ddf70420924f537814643>>
  * @lightSyntaxTransform
  */
 
@@ -34,12 +34,12 @@ export type InvestigationsPageQuery$data = {
     readonly model: string;
     readonly notes: ReadonlyArray<string>;
     readonly outputTokens: number;
-    readonly risk: number;
-    readonly status: InvestigationStatus;
-    readonly subject: {
+    readonly principal: {
       readonly id: string;
       readonly type: string;
     };
+    readonly risk: number;
+    readonly status: InvestigationStatus;
     readonly summary: string;
     readonly trigger: string;
     readonly verdict: InvestigationVerdict;
@@ -109,7 +109,7 @@ v2 = [
         "args": null,
         "concreteType": "EntityRef",
         "kind": "LinkedField",
-        "name": "subject",
+        "name": "principal",
         "plural": false,
         "selections": [
           {
@@ -286,16 +286,16 @@ return {
     "selections": (v2/*:: as any*/)
   },
   "params": {
-    "cacheID": "861cc62e4b68a83258f0d9ecbbb6c603",
+    "cacheID": "7b2821b51818af82f530c0fb65d8e045",
     "id": null,
     "metadata": {},
     "name": "InvestigationsPageQuery",
     "operationKind": "query",
-    "text": "query InvestigationsPageQuery(\n  $status: InvestigationStatus\n) {\n  canClose: viewerCan(action: ADMINISTER, area: INVESTIGATIONS)\n  investigations(status: $status, first: 100) {\n    id\n    subject {\n      type\n      id\n    }\n    trigger\n    floor\n    status\n    verdict\n    risk\n    summary\n    evidence {\n      evidenceId\n      why\n    }\n    containment\n    notes\n    model\n    inputTokens\n    outputTokens\n    finishedAt\n    closedBy {\n      label\n    }\n    closedAt\n    closeReason\n  }\n}\n"
+    "text": "query InvestigationsPageQuery(\n  $status: InvestigationStatus\n) {\n  canClose: viewerCan(action: ADMINISTER, area: INVESTIGATIONS)\n  investigations(status: $status, first: 100) {\n    id\n    principal {\n      type\n      id\n    }\n    trigger\n    floor\n    status\n    verdict\n    risk\n    summary\n    evidence {\n      evidenceId\n      why\n    }\n    containment\n    notes\n    model\n    inputTokens\n    outputTokens\n    finishedAt\n    closedBy {\n      label\n    }\n    closedAt\n    closeReason\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "e1c143f053c244386b76a3813aa45d6b";
+(node as any).hash = "79d43411f4e7625621f00adfaf5275cb";
 
 export default node;

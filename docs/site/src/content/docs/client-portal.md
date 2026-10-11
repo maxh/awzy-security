@@ -27,11 +27,11 @@ access. Every change made in the portal is recorded with who made it.
 
 ### Decisions
 
-Every allow, deny, and challenge the PDPs decided, newest first. Filter by subject, resource,
+Every allow, deny, and challenge the PDPs decided, newest first. Filter by principal, resource,
 verdict, and mode, so that, for instance, *monitor* and *deny* together list what enforcing would
 have blocked.
 
-Open a decision to see what was asked (the subject, the person it acted for, the action, the
+Open a decision to see what was asked (the principal, the person it acted for, the action, the
 resource), the verdict and mode, and **why**: the policies that produced it, with their source,
 from the bundle in force at the time. For a request made by an agent for a person, it shows both
 checks. See [How awzy decides](/concepts/how-awzy-decides/).
@@ -110,7 +110,7 @@ is checked as the person the agent acts for, the same way the pages are.
 
 | Tool | Does |
 | --- | --- |
-| `search_decisions` | Search decisions by subject, resource, verdict, mode, and time |
+| `search_decisions` | Search decisions by principal, resource, verdict, mode, and time |
 | `explain_decision` | One decision, with the source of the policies behind it |
 | `get_active_policy_bundle` | The policies and schema the PDPs enforce |
 | `list_policy_bundles` | Recent bundles, with their status |

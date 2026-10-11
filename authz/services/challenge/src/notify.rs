@@ -56,7 +56,7 @@ fn label(r: &awzy_model::EntityRef) -> String {
 fn challenge_details(c: &Challenge) -> Value {
     json!({
         "challenge_qid": c.id.to_string(),
-        "subject": label(&c.request.subject),
+        "principal": label(&c.request.principal),
         "on_behalf_of": c.request.on_behalf_of.as_ref().map(label),
         "action": c.request.action,
         "resource": label(&c.request.resource),
@@ -92,7 +92,7 @@ impl ChallengeStore {
         }
         if c.kinds.contains(ChallengeKind::Approval) {
             let parties: Vec<&str> =
-                [c.request.subject.id.as_str()].into_iter().chain(c.answerer_id.as_deref()).collect();
+                [c.request.principal.id.as_str()].into_iter().chain(c.answerer_id.as_deref()).collect();
             // Never ask someone to approve their own request.
             if let Some(owner) = resource_owner.filter(|o| !parties.contains(o)) {
                 let mut details = details.clone();
@@ -123,7 +123,7 @@ impl ChallengeStore {
         }
         let details = json!({
             "containment_qid": c.id.to_string(),
-            "subject": label(&c.subject),
+            "principal": label(&c.principal),
             "created_by": c.created_by,
             "monitor": c.monitor,
         });
@@ -137,8 +137,8 @@ pub fn render(kind: &str, details: &Value, portal_url: &str) -> String {
     let s = |k: &str| details[k].as_str().unwrap_or("").to_string();
     let challenges_link = format!("{portal}/challenges?challenge={}", s("challenge_qid"));
     let who = match details["on_behalf_of"].as_str() {
-        Some(human) => format!("{} for {human}", s("subject")),
-        None => s("subject"),
+        Some(human) => format!("{} for {human}", s("principal")),
+        None => s("principal"),
     };
     let request = format!("{who} wants to {} {}", s("action"), s("resource"));
     match kind {
@@ -170,10 +170,10 @@ pub fn render(kind: &str, details: &Value, portal_url: &str) -> String {
             if details["monitor"] == true {
                 format!(
                     "awzy would have contained {} (automated containments are in monitor). Review it: {link}",
-                    s("subject")
+                    s("principal")
                 )
             } else {
-                format!("{} is contained by {}. Review it: {link}", s("subject"), s("created_by"))
+                format!("{} is contained by {}. Review it: {link}", s("principal"), s("created_by"))
             }
         }
         other => format!("awzy: {other}. {portal}"),
@@ -257,7 +257,7 @@ mod tests {
     use super::*;
 
     fn opened(kinds: &[&str], approver: bool) -> Value {
-        json!({ "challenge_qid": "challenge_1", "subject": "ServiceAccount::sales-genie",
+        json!({ "challenge_qid": "challenge_1", "principal": "ServiceAccount::sales-genie",
                 "on_behalf_of": "Human::nora", "action": "read", "resource": "Resource::plan",
                 "kinds": kinds, "approver": approver })
     }
@@ -288,7 +288,7 @@ mod tests {
         d["passed"] = json!(true);
         assert!(render("challenge_decided", &d, "https://p").contains("Retry it now"));
 
-        let would = json!({ "containment_qid": "containment_1", "subject": "Human::nora",
+        let would = json!({ "containment_qid": "containment_1", "principal": "Human::nora",
                             "created_by": "AwzyService::awzy-reasoner", "monitor": true });
         assert!(render("containment", &would, "https://p").contains("would have contained Human::nora"));
     }
@@ -310,7 +310,7 @@ mod tests {
         let Some(store) = test_store(Lifetimes::default()).await else { return };
         let store = store.with_notifications();
         let request = RequestKey {
-            subject: EntityRef::new("ServiceAccount", "sales-genie"),
+            principal: EntityRef::new("ServiceAccount", "sales-genie"),
             on_behalf_of: Some(EntityRef::new("Human", "nora")),
             action: "read".into(),
             resource: EntityRef::new("Resource", "plan"),

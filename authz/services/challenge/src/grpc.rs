@@ -154,7 +154,7 @@ impl ChallengeService for Service {
             return Err(Status::invalid_argument("kinds is required"));
         }
         let request = RequestKey {
-            subject: required_ref(req.subject, "subject")?,
+            principal: required_ref(req.principal, "principal")?,
             on_behalf_of: req.on_behalf_of.map(Into::into),
             action: req.action,
             resource: required_ref(req.resource, "resource")?,
@@ -243,18 +243,19 @@ impl ChallengeService for Service {
 
     async fn contain(&self, req: Request<ContainRequest>) -> Result<Response<ContainResponse>, Status> {
         let req = req.into_inner();
-        let subject = required_ref(req.subject, "subject")?;
+        let principal = required_ref(req.principal, "principal")?;
         let created_by = actor(req.created_by_actor, &req.created_by, "created_by_actor")?;
-        let (c, created) = self.store.contain(&subject, &req.reason, &created_by, req.monitor).await.map_err(status)?;
+        let (c, created) =
+            self.store.contain(&principal, &req.reason, &created_by, req.monitor).await.map_err(status)?;
         if created {
             if let Err(e) = self.store.notify_contained(&c).await {
                 tracing::warn!(containment_id = %c.id, error = %e, "couldn't record who to tell about a containment");
             }
         }
         if created && c.monitor {
-            tracing::info!(containment_id = %c.id, subject = ?c.subject, created_by = %c.created_by, reason = %c.reason, "principal would be contained (monitor)");
+            tracing::info!(containment_id = %c.id, principal = ?c.principal, created_by = %c.created_by, reason = %c.reason, "principal would be contained (monitor)");
         } else if created {
-            tracing::warn!(containment_id = %c.id, subject = ?c.subject, created_by = %c.created_by, reason = %c.reason, "principal contained");
+            tracing::warn!(containment_id = %c.id, principal = ?c.principal, created_by = %c.created_by, reason = %c.reason, "principal contained");
             self.refresh_feed().await;
         }
         Ok(Response::new(ContainResponse { containment: Some(containment_to_wire(c)) }))
@@ -268,7 +269,7 @@ impl ChallengeService for Service {
             .lift(qid::<ContainmentId>(&req.containment_qid)?, &lifted_by, &req.reason)
             .await
             .map_err(status)?;
-        tracing::warn!(containment_id = %c.id, subject = ?c.subject, lifted_by = %lifted_by, "containment lifted");
+        tracing::warn!(containment_id = %c.id, principal = ?c.principal, lifted_by = %lifted_by, "containment lifted");
         self.refresh_feed().await;
         Ok(Response::new(LiftResponse { containment: Some(containment_to_wire(c)) }))
     }
@@ -278,10 +279,10 @@ impl ChallengeService for Service {
         req: Request<ListContainmentsRequest>,
     ) -> Result<Response<ListContainmentsResponse>, Status> {
         let req = req.into_inner();
-        let subject: Option<EntityRef> = req.subject.map(Into::into);
+        let principal: Option<EntityRef> = req.principal.map(Into::into);
         let list = self
             .store
-            .containments(req.active_only, subject.as_ref(), limit(req.limit), req.include_monitor)
+            .containments(req.active_only, principal.as_ref(), limit(req.limit), req.include_monitor)
             .await
             .map_err(status)?;
         Ok(Response::new(ListContainmentsResponse {
@@ -599,7 +600,7 @@ fn challenge_to_wire(c: Challenge) -> WireChallenge {
     WireChallenge {
         qid: c.id.to_string(),
         decision_qid: c.decision_id.to_string(),
-        subject: Some(c.request.subject.into()),
+        principal: Some(c.request.principal.into()),
         on_behalf_of: c.request.on_behalf_of.map(Into::into),
         action: c.request.action,
         resource: Some(c.request.resource.into()),
@@ -629,7 +630,7 @@ fn containment_to_wire(c: Containment) -> WireContainment {
     let (lifted_by_actor, lifted_by) = awzy_authz_proto::actor_to_wire(c.lifted_by.as_deref().unwrap_or(""));
     WireContainment {
         qid: c.id.to_string(),
-        subject: Some(c.subject.into()),
+        principal: Some(c.principal.into()),
         reason: c.reason,
         created_by,
         created_by_actor,
@@ -649,7 +650,7 @@ mod tests {
     use std::time::Duration;
 
     use awzy_authz_proto::challenge::v1::challenge_service_client::ChallengeServiceClient;
-    use awzy_model::{AccessRequest, EnforcementMode, Verdict};
+    use awzy_model::{Check, EnforcementMode, Verdict};
     use awzy_pdp::{challenges::ChallengeResolver, containments::Containments, AppState, Enforcement, Pdp};
     use serde_json::json;
     use tonic::{transport::Channel, Code};
@@ -702,14 +703,14 @@ mod tests {
         panic!("condition not met within 3 seconds");
     }
 
-    fn read(who: &str, what: &str) -> (AccessRequest, serde_json::Value) {
+    fn read(who: &str, what: &str) -> (Check, serde_json::Value) {
         let sensitivity = match what {
             "board-deck" => "crown_jewels",
             "payroll" => "confidential",
             _ => "internal",
         };
-        let req = AccessRequest {
-            subject: awzy_model::EntityRef::new("Human", who),
+        let req = Check {
+            principal: awzy_model::EntityRef::new("Human", who),
             action: "read".into(),
             resource: awzy_model::EntityRef::new("Resource", what),
             context: Default::default(),
@@ -851,7 +852,7 @@ mod tests {
         let started = std::time::Instant::now();
         let containment = client
             .contain(ContainRequest {
-                subject: Some(awzy_model::EntityRef::new("Human", "mallory").into()),
+                principal: Some(awzy_model::EntityRef::new("Human", "mallory").into()),
                 reason: "bulk download of design docs".into(),
                 created_by_actor: Some(awzy_model::Actor::awzy("awzy-reasoner").into()),
                 ..Default::default()
@@ -886,7 +887,7 @@ mod tests {
         let state = pdp(&endpoint).await;
         let would = client
             .contain(ContainRequest {
-                subject: Some(awzy_model::EntityRef::new("Human", "mallory").into()),
+                principal: Some(awzy_model::EntityRef::new("Human", "mallory").into()),
                 reason: "rejected challenge and an export".into(),
                 created_by_actor: Some(awzy_model::Actor::awzy("awzy-reasoner").into()),
                 monitor: true,

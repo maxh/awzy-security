@@ -46,7 +46,7 @@ export function DecisionsPage() {
 }
 
 function Filters({ onApply }: { onApply: (f: DecisionFilter) => void }) {
-  const [subjectId, setSubjectId] = useState("");
+  const [principalId, setPrincipalId] = useState("");
   const [resourceId, setResourceId] = useState("");
   const [verdict, setVerdict] = useState<string | null>(null);
   const [mode, setMode] = useState<string | null>(null);
@@ -54,7 +54,7 @@ function Filters({ onApply }: { onApply: (f: DecisionFilter) => void }) {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     onApply({
-      subjectId: subjectId.trim() || null,
+      principalId: principalId.trim() || null,
       resourceId: resourceId.trim() || null,
       verdict: (verdict as Verdict | null) ?? null,
       mode: (mode as Mode | null) ?? null,
@@ -65,11 +65,11 @@ function Filters({ onApply }: { onApply: (f: DecisionFilter) => void }) {
     <form onSubmit={submit} style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
       <Group align="end" gap="sm" p="md">
         <TextInput
-          id="filter-subject"
-          label="Subject ID"
+          id="filter-principal"
+          label="Principal ID"
           placeholder="alice"
-          value={subjectId}
-          onChange={(e) => setSubjectId(e.currentTarget.value)}
+          value={principalId}
+          onChange={(e) => setPrincipalId(e.currentTarget.value)}
         />
         <TextInput
           id="filter-resource"
@@ -138,7 +138,7 @@ function DecisionList({ filter, onSelect }: { filter: DecisionFilter; onSelect: 
             node {
               id
               at
-              subject {
+              principal {
                 type
                 id
               }
@@ -184,7 +184,7 @@ function DecisionList({ filter, onSelect }: { filter: DecisionFilter; onSelect: 
             <Table.Tr>
               <Table.Th>Time</Table.Th>
               <Table.Th>Verdict</Table.Th>
-              <Table.Th>Subject</Table.Th>
+              <Table.Th>Principal</Table.Th>
               <Table.Th>Action</Table.Th>
               <Table.Th>Resource</Table.Th>
               <Table.Th>Policies</Table.Th>
@@ -200,7 +200,7 @@ function DecisionList({ filter, onSelect }: { filter: DecisionFilter; onSelect: 
                   <VerdictBadge verdict={d.verdict} mode={d.mode} challenges={d.challenges} />
                 </Table.Td>
                 <Table.Td>
-                  <Entity e={d.subject} />
+                  <Entity e={d.principal} />
                   {d.onBehalfOf && (
                     <Text size="xs" c="dimmed">
                       for {d.onBehalfOf.human.id}

@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<263043374d6274ae1571d19a9f9b744e>>
+ * @generated SignedSource<<1b80ced4c9840e37548c146f4a3be265>>
  * @lightSyntaxTransform
  */
 
@@ -9,8 +9,8 @@
 
 import { ConcreteRequest } from 'relay-runtime';
 export type ContainPrincipalInput = {
+  principal: EntityRefInput;
   reason: string;
-  subject: EntityRefInput;
 };
 export type EntityRefInput = {
   id: string;

@@ -97,7 +97,7 @@ impl ContextClient {
             .into_iter()
             .flatten()
             .filter_map(|i| {
-                Some((i["subject"]["type"].as_str()?.to_string(), i["subject"]["id"].as_str()?.to_string()))
+                Some((i["principal"]["type"].as_str()?.to_string(), i["principal"]["id"].as_str()?.to_string()))
             })
             .collect())
     }
@@ -116,7 +116,7 @@ impl ContextClient {
                 .iter()
                 .map(|s| {
                     json!({
-                        "subject": { "type": s.principal.0, "id": s.principal.1 },
+                        "principal": { "type": s.principal.0, "id": s.principal.1 },
                         "score": s.score.score,
                         "reasons": s.score.reasons,
                     })

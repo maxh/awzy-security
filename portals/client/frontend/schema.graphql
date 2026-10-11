@@ -94,7 +94,7 @@ type Challenge implements Node {
 	The decision that opened it.
 	"""
 	decisionQid: String!
-	subject: EntityRef
+	principal: EntityRef
 	"""
 	Set when a service account acted for a person.
 	"""
@@ -214,7 +214,7 @@ type CloseInvestigationPayload {
 }
 
 input ContainPrincipalInput {
-	subject: EntityRefInput!
+	principal: EntityRefInput!
 	reason: String!
 }
 
@@ -223,7 +223,7 @@ type Containment {
 	QID: containment_<uuid>.
 	"""
 	id: ID!
-	subject: EntityRef
+	principal: EntityRef
 	reason: String!
 	createdBy: Actor
 	createdAt: UtcTimestamp
@@ -272,7 +272,7 @@ type Decision implements Node {
 	"""
 	id: ID!
 	at: UtcTimestamp!
-	subject: EntityRef!
+	principal: EntityRef!
 	"""
 	Set when a service account acted for a person: that person and their own check.
 	"""
@@ -284,7 +284,7 @@ type Decision implements Node {
 	action: String!
 	resource: EntityRef!
 	"""
-	What policy decided. For a delegated request, the stricter of the subject's and the
+	What policy decided. For a delegated request, the stricter of the principal's and the
 	person's checks. In MONITOR mode it was not applied: a DENY is a "would deny".
 	"""
 	verdict: Verdict!
@@ -294,7 +294,7 @@ type Decision implements Node {
 	"""
 	challenges: [String!]!
 	"""
-	IDs of the policies that determined the subject's own check.
+	IDs of the policies that determined the principal's own check.
 	"""
 	policies: [String!]!
 	"""
@@ -306,7 +306,7 @@ type Decision implements Node {
 	"""
 	context: String!
 	"""
-	Explain the subject's check: the source of each determining policy, from the bundle the
+	Explain the principal's check: the source of each determining policy, from the bundle the
 	decision was made under.
 	"""
 	determiningPolicies: [PolicySource!]!
@@ -342,7 +342,7 @@ type DecisionEdge {
 }
 
 input DecisionFilter {
-	subjectId: String
+	principalId: String
 	resourceId: String
 	verdict: Verdict
 	mode: EnforcementMode
@@ -500,7 +500,7 @@ type Investigation {
 	"""
 	The person or service account it's about.
 	"""
-	subject: EntityRef!
+	principal: EntityRef!
 	"""
 	Why the reasoner opened it.
 	"""
@@ -776,8 +776,8 @@ type PolicyDryRunChange {
 }
 
 type PolicyDryRunExample {
-	subjectType: String!
-	subjectId: String!
+	principalType: String!
+	principalId: String!
 	"""
 	The person a service account acted for, if any.
 	"""

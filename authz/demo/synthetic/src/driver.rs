@@ -88,13 +88,13 @@ impl Driver {
         match &a.on_behalf_of {
             Some(human) => {
                 claims["sub"] = json!(human);
-                claims["act"] = json!({ "sub": a.subject });
+                claims["act"] = json!({ "sub": a.principal });
             }
             None => {
-                claims["sub"] = json!(a.subject);
+                claims["sub"] = json!(a.principal);
                 if !a.human_present {
                     // RFC 9068: an application's own token.
-                    claims["client_id"] = json!(a.subject);
+                    claims["client_id"] = json!(a.principal);
                 }
             }
         }
@@ -158,10 +158,10 @@ mod tests {
     use super::*;
     use crate::activity::{Why, READ};
 
-    fn access(subject: &str, on_behalf_of: Option<&str>, human_present: bool, resource: &str) -> Access {
+    fn access(principal: &str, on_behalf_of: Option<&str>, human_present: bool, resource: &str) -> Access {
         Access {
             minute: 9 * 60,
-            subject: subject.into(),
+            principal: principal.into(),
             on_behalf_of: on_behalf_of.map(str::to_string),
             human_present,
             team: "sales-northeast-finserv",

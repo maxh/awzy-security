@@ -64,7 +64,7 @@ function Investigations({
         canClose: viewerCan(action: ADMINISTER, area: INVESTIGATIONS)
         investigations(status: $status, first: 100) {
           id
-          subject {
+          principal {
             type
             id
           }
@@ -129,7 +129,7 @@ function Investigations({
                   <Time at={i.finishedAt} />
                 </Table.Td>
                 <Table.Td>
-                  <Entity e={i.subject} />
+                  <Entity e={i.principal} />
                 </Table.Td>
                 <Table.Td>
                   <StatusBadge tone={VERDICT_TONE[i.verdict] ?? "neutral"}>{words(i.verdict)}</StatusBadge>
@@ -209,7 +209,7 @@ function Detail({
   return (
     <Stack gap="md">
       <Group gap="sm">
-        <Entity e={i.subject} />
+        <Entity e={i.principal} />
         <StatusBadge tone={VERDICT_TONE[i.verdict] ?? "neutral"}>{words(i.verdict)}</StatusBadge>
         <Text size="sm">risk {i.risk}</Text>
       </Group>

@@ -63,8 +63,8 @@ CREATE TABLE public.humans (
 
 CREATE TABLE public.investigations (
     id uuid NOT NULL,
-    subject_type text NOT NULL,
-    subject_id text NOT NULL,
+    principal_type text NOT NULL,
+    principal_id text NOT NULL,
     trigger text NOT NULL,
     floor integer NOT NULL,
     status text NOT NULL,
@@ -129,8 +129,8 @@ CREATE TABLE public.resources (
 );
 
 CREATE TABLE public.risk_scores (
-    subject_type text NOT NULL,
-    subject_id text NOT NULL,
+    principal_type text NOT NULL,
+    principal_id text NOT NULL,
     score integer NOT NULL,
     reasons jsonb DEFAULT '[]'::jsonb NOT NULL,
     computed_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -189,7 +189,7 @@ ALTER TABLE ONLY public.resources
     ADD CONSTRAINT resources_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.risk_scores
-    ADD CONSTRAINT risk_scores_pkey PRIMARY KEY (subject_type, subject_id);
+    ADD CONSTRAINT risk_scores_pkey PRIMARY KEY (principal_type, principal_id);
 
 ALTER TABLE ONLY public.service_accounts
     ADD CONSTRAINT service_accounts_pkey PRIMARY KEY (id);
@@ -208,7 +208,7 @@ CREATE UNIQUE INDEX humans_user_name ON public.humans USING btree (lower(user_na
 
 CREATE INDEX investigations_by_finished ON public.investigations USING btree (finished_at DESC);
 
-CREATE INDEX investigations_by_subject ON public.investigations USING btree (subject_type, subject_id, finished_at DESC);
+CREATE INDEX investigations_by_principal ON public.investigations USING btree (principal_type, principal_id, finished_at DESC);
 
 CREATE INDEX resource_changes_by_time ON public.resource_changes USING btree (changed_at);
 

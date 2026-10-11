@@ -68,7 +68,7 @@ message Challenge {
   string qid = 1;
   // The decision that opened it (QID: decision_<uuid>).
   string decision_qid = 2;
-  awzy.authz.v1.EntityRef subject = 3;
+  awzy.authz.v1.EntityRef principal = 3;
   // Set when a service account acted for a person.
   awzy.authz.v1.EntityRef on_behalf_of = 4;
   string action = 5;
@@ -77,7 +77,7 @@ message Challenge {
   repeated awzy.authz.v1.ChallengeKind kinds = 7;
   repeated awzy.authz.v1.ChallengeKind passed = 8;
   ChallengeStatus status = 9;
-  // The person it was sent to: the human subject, the person a service account acted for, or a
+  // The person it was sent to: the human principal, the person a service account acted for, or a
   // service account's owner. Empty when no one is known, so only an approval can pass it.
   string answerer_id = 10;
   string justification = 11;
@@ -98,7 +98,7 @@ message Challenge {
 message ResolveRequest {
   // The challenge verdict's decision (QID: decision_<uuid>).
   string decision_qid = 1;
-  awzy.authz.v1.EntityRef subject = 2;
+  awzy.authz.v1.EntityRef principal = 2;
   awzy.authz.v1.EntityRef on_behalf_of = 3;
   string action = 4;
   awzy.authz.v1.EntityRef resource = 5;
@@ -178,7 +178,7 @@ message DecideResponse {
 message Containment {
   // QID: containment_<uuid>.
   string qid = 1;
-  awzy.authz.v1.EntityRef subject = 2;
+  awzy.authz.v1.EntityRef principal = 2;
   string reason = 3;
   // Deprecated: use `created_by_actor`, which this repeats as text (`Human::alice`).
   string created_by = 4;
@@ -198,7 +198,7 @@ message Containment {
 }
 
 message ContainRequest {
-  awzy.authz.v1.EntityRef subject = 1;
+  awzy.authz.v1.EntityRef principal = 1;
   string reason = 2;
   // Deprecated: use `created_by_actor`, which this repeats as text (`Human::alice`).
   string created_by = 3;
@@ -230,7 +230,7 @@ message ListContainmentsRequest {
   // Only containments still in force.
   bool active_only = 1;
   // Only this principal's.
-  awzy.authz.v1.EntityRef subject = 2;
+  awzy.authz.v1.EntityRef principal = 2;
   // Default 50, at most 500.
   int32 limit = 3;
   // Monitored containments too, which are otherwise left out (ADR 0066).

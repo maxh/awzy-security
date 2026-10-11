@@ -3,7 +3,7 @@ title: Decision API
 description: Asking awzy-pdp for a decision over gRPC or HTTP.
 ---
 
-Enforcement points ask awzy-pdp one question: may this subject take this action on this
+Enforcement points ask awzy-pdp one question: may this principal take this action on this
 resource? The same port serves gRPC and HTTP.
 
 ## gRPC
@@ -13,7 +13,7 @@ resource? The same port serves gRPC and HTTP.
 
 | Request field | |
 | --- | --- |
-| `subject` | Who is acting: `{type: "Human" \| "ServiceAccount", id}`. |
+| `principal` | Who is acting: `{type: "Human" \| "ServiceAccount", id}`. |
 | `action` | What they're doing, e.g. `read`. |
 | `resource` | What they're doing it to. |
 | `context` | Request context; must match the schema for the action. |
@@ -39,7 +39,7 @@ away, at elevated risk:
 
 ```sh
 curl -s http://awzy-pdp:8080/v1/access/evaluation -H 'content-type: application/json' -d '{
-  "subject": {"type": "ServiceAccount", "id": "sales-genie"},
+  "principal": {"type": "ServiceAccount", "id": "sales-genie"},
   "on_behalf_of": {"type": "Human", "id": "bob"},
   "action": "read",
   "resource": {"type": "Resource", "id": "design-doc"},

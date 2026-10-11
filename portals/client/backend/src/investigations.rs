@@ -37,7 +37,7 @@ pub struct WireCited {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct WireInvestigation {
     pub qid: String,
-    pub subject: WireSubject,
+    pub principal: WireSubject,
     pub trigger: String,
     pub floor: i32,
     pub status: String,
@@ -188,8 +188,8 @@ impl Investigation {
     }
 
     /// The person or service account it's about.
-    async fn subject(&self) -> EntityRef {
-        EntityRef { kind: self.0.subject.kind.clone(), id: self.0.subject.id.clone() }
+    async fn principal(&self) -> EntityRef {
+        EntityRef { kind: self.0.principal.kind.clone(), id: self.0.principal.id.clone() }
     }
 
     /// Why the reasoner opened it.
@@ -334,7 +334,7 @@ impl InvestigationMutation {
 pub fn to_json(i: &WireInvestigation) -> Value {
     json!({
         "investigation_qid": i.qid,
-        "subject": { "type": i.subject.kind, "id": i.subject.id },
+        "principal": { "type": i.principal.kind, "id": i.principal.id },
         "trigger": i.trigger,
         "floor": i.floor,
         "status": i.status,
@@ -366,7 +366,7 @@ mod tests {
     fn what_awzy_context_sends_reads_as_an_investigation() {
         let wire: WireInvestigation = serde_json::from_value(json!({
             "qid": "investigation_0199a8f2-6c1e-7b3a-9d4e-2f8c1a5b7e90",
-            "subject": { "type": "Human", "id": "nora" },
+            "principal": { "type": "Human", "id": "nora" },
             "trigger": "risk 63", "floor": 63, "status": "needs_review", "verdict": "suspicious", "risk": 70,
             "summary": "s", "evidence": [{ "id": "decision_1", "why": "the export" }], "containment": "none",
             "notes": [], "finding": null, "model": "m", "input_tokens": 10, "output_tokens": 2,

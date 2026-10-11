@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<8bf25dc711ecfe30d9f849bedb42064a>>
+ * @generated SignedSource<<e6156ca3ca721c05a02ef1dd003290e6>>
  * @lightSyntaxTransform
  */
 
@@ -13,9 +13,9 @@ export type EnforcementMode = "ENFORCE" | "MONITOR" | "%future added value";
 export type Verdict = "ALLOW" | "CHALLENGE" | "DENY" | "%future added value";
 export type DecisionFilter = {
   mode?: EnforcementMode | null | undefined;
+  principalId?: string | null | undefined;
   resourceId?: string | null | undefined;
   since?: string | null | undefined;
-  subjectId?: string | null | undefined;
   verdict?: Verdict | null | undefined;
 };
 export type DecisionsPagePaginationQuery$variables = {
@@ -142,7 +142,7 @@ return {
                     "args": null,
                     "concreteType": "EntityRef",
                     "kind": "LinkedField",
-                    "name": "subject",
+                    "name": "principal",
                     "plural": false,
                     "selections": (v3/*:: as any*/),
                     "storageKey": null
@@ -275,16 +275,16 @@ return {
     ]
   },
   "params": {
-    "cacheID": "b7b7060e8e2c6f451ed79c3b3419a5be",
+    "cacheID": "bd962a9b12ded13ebe3cdca63edbd6f8",
     "id": null,
     "metadata": {},
     "name": "DecisionsPagePaginationQuery",
     "operationKind": "query",
-    "text": "query DecisionsPagePaginationQuery(\n  $after: String\n  $filter: DecisionFilter\n  $first: Int = 50\n) {\n  ...DecisionsPage_decisions_G9cLv\n}\n\nfragment DecisionsPage_decisions_G9cLv on Query {\n  decisions(filter: $filter, first: $first, after: $after) {\n    edges {\n      node {\n        id\n        at\n        subject {\n          type\n          id\n        }\n        onBehalfOf {\n          human {\n            type\n            id\n          }\n        }\n        action\n        resource {\n          type\n          id\n        }\n        verdict\n        mode\n        challenges\n        policies\n        __typename\n      }\n      cursor\n    }\n    pageInfo {\n      endCursor\n      hasNextPage\n    }\n  }\n}\n"
+    "text": "query DecisionsPagePaginationQuery(\n  $after: String\n  $filter: DecisionFilter\n  $first: Int = 50\n) {\n  ...DecisionsPage_decisions_G9cLv\n}\n\nfragment DecisionsPage_decisions_G9cLv on Query {\n  decisions(filter: $filter, first: $first, after: $after) {\n    edges {\n      node {\n        id\n        at\n        principal {\n          type\n          id\n        }\n        onBehalfOf {\n          human {\n            type\n            id\n          }\n        }\n        action\n        resource {\n          type\n          id\n        }\n        verdict\n        mode\n        challenges\n        policies\n        __typename\n      }\n      cursor\n    }\n    pageInfo {\n      endCursor\n      hasNextPage\n    }\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "982978d5aefb142e5b1ee8cd2ec7bac6";
+(node as any).hash = "64de53bf86e1737c02ae16fcdf2843c9";
 
 export default node;

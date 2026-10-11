@@ -3,14 +3,14 @@ title: How awzy decides
 description: One check per action, against Cedar policy, the principal, and the resource.
 ---
 
-Every request an enforcement point sends is one **check**: a *subject* (who), an *action* (what),
+Every request an enforcement point sends is one **check**: a *principal* (who), an *action* (what),
 and a *resource* (on what), with *context*.
 
 ```text
-subject:  ServiceAccount::"sales-genie"   acting for Human::"bob"
-action:   read
-resource: Resource::"q3-strategy-deck"
-context:  { "human_present": false }
+principal: ServiceAccount::"sales-genie"   acting for Human::"bob"
+action:    read
+resource:  Resource::"q3-strategy-deck"
+context:   { "human_present": false }
 ```
 
 awzy-pdp fills in what it knows: the person's groups and status from your IdP, the resource's

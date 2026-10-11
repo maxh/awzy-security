@@ -27,7 +27,7 @@ use std::{collections::HashSet, str::FromStr, sync::Arc};
 use arc_swap::ArcSwap;
 
 use awzy_model::{
-    AccessRequest, ChallengeKind, Challenges, Decision, DecisionId, DecisionRecord, DelegationCheck, EnforcementMode,
+    ChallengeKind, Challenges, Check, Decision, DecisionId, DecisionRecord, DelegationCheck, EnforcementMode,
     EntityRef, Verdict,
 };
 use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
@@ -46,7 +46,7 @@ pub const DEFAULT_POLICIES: &str = include_str!("../../../../policies/base.cedar
 pub struct Facts<'a> {
     /// Who is assigned to open work on the resource (ADR 0046), for `context.assigned`.
     pub assignees: Option<&'a HashSet<String>>,
-    /// awzy-reasoner's scores for the subject and the person it acts for, keyed `Type::id`
+    /// awzy-reasoner's scores for the principal and the person it acts for, keyed `Type::id`
     /// (ADR 0056), for `context.risk_score`.
     pub risk: Option<&'a std::collections::HashMap<String, i64>>,
 }
@@ -164,18 +164,18 @@ impl Pdp {
     }
 
     /// Decides one request. A delegated request (`on_behalf_of` set) is checked twice: once
-    /// for the subject and once as the person it acts for. The stricter verdict wins, so a
+    /// for the principal and once as the person it acts for. The stricter verdict wins, so a
     /// service account can never do more than the person it acts for.
-    pub fn decide(&self, req: &AccessRequest, entities: &Entities) -> anyhow::Result<Decision> {
+    pub fn decide(&self, req: &Check, entities: &Entities) -> anyhow::Result<Decision> {
         self.decide_assigned(req, entities, None)
     }
 
     /// [`Self::decide`], with who is assigned to work on the resource when that's known
     /// (ADR 0046). Each check then sees `context.assigned` for its own principal: the account for
-    /// the subject's check, the person for the delegated one.
+    /// the principal's check, the person for the delegated one.
     pub fn decide_assigned(
         &self,
-        req: &AccessRequest,
+        req: &Check,
         entities: &Entities,
         assignees: Option<&HashSet<String>>,
     ) -> anyhow::Result<Decision> {
@@ -187,7 +187,7 @@ impl Pdp {
     /// a plain deny or a challenge of another kind.
     pub fn decide_passed(
         &self,
-        req: &AccessRequest,
+        req: &Check,
         entities: &Entities,
         assignees: Option<&HashSet<String>>,
         passed: Challenges,
@@ -199,7 +199,7 @@ impl Pdp {
     /// request has passed.
     pub fn decide_with(
         &self,
-        req: &AccessRequest,
+        req: &Check,
         entities: &Entities,
         facts: &Facts<'_>,
         passed: Challenges,
@@ -235,7 +235,7 @@ impl Pdp {
             )?;
             &without_passed
         };
-        let (verdict, policies) = self.check(policy_set, &req.subject, req, &context, entities, &facts)?;
+        let (verdict, policies) = self.check(policy_set, &req.principal, req, &context, entities, &facts)?;
         let on_behalf_of = match &req.on_behalf_of {
             Some(human) => {
                 let (verdict, policies) = self.check(policy_set, human, req, &context, entities, &facts)?;
@@ -260,7 +260,7 @@ impl Pdp {
         &self,
         policy_set: &PolicySet,
         principal: &EntityRef,
-        req: &AccessRequest,
+        req: &Check,
         context: &serde_json::Map<String, serde_json::Value>,
         entities: &Entities,
         facts: &Facts<'_>,
@@ -423,19 +423,20 @@ impl AppState {
 
     /// Decides one request, stamps the enforcement mode, and records the decision. Recording
     /// never blocks or fails a decision.
-    pub async fn check(&self, req: &AccessRequest, entities: serde_json::Value) -> Result<Decision, CheckError> {
+    pub async fn check(&self, req: &Check, entities: serde_json::Value) -> Result<Decision, CheckError> {
         let started = std::time::Instant::now();
         let result = self.check_inner(req, entities).await;
         self.metrics.record(result.as_ref().ok().map(|d| &d.verdict), started.elapsed());
         result
     }
 
-    async fn check_inner(&self, req: &AccessRequest, entities: serde_json::Value) -> Result<Decision, CheckError> {
+    async fn check_inner(&self, req: &Check, entities: serde_json::Value) -> Result<Decision, CheckError> {
         if !self.is_ready() {
             return Err(CheckError::NotReady);
         }
         let mode = if req.always_enforced { EnforcementMode::Enforce } else { self.enforcement.mode() };
-        let who: Vec<&awzy_model::EntityRef> = std::iter::once(&req.subject).chain(req.on_behalf_of.as_ref()).collect();
+        let who: Vec<&awzy_model::EntityRef> =
+            std::iter::once(&req.principal).chain(req.on_behalf_of.as_ref()).collect();
         let contained = self.containments.find(&who).await.map_err(CheckError::Unavailable)?;
         // With awzy-context, every service account must be registered there (ADR 0033).
         let assembled = if contained.is_empty() {
@@ -481,7 +482,7 @@ impl AppState {
     async fn resolve_challenge(
         &self,
         pdp: &Pdp,
-        req: &AccessRequest,
+        req: &Check,
         entities: &Entities,
         facts: &Facts<'_>,
         mut decision: Decision,
@@ -519,7 +520,7 @@ impl AppState {
 #[derive(Debug, Deserialize)]
 pub struct EvaluationRequest {
     #[serde(flatten)]
-    pub request: AccessRequest,
+    pub request: Check,
     #[serde(default)]
     pub entities: Vec<serde_json::Value>,
 }
@@ -576,9 +577,9 @@ mod tests {
         .unwrap()
     }
 
-    fn read(who: &str, what: &str, risk: i64) -> AccessRequest {
-        AccessRequest {
-            subject: EntityRef::new("Human", who),
+    fn read(who: &str, what: &str, risk: i64) -> Check {
+        Check {
+            principal: EntityRef::new("Human", who),
             action: "read".into(),
             resource: EntityRef::new("Resource", what),
             context: json!({ "risk_score": risk }).as_object().unwrap().clone(),
@@ -589,15 +590,15 @@ mod tests {
     }
 
     /// `account` reading `what`, optionally acting for the person `for_human`.
-    fn sa_read(account: &str, for_human: Option<&str>, what: &str, risk: i64) -> AccessRequest {
-        AccessRequest {
-            subject: EntityRef::new("ServiceAccount", account),
+    fn sa_read(account: &str, for_human: Option<&str>, what: &str, risk: i64) -> Check {
+        Check {
+            principal: EntityRef::new("ServiceAccount", account),
             on_behalf_of: for_human.map(|h| EntityRef::new("Human", h)),
             ..read(account, what, risk)
         }
     }
 
-    fn decide(req: &AccessRequest) -> Decision {
+    fn decide(req: &Check) -> Decision {
         let pdp = Pdp::with_defaults().unwrap();
         pdp.decide(req, &fixtures(&pdp)).unwrap()
     }
@@ -632,7 +633,7 @@ mod tests {
                 { "uid": { "type": "Resource", "id": "plan" }, "attrs": { "sensitivity": "crown_jewels" }, "parents": [] },
             ]))
             .unwrap();
-        let req = AccessRequest { human_present: Some(true), ..sa_read("sales-genie", Some("nora"), "plan", 1) };
+        let req = Check { human_present: Some(true), ..sa_read("sales-genie", Some("nora"), "plan", 1) };
         let assigned = |who: &[&str]| who.iter().map(|w| w.to_string()).collect::<HashSet<String>>();
         let challenged = Verdict::Challenge { challenges: Challenges::of(ChallengeKind::Approval) };
 
@@ -693,7 +694,7 @@ mod tests {
     #[test]
     fn the_security_team_approves_challenges() {
         let pdp = Pdp::with_defaults().unwrap();
-        let approve = |who: &str| AccessRequest { action: "approve".into(), ..read(who, "board-deck", 10) };
+        let approve = |who: &str| Check { action: "approve".into(), ..read(who, "board-deck", 10) };
         assert_eq!(pdp.decide(&approve("alice"), &fixtures(&pdp)).unwrap().verdict, Verdict::Allow);
         assert_eq!(pdp.decide(&approve("bob"), &fixtures(&pdp)).unwrap().verdict, Verdict::Deny);
     }
@@ -701,7 +702,7 @@ mod tests {
     #[test]
     fn an_agent_approves_only_where_a_policy_names_it_and_never_for_its_owner() {
         let approve = |agent: &str, what: &str, approving_for: Option<&str>| {
-            let mut req = AccessRequest { action: "approve".into(), ..sa_read(agent, None, what, 10) };
+            let mut req = Check { action: "approve".into(), ..sa_read(agent, None, what, 10) };
             if let Some(h) = approving_for {
                 req.context.insert("approving_for".into(), json!({ "__entity": { "type": "Human", "id": h } }));
             }
@@ -751,7 +752,7 @@ mod tests {
                   "attrs": { "sensitivity": "confidential" }, "parents": [] },
             ]))
             .unwrap();
-        let call = |tool: &str, risk: i64| AccessRequest {
+        let call = |tool: &str, risk: i64| Check {
             action: "call".into(),
             resource: EntityRef::new("McpTool", format!("larkspur-admin/{tool}")),
             ..read("lee", "", risk)
@@ -803,8 +804,8 @@ mod tests {
         .unwrap()
     }
 
-    fn as_(who: &str, kind: &str, action: &str, what: &str) -> AccessRequest {
-        AccessRequest { subject: EntityRef::new(kind, who), action: action.into(), ..read(who, what, 0) }
+    fn as_(who: &str, kind: &str, action: &str, what: &str) -> Check {
+        Check { principal: EntityRef::new(kind, who), action: action.into(), ..read(who, what, 0) }
     }
 
     #[test]
@@ -812,7 +813,7 @@ mod tests {
         let pdp = Pdp::with_defaults().unwrap();
         let e = larkspur(&pdp);
         let nobody_assigned = HashSet::new();
-        let decide = |r: AccessRequest| pdp.decide_assigned(&r, &e, Some(&nobody_assigned)).unwrap();
+        let decide = |r: Check| pdp.decide_assigned(&r, &e, Some(&nobody_assigned)).unwrap();
         assert_eq!(decide(as_("nora", "Human", "read", "accounts")).verdict, Verdict::Allow, "shared with her team");
         assert_eq!(decide(as_("nora", "Human", "write", "accounts")).verdict, Verdict::Allow, "her team writes");
         assert_eq!(decide(as_("nora", "Human", "read", "export")).verdict, Verdict::Deny, "not shared with her");
@@ -840,7 +841,7 @@ mod tests {
     fn the_rogue_agent_needs_its_person_and_the_owner() {
         let pdp = Pdp::with_defaults().unwrap();
         let e = larkspur(&pdp);
-        let genie = AccessRequest {
+        let genie = Check {
             on_behalf_of: Some(EntityRef::new("Human", "nora")),
             human_present: Some(true),
             ..as_("sales-genie", "ServiceAccount", "read", "plan")
@@ -849,9 +850,9 @@ mod tests {
         let both = [ChallengeKind::Justification, ChallengeKind::Approval].into_iter().collect();
         assert_eq!(d.verdict, Verdict::Challenge { challenges: both });
         assert_eq!(d.on_behalf_of.unwrap().verdict, Verdict::Allow, "Nora herself may read the overshared plan");
-        let nora = AccessRequest { on_behalf_of: None, ..as_("nora", "Human", "read", "plan") };
+        let nora = Check { on_behalf_of: None, ..as_("nora", "Human", "read", "plan") };
         assert_eq!(pdp.decide_assigned(&nora, &e, Some(&HashSet::new())).unwrap().verdict, Verdict::Allow);
-        let accounts = AccessRequest { resource: EntityRef::new("Resource", "accounts"), ..genie };
+        let accounts = Check { resource: EntityRef::new("Resource", "accounts"), ..genie };
         assert_eq!(
             pdp.decide_assigned(&accounts, &e, Some(&HashSet::new())).unwrap().verdict,
             Verdict::Allow,
@@ -991,7 +992,7 @@ mod tests {
         enforcement.synced(EnforcementMode::Monitor);
         let d = state.check(&read("bob", "board-deck", 1), entities.clone()).await.unwrap();
         assert_eq!((d.verdict, d.mode), (Verdict::Deny, EnforcementMode::Monitor), "a would-deny");
-        let portal = AccessRequest { always_enforced: true, ..read("bob", "board-deck", 1) };
+        let portal = Check { always_enforced: true, ..read("bob", "board-deck", 1) };
         assert_eq!(
             state.check(&portal, entities.clone()).await.unwrap().mode,
             EnforcementMode::Enforce,
@@ -1026,7 +1027,7 @@ mod tests {
 
         // SalesGenie (10) acting for bob (90): its own check passes, bob's is challenged, and the
         // stricter verdict stands.
-        let req = AccessRequest { human_present: Some(true), ..sa_read("sales-genie", Some("bob"), "design-doc", 0) };
+        let req = Check { human_present: Some(true), ..sa_read("sales-genie", Some("bob"), "design-doc", 0) };
         let d = state.check(&req, doc.clone()).await.unwrap();
         assert_eq!(d.verdict, verify);
         assert_eq!(d.on_behalf_of.unwrap().verdict, verify);
@@ -1083,7 +1084,7 @@ mod tests {
         use tower::ServiceExt;
 
         let body = json!({
-            "subject": { "type": "Human", "id": "bob" },
+            "principal": { "type": "Human", "id": "bob" },
             "action": "read",
             "resource": { "type": "Resource", "id": "design-doc" },
             "context": { "risk_score": 5 },

@@ -28,7 +28,7 @@ const MAX_LIST: i64 = 500;
 /// One investigation as the reasoner writes it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct InvestigationInput {
-    pub subject: EntityRef,
+    pub principal: EntityRef,
     pub trigger: String,
     pub floor: i32,
     pub status: String,
@@ -52,11 +52,11 @@ pub struct InvestigationInput {
 
 impl InvestigationInput {
     fn validate(&self) -> Result<(), String> {
-        if ![entity_type::HUMAN, entity_type::SERVICE_ACCOUNT].contains(&self.subject.kind.as_str()) {
-            return Err(format!("{}: only people and service accounts are investigated", self.subject.kind));
+        if ![entity_type::HUMAN, entity_type::SERVICE_ACCOUNT].contains(&self.principal.kind.as_str()) {
+            return Err(format!("{}: only people and service accounts are investigated", self.principal.kind));
         }
-        if self.subject.id.trim().is_empty() || self.subject.id.len() > 256 {
-            return Err("subject.id is 1 to 256 characters".into());
+        if self.principal.id.trim().is_empty() || self.principal.id.len() > 256 {
+            return Err("principal.id is 1 to 256 characters".into());
         }
         if !(0..=100).contains(&self.floor) || !(0..=100).contains(&self.risk) {
             return Err("floor and risk are 0 to 100".into());
@@ -117,8 +117,8 @@ pub struct Usage {
 #[derive(Debug, Default, Deserialize)]
 pub struct ListParams {
     pub status: Option<String>,
-    pub subject_type: Option<String>,
-    pub subject_id: Option<String>,
+    pub principal_type: Option<String>,
+    pub principal_id: Option<String>,
     /// Only those finished after this.
     pub since: Option<DateTime<Utc>>,
     pub limit: Option<i64>,
@@ -131,7 +131,10 @@ fn from_row(row: &PgRow) -> Result<Investigation, sqlx::Error> {
     Ok(Investigation {
         qid: InvestigationId::from_uuid(row.try_get("id")?).to_string(),
         input: InvestigationInput {
-            subject: EntityRef::new(row.try_get::<String, _>("subject_type")?, row.try_get::<String, _>("subject_id")?),
+            principal: EntityRef::new(
+                row.try_get::<String, _>("principal_type")?,
+                row.try_get::<String, _>("principal_id")?,
+            ),
             trigger: row.try_get("trigger")?,
             floor: row.try_get("floor")?,
             status: row.try_get("status")?,
@@ -157,14 +160,14 @@ fn from_row(row: &PgRow) -> Result<Investigation, sqlx::Error> {
 impl ContextStore {
     pub async fn put_investigation(&self, i: &InvestigationInput) -> Result<Investigation, sqlx::Error> {
         let row = sqlx::query(
-            "INSERT INTO investigations (id, subject_type, subject_id, trigger, floor, status, verdict, risk, summary,
+            "INSERT INTO investigations (id, principal_type, principal_id, trigger, floor, status, verdict, risk, summary,
                  evidence, containment, notes, finding, model, input_tokens, output_tokens, started_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
              RETURNING *",
         )
         .bind(InvestigationId::new().uuid())
-        .bind(&i.subject.kind)
-        .bind(&i.subject.id)
+        .bind(&i.principal.kind)
+        .bind(&i.principal.id)
         .bind(&i.trigger)
         .bind(i.floor)
         .bind(&i.status)
@@ -189,14 +192,14 @@ impl ContextStore {
         let rows = sqlx::query(
             "SELECT * FROM investigations
              WHERE ($1::text IS NULL OR status = $1)
-               AND ($2::text IS NULL OR subject_type = $2)
-               AND ($3::text IS NULL OR subject_id = $3)
+               AND ($2::text IS NULL OR principal_type = $2)
+               AND ($3::text IS NULL OR principal_id = $3)
                AND ($4::timestamptz IS NULL OR finished_at > $4)
              ORDER BY finished_at DESC LIMIT $5",
         )
         .bind(p.status.as_deref())
-        .bind(p.subject_type.as_deref())
-        .bind(p.subject_id.as_deref())
+        .bind(p.principal_type.as_deref())
+        .bind(p.principal_id.as_deref())
         .bind(p.since)
         .bind(p.limit.unwrap_or(50).clamp(1, MAX_LIST))
         .fetch_all(self.pool())
@@ -352,7 +355,7 @@ mod tests {
 
     fn input(id: &str, tokens: i64) -> InvestigationInput {
         InvestigationInput {
-            subject: EntityRef::new("Human", id),
+            principal: EntityRef::new("Human", id),
             trigger: "risk 63".into(),
             floor: 63,
             status: "needs_review".into(),
@@ -373,7 +376,9 @@ mod tests {
     #[test]
     fn only_principals_and_known_values_are_stored() {
         assert!(input("nora", 10).validate().is_ok());
-        assert!(InvestigationInput { subject: EntityRef::new("Resource", "doc"), ..input("x", 1) }.validate().is_err());
+        assert!(InvestigationInput { principal: EntityRef::new("Resource", "doc"), ..input("x", 1) }
+            .validate()
+            .is_err());
         assert!(InvestigationInput { verdict: "guilty".into(), ..input("x", 1) }.validate().is_err());
         assert!(InvestigationInput { risk: 101, ..input("x", 1) }.validate().is_err());
         assert!(InvestigationInput { input_tokens: -1, ..input("x", 1) }.validate().is_err());
@@ -389,8 +394,11 @@ mod tests {
 
         let id: InvestigationId = nora.qid.parse().unwrap();
         assert_eq!(store.investigation(id).await.unwrap().unwrap().input, nora.input);
-        let theirs =
-            ListParams { subject_type: Some("Human".into()), subject_id: Some("nora".into()), ..Default::default() };
+        let theirs = ListParams {
+            principal_type: Some("Human".into()),
+            principal_id: Some("nora".into()),
+            ..Default::default()
+        };
         assert_eq!(store.investigations(&theirs).await.unwrap().len(), 1);
         let review = ListParams { status: Some("needs_review".into()), ..Default::default() };
         assert!(store.investigations(&review).await.unwrap().iter().all(|i| i.input.status == "needs_review"));

@@ -40,10 +40,11 @@ impl EntityRef {
     }
 }
 
-/// One action by one principal on one resource: the unit Beyond Zero authorizes.
+/// A check: one action by one principal on one resource, the unit Beyond Zero authorizes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AccessRequest {
-    pub subject: EntityRef,
+pub struct Check {
+    /// Who is acting.
+    pub principal: EntityRef,
     pub action: String,
     pub resource: EntityRef,
     #[serde(default)]
@@ -53,7 +54,7 @@ pub struct AccessRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_behalf_of: Option<EntityRef>,
     /// Whether a person is there to answer a challenge. Unset means: yes for a Human
-    /// subject, no for a service account.
+    /// principal, no for a service account.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub human_present: Option<bool>,
     /// The enforcement point applies the verdict whatever the install's mode (ADR 0020), so the
@@ -62,9 +63,9 @@ pub struct AccessRequest {
     pub always_enforced: bool,
 }
 
-impl AccessRequest {
+impl Check {
     pub fn human_present(&self) -> bool {
-        self.human_present.unwrap_or(self.subject.kind == entity_type::HUMAN)
+        self.human_present.unwrap_or(self.principal.kind == entity_type::HUMAN)
     }
 }
 
@@ -222,12 +223,12 @@ pub struct Decision {
     /// On the wire: `qid` (ADR 0058).
     #[serde(rename = "qid")]
     pub id: DecisionId,
-    /// For a delegated request, the stricter of the subject's and the person's checks.
+    /// For a delegated request, the stricter of the principal's and the person's checks.
     #[serde(flatten)]
     pub verdict: Verdict,
-    /// Policies that determined the subject's own check.
+    /// Policies that determined the principal's own check.
     pub policies: Vec<String>,
-    /// For a delegated request: the check of the person the subject acted for.
+    /// For a delegated request: the check of the person the principal acted for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_behalf_of: Option<DelegationCheck>,
     /// In monitor the enforcement point must allow; `verdict` is what would have happened.
@@ -279,8 +280,8 @@ pub struct DecisionRecord {
     /// On the wire: `at_ms`, milliseconds since the Unix epoch.
     #[serde(rename = "at_ms", with = "chrono::serde::ts_milliseconds")]
     pub at: DateTime<Utc>,
-    pub subject_type: String,
-    pub subject_id: String,
+    pub principal_type: String,
+    pub principal_id: String,
     /// The person a service account acted for; empty when not delegated.
     pub on_behalf_of_type: String,
     pub on_behalf_of_id: String,
@@ -304,7 +305,7 @@ pub struct DecisionRecord {
 }
 
 impl DecisionRecord {
-    pub fn new(req: &AccessRequest, decision: &Decision, policy_version: i64, at: DateTime<Utc>) -> Self {
+    pub fn new(req: &Check, decision: &Decision, policy_version: i64, at: DateTime<Utc>) -> Self {
         let challenge = match decision.verdict {
             Verdict::Challenge { challenges } => challenges.joined(),
             _ => String::new(),
@@ -319,8 +320,8 @@ impl DecisionRecord {
         Self {
             id: decision.id,
             at,
-            subject_type: req.subject.kind.clone(),
-            subject_id: req.subject.id.clone(),
+            principal_type: req.principal.kind.clone(),
+            principal_id: req.principal.id.clone(),
             on_behalf_of_type,
             on_behalf_of_id,
             human_present: req.human_present(),
@@ -355,8 +356,8 @@ pub struct EventRecord {
     pub source: String,
     /// The system that logged it: an app's name, or an AWS service such as `s3.amazonaws.com`.
     pub system: String,
-    pub subject_type: String,
-    pub subject_id: String,
+    pub principal_type: String,
+    pub principal_id: String,
     /// The person a service account acted for, when the source records it.
     pub on_behalf_of_type: String,
     pub on_behalf_of_id: String,
@@ -400,8 +401,8 @@ mod tests {
 
     #[test]
     fn decision_record_flattens_request_and_verdict() {
-        let req = AccessRequest {
-            subject: EntityRef::new("ServiceAccount", "sales-genie"),
+        let req = Check {
+            principal: EntityRef::new("ServiceAccount", "sales-genie"),
             action: "read".into(),
             resource: EntityRef::new("Resource", "plan"),
             context: serde_json::json!({ "risk_score": 90 }).as_object().unwrap().clone(),

@@ -28,7 +28,7 @@ const MAX_PAGE: usize = 200;
 const DEFAULT_WINDOW: Duration = Duration::hours(24);
 const MAX_WINDOW: Duration = Duration::days(30);
 
-const COLUMNS: &str = "id, at, subject_type, subject_id, on_behalf_of_type, on_behalf_of_id, human_present, \
+const COLUMNS: &str = "id, at, principal_type, principal_id, on_behalf_of_type, on_behalf_of_id, human_present, \
     action, resource_type, resource_id, verdict, mode, challenge, policies, on_behalf_of_verdict, on_behalf_of_policies, \
     policy_version, context";
 
@@ -38,8 +38,8 @@ pub struct DecisionRow {
     pub id: Uuid,
     #[serde(with = "::clickhouse::serde::chrono::datetime64::millis")]
     pub at: DateTime<Utc>,
-    pub subject_type: String,
-    pub subject_id: String,
+    pub principal_type: String,
+    pub principal_id: String,
     pub on_behalf_of_type: String,
     pub on_behalf_of_id: String,
     pub human_present: bool,
@@ -112,8 +112,8 @@ impl Decision {
         UtcTimestamp(self.0.at)
     }
 
-    async fn subject(&self) -> EntityRef {
-        EntityRef { kind: self.0.subject_type.clone(), id: self.0.subject_id.clone() }
+    async fn principal(&self) -> EntityRef {
+        EntityRef { kind: self.0.principal_type.clone(), id: self.0.principal_id.clone() }
     }
 
     /// Set when a service account acted for a person: that person and their own check.
@@ -134,7 +134,7 @@ impl Decision {
         EntityRef { kind: self.0.resource_type.clone(), id: self.0.resource_id.clone() }
     }
 
-    /// What policy decided. For a delegated request, the stricter of the subject's and the
+    /// What policy decided. For a delegated request, the stricter of the principal's and the
     /// person's checks. In MONITOR mode it was not applied: a DENY is a "would deny".
     async fn verdict(&self) -> Verdict {
         Verdict::parse(&self.0.verdict)
@@ -149,7 +149,7 @@ impl Decision {
         split_challenges(&self.0.challenge)
     }
 
-    /// IDs of the policies that determined the subject's own check.
+    /// IDs of the policies that determined the principal's own check.
     async fn policies(&self) -> &[String] {
         &self.0.policies
     }
@@ -164,7 +164,7 @@ impl Decision {
         &self.0.context
     }
 
-    /// Explain the subject's check: the source of each determining policy, from the bundle the
+    /// Explain the principal's check: the source of each determining policy, from the bundle the
     /// decision was made under.
     async fn determining_policies(&self, ctx: &Context<'_>) -> Result<Vec<PolicySource>> {
         let policy = ctx.data::<Services>().ok().and_then(|s| s.policy.clone());
@@ -197,7 +197,7 @@ impl OnBehalfOf {
 
 #[derive(InputObject, Default)]
 pub struct DecisionFilter {
-    pub subject_id: Option<String>,
+    pub principal_id: Option<String>,
     pub resource_id: Option<String>,
     pub verdict: Option<Verdict>,
     pub mode: Option<crate::enforcement::Mode>,
@@ -232,7 +232,7 @@ impl DecisionQuery {
             let page = search(
                 &client,
                 SearchParams {
-                    subject_id: filter.subject_id,
+                    principal_id: filter.principal_id,
                     resource_id: filter.resource_id,
                     verdict: filter.verdict,
                     mode: filter.mode.map(Into::into),
@@ -252,7 +252,7 @@ impl DecisionQuery {
 
 /// What to search for. `since` and `limit` are clamped to the bounds at the top of this file.
 pub struct SearchParams {
-    pub subject_id: Option<String>,
+    pub principal_id: Option<String>,
     pub resource_id: Option<String>,
     pub verdict: Option<Verdict>,
     pub mode: Option<awzy_model::EnforcementMode>,
@@ -274,8 +274,8 @@ pub async fn search(ch: &::clickhouse::Client, p: SearchParams) -> anyhow::Resul
 
     let mut sql = format!("SELECT {COLUMNS} FROM decisions WHERE at >= fromUnixTimestamp64Milli(?, 'UTC')");
     let mut strings = Vec::new();
-    if let Some(v) = p.subject_id {
-        sql.push_str(" AND subject_id = ?");
+    if let Some(v) = p.principal_id {
+        sql.push_str(" AND principal_id = ?");
         strings.push(v);
     }
     if let Some(v) = p.resource_id {
@@ -436,8 +436,8 @@ mod tests {
         let row = DecisionRow {
             id: Uuid::now_v7(),
             at: DateTime::from_timestamp_millis(1_700_000_000_123).unwrap(),
-            subject_type: String::new(),
-            subject_id: String::new(),
+            principal_type: String::new(),
+            principal_id: String::new(),
             on_behalf_of_type: String::new(),
             on_behalf_of_id: String::new(),
             human_present: true,
@@ -480,17 +480,17 @@ mod tests {
         let now_ms = Utc::now().timestamp_millis();
         let mut values = Vec::new();
         for i in 0..5 {
-            let (subject, verdict, policy) =
+            let (principal, verdict, policy) =
                 if i < 3 { ("alice", "allow", "security-team-read") } else { ("bob", "deny", "") };
             let id = Uuid::now_v7();
             values.push(format!(
-                "('{id}', fromUnixTimestamp64Milli({}, 'UTC'), 'Human', '{subject}', 'read', 'Resource', 'doc{i}', '{verdict}', [{}], true)",
+                "('{id}', fromUnixTimestamp64Milli({}, 'UTC'), 'Human', '{principal}', 'read', 'Resource', 'doc{i}', '{verdict}', [{}], true)",
                 now_ms - i * 1000,
                 if policy.is_empty() { String::new() } else { format!("'{policy}'") }
             ));
         }
         ch.query(&format!(
-            "INSERT INTO decisions (id, at, subject_type, subject_id, action, resource_type, resource_id, verdict, policies, human_present) VALUES {}",
+            "INSERT INTO decisions (id, at, principal_type, principal_id, action, resource_type, resource_id, verdict, policies, human_present) VALUES {}",
             values.join(",")
         ))
         .execute()
@@ -511,7 +511,7 @@ mod tests {
             async move { crate::testing::run(&schema, &alice, q).await }
         };
 
-        let first = run(r#"{ decisions(first: 2, filter: { subjectId: "alice" }) {
+        let first = run(r#"{ decisions(first: 2, filter: { principalId: "alice" }) {
             edges { cursor node { id verdict resource { id } determiningPolicies { id source } } }
             pageInfo { hasNextPage }
         } }"#)
@@ -526,7 +526,7 @@ mod tests {
 
         let cursor = edges[1]["cursor"].as_str().unwrap();
         let second = run(&format!(
-            r#"{{ decisions(first: 2, after: "{cursor}", filter: {{ subjectId: "alice" }}) {{ edges {{ node {{ resource {{ id }} }} }} pageInfo {{ hasNextPage }} }} }}"#
+            r#"{{ decisions(first: 2, after: "{cursor}", filter: {{ principalId: "alice" }}) {{ edges {{ node {{ resource {{ id }} }} }} pageInfo {{ hasNextPage }} }} }}"#
         ))
         .await;
         assert_eq!(second["decisions"]["edges"].as_array().unwrap().len(), 1);
@@ -534,7 +534,7 @@ mod tests {
         assert_eq!(second["decisions"]["pageInfo"]["hasNextPage"], false);
 
         let denies =
-            run(r#"{ decisions(filter: { verdict: DENY }) { edges { node { subject { id } mode } } } }"#).await;
+            run(r#"{ decisions(filter: { verdict: DENY }) { edges { node { principal { id } mode } } } }"#).await;
         assert_eq!(denies["decisions"]["edges"].as_array().unwrap().len(), 2);
         assert_eq!(denies["decisions"]["edges"][0]["node"]["mode"], "MONITOR", "rows without a mode count as monitor");
 
@@ -548,8 +548,8 @@ mod tests {
 
         let id = edges[0]["node"]["id"].as_str().unwrap();
         assert!(id.starts_with("decision_"), "{id}");
-        let node = run(&format!(r#"{{ node(id: "{id}") {{ ... on Decision {{ subject {{ id }} }} }} }}"#)).await;
-        assert_eq!(node["node"]["subject"]["id"], "alice");
+        let node = run(&format!(r#"{{ node(id: "{id}") {{ ... on Decision {{ principal {{ id }} }} }} }}"#)).await;
+        assert_eq!(node["node"]["principal"]["id"], "alice");
 
         admin.query(&format!("DROP DATABASE {database}")).execute().await.unwrap();
     }

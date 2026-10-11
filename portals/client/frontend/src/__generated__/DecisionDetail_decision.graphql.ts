@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<a4cac2d0c873f5177ee72125d343bf65>>
+ * @generated SignedSource<<adea6236a2abedd9cad7bf602d1076b5>>
  * @lightSyntaxTransform
  */
 
@@ -35,11 +35,11 @@ export type DecisionDetail_decision$data = {
     readonly verdict: Verdict;
   } | null | undefined;
   readonly policyVersion: number;
-  readonly resource: {
+  readonly principal: {
     readonly id: string;
     readonly type: string;
   };
-  readonly subject: {
+  readonly resource: {
     readonly id: string;
     readonly type: string;
   };
@@ -114,7 +114,7 @@ return {
       "args": null,
       "concreteType": "EntityRef",
       "kind": "LinkedField",
-      "name": "subject",
+      "name": "principal",
       "plural": false,
       "selections": (v1/*:: as any*/),
       "storageKey": null
@@ -202,6 +202,6 @@ return {
 };
 })();
 
-(node as any).hash = "3d14f885a42ce47fcf384e895ce80c72";
+(node as any).hash = "4f2f8df02cca6360f668192db772794d";
 
 export default node;

@@ -64,7 +64,7 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
             node {
               id
               at
-              subject {
+              principal {
                 type
                 id
               }
@@ -263,7 +263,7 @@ function Enforcement({ fetchKey, onChanged }: { fetchKey: number; onChanged: () 
                         <Time at={d.at} />
                       </Table.Td>
                       <Table.Td>
-                        <Entity e={d.subject} />
+                        <Entity e={d.principal} />
                       </Table.Td>
                       <Table.Td>{d.action}</Table.Td>
                       <Table.Td>

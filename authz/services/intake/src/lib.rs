@@ -154,7 +154,7 @@ mod tests {
 
     fn one_event() -> serde_json::Value {
         json!({ "events": [{ "at": chrono::Utc::now().to_rfc3339(), "system": "jira",
-                             "subject": { "type": "Human", "id": "bob" }, "action": "read" }] })
+                             "principal": { "type": "Human", "id": "bob" }, "action": "read" }] })
     }
 
     #[tokio::test]

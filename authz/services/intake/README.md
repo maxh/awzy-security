@@ -17,7 +17,7 @@ Normalizes them into one event schema, enriches them with entity IDs, and writes
 | `POST /v1/events/aws-cloudtrail` | A CloudTrail log file, `{"Records": [...]}` |
 
 Each event becomes an `EventRecord` (`libs/model`) with an `event_` QID and UTC times, goes to
-Kafka (`awzy.events.v1`, partitioned by subject), and lands in ClickHouse's `events` table next
+Kafka (`awzy.events.v1`, partitioned by principal), and lands in ClickHouse's `events` table next
 to `decisions` (migration 5 in [awzy-clickhouse-migrate](../../jobs/clickhouse-migrate/README.md)).
 
 - **Acknowledged, not fire-and-forget.** A request gets `202` only once Kafka has every event,

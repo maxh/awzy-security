@@ -1,8 +1,7 @@
 //! Conversions between the wire types and `awzy-model`.
 
 use awzy_model::{
-    AccessRequest, ChallengeKind as ModelChallenge, Challenges, Decision, EntityRef as ModelRef,
-    Verdict as ModelVerdict,
+    ChallengeKind as ModelChallenge, Challenges, Check, Decision, EntityRef as ModelRef, Verdict as ModelVerdict,
 };
 
 use awzy_model::EnforcementMode as ModelMode;
@@ -76,12 +75,12 @@ pub fn actor_to_wire(stored: &str) -> (Option<crate::authz::v1::Actor>, String) 
     (Some(actor.into()), text)
 }
 
-impl TryFrom<CheckRequest> for AccessRequest {
+impl TryFrom<CheckRequest> for Check {
     type Error = ConvertError;
 
     fn try_from(req: CheckRequest) -> Result<Self, Self::Error> {
-        Ok(AccessRequest {
-            subject: req.subject.ok_or(ConvertError::Missing("subject"))?.into(),
+        Ok(Check {
+            principal: req.principal.ok_or(ConvertError::Missing("principal"))?.into(),
             action: req.action,
             resource: req.resource.ok_or(ConvertError::Missing("resource"))?.into(),
             context: req.context.map(struct_to_json).unwrap_or_default(),
@@ -231,8 +230,8 @@ mod tests {
     }
 
     #[test]
-    fn check_request_requires_subject() {
-        let err = AccessRequest::try_from(CheckRequest::default()).unwrap_err();
-        assert_eq!(err.to_string(), "subject is required");
+    fn check_request_requires_principal() {
+        let err = Check::try_from(CheckRequest::default()).unwrap_err();
+        assert_eq!(err.to_string(), "principal is required");
     }
 }

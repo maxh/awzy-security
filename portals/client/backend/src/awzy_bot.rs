@@ -121,7 +121,7 @@ impl Tool for BotTool {
         let (name, description, input_schema) = match self.kind {
             Kind::SearchDecisions => (
                 "search_decisions",
-                "Search authorization decisions, newest first. Filter by subject, resource, verdict, and time (last 24 hours by default, at most 30 days).",
+                "Search authorization decisions, newest first. Filter by principal, resource, verdict, and time (last 24 hours by default, at most 30 days).",
                 schema_of::<SearchDecisionsParams>(),
             ),
             Kind::ExplainDecision => (
@@ -178,7 +178,7 @@ impl BotTool {
                 let page = decisions::search(
                     ch,
                     SearchParams {
-                        subject_id: p.subject_id,
+                        principal_id: p.principal_id,
                         resource_id: p.resource_id,
                         verdict: p.verdict,
                         mode: p.mode.map(Into::into),

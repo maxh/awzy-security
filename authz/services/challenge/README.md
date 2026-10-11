@@ -4,7 +4,7 @@ Challenges and containments. Part of [awzy-authz](../../README.md).
 Design: [ADR 0054](../../../docs/adr/0054-challenges-and-containments-over-grpc.md).
 
 - **Challenges.** On an enforced challenge verdict, the PDP calls `Resolve`. A challenge opens
-  for that exact request and goes to the person responsible: the human subject, the person an
+  for that exact request and goes to the person responsible: the human principal, the person an
   agent acts for, or a service account's owner. Retries share it. Once every kind is passed, the
   request is allowed on retry for `AWZY_CHALLENGE_GRANT_SECS`.
 - **Justification:** the answerer writes why they need the access.

@@ -34,7 +34,7 @@ fn request(i: usize) -> CheckRequest {
         entity("Resource", res_id, json!({ "sensitivity": sensitivity }), &[]),
     ];
     let delegated = i.is_multiple_of(3);
-    let (subject, on_behalf_of) = if delegated {
+    let (principal, on_behalf_of) = if delegated {
         entities.push(entity(
             "ServiceAccount",
             "sales-genie",
@@ -46,7 +46,7 @@ fn request(i: usize) -> CheckRequest {
         (r("Human", if i.is_multiple_of(2) { "alice" } else { "bob" }), None)
     };
     CheckRequest {
-        subject: Some(subject),
+        principal: Some(principal),
         action: "read".into(),
         resource: Some(r("Resource", res_id)),
         context: Some(json_to_struct(json!({ "client": "loadtest" }).as_object().unwrap().clone())),

@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<41dac6ab92c28952cf3f62f2c169dcc8>>
+ * @generated SignedSource<<2d43f670fbec75a675ba0bae7d029e4b>>
  * @lightSyntaxTransform
  */
 
@@ -21,8 +21,8 @@ export type DryRunReportQuery$data = {
         readonly onBehalfOfId: string | null | undefined;
         readonly policiesAfter: ReadonlyArray<string>;
         readonly policiesBefore: ReadonlyArray<string>;
+        readonly principalId: string;
         readonly resourceId: string;
-        readonly subjectId: string;
       }>;
       readonly from: string;
       readonly requests: number;
@@ -173,7 +173,7 @@ v2 = [
                 "alias": null,
                 "args": null,
                 "kind": "ScalarField",
-                "name": "subjectId",
+                "name": "principalId",
                 "storageKey": null
               },
               {
@@ -240,16 +240,16 @@ return {
     "selections": (v2/*:: as any*/)
   },
   "params": {
-    "cacheID": "a31c4a4918e8af269e4e8025ad520182",
+    "cacheID": "15a0876436173315aa0ac792156bae01",
     "id": null,
     "metadata": {},
     "name": "DryRunReportQuery",
     "operationKind": "query",
-    "text": "query DryRunReportQuery(\n  $draftQid: ID!\n) {\n  policyDryRun(draftQid: $draftQid) {\n    days\n    comparedWithVersion\n    decisions\n    distinctRequests\n    replayedRequests\n    truncated\n    unchangedDecisions\n    skippedRequests\n    skippedReason\n    changes {\n      from\n      to\n      decisions\n      requests\n      examples {\n        subjectId\n        onBehalfOfId\n        action\n        resourceId\n        decisions\n        policiesBefore\n        policiesAfter\n      }\n    }\n  }\n}\n"
+    "text": "query DryRunReportQuery(\n  $draftQid: ID!\n) {\n  policyDryRun(draftQid: $draftQid) {\n    days\n    comparedWithVersion\n    decisions\n    distinctRequests\n    replayedRequests\n    truncated\n    unchangedDecisions\n    skippedRequests\n    skippedReason\n    changes {\n      from\n      to\n      decisions\n      requests\n      examples {\n        principalId\n        onBehalfOfId\n        action\n        resourceId\n        decisions\n        policiesBefore\n        policiesAfter\n      }\n    }\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "650f9a457f290bac90a1710902c95595";
+(node as any).hash = "8e69e30cc8330efe7b70c3db5cda2be2";
 
 export default node;

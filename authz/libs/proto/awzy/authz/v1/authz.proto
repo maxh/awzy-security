@@ -6,7 +6,7 @@ package awzy.authz.v1;
 import "google/protobuf/struct.proto";
 
 service Authorizer {
-  // Decides one action by one subject on one resource: allow, deny, or challenge.
+  // Decides one action by one principal on one resource: allow, deny, or challenge.
   rpc Check(CheckRequest) returns (CheckResponse);
 }
 
@@ -34,8 +34,8 @@ message Entity {
 }
 
 message CheckRequest {
-  // Who is acting: a Human or a ServiceAccount.
-  EntityRef subject = 1;
+  // The principal: who is acting, a Human or a ServiceAccount.
+  EntityRef principal = 1;
   // What they are doing, e.g. "read".
   string action = 2;
   // What they are doing it to.
@@ -48,7 +48,7 @@ message CheckRequest {
   // The PDP allows the request only if the person could do it too.
   EntityRef on_behalf_of = 5;
   repeated Entity entities = 6;
-  // Whether a person is there to answer a challenge. Unset: true for a Human subject,
+  // Whether a person is there to answer a challenge. Unset: true for a Human principal,
   // false for a service account.
   optional bool human_present = 7;
   // The enforcement point applies this verdict whatever the install's mode, and the decision
@@ -87,7 +87,7 @@ message CheckResponse {
   Verdict verdict = 2;
   // Set when verdict is VERDICT_CHALLENGE: every one must be passed.
   repeated ChallengeKind challenges = 3;
-  // Policies that determined the subject's own check.
+  // Policies that determined the principal's own check.
   repeated string policies = 4;
   // For a delegated request: the person's own check. The verdict above is the stricter of the two.
   DelegationCheck on_behalf_of = 5;
