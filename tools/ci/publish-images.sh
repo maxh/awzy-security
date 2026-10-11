@@ -15,11 +15,13 @@ case "${1:-}" in
   authz)
     scope='//authz/... + //portals/client/... + //tools/dev-idp/...'
     registry="${AWZY_AUTHZ_RELEASE_REGISTRY:?}" tag="${AWZY_AUTHZ_RELEASE_TAG:?}" key="${AWZY_AUTHZ_RELEASE_COSIGN_KEY:?}"
+    digests="${AWZY_AUTHZ_RELEASE_DIGESTS:-}"
     ;;
   corp-portal)
     scope='//portals/corp/...'
     registry="${AWZY_CORP_PORTAL_RELEASE_REGISTRY:?}" tag="${AWZY_CORP_PORTAL_RELEASE_TAG:?}"
     key="${AWZY_CORP_PORTAL_RELEASE_COSIGN_KEY:?}"
+    digests=""
     ;;
   *) echo "usage: $0 authz|corp-portal" >&2; exit 2 ;;
 esac
@@ -92,5 +94,9 @@ done < "$scripts/plan"
 if [ "$failed" = 1 ] || [ -s "$scripts/failed" ]; then
   echo "::error::Failed to push or sign: $(tr '\n' ' ' < "$scripts/failed" 2>/dev/null)" >&2
   exit 1
+fi
+# <binary>: <digest>, for publish-chart.sh to pin each image the chart names.
+if [ -n "$digests" ]; then
+  awk '{ sub(/^awzy\//, "", $2); print $2 ": " $3 }' "$scripts/plan" > "$digests"
 fi
 echo "pushed and signed $(wc -l < "$scripts/plan" | tr -d ' ') images"
