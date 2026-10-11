@@ -106,6 +106,8 @@ module "bootstrap" {
 
   install_contract  = local.contract
   cosign_public_key = file("${path.module}/../../../../release/cosign.pub")
+  # The corp portal's support key, once it exists (ADR 0095).
+  support_public_key = fileexists("${path.module}/../../../../release/support.pub") ? file("${path.module}/../../../../release/support.pub") : null
   # The fast channel, which this install is registered with (ADR 0094), unless pinned here.
   chart_version = var.chart_version
 

@@ -48,6 +48,10 @@ type DeployedService {
 }
 
 type Install implements Node {
+	"""
+	Support sessions asked for on this install, newest first (ADR 0095).
+	"""
+	supportSessions: [SupportSession!]!
 	id: ID!
 	client: String!
 	"""
@@ -240,6 +244,15 @@ type Mutation {
 	tools, for 30 days, and nothing else here. Shown once.
 	"""
 	mcpToken: String!
+	"""
+	Asks an install's admins for a support session. It reaches the install with its next
+	heartbeat; they approve or reject it in their client portal.
+	"""
+	requestSupportSession(input: RequestSupportSessionInput!): SupportSession!
+	"""
+	Signs the staff member who asked in to an approved session's client portal.
+	"""
+	signInToSupportSession(supportSessionQid: ID!): SupportSignIn!
 }
 
 interface Node {
@@ -346,6 +359,20 @@ enum ReleaseChannel {
 	PINNED
 }
 
+input RequestSupportSessionInput {
+	installQid: ID!
+	"""
+	Client portal areas, e.g. "decisions".
+	"""
+	areas: [String!]!
+	reason: String!
+	durationMinutes: Int!
+	"""
+	The client portal's URL, e.g. https://portal.example.com.
+	"""
+	portalUrl: String!
+}
+
 input RetireInstallInput {
 	installQid: ID!
 }
@@ -370,6 +397,41 @@ type SetInstallReleasePayload {
 type Staff {
 	username: String!
 	name: String!
+}
+
+type SupportSession implements Node {
+	id: ID!
+	status: SupportSessionStatus!
+	requestedBy: String!
+	areas: [String!]!
+	reason: String!
+	durationMinutes: Int!
+	portalUrl: String!
+	requestedAt: UtcTimestamp!
+	expiresAt: UtcTimestamp
+	"""
+	Whether the install has the request yet.
+	"""
+	delivered: Boolean!
+}
+
+enum SupportSessionStatus {
+	"""
+	Asked for; the install hasn't decided, or hasn't got it yet.
+	"""
+	REQUESTED
+	APPROVED
+	REJECTED
+	ENDED
+	EXPIRED
+}
+
+type SupportSignIn {
+	"""
+	Opens the client portal signed in to the session. Holds the token: don't share it.
+	"""
+	signInUrl: String!
+	expiresAt: UtcTimestamp!
 }
 
 scalar UtcTimestamp

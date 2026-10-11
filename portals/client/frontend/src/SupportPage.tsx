@@ -31,8 +31,8 @@ const decide = graphql`
 `;
 
 const end = graphql`
-  mutation SupportPageEndMutation($id: ID!) {
-    endSupportSession(id: $id) {
+  mutation SupportPageEndMutation($supportSessionQid: ID!) {
+    endSupportSession(supportSessionQid: $supportSessionQid) {
       id
       status
     }
@@ -105,7 +105,9 @@ function Sessions({ queryRef, onChanged }: { queryRef: PreloadedQuery<SupportPag
 
   const reject = async (s: Session) => {
     try {
-      await mutate<SupportPageDecideMutation>(environment, decide, { input: { id: s.id, approve: false } });
+      await mutate<SupportPageDecideMutation>(environment, decide, {
+        input: { supportSessionQid: s.id, approve: false },
+      });
       onChanged();
     } catch (e) {
       setError((e as Error).message);
@@ -113,7 +115,7 @@ function Sessions({ queryRef, onChanged }: { queryRef: PreloadedQuery<SupportPag
   };
   const stop = async (s: Session) => {
     try {
-      await mutate<SupportPageEndMutation>(environment, end, { id: s.id });
+      await mutate<SupportPageEndMutation>(environment, end, { supportSessionQid: s.id });
       onChanged();
     } catch (e) {
       setError((e as Error).message);
@@ -219,7 +221,7 @@ function Approve({ session, onClose, onApproved }: { session: Session; onClose: 
   const approve = async () => {
     setSaving(true);
     try {
-      const input = { input: { id: session.id, approve: true, areas, minutes } };
+      const input = { input: { supportSessionQid: session.id, approve: true, areas, minutes } };
       let { decideSupportSession: res } = await mutate<SupportPageDecideMutation>(environment, decide, input);
       if (res.challengeQid) {
         await passChallenge(environment, res.challengeQid);

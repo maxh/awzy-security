@@ -78,3 +78,19 @@ resource "aws_secretsmanager_secret_version" "alerts_slack_webhook" {
     ignore_changes = [secret_string]
   }
 }
+
+# The key the corp portal signs support session tokens with (ADR 0095): a PKCS#8 PEM P-256 private
+# key, whose public half every install's client portal trusts (deploy/release/support.pub). Set by
+# hand, never in Terraform state (see README); the placeholder leaves support sessions unable to
+# sign in.
+resource "aws_secretsmanager_secret" "support_signing_key" {
+  name = "${local.name}/support-signing-key"
+}
+
+resource "aws_secretsmanager_secret_version" "support_signing_key" {
+  secret_id     = aws_secretsmanager_secret.support_signing_key.id
+  secret_string = "unset"
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}
