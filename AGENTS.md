@@ -101,6 +101,9 @@ bazel build --config=lint //...                    # clippy
   enforces it (`.bazelrc`, `clippy.toml`).
 - **TypeScript narrowing:** never `as`. Narrow with `isOneOf`, `oneOf`, or `isRecord` from
   `@awzy/ui`, or a type guard; oxlint's `no-unsafe-type-assertion` enforces it.
+- **Quality ratchets:** `tools/ci/check-quality-ratchets.sh` counts what the code-quality pass is
+  removing (JSON read by field name, hand-built HTTP and Kubernetes clients, string errors, files
+  over 800 lines) and fails if a count grows; lower its baseline when you shrink one.
 - **Tests** sit next to the code in `#[cfg(test)] mod tests` and read as statements of behavior
   (`delegation_never_exceeds_the_person`).
 - **Comments and docs** explain why, briefly, in plain sentences. Match the comment density of the
