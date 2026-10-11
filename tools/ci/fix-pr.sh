@@ -45,7 +45,9 @@ if touches '^libs/(model|portal)/|^portals/[^/]+/backend/|^portals/[^/]+/fronten
     echo '{}' >"portals/$portal/frontend/persisted_queries.json"
     (cd "portals/$portal/frontend" && pnpm relay)
   done
-  generated=('portals/*/frontend/schema.graphql' 'portals/*/frontend/persisted_queries.json' 'portals/*/frontend/src/__generated__')
+  # A wildcard pathspec matches whole paths, so the artifacts' needs `**`, not a directory prefix.
+  generated=('portals/*/frontend/schema.graphql' 'portals/*/frontend/persisted_queries.json'
+    ':(glob)portals/*/frontend/src/__generated__/**')
   [ -z "$(git status --porcelain -- "${generated[@]}")" ] || fixed+=("regenerate schemas")
   paths+=("${generated[@]}")
   echo "::endgroup::"
