@@ -13,13 +13,13 @@ Developing awzy is in [DEVELOPMENT.md](DEVELOPMENT.md); why an install looks the
 
 An install runs entirely in your account. awzy (the vendor) holds no credential for it: the
 install pulls signed releases from awzy's registry and sends a heartbeat out, and nothing comes
-in. AWS is the only cloud so far.
+in. AWS and Google Cloud have cloud layers so far; Azure doesn't yet.
 
 It has two layers, applied in order:
 
 | Layer | Module | What it makes |
 | --- | --- | --- |
-| Cloud | One per cloud: [`deploy/terraform/aws/install`](deploy/terraform/aws/install) on AWS | The network, a Kubernetes cluster, managed Postgres, Kafka, and Valkey, a bucket, a key for data at rest and one awzy-policy signs policy with, and workload identities. Outputs `install_contract`. On AWS: VPC, EKS, Aurora, MSK, ElastiCache, S3, KMS, and Pod Identity. |
+| Cloud | One per cloud: [`deploy/terraform/aws/install`](deploy/terraform/aws/install) on AWS, [`deploy/terraform/gcp/install`](deploy/terraform/gcp/install) on Google Cloud | The network, a Kubernetes cluster, managed Postgres, Kafka, a bucket, a key for data at rest and one awzy-policy signs policy with, and workload identities. Outputs `install_contract`. On AWS: VPC, EKS, Aurora, MSK, ElastiCache, S3, KMS, and Pod Identity. On Google Cloud: VPC, GKE, Cloud SQL, Kafka in the cluster (Strimzi), GCS, Cloud KMS, and Workload Identity Federation. |
 | Cluster | [`deploy/terraform/bootstrap`](deploy/terraform/bootstrap) | Namespaces, Secrets, Argo CD, Kyverno, External Secrets, the ClickHouse operator, Envoy Gateway, cert-manager, and metrics-server, then an Argo CD Application for the awzy chart. Never cloud-specific. |
 
 You call both from your own Terraform, as
@@ -78,7 +78,9 @@ Back the file up, since it's the only record of what the deployment targets:
 
 ## 4. Apply the cloud layer
 
-This step is per cloud; AWS's is below. On a cluster you already have, skip to step 5.
+This step is per cloud; AWS's is below, and Google Cloud's is in
+[`examples/example-client-gcp`](deploy/terraform/examples/example-client-gcp/README.md). On a
+cluster you already have, skip to step 5.
 
 ```sh
 cd install
