@@ -386,11 +386,13 @@ function Challenges({
     {},
     { fetchKey, fetchPolicy: "store-and-network" },
   );
-  // A notification's link names one challenge: bring it into view.
+  // A notification's link names one challenge: bring it into view once it's on the page.
+  const linked = linkedChallenge();
+  const linkedShown =
+    linked !== null && (data.pending.some((c) => c.id === linked) || data.toApprove.some((c) => c.id === linked));
   useEffect(() => {
-    const linked = linkedChallenge();
-    if (linked) document.getElementById(linked)?.scrollIntoView({ block: "center" });
-  }, [data]);
+    if (linked && linkedShown) document.getElementById(linked)?.scrollIntoView({ block: "center" });
+  }, [linked, linkedShown]);
   const recent = data.recent.filter((c) => c.status !== "PENDING");
   const hasKeys = data.mySecurityKeys.length > 0;
   // When the page loaded: a pass that has since run out no longer invites a retry.
