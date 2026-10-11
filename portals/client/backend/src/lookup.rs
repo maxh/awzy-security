@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use crate::{
     access::{require, PortalAction::*, PortalArea},
-    directory::context,
+    directory::{context, context_api},
     mcp::principal_from_snapshot,
 };
 
@@ -84,24 +84,6 @@ pub struct ResourceDetail {
     pub assignees: Vec<String>,
 }
 
-fn strings(v: &Value) -> Vec<String> {
-    v.as_array().into_iter().flatten().filter_map(|x| x.as_str().map(str::to_string)).collect()
-}
-
-fn text(v: &Value) -> Option<String> {
-    v.as_str().map(str::to_string)
-}
-
-/// A path segment, percent-encoded.
-fn encode(s: &str) -> String {
-    s.bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
-            _ => format!("%{b:02X}"),
-        })
-        .collect()
-}
-
 #[derive(Default)]
 pub struct LookupQuery;
 
@@ -128,18 +110,16 @@ impl LookupQuery {
         if q.is_empty() {
             return Ok(vec![]);
         }
-        let found: Value = context(ctx)?.get(&format!("/v1/resources?limit=50&q={}", encode(q))).await?;
-        Ok(found["resources"]
-            .as_array()
+        let found = context_api(ctx)?.search_resources(q, 50).await?;
+        Ok(found
             .into_iter()
-            .flatten()
             .map(|r| ResourceSummary {
-                id: text(&r["id"]).unwrap_or_default(),
-                name: text(&r["name"]).unwrap_or_default(),
-                kind: text(&r["kind"]).unwrap_or_default(),
-                source: text(&r["source"]).unwrap_or_default(),
-                owner: text(&r["owner"]),
-                sensitivity: text(&r["sensitivity"]),
+                id: r.id,
+                name: r.name,
+                kind: r.kind,
+                source: r.source,
+                owner: r.owner,
+                sensitivity: r.sensitivity,
             })
             .collect())
     }
@@ -148,43 +128,31 @@ impl LookupQuery {
     /// and who is assigned to work that links it. Null when awzy-context doesn't know it.
     async fn resource(&self, ctx: &Context<'_>, id: String) -> Result<Option<ResourceDetail>> {
         require(ctx, View, PortalArea::Directory).await?;
-        let client = context(ctx)?;
-        let (status, body) = client.call("GET", &format!("/v1/resources/{}", encode(&id)), None, None).await?;
-        if status == 404 {
-            return Ok(None);
-        }
-        if status != 200 {
-            return Err(format!("awzy-context answered {status}").into());
-        }
-        let found: Value = serde_json::from_slice(&body)?;
-        let r = &found["resource"];
-        let (_, body) = client.call("GET", &format!("/v1/resources/{}/entities", encode(&id)), None, None).await?;
-        let entities: Value = serde_json::from_slice(&body).unwrap_or_default();
-        let folders = entities["entities"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .skip(1)
-            .filter_map(|e| text(&e["uid"]["id"]))
-            .collect();
-        let c = &r["classification"];
+        let api = context_api(ctx)?;
+        let Some(r) = api.resource(&id).await? else { return Ok(None) };
+        let entities = api.resource_entities(&id).await?;
+        let (folders, assignees) = match entities {
+            // The first entity is the resource itself; the rest are the folders above it.
+            Some(e) => (e.entities.into_iter().skip(1).map(|f| f.uid.id).collect(), e.assignees),
+            None => (vec![], vec![]),
+        };
         Ok(Some(ResourceDetail {
-            id: text(&r["id"]).unwrap_or(id),
-            name: text(&r["name"]).unwrap_or_default(),
-            kind: text(&r["kind"]).unwrap_or_default(),
-            source: text(&r["source"]).unwrap_or_default(),
-            owner: text(&r["owner"]),
-            sensitivity: text(&r["sensitivity"]),
-            classification: c.is_object().then(|| ResourceClassification {
-                sensitivity: text(&c["sensitivity"]),
-                by: text(&c["by"]),
-                reason: text(&c["reason"]).unwrap_or_default(),
+            id: r.id,
+            name: r.name,
+            kind: r.kind,
+            source: r.source,
+            owner: r.owner,
+            sensitivity: r.sensitivity,
+            classification: r.classification.map(|c| ResourceClassification {
+                sensitivity: c.sensitivity,
+                by: c.by,
+                reason: c.reason,
             }),
-            sharing: Some(JsonString::of(&r["sharing"])),
-            labels: strings(&r["labels"]),
-            url: text(&r["url"]),
+            sharing: Some(JsonString::of(&serde_json::to_value(&r.sharing)?)),
+            labels: r.labels,
+            url: r.url,
             folders,
-            assignees: strings(&entities["assignees"]),
+            assignees,
         }))
     }
 }

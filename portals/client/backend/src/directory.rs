@@ -64,6 +64,14 @@ impl ContextClient {
     }
 }
 
+/// awzy-context's typed API (#222), for the areas it covers.
+pub(crate) fn context_api<'a>(ctx: &Context<'a>) -> Result<&'a awzy_context_api::ContextApi> {
+    ctx.data::<crate::Services>()?
+        .context_api
+        .as_ref()
+        .ok_or_else(|| "awzy-context is not configured (AWZY_CONTEXT_ADDR)".into())
+}
+
 pub(crate) fn context<'a>(ctx: &Context<'a>) -> Result<&'a ContextClient> {
     ctx.data::<crate::Services>()?
         .context
@@ -400,6 +408,7 @@ mod tests {
         let services = Services {
             pdp: Some(testing::pdp().await),
             context: Some(super::ContextClient::new(fake_context(seen.clone()).await)),
+            context_api: None,
             ..Default::default()
         };
         let schema = crate::schema_with(services);

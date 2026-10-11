@@ -25,6 +25,7 @@ async fn main() -> anyhow::Result<()> {
     awzy_server::metrics::register(Arc::new(DriveMetrics));
     awzy_server::metrics::register(Arc::new(JiraMetrics));
     // Google Drive (ADR 0069) and Jira (ADR 0070), as the client portal configures them.
-    tokio::spawn(Supervisor::new(context, http, files).run());
+    let api = awzy_context_api::ContextApi::new(&context_url, awzy_service_auth::TokenSource::from_env());
+    tokio::spawn(Supervisor::new(context, api, http, files).run());
     awzy_server::serve("awzy-connectors", awzy_connectors::router()).await
 }

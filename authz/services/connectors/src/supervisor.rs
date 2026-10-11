@@ -5,6 +5,7 @@
 
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
+use awzy_context_api::{model::ConnectorSettings, ContextApi};
 use serde_json::Value;
 use tokio::task::JoinHandle;
 
@@ -38,12 +39,12 @@ enum Want {
     },
 }
 
-fn want(all: &[Value], name: &str, credential: Option<String>) -> Want {
-    let Some(c) = all.iter().find(|c| c["name"] == name) else { return Want::Off };
-    if c["enabled"] != true {
+fn want(all: &[ConnectorSettings], name: &str, credential: Option<String>) -> Want {
+    let Some(c) = all.iter().find(|c| c.name == name) else { return Want::Off };
+    if !c.enabled {
         return Want::Off;
     }
-    let settings = c["settings"].clone();
+    let settings = c.settings.clone();
     match credential.filter(|t| !t.trim().is_empty()) {
         Some(credential) => Want::Run { settings, credential },
         None => Want::NoCredential(settings),
@@ -56,20 +57,22 @@ fn read(path: &str) -> Option<String> {
 
 pub struct Supervisor {
     context: ContextClient,
+    /// Where the settings come from (#222).
+    api: ContextApi,
     http: Http,
     files: CredentialFiles,
     running: HashMap<&'static str, (Want, Option<JoinHandle<()>>)>,
 }
 
 impl Supervisor {
-    pub fn new(context: ContextClient, http: Http, files: CredentialFiles) -> Self {
-        Self { context, http, files, running: HashMap::new() }
+    pub fn new(context: ContextClient, api: ContextApi, http: Http, files: CredentialFiles) -> Self {
+        Self { context, api, http, files, running: HashMap::new() }
     }
 
     /// Forever: brings the connectors in line with their settings, every minute.
     pub async fn run(mut self) {
         loop {
-            match self.context.connector_settings().await {
+            match self.api.connector_settings().await {
                 Ok(all) => {
                     let drive = want(&all, "drive", read(&self.files.drive_key));
                     self.apply("drive", drive);
@@ -177,7 +180,16 @@ mod tests {
     #[test]
     fn a_connector_runs_only_when_enabled_and_its_credential_is_there() {
         let settings = json!({ "url": "https://acme.atlassian.net", "user": "bot" });
-        let all = vec![json!({ "name": "jira", "enabled": true, "settings": settings })];
+        let at = "2026-10-11T12:00:00Z".parse().unwrap();
+        let jira = |enabled| ConnectorSettings {
+            name: "jira".into(),
+            enabled,
+            settings: settings.clone(),
+            credential_set_at: None,
+            updated_by: "alice".into(),
+            updated_at: at,
+        };
+        let all = vec![jira(true)];
         assert_eq!(want(&all, "drive", Some("{}".into())), Want::Off, "not configured");
         assert_eq!(want(&all, "jira", None), Want::NoCredential(settings.clone()));
         assert_eq!(want(&all, "jira", Some(" \n".into())), Want::NoCredential(settings.clone()), "an empty file");
@@ -185,7 +197,6 @@ mod tests {
             want(&all, "jira", Some("token".into())),
             Want::Run { settings: settings.clone(), credential: "token".into() }
         );
-        let off = vec![json!({ "name": "jira", "enabled": false, "settings": settings })];
-        assert_eq!(want(&off, "jira", Some("token".into())), Want::Off);
+        assert_eq!(want(&[jira(false)], "jira", Some("token".into())), Want::Off);
     }
 }

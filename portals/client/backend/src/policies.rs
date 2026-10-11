@@ -436,6 +436,7 @@ pub(crate) mod tests {
             clickhouse: None,
             pdp: Some(testing::pdp().await),
             context: None,
+            context_api: None,
             bot: None,
             activity: Default::default(),
         });
@@ -547,6 +548,7 @@ pub(crate) mod tests {
             clickhouse: None,
             pdp: Some(testing::pdp().await),
             context: None,
+            context_api: None,
             bot: None,
             activity: Default::default(),
         });
@@ -586,6 +588,7 @@ pub(crate) mod tests {
             clickhouse: None,
             pdp: None,
             context: None,
+            context_api: None,
             bot: None,
             activity: Default::default(),
             challenge: None,

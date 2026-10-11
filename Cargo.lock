@@ -805,6 +805,7 @@ dependencies = [
  "awzy-challenge",
  "awzy-clickhouse",
  "awzy-cloud",
+ "awzy-context-api",
  "awzy-http",
  "awzy-identity",
  "awzy-kube",
@@ -846,6 +847,7 @@ name = "awzy-connectors"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "awzy-context-api",
  "awzy-http",
  "awzy-server",
  "awzy-service-auth",
@@ -867,6 +869,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "awzy-classify",
+ "awzy-context-api",
  "awzy-migrations",
  "awzy-model",
  "awzy-server",
@@ -885,6 +888,20 @@ dependencies = [
  "tower",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "awzy-context-api"
+version = "0.1.0"
+dependencies = [
+ "awzy-http",
+ "awzy-service-auth",
+ "axum",
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]

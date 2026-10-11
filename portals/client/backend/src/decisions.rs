@@ -598,6 +598,7 @@ mod tests {
             clickhouse: Some(ch),
             pdp: Some(crate::testing::pdp().await),
             context: None,
+            context_api: None,
             bot: None,
             activity: Default::default(),
         });

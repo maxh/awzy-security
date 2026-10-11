@@ -5,6 +5,7 @@ awzy_service(
     crate_name = "awzy_connectors",
     binary_name = "awzy-connectors",
     deps = [
+        "//authz/libs/context-api",
         "//authz/libs/service-auth",
         "//libs/http",
         "//libs/server",
