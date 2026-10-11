@@ -106,7 +106,7 @@ pub struct PolicyDryRunExample {
     /// How many times this exact request was decided in the window.
     pub decisions: u64,
     /// One of those decisions, `decision_<uuid>`.
-    pub sample_decision_qid: String,
+    pub sample_decision_qid: ID,
     /// The policies that decided it under the active bundle, and under the draft.
     pub policies_before: Vec<String>,
     pub policies_after: Vec<String>,
@@ -195,7 +195,7 @@ pub async fn compare(
                 action: g.action.clone(),
                 resource_id: g.resource_id.clone(),
                 decisions: g.decisions,
-                sample_decision_qid: format!("decision_{}", g.sample_id),
+                sample_decision_qid: ID(format!("decision_{}", g.sample_id)),
                 policies_before: before.policies,
                 policies_after: after.policies,
             });

@@ -11,6 +11,7 @@ use awzy_authz_proto::challenge::v1::{
     FinishKeyRegistrationRequest, FinishVerificationRequest, ListSecurityKeysRequest, RemoveSecurityKeyRequest,
     ResetSecurityKeyRequest, SecurityKey as WireKey,
 };
+use awzy_model::SecurityKeyId;
 use awzy_portal::UtcTimestamp;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 
@@ -44,8 +45,8 @@ impl SecurityKey {
     }
 
     /// The key that authorized adding this one; null for a person's first key.
-    async fn added_with_qid(&self) -> Option<&str> {
-        Some(self.0.added_with_qid.as_str()).filter(|s| !s.is_empty())
+    async fn added_with_qid(&self) -> Option<ID> {
+        Some(&self.0.added_with_qid).filter(|s| !s.is_empty()).map(|s| ID(s.clone()))
     }
 
     async fn created_at(&self) -> Option<UtcTimestamp> {
@@ -164,6 +165,16 @@ impl SecurityKeyQuery {
         let keys = client(ctx)?.list_security_keys(ListSecurityKeysRequest { human_id }).await.map_err(grpc)?;
         Ok(keys.into_inner().keys.into_iter().map(SecurityKey).collect())
     }
+}
+
+/// One of the signed-in person's own security keys, for `node(id)`. Someone else's key isn't
+/// found this way, since awzy-challenge lists keys by person; `securityKeys(humanId)` shows them.
+pub(crate) async fn get_by_id(ctx: &Context<'_>, id: SecurityKeyId) -> Result<Option<SecurityKey>> {
+    let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
+    let human_id = answering_human(&viewer)?;
+    let keys = client(ctx)?.list_security_keys(ListSecurityKeysRequest { human_id }).await.map_err(grpc)?;
+    let qid = id.to_string();
+    Ok(keys.into_inner().keys.into_iter().find(|k| k.qid == qid).map(SecurityKey))
 }
 
 #[derive(Default)]

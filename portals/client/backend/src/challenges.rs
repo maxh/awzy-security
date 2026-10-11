@@ -23,7 +23,7 @@ use awzy_authz_proto::{
     challenges_from_wire,
     prost_types::Timestamp,
 };
-use awzy_model::{entity_type, ChallengeId};
+use awzy_model::{entity_type, ChallengeId, ContainmentId};
 use awzy_portal::{Actor, UtcTimestamp};
 use chrono::DateTime;
 
@@ -127,8 +127,8 @@ impl Challenge {
     }
 
     /// The decision that opened it.
-    async fn decision_qid(&self) -> &str {
-        &self.0.decision_qid
+    async fn decision_qid(&self) -> ID {
+        ID(self.0.decision_qid.clone())
     }
 
     async fn principal(&self) -> Option<EntityRef> {
@@ -250,6 +250,16 @@ impl Containment {
 
 /// For `node(id)`: the challenge, if the viewer is the person it was sent to or administers
 /// challenges.
+/// One containment, for `node(id)`. For those who administer challenges. awzy-challenge has no
+/// lookup by ID, so this looks through the most recent ones, lifted included.
+pub(crate) async fn containment_by_id(ctx: &Context<'_>, id: ContainmentId) -> Result<Option<Containment>> {
+    require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
+    let req = ListContainmentsRequest { active_only: false, principal: None, limit: 500, include_monitor: true };
+    let list = client(ctx)?.list_containments(req).await.map_err(grpc)?.into_inner().containments;
+    let qid = id.to_string();
+    Ok(list.into_iter().find(|c| c.qid == qid).map(Containment))
+}
+
 pub(crate) async fn get_by_id(ctx: &Context<'_>, id: ChallengeId) -> Result<Option<Challenge>> {
     let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
     let res = client(ctx)?.get_challenge(GetChallengeRequest { challenge_qid: id.to_string() }).await;

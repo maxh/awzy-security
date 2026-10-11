@@ -3,6 +3,7 @@
 //! person closes one here once they've reviewed it.
 
 use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject, ID};
+use awzy_model::InvestigationId;
 use awzy_portal::{Actor, UtcTimestamp};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -290,11 +291,12 @@ impl InvestigationQuery {
         Ok(list.into_iter().map(Investigation).collect())
     }
 
-    /// One investigation by its QID.
-    async fn investigation(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Investigation>> {
-        require(ctx, PortalAction::View, PortalArea::Investigations).await?;
-        Ok(get(context(ctx)?, &id.0).await?.map(Investigation))
-    }
+}
+
+/// One investigation, for `node(id)`. For those who may view investigations.
+pub(crate) async fn get_by_id(ctx: &Context<'_>, id: InvestigationId) -> Result<Option<Investigation>> {
+    require(ctx, PortalAction::View, PortalArea::Investigations).await?;
+    Ok(get(context(ctx)?, &id.to_string()).await?.map(Investigation))
 }
 
 #[derive(InputObject)]

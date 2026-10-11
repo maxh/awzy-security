@@ -93,7 +93,7 @@ type Challenge implements Node {
 	"""
 	The decision that opened it.
 	"""
-	decisionQid: String!
+	decisionQid: ID!
 	principal: EntityRef
 	"""
 	Set when a service account acted for a person.
@@ -273,7 +273,7 @@ input ContainPrincipalInput {
 	reason: String!
 }
 
-type Containment {
+type Containment implements Node {
 	"""
 	QID: containment_<uuid>.
 	"""
@@ -601,7 +601,7 @@ type Human {
 	updatedAt: UtcTimestamp!
 }
 
-type Investigation {
+type Investigation implements Node {
 	"""
 	QID: investigation_<uuid>.
 	"""
@@ -936,7 +936,7 @@ type PolicyDryRunExample {
 	"""
 	One of those decisions, `decision_<uuid>`.
 	"""
-	sampleDecisionQid: String!
+	sampleDecisionQid: ID!
 	"""
 	The policies that decided it under the active bundle, and under the draft.
 	"""
@@ -1119,10 +1119,6 @@ type Query {
 	"""
 	investigations(status: InvestigationStatus, first: Int! = 50): [Investigation!]!
 	"""
-	One investigation by its QID.
-	"""
-	investigation(id: ID!): Investigation
-	"""
 	Whether each of awzy's services the portal uses is ready, and the release it runs. For
 	those who may view the enforcement area.
 	"""
@@ -1270,7 +1266,7 @@ type ResourceSummary {
 	sensitivity: String
 }
 
-type SecurityKey {
+type SecurityKey implements Node {
 	"""
 	QID: security_key_<uuid>.
 	"""
@@ -1286,7 +1282,7 @@ type SecurityKey {
 	"""
 	The key that authorized adding this one; null for a person's first key.
 	"""
-	addedWithQid: String
+	addedWithQid: ID
 	createdAt: UtcTimestamp
 	lastUsedAt: UtcTimestamp
 }
@@ -1379,7 +1375,7 @@ type SetOutageFallbackPayload {
 	challengeQid: ID
 }
 
-type SupportSession {
+type SupportSession implements Node {
 	"""
 	Its QID, which the corp portal minted.
 	"""
@@ -1472,7 +1468,7 @@ type ViewerInfo {
 The signed-in viewer's own support session, when they're awzy staff in one.
 """
 type ViewerSupport {
-	sessionId: ID!
+	supportSessionQid: ID!
 	staff: String!
 	areas: [String!]!
 	expiresAt: UtcTimestamp!

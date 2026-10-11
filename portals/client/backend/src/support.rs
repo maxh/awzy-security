@@ -300,10 +300,20 @@ impl SupportSession {
 /// The signed-in viewer's own support session, when they're awzy staff in one.
 #[derive(SimpleObject)]
 pub struct ViewerSupport {
-    pub session_id: ID,
+    pub support_session_qid: ID,
     pub staff: String,
     pub areas: Vec<String>,
     pub expires_at: UtcTimestamp,
+}
+
+/// One support session, for `node(id)`. For those who may view enforcement.
+pub(crate) async fn get_by_id(ctx: &Context<'_>, id: SupportSessionId) -> Result<Option<SupportSession>> {
+    require(ctx, View, PortalArea::Enforcement).await?;
+    match client(ctx)?.get_support_session(GetSupportSessionRequest { qid: id.to_string() }).await {
+        Ok(res) => Ok(res.into_inner().session.map(SupportSession)),
+        Err(s) if s.code() == tonic::Code::NotFound => Ok(None),
+        Err(s) => Err(grpc(s)),
+    }
 }
 
 #[derive(Default)]
@@ -322,7 +332,7 @@ impl SupportQuery {
     async fn viewer_support(&self, ctx: &Context<'_>) -> Option<ViewerSupport> {
         let grant = ctx.data_opt::<Viewer>()?.1.clone()?;
         Some(ViewerSupport {
-            session_id: ID(grant.session.to_string()),
+            support_session_qid: ID(grant.session.to_string()),
             staff: grant.staff.clone(),
             areas: grant.areas.clone(),
             expires_at: UtcTimestamp(grant.expires_at),
