@@ -44,6 +44,15 @@ CREATE TABLE public.installs (
     retired_by text
 );
 
+CREATE TABLE public.release_channel_changes (
+    id uuid NOT NULL,
+    channel text NOT NULL,
+    chart_version text NOT NULL,
+    changed_by text NOT NULL,
+    changed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT release_channel_changes_channel_check CHECK ((channel = ANY (ARRAY['stable'::text, 'fast'::text])))
+);
+
 ALTER TABLE ONLY public.heartbeat_samples
     ADD CONSTRAINT heartbeat_samples_pkey PRIMARY KEY (install_id, received_at);
 
@@ -56,7 +65,12 @@ ALTER TABLE ONLY public.installs
 ALTER TABLE ONLY public.installs
     ADD CONSTRAINT installs_token_sha256_key UNIQUE (token_sha256);
 
+ALTER TABLE ONLY public.release_channel_changes
+    ADD CONSTRAINT release_channel_changes_pkey PRIMARY KEY (id);
+
 CREATE UNIQUE INDEX installs_client_environment_active ON public.installs USING btree (client, environment) WHERE (retired_at IS NULL);
+
+CREATE INDEX release_channel_changes_latest ON public.release_channel_changes USING btree (channel, changed_at DESC);
 
 ALTER TABLE ONLY public.heartbeat_samples
     ADD CONSTRAINT heartbeat_samples_install_id_fkey FOREIGN KEY (install_id) REFERENCES public.installs(id);

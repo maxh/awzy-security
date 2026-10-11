@@ -13,6 +13,17 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("migrations applied");
         return Ok(());
     }
+    // `awzy-corp-portal channel set <stable|fast> <chart version> <by>`: what CI runs, as a
+    // one-off task, to move a release channel (ADR 0094).
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if let ["channel", "set", channel, version, by] = args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+        let channel = awzy_corp_portal::fleet::Channel::from_name(channel)
+            .with_context(|| format!("{channel:?} isn't a channel: stable or fast"))?;
+        let pool = sqlx::postgres::PgPoolOptions::new().max_connections(1).connect(&url).await?;
+        let set = awzy_corp_portal::fleet::FleetStore::new(pool).set_channel(channel, version, by).await?;
+        tracing::info!(channel = set.channel.as_str(), version = %set.chart_version, by = %set.changed_by, "channel moved");
+        return Ok(());
+    }
     let pool = sqlx::postgres::PgPoolOptions::new().max_connections(5).connect(&url).await?;
     // The registry proxy's pull tokens live in its own schema of this database (ADR 0028).
     let pull_tokens = awzy_registry::tokens::TokenStore::connect(&url, "registry").await?;

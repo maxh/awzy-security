@@ -57,6 +57,11 @@ impl Channel {
         }
     }
 
+    /// `stable`, `fast`, or `pinned`.
+    pub fn from_name(s: &str) -> Option<Self> {
+        Self::parse(s).ok()
+    }
+
     fn parse(s: &str) -> Result<Self, sqlx::Error> {
         match s {
             "stable" => Ok(Self::Stable),
@@ -65,6 +70,35 @@ impl Channel {
             other => Err(sqlx::Error::Decode(format!("unknown channel {other:?}").into())),
         }
     }
+}
+
+/// The chart version a release channel names, and who moved it there.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChannelVersion {
+    pub channel: Channel,
+    pub chart_version: String,
+    pub changed_by: String,
+    pub changed_at: DateTime<Utc>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SetChannelError {
+    #[error("a pinned install names its own version; only stable and fast are channels")]
+    Pinned,
+    #[error("{0:?} isn't a chart version: CI publishes 0.1.0-g<12 hex digits>")]
+    Version(String),
+    #[error(transparent)]
+    Db(#[from] sqlx::Error),
+}
+
+/// A version CI publishes: `0.<minor>.<patch>-g<first 12 hex digits of the commit>`.
+pub fn is_chart_version(v: &str) -> bool {
+    let Some((release, sha)) = v.split_once("-g") else { return false };
+    let parts: Vec<&str> = release.split('.').collect();
+    parts.len() == 3
+        && parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+        && sha.len() == 12
+        && sha.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
 }
 
 /// What staff enter to register an install.
@@ -275,6 +309,53 @@ impl FleetStore {
     /// Retires an install: its reporting and pull tokens stop working, it leaves the fleet
     /// views, and its client and environment can be registered again. None if there's no
     /// active install with that ID.
+    /// Each channel's current chart version, stable first. A channel never moved isn't listed.
+    pub async fn channel_versions(&self) -> Result<Vec<ChannelVersion>, sqlx::Error> {
+        let rows = sqlx::query(
+            "SELECT DISTINCT ON (channel) channel, chart_version, changed_by, changed_at FROM release_channel_changes
+             ORDER BY channel DESC, changed_at DESC, id DESC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        rows.iter()
+            .map(|row| {
+                Ok(ChannelVersion {
+                    channel: Channel::parse(row.try_get("channel")?)?,
+                    chart_version: row.try_get("chart_version")?,
+                    changed_by: row.try_get("changed_by")?,
+                    changed_at: row.try_get("changed_at")?,
+                })
+            })
+            .collect()
+    }
+
+    /// Points `channel` (stable or fast) at `chart_version` (ADR 0094). Every install on that
+    /// channel moves to it at its next sync.
+    pub async fn set_channel(
+        &self,
+        channel: Channel,
+        chart_version: &str,
+        by: &str,
+    ) -> Result<ChannelVersion, SetChannelError> {
+        if channel == Channel::Pinned {
+            return Err(SetChannelError::Pinned);
+        }
+        if !is_chart_version(chart_version) {
+            return Err(SetChannelError::Version(chart_version.to_string()));
+        }
+        let changed_at: DateTime<Utc> = sqlx::query_scalar(
+            "INSERT INTO release_channel_changes (id, channel, chart_version, changed_by) VALUES ($1, $2, $3, $4)
+             RETURNING changed_at",
+        )
+        .bind(Uuid::now_v7())
+        .bind(channel.as_str())
+        .bind(chart_version)
+        .bind(by)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(ChannelVersion { channel, chart_version: chart_version.to_string(), changed_by: by.to_string(), changed_at })
+    }
+
     pub async fn retire(&self, id: InstallId, by: &str) -> Result<Option<InstallRecord>, sqlx::Error> {
         let row = sqlx::query(&format!(
             "UPDATE installs SET retired_at = now(), retired_by = $2 WHERE id = $1 AND retired_at IS NULL RETURNING {COLUMNS}"
@@ -712,5 +793,34 @@ pub(crate) mod tests {
         let kept: i64 =
             sqlx::query_scalar("SELECT count(*) FROM heartbeat_samples").fetch_one(&store.pool).await.unwrap();
         assert_eq!(kept, 1);
+    }
+
+    #[test]
+    fn only_versions_ci_publishes_can_be_named() {
+        assert!(is_chart_version("0.1.0-g0123456789ab"));
+        assert!(!is_chart_version("0.1.0"));
+        assert!(!is_chart_version("0.1.0-g0123"));
+        assert!(!is_chart_version("0.1.0-gXYZ456789abc"));
+        assert!(!is_chart_version(">=0.0.0-0"));
+    }
+
+    #[tokio::test]
+    async fn a_channel_names_its_latest_version_and_keeps_its_history() {
+        let Some(store) = test_store().await else { return };
+        assert!(store.channel_versions().await.unwrap().is_empty());
+        store.set_channel(Channel::Fast, "0.1.0-g000000000001", "github-actions").await.unwrap();
+        store.set_channel(Channel::Stable, "0.1.0-g000000000001", "alice").await.unwrap();
+        store.set_channel(Channel::Fast, "0.1.0-g000000000002", "github-actions").await.unwrap();
+        let now: Vec<_> =
+            store.channel_versions().await.unwrap().into_iter().map(|c| (c.channel, c.chart_version)).collect();
+        assert_eq!(
+            now,
+            [(Channel::Stable, "0.1.0-g000000000001".to_string()), (Channel::Fast, "0.1.0-g000000000002".to_string())]
+        );
+        assert!(matches!(
+            store.set_channel(Channel::Pinned, "0.1.0-g000000000003", "bob").await,
+            Err(SetChannelError::Pinned)
+        ));
+        assert!(matches!(store.set_channel(Channel::Stable, "latest", "bob").await, Err(SetChannelError::Version(_))));
     }
 }

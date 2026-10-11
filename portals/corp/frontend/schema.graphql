@@ -17,6 +17,20 @@ type Actor {
 	label: String!
 }
 
+"""
+The chart version a release channel names (ADR 0094): every publish moves `FAST`; a
+promotion, after a day's soak in fast, moves `STABLE`.
+"""
+type ChannelVersion {
+	channel: ReleaseChannel!
+	chartVersion: String!
+	"""
+	Who moved it: `github-actions` for a publish, the person who asked for a promotion.
+	"""
+	changedBy: String!
+	changedAt: UtcTimestamp!
+}
+
 type DeployedService {
 	"""
 	e.g. awzy-pdp.
@@ -266,6 +280,10 @@ type Query {
 	aren't counted.
 	"""
 	releases: [Release!]!
+	"""
+	Each channel's chart version, stable first. A channel never moved isn't listed.
+	"""
+	channels: [ChannelVersion!]!
 	"""
 	The services an install can report, for filters and empty states.
 	"""

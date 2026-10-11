@@ -6,9 +6,9 @@
 # in SSM by deploy-templates.tf) with the image set and register it, so Terraform's changes to a
 # task definition reach the service with the next deploy. Then run the corp portal's new revision
 # once as `awzy-corp-portal migrate` (ADR 0087): a failed migration stops the deploy here, before
-# any service changes. Then point each service at its new revision and wait for it to settle.
-# ECS's deployment circuit breaker rolls a failing deploy back; that shows up here as the old
-# revision still running.
+# any service changes. Then point the fast channel at this commit's authz chart (ADR 0094), point
+# each service at its new revision, and wait for it to settle. ECS's deployment circuit breaker
+# rolls a failing deploy back; that shows up here as the old revision still running.
 #
 # CI runs for commits on main finish in any order, so a commit older than the one deployed is
 # skipped rather than deployed over it. That needs the full history (fetch-depth: 0).
@@ -67,21 +67,15 @@ PY
   wanted[$service]=$new
 done
 
-# The migrate task, on the corp portal service's own network so it reaches the database.
 echo "migrating"
-network=$(aws ecs describe-services --cluster "$CLUSTER" --services awzy-corp-portal \
-  --query 'services[0].networkConfiguration' --output json)
-task=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "${wanted[awzy-corp-portal]}" --launch-type FARGATE \
-  --network-configuration "$network" --started-by deploy-corp-migrate \
-  --overrides '{"containerOverrides":[{"name":"corp-portal","command":["migrate"]}]}' \
-  --query 'tasks[0].taskArn' --output text)
-aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$task"
-read -r code reason < <(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task" --output text \
-  --query "tasks[0].[containers[?name=='corp-portal'].exitCode | [0], stoppedReason]")
-if [ "$code" != 0 ]; then
-  echo "::error::The migrate task ${task##*/} failed (exit $code: $reason); nothing was deployed. Its logs are in CloudWatch." >&2
+if ! tools/ci/corp-task.sh "${wanted[awzy-corp-portal]}" deploy-corp-migrate migrate; then
+  echo "::error::The migration failed; nothing was deployed." >&2
   exit 1
 fi
+
+# This commit's authz chart is the fast channel's now (ADR 0094); publish-chart.sh named it so.
+tools/ci/corp-task.sh "${wanted[awzy-corp-portal]}" deploy-corp-channel \
+  channel set fast "0.1.0-g${AWZY_CORP_PORTAL_RELEASE_TAG:0:12}" github-actions
 
 for service in "${!wanted[@]}"; do
   aws ecs update-service --cluster "$CLUSTER" --service "$service" --task-definition "${wanted[$service]}" \

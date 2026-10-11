@@ -1,30 +1,38 @@
 import { EmptyState, PageHeader, PageLoader, Section, StatusBadge } from "@awzy/ui";
-import { Anchor, Group, Table } from "@mantine/core";
+import { Anchor, Group, Table, Text } from "@mantine/core";
 import { IconPackage } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { Suspense } from "react";
 import { graphql, useLazyLoadQuery } from "react-relay";
 
 import type { ReleasesPageQuery } from "./__generated__/ReleasesPageQuery.graphql";
-import { channelLabel, healthOf } from "./format";
+import { channelLabel, formatTime, healthOf } from "./format";
 
-/** Which chart versions are running, and where: the rollout view. */
+/** What each release channel names, and which chart versions are running where: the rollout view. */
 export function ReleasesPage() {
   return (
     <>
-      <PageHeader title="Releases" description="Which chart versions installs are running, and where." />
-      <Section flush>
-        <Suspense fallback={<PageLoader />}>
-          <Releases />
-        </Suspense>
-      </Section>
+      <PageHeader
+        title="Releases"
+        description="The version each channel names, and which chart versions installs are running, and where."
+      />
+      <Suspense fallback={<PageLoader />}>
+        <Releases />
+      </Suspense>
     </>
   );
 }
+
 function Releases() {
   const data = useLazyLoadQuery<ReleasesPageQuery>(
     graphql`
       query ReleasesPageQuery {
+        channels {
+          channel
+          chartVersion
+          changedBy
+          changedAt
+        }
         releases {
           version
           installCount
@@ -42,7 +50,49 @@ function Releases() {
     {},
     { fetchPolicy: "store-and-network" },
   );
-  if (data.releases.length === 0) {
+  return (
+    <>
+      <Section title="Channels" flush>
+        {data.channels.length === 0 ? (
+          <Text size="sm" c="dimmed" p="md">
+            No channel names a version yet. The next publish sets fast; stable is set by a promotion.
+          </Text>
+        ) : (
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th w={120}>Channel</Table.Th>
+                <Table.Th w={220}>Version</Table.Th>
+                <Table.Th>Moved</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {data.channels.map((c) => (
+                <Table.Tr key={c.channel}>
+                  <Table.Td>{channelLabel(c.channel, null)}</Table.Td>
+                  <Table.Td ff="monospace" fz="sm">
+                    {c.chartVersion}
+                  </Table.Td>
+                  <Table.Td>
+                    <Text size="sm" c="dimmed">
+                      {formatTime(c.changedAt)} by {c.changedBy}
+                    </Text>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        )}
+      </Section>
+      <Section title="Running" flush>
+        <Running releases={data.releases} />
+      </Section>
+    </>
+  );
+}
+
+function Running({ releases }: { releases: ReleasesPageQuery["response"]["releases"] }) {
+  if (releases.length === 0) {
     return (
       <EmptyState
         icon={<IconPackage size={22} />}
@@ -63,7 +113,7 @@ function Releases() {
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>
-        {data.releases.map((r) => (
+        {releases.map((r) => (
           <Table.Tr key={r.version}>
             <Table.Td ff="monospace" fz="sm">
               {r.version}

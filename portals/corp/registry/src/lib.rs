@@ -4,7 +4,12 @@
 //! username and its pull token as the password. Only GET and HEAD on `awzy/*` repositories are
 //! allowed. Manifests come from ECR through the proxy; layer downloads follow ECR's redirect to
 //! a presigned S3 URL, so the bytes never pass through here.
+//!
+//! The chart is how an install follows its release channel (ADR 0094): the proxy lists only the
+//! chart version the install's channel names, and refuses any other, so Argo CD, asking for the
+//! newest version in a range, gets that one.
 
+pub mod channels;
 pub mod sigv4;
 pub mod tokens;
 pub mod upstream;
@@ -32,19 +37,62 @@ impl Tokens for tokens::TokenStore {
     }
 }
 
-pub struct Registry<T> {
+/// Which chart version an install may pull.
+pub trait Channels: Send + Sync + 'static {
+    fn chart_version(
+        &self,
+        install: InstallId,
+    ) -> impl std::future::Future<Output = anyhow::Result<Option<String>>> + Send;
+}
+
+impl Channels for channels::ChannelStore {
+    async fn chart_version(&self, install: InstallId) -> anyhow::Result<Option<String>> {
+        Ok(channels::ChannelStore::chart_version(self, install).await?)
+    }
+}
+
+/// The chart's repository: the one the proxy shows each install a version of.
+pub const CHART_REPO: &str = "awzy/charts/awzy";
+
+pub struct Registry<T, C> {
     pub tokens: T,
+    pub channels: C,
     pub upstream: upstream::Upstream,
     /// Shown in the Basic auth challenge, e.g. `registry.awzysecurity.com`.
     pub realm: String,
 }
 
-pub fn router<T: Tokens>(registry: Registry<T>) -> Router {
+pub fn router<T: Tokens, C: Channels>(registry: Registry<T, C>) -> Router {
     Router::new()
-        .route("/v2", any(handle::<T>))
-        .route("/v2/", any(handle::<T>))
-        .route("/v2/{*rest}", any(handle::<T>))
+        .route("/v2", any(handle::<T, C>))
+        .route("/v2/", any(handle::<T, C>))
+        .route("/v2/{*rest}", any(handle::<T, C>))
         .with_state(Arc::new(registry))
+}
+
+/// What the proxy does with a request for the chart's repository.
+#[derive(Debug, PartialEq)]
+enum ChartRequest<'a> {
+    /// List only the install's version.
+    Tags,
+    /// A version by tag: served only if it's the install's.
+    Version(&'a str),
+    /// By digest, or a signature's or attestation's tag (`sha256-…`): passed through, since a
+    /// digest only names what a version the install got already points to.
+    Other,
+}
+
+fn chart_request(path: &str) -> ChartRequest<'_> {
+    let rest = path.strip_prefix("/v2/").and_then(|p| p.strip_prefix(CHART_REPO)).unwrap_or_default();
+    if rest == "/tags/list" {
+        return ChartRequest::Tags;
+    }
+    match rest.strip_prefix("/manifests/") {
+        Some(reference) if !reference.starts_with("sha256:") && !reference.starts_with("sha256-") => {
+            ChartRequest::Version(reference)
+        }
+        _ => ChartRequest::Other,
+    }
 }
 
 /// What a path under /v2/ asks for.
@@ -92,7 +140,7 @@ fn basic_credentials(headers: &HeaderMap) -> Option<(String, String)> {
     Some((user.to_string(), pass.to_string()))
 }
 
-async fn handle<T: Tokens>(State(reg): State<Arc<Registry<T>>>, req: Request) -> Response {
+async fn handle<T: Tokens, C: Channels>(State(reg): State<Arc<Registry<T, C>>>, req: Request) -> Response {
     let unauthorized = || {
         let mut r = error(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", "sign in with the install ID and its pull token");
         let challenge = format!("Basic realm=\"{}\"", reg.realm);
@@ -120,6 +168,35 @@ async fn handle<T: Tokens>(State(reg): State<Arc<Registry<T>>>, req: Request) ->
     };
     if target == Target::Base {
         return (StatusCode::OK, [("docker-distribution-api-version", "registry/2.0")], "{}").into_response();
+    }
+    if target == (Target::Repo { name: CHART_REPO }) {
+        let request = chart_request(path);
+        if request != ChartRequest::Other {
+            let allowed = match reg.channels.chart_version(install).await {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::error!(error = %e, "finding an install's chart version failed");
+                    return error(StatusCode::SERVICE_UNAVAILABLE, "UNAVAILABLE", "try again");
+                }
+            };
+            match request {
+                ChartRequest::Tags => {
+                    let body =
+                        serde_json::json!({ "name": CHART_REPO, "tags": allowed.into_iter().collect::<Vec<_>>() });
+                    return (StatusCode::OK, [(header::CONTENT_TYPE, "application/json")], body.to_string())
+                        .into_response();
+                }
+                ChartRequest::Version(v) if allowed.as_deref() != Some(v) => {
+                    tracing::info!(%install, version = v, allowed = ?allowed, "refused a chart version outside the install's channel");
+                    return error(
+                        StatusCode::NOT_FOUND,
+                        "MANIFEST_UNKNOWN",
+                        "your release channel names another version",
+                    );
+                }
+                _ => {}
+            }
+        }
     }
     let path_and_query = req.uri().path_and_query().map(|p| p.as_str()).unwrap_or(path);
     match reg.upstream.forward(req.method().clone(), path_and_query, req.headers().get(header::ACCEPT)).await {
@@ -167,6 +244,14 @@ mod tests {
         }
     }
 
+    /// Every install's channel names one version.
+    struct OneVersion(&'static str);
+    impl Channels for OneVersion {
+        async fn chart_version(&self, _: InstallId) -> anyhow::Result<Option<String>> {
+            Ok(Some(self.0.to_string()))
+        }
+    }
+
     /// A fake ECR: a manifest, and a blob that redirects like ECR does.
     async fn fake_upstream() -> String {
         let app = Router::new()
@@ -183,6 +268,7 @@ mod tests {
                     )
                 }),
             )
+            .route("/v2/awzy/charts/awzy/manifests/{reference}", get(|| async { "chart" }))
             .route(
                 "/v2/awzy/awzy-pdp/blobs/sha256:bb",
                 get(|| async { (StatusCode::TEMPORARY_REDIRECT, [("location", "https://s3.example/bb?sig=1")]) }),
@@ -200,7 +286,13 @@ mod tests {
             client: upstream::http_client(),
             auth: upstream::Auth::Fixed(Some("Basic upstream".into())),
         };
-        (router(Registry { tokens: OneToken(install), upstream, realm: "registry.test".into() }), install)
+        let registry = Registry {
+            tokens: OneToken(install),
+            channels: OneVersion("0.1.0-g000000000002"),
+            upstream,
+            realm: "registry.test".into(),
+        };
+        (router(registry), install)
     }
 
     fn get_req(path: &str, user: &str, pass: &str) -> axum::http::Request<Body> {
@@ -247,5 +339,35 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         assert_eq!(app.oneshot(put).await.unwrap().status(), StatusCode::METHOD_NOT_ALLOWED);
+    }
+
+    #[tokio::test]
+    async fn an_install_sees_and_gets_only_its_channels_chart_version() {
+        let (app, install) = app().await;
+        let user = install.to_string();
+        let get = |path: &str| app.clone().oneshot(get_req(path, &user, "awzy_pull_good"));
+
+        let resp = get("/v2/awzy/charts/awzy/tags/list").await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: serde_json::Value =
+            serde_json::from_slice(&resp.into_body().collect().await.unwrap().to_bytes()).unwrap();
+        assert_eq!(body["tags"], serde_json::json!(["0.1.0-g000000000002"]));
+
+        assert_eq!(get("/v2/awzy/charts/awzy/manifests/0.1.0-g000000000002").await.unwrap().status(), StatusCode::OK);
+        assert_eq!(
+            get("/v2/awzy/charts/awzy/manifests/0.1.0-g000000000001").await.unwrap().status(),
+            StatusCode::NOT_FOUND
+        );
+        // By digest, and the signatures beside a version, pass through.
+        assert_eq!(get("/v2/awzy/charts/awzy/manifests/sha256:cc").await.unwrap().status(), StatusCode::OK);
+        assert_eq!(get("/v2/awzy/charts/awzy/manifests/sha256-cc.sig").await.unwrap().status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn chart_requests_are_told_apart() {
+        assert_eq!(chart_request("/v2/awzy/charts/awzy/tags/list"), ChartRequest::Tags);
+        assert_eq!(chart_request("/v2/awzy/charts/awzy/manifests/0.1.0-gabc"), ChartRequest::Version("0.1.0-gabc"));
+        assert_eq!(chart_request("/v2/awzy/charts/awzy/manifests/sha256:00"), ChartRequest::Other);
+        assert_eq!(chart_request("/v2/awzy/charts/awzy/blobs/sha256:00"), ChartRequest::Other);
     }
 }

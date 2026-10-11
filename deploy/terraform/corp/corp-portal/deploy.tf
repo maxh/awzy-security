@@ -1,6 +1,6 @@
 # The role CI assumes after publishing to deploy the corp portal and the registry
-# (tools/ci/deploy-corp.sh). Like the publish role (corp/build), only pushes to main can
-# assume it.
+# (tools/ci/deploy-corp.sh), and to promote a chart to the stable channel (tools/ci/promote.sh).
+# Only workflows on main can assume it.
 
 data "aws_iam_openid_connect_provider" "github" {
   url = "https://token.actions.githubusercontent.com"
@@ -59,6 +59,11 @@ data "aws_iam_policy_document" "ci_deploy" {
   statement {
     actions   = ["ecs:DescribeTasks"]
     resources = ["arn:aws:ecs:${var.region}:${var.build_account_id}:task/${aws_ecs_cluster.corp.name}/*"]
+  }
+  # How long a chart has soaked in fast, before it's promoted to stable (tools/ci/promote.sh).
+  statement {
+    actions   = ["ecr:DescribeImages"]
+    resources = ["arn:aws:ecr:${var.region}:${var.build_account_id}:repository/awzy/charts/awzy"]
   }
   # Which revision to deploy from (deploy-templates.tf).
   statement {

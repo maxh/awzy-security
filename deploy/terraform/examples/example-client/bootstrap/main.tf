@@ -106,7 +106,7 @@ module "bootstrap" {
 
   install_contract  = local.contract
   cosign_public_key = file("${path.module}/../../../../release/cosign.pub")
-  # The first chart CI publishes. Later: follow the fast channel (ADR 0015).
+  # The fast channel, which this install is registered with (ADR 0094), unless pinned here.
   chart_version = var.chart_version
 
   registry_credentials = {
@@ -135,8 +135,9 @@ module "bootstrap" {
 }
 
 variable "chart_version" {
-  description = "awzy chart version to install, 0.1.0-<sha> from CI"
+  description = "awzy chart versions to follow: by default whatever the install's channel names; or an exact 0.1.0-g<sha> from CI"
   type        = string
+  default     = ">=0.0.0-0"
 }
 
 

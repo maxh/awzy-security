@@ -472,7 +472,7 @@ deploy/terraform/
 Argo CD then pulls the Helm chart and signed images from the release channel the client subscribes to. awzy needs no standing inbound access.
 
 - The umbrella chart and the images are OCI artifacts in the vendor registry, so any cluster pulls them the same way. The chart refers to images by digest
-- A pinned install sets Argo CD's `targetRevision` to an exact chart version. `stable` and `fast` are small per-channel artifacts that name an exact chart version, moved by the release process. Phase 0 checks how Argo CD handles moving OCI tags before relying on this
+- Each channel names an exact chart version, kept by the corp portal: every publish moves `fast`, and a promotion, after a day's soak, moves `stable`. Argo CD follows a semver range, and the release registry shows each install only the version its channel (or pin) names ([ADR 0094](../adr/0094-installs-follow-their-channel-through-the-registry.md))
 - Images replicated or pulled through a cache into the client's own registry (ECR pull-through cache, an Artifact Registry remote repository, or ACR artifact cache). This is per-cloud Terraform; the chart sees only a registry prefix. Clients with no egress to the vendor registry need the mirror seeded
 - Images signed with cosign and verified at admission by Kyverno, with an SBOM attached to each release. Verification needs only the public key, so it is the same on every cloud
 - No write access for awzy, even in an emergency. Repairs are run by the client's own team from runbooks and repair Jobs, optionally on a call with awzy support

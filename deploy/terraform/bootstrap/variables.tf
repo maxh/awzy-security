@@ -20,8 +20,9 @@ variable "install_contract" {
 }
 
 variable "chart_version" {
-  description = "awzy chart version: an exact release (pinned) or what a channel names"
+  description = "The awzy chart versions Argo CD follows. The release registry shows an install only the version its release channel (or pinned version) names, as registered in the corp portal, so the default range follows that channel (ADR 0094)"
   type        = string
+  default     = ">=0.0.0-0"
 }
 
 variable "registry_credentials" {

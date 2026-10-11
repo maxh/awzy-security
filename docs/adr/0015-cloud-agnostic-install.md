@@ -1,6 +1,6 @@
 # 0015. Cloud-agnostic install: per-cloud infrastructure, shared bootstrap
 
-- Status: Accepted
+- Status: Accepted; amended by [0094](0094-installs-follow-their-channel-through-the-registry.md) (installs follow their channel through the registry)
 - Date: 2026-10-09
 
 ## Context

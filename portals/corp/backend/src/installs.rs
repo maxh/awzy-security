@@ -301,6 +301,17 @@ pub struct VersionSeen {
     pub first_seen_at: UtcTimestamp,
 }
 
+/// The chart version a release channel names (ADR 0094): every publish moves `FAST`; a
+/// promotion, after a day's soak in fast, moves `STABLE`.
+#[derive(SimpleObject)]
+pub struct ChannelVersion {
+    pub channel: ReleaseChannel,
+    pub chart_version: String,
+    /// Who moved it: `github-actions` for a publish, the person who asked for a promotion.
+    pub changed_by: String,
+    pub changed_at: UtcTimestamp,
+}
+
 /// A chart version and the installs running it.
 pub struct Release {
     version: String,
@@ -373,6 +384,21 @@ impl FleetQuery {
             by_version.into_iter().map(|(version, installs)| Release { version, installs }).collect();
         releases.sort_by(|a, b| fleet::compare_versions(&b.version, &a.version));
         Ok(releases)
+    }
+
+    /// Each channel's chart version, stable first. A channel never moved isn't listed.
+    async fn channels(&self, ctx: &Context<'_>) -> Result<Vec<ChannelVersion>> {
+        Ok(store(ctx)?
+            .channel_versions()
+            .await?
+            .into_iter()
+            .map(|c| ChannelVersion {
+                channel: c.channel.into(),
+                chart_version: c.chart_version,
+                changed_by: c.changed_by,
+                changed_at: UtcTimestamp(c.changed_at),
+            })
+            .collect())
     }
 
     /// The services an install can report, for filters and empty states.
