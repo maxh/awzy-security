@@ -80,6 +80,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm format:check
+      # How much of the frontends the unit tests cover, on the run's summary page (#226). The
+      # tests themselves also run in Bazel; this is only the report.
+      - name: Frontend test coverage
+        run: |
+          pnpm -r --if-present coverage | tee coverage.txt
+          { echo '### Frontend test coverage'; echo '```'; grep -E '^(Statements|Branches|Functions|Lines)|> @awzy' coverage.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   # Clippy and rustfmt over every Rust target; any warning fails.
   lint-rust:
