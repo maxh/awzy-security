@@ -1,6 +1,6 @@
 import { EmptyState, oneOf, PageHeader, PageLoader, Section, Stat, StatusBadge } from "@awzy/ui";
 import { Alert, Button, Group, Modal, Select, SimpleGrid, Stack, Table, Text, TextInput } from "@mantine/core";
-import { IconArchive, IconBox, IconHistory, IconPencil, IconPin } from "@tabler/icons-react";
+import { IconArchive, IconBox, IconPencil, IconPin } from "@tabler/icons-react";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { Suspense, useState } from "react";
 import { graphql, type PreloadedQuery, useMutation, usePreloadedQuery } from "react-relay";
@@ -13,6 +13,7 @@ import { ago, CHANNEL_NAMES, channelLabel, CHANNELS, formatTime, healthOf, short
 import { InstallCharts } from "./InstallCharts";
 import { LicenseSection } from "./LicenseSection";
 import { AskForSupportButton, SupportSection } from "./SupportSection";
+import { VersionHistorySection } from "./VersionHistorySection";
 
 /** One install: the deployed units inside it, its numbers, and its upgrade history. */
 const route = getRouteApi("/installs/$installId");
@@ -72,10 +73,7 @@ function Install({ id, queryRef }: { id: string; queryRef: PreloadedQuery<Instal
               kafkaLag
               clickhouseDiskUsedPercent
             }
-            versionHistory {
-              chartVersion
-              firstSeenAt
-            }
+            ...VersionHistorySection_install @alias(as: "versionHistorySection")
             ...LicenseSection_install @alias(as: "licenseSection")
           }
         }
@@ -95,7 +93,6 @@ function Install({ id, queryRef }: { id: string; queryRef: PreloadedQuery<Instal
   const health = healthOf(i.health ?? "");
   const m = i.metrics;
   const services = i.services ?? [];
-  const history = i.versionHistory ?? [];
 
   return (
     <>
@@ -202,26 +199,7 @@ function Install({ id, queryRef }: { id: string; queryRef: PreloadedQuery<Instal
           )}
         </Section>
 
-        <Section title="Version history" description="Each chart version the install reported, newest first." flush>
-          {history.length === 0 ? (
-            <EmptyState icon={<IconHistory size={22} />} title="No chart version reported yet" />
-          ) : (
-            <Table>
-              <Table.Tbody>
-                {history.map((v) => (
-                  <Table.Tr key={v.chartVersion}>
-                    <Table.Td ff="monospace" fz="sm">
-                      {v.chartVersion}
-                    </Table.Td>
-                    <Table.Td c="dimmed" fz="sm">
-                      <Group gap={4}>First seen {formatTime(v.firstSeenAt)}</Group>
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          )}
-        </Section>
+        {i.versionHistorySection && <VersionHistorySection install={i.versionHistorySection} />}
 
         {i.licenseSection && <LicenseSection install={i.licenseSection} />}
         <SupportSection installId={id} />

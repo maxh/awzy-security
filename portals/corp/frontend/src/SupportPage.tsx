@@ -1,10 +1,12 @@
-import { EmptyState, PageHeader, PageLoader, StatusBadge } from "@awzy/ui";
+import { EmptyState, PageHeader, PageLoader, ShowMore, StatusBadge } from "@awzy/ui";
 import { Alert, Anchor, Button, Group, Table, Text } from "@mantine/core";
 import { IconLifebuoy } from "@tabler/icons-react";
 import { getRouteApi, Link, useRouter } from "@tanstack/react-router";
 import { Suspense, useState } from "react";
-import { graphql, type PreloadedQuery, useMutation, usePreloadedQuery } from "react-relay";
+import { graphql, type PreloadedQuery, useMutation, usePaginationFragment, usePreloadedQuery } from "react-relay";
 
+import type { SupportPage_sessions$key } from "./__generated__/SupportPage_sessions.graphql";
+import type { SupportPagePaginationQuery } from "./__generated__/SupportPagePaginationQuery.graphql";
 import type { SupportPageQuery } from "./__generated__/SupportPageQuery.graphql";
 import type { SupportPageSignInMutation } from "./__generated__/SupportPageSignInMutation.graphql";
 import { formatTime, supportStatus } from "./format";
@@ -34,28 +36,46 @@ export function SupportPage() {
 }
 
 function Sessions({ queryRef }: { queryRef: PreloadedQuery<SupportPageQuery> }) {
-  const data = usePreloadedQuery<SupportPageQuery>(
+  const query = usePreloadedQuery<SupportPageQuery>(
     graphql`
       query SupportPageQuery {
-        supportSessions {
-          id
-          status
-          requestedBy
-          areas
-          reason
-          requestedAt
-          expiresAt
-          delivered
-          install {
-            id
-            client
-            environment
-          }
-        }
+        ...SupportPage_sessions
       }
     `,
     queryRef,
   );
+  const { data, loadNext, hasNext, isLoadingNext } = usePaginationFragment<
+    SupportPagePaginationQuery,
+    SupportPage_sessions$key
+  >(
+    graphql`
+      fragment SupportPage_sessions on Query
+      @argumentDefinitions(first: { type: "Int", defaultValue: 20 }, after: { type: "String" })
+      @refetchable(queryName: "SupportPagePaginationQuery") {
+        supportSessions(first: $first, after: $after) @connection(key: "SupportPage_supportSessions") {
+          edges {
+            node {
+              id
+              status
+              requestedBy
+              areas
+              reason
+              requestedAt
+              expiresAt
+              delivered
+              install {
+                id
+                client
+                environment
+              }
+            }
+          }
+        }
+      }
+    `,
+    query,
+  );
+  const sessions = data.supportSessions.edges.map((e) => e.node);
   const [signIn, signingIn] = useMutation<SupportPageSignInMutation>(graphql`
     mutation SupportPageSignInMutation($supportSessionQid: Qid!) {
       signInToSupportSession(supportSessionQid: $supportSessionQid) {
@@ -73,7 +93,7 @@ function Sessions({ queryRef }: { queryRef: PreloadedQuery<SupportPageQuery> }) 
       onError: (e) => setError(e.message),
     });
 
-  if (data.supportSessions.length === 0) {
+  if (sessions.length === 0) {
     return (
       <EmptyState
         icon={<IconLifebuoy size={28} stroke={1.5} />}
@@ -100,7 +120,7 @@ function Sessions({ queryRef }: { queryRef: PreloadedQuery<SupportPageQuery> }) 
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {data.supportSessions.map((s) => {
+          {sessions.map((s) => {
             const status = supportStatus(s.status);
             return (
               <Table.Tr key={s.id}>
@@ -147,6 +167,7 @@ function Sessions({ queryRef }: { queryRef: PreloadedQuery<SupportPageQuery> }) 
           })}
         </Table.Tbody>
       </Table>
+      <ShowMore hasMore={hasNext} loading={isLoadingNext} onMore={() => loadNext(50)} />
     </>
   );
 }

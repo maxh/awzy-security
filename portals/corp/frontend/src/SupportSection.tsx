@@ -1,4 +1,4 @@
-import { Section, StatusBadge } from "@awzy/ui";
+import { Section, ShowMore, StatusBadge } from "@awzy/ui";
 import {
   Alert,
   Button,
@@ -15,9 +15,12 @@ import {
 } from "@mantine/core";
 import { IconLifebuoy } from "@tabler/icons-react";
 import { Suspense, useState } from "react";
-import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
+import { graphql, useLazyLoadQuery, useMutation, usePaginationFragment } from "react-relay";
+import { ConnectionHandler } from "relay-runtime";
 
 import type { SupportSectionInstallsQuery } from "./__generated__/SupportSectionInstallsQuery.graphql";
+import type { SupportSection_install$key } from "./__generated__/SupportSection_install.graphql";
+import type { SupportSectionPaginationQuery } from "./__generated__/SupportSectionPaginationQuery.graphql";
 import type { SupportSectionQuery } from "./__generated__/SupportSectionQuery.graphql";
 import type { SupportSectionRequestMutation } from "./__generated__/SupportSectionRequestMutation.graphql";
 import type { SupportSectionSignInMutation } from "./__generated__/SupportSectionSignInMutation.graphql";
@@ -48,14 +51,36 @@ function Sessions({ installId }: { installId: string }) {
     graphql`
       query SupportSectionQuery($id: ID!) {
         node(id: $id) {
-          ... on Install {
-            supportSessions {
+          ...SupportSection_install
+        }
+      }
+    `,
+    { id: installId },
+    { fetchPolicy: "store-and-network" },
+  );
+  return data.node ? <SessionList installId={installId} install={data.node} /> : null;
+}
+
+/** The connection a new request is prepended to, so the list shows it without a refetch. */
+export const SUPPORT_SESSIONS_CONNECTION = "SupportSection_supportSessions";
+
+function SessionList({ installId, install }: { installId: string; install: SupportSection_install$key }) {
+  const { data, loadNext, hasNext, isLoadingNext } = usePaginationFragment<
+    SupportSectionPaginationQuery,
+    SupportSection_install$key
+  >(
+    graphql`
+      fragment SupportSection_install on Install
+      @argumentDefinitions(first: { type: "Int", defaultValue: 5 }, after: { type: "String" })
+      @refetchable(queryName: "SupportSectionPaginationQuery") {
+        supportSessions(first: $first, after: $after) @connection(key: "SupportSection_supportSessions") {
+          edges {
+            node {
               id
               status
               requestedBy
               areas
               reason
-              durationMinutes
               portalUrl
               requestedAt
               expiresAt
@@ -65,10 +90,9 @@ function Sessions({ installId }: { installId: string }) {
         }
       }
     `,
-    { id: installId },
-    { fetchPolicy: "store-and-network" },
+    install,
   );
-  const sessions = data.node?.supportSessions ?? [];
+  const sessions = data.supportSessions.edges.map((e) => e.node);
   const [signIn, signingIn] = useMutation<SupportSectionSignInMutation>(graphql`
     mutation SupportSectionSignInMutation($supportSessionQid: Qid!) {
       signInToSupportSession(supportSessionQid: $supportSessionQid) {
@@ -151,6 +175,7 @@ function Sessions({ installId }: { installId: string }) {
             </Table.Tbody>
           </Table>
         )}
+        <ShowMore hasMore={hasNext} loading={isLoadingNext} onMore={() => loadNext(20)} />
       </Stack>
     </Section>
   );
@@ -245,31 +270,27 @@ function RequestForm({
   const [portalUrl, setPortalUrl] = useState(lastPortal ?? "https://");
   const [error, setError] = useState<string | null>(null);
   const [request, requesting] = useMutation<SupportSectionRequestMutation>(graphql`
-    mutation SupportSectionRequestMutation($input: RequestSupportSessionInput!) {
-      requestSupportSession(input: $input) {
+    mutation SupportSectionRequestMutation($input: RequestSupportSessionInput!, $connections: [ID!]!) {
+      requestSupportSession(input: $input) @prependNode(connections: $connections, edgeTypeName: "SupportSessionEdge") {
         id
-        install {
-          id
-          supportSessions {
-            id
-            status
-            requestedBy
-            areas
-            reason
-            durationMinutes
-            portalUrl
-            requestedAt
-            expiresAt
-            delivered
-          }
-        }
+        status
+        requestedBy
+        areas
+        reason
+        portalUrl
+        requestedAt
+        expiresAt
+        delivered
       }
     }
   `);
   const submit = () => {
     if (!installId) return;
     request({
-      variables: { input: { installQid: installId, areas, reason, durationMinutes: minutes, portalUrl } },
+      variables: {
+        input: { installQid: installId, areas, reason, durationMinutes: minutes, portalUrl },
+        connections: [ConnectionHandler.getConnectionID(installId, SUPPORT_SESSIONS_CONNECTION)],
+      },
       onCompleted: (_, errors) => {
         if (errors?.[0]) {
           setError(errors[0].message);

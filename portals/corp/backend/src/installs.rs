@@ -8,7 +8,7 @@ use async_graphql::{
 };
 use awzy_heartbeat::{Service as WireService, ServiceStatus};
 use awzy_model::InstallId;
-use awzy_portal::{Actor, ErrorCode, Qid, UtcTimestamp};
+use awzy_portal::{connection::page, Actor, ErrorCode, Qid, UtcTimestamp};
 use chrono::Utc;
 
 use crate::{
@@ -124,8 +124,14 @@ pub struct Install(pub InstallRecord);
 #[Object]
 impl Install {
     /// Support sessions asked for on this install, newest first (ADR 0095).
-    async fn support_sessions(&self, ctx: &Context<'_>) -> Result<Vec<crate::support::SupportSession>> {
-        Ok(store(ctx)?.support_sessions(self.0.id).await?.into_iter().map(crate::support::SupportSession).collect())
+    async fn support_sessions(
+        &self,
+        ctx: &Context<'_>,
+        after: Option<String>,
+        first: Option<i32>,
+    ) -> Result<Connection<String, crate::support::SupportSession>> {
+        let sessions = store(ctx)?.support_sessions(self.0.id).await?;
+        page(sessions.into_iter().map(crate::support::SupportSession).collect(), |s| s.0.id.to_string(), after, first)
     }
 
     pub async fn id(&self) -> ID {
@@ -218,12 +224,18 @@ impl Install {
     }
 
     /// Chart versions the install has run, newest first: its upgrade history.
-    async fn version_history(&self, ctx: &Context<'_>) -> Result<Vec<VersionSeen>> {
+    async fn version_history(
+        &self,
+        ctx: &Context<'_>,
+        after: Option<String>,
+        first: Option<i32>,
+    ) -> Result<Connection<String, VersionSeen>> {
         let versions = store(ctx)?.versions(self.0.id).await?;
-        Ok(versions
+        let seen = versions
             .into_iter()
             .map(|(chart_version, at)| VersionSeen { chart_version, first_seen_at: UtcTimestamp(at) })
-            .collect())
+            .collect();
+        page(seen, |v| v.chart_version.clone(), after, first)
     }
 
     /// The staff member who registered it.
@@ -338,8 +350,8 @@ impl Release {
         self.installs.len()
     }
 
-    async fn installs(&self) -> Vec<Install> {
-        self.installs.iter().cloned().map(Install).collect()
+    async fn installs(&self, after: Option<String>, first: Option<i32>) -> Result<Connection<String, Install>> {
+        page(self.installs.iter().cloned().map(Install).collect(), |i| i.0.id.to_string(), after, first)
     }
 }
 
@@ -422,7 +434,12 @@ impl FleetQuery {
 
     /// Chart versions installs report, newest first. Installs that haven't reported a version
     /// aren't counted.
-    async fn releases(&self, ctx: &Context<'_>) -> Result<Vec<Release>> {
+    async fn releases(
+        &self,
+        ctx: &Context<'_>,
+        after: Option<String>,
+        first: Option<i32>,
+    ) -> Result<Connection<String, Release>> {
         let mut by_version: BTreeMap<String, Vec<InstallRecord>> = BTreeMap::new();
         for install in store(ctx)?.list(None, 10_000).await? {
             if let Some(v) = install.last_heartbeat.as_ref().and_then(|h| h.chart_version.clone()) {
@@ -432,7 +449,7 @@ impl FleetQuery {
         let mut releases: Vec<Release> =
             by_version.into_iter().map(|(version, installs)| Release { version, installs }).collect();
         releases.sort_by(|a, b| fleet::compare_versions(&b.version, &a.version));
-        Ok(releases)
+        page(releases, |r| r.version.clone(), after, first)
     }
 
     /// Each channel's chart version, stable first. A channel never moved isn't listed.

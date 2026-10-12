@@ -291,8 +291,8 @@ mod tests {
                 r#"{ installs { edges { node { client environment health chartVersion
                 services { name replicasReady replicasDesired healthy } metrics { decisionsPerSecond }
                 metricHistory(window: DAY) { pdpP99Ms degraded }
-                versionHistory { chartVersion } } } }
-              releases { version installCount } }"#,
+                versionHistory(first: 1) { edges { node { chartVersion } } pageInfo { hasNextPage endCursor } } } } }
+              releases { edges { node { version installCount } } } }"#,
             ),
         )
         .await;
@@ -310,7 +310,10 @@ mod tests {
         assert!(matches!(history.len(), 1 | 2), "{body}");
         assert_eq!(history.last().unwrap()["pdpP99Ms"], 1.3);
         assert!(history.iter().any(|s| s["degraded"] == true), "the 2-of-3 heartbeat was degraded");
-        assert_eq!(install["versionHistory"], json!([{ "chartVersion": "0.5.0" }, { "chartVersion": "0.4.2" }]));
-        assert_eq!(fleet["data"]["releases"], json!([{ "version": "0.5.0", "installCount": 1 }]));
+        // Newest first, a page at a time.
+        let versions = &install["versionHistory"];
+        assert_eq!(versions["edges"], json!([{ "node": { "chartVersion": "0.5.0" } }]));
+        assert_eq!(versions["pageInfo"], json!({ "hasNextPage": true, "endCursor": "0.5.0" }));
+        assert_eq!(fleet["data"]["releases"]["edges"], json!([{ "node": { "version": "0.5.0", "installCount": 1 } }]));
     }
 }

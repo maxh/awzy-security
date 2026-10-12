@@ -3,10 +3,10 @@
 //! there, and the install's heartbeats say where the session stands. Once it's approved, the staff
 //! member who asked gets a token, signed here, that the client portal accepts until it ends.
 
-use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject, ID};
+use async_graphql::{connection::Connection, Context, Enum, InputObject, Object, Result, SimpleObject, ID};
 use awzy_heartbeat::{SupportRequest, SupportSessionState, SupportStatus};
 use awzy_model::{InstallId, SupportSessionId};
-use awzy_portal::{ErrorCode, Qid, UtcTimestamp};
+use awzy_portal::{connection::page, ErrorCode, Qid, UtcTimestamp};
 use chrono::{DateTime, Utc};
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use serde::Serialize;
@@ -355,8 +355,14 @@ pub struct SupportQuery;
 #[Object]
 impl SupportQuery {
     /// Every install's support sessions, newest first, up to 200.
-    async fn support_sessions(&self, ctx: &Context<'_>) -> Result<Vec<SupportSession>> {
-        Ok(store(ctx)?.recent_support_sessions(RECENT).await?.into_iter().map(SupportSession).collect())
+    async fn support_sessions(
+        &self,
+        ctx: &Context<'_>,
+        after: Option<String>,
+        first: Option<i32>,
+    ) -> Result<Connection<String, SupportSession>> {
+        let sessions = store(ctx)?.recent_support_sessions(RECENT).await?;
+        page(sessions.into_iter().map(SupportSession).collect(), |s| s.0.id.to_string(), after, first)
     }
 }
 
