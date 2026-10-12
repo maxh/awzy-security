@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+# awzy on your machine, with Larkspur Capital, the demo's synthetic company: its people, agents,
+# documents, and a day of their work flowing through the MCP gateway as PDP decisions.
+#
+#   tools/demo up      # build, start everything, seed the company, print where to sign in
+#   tools/demo check   # is every part answering? (what CI runs)
+#   tools/demo down    # stop it; `down --wipe` also removes the local stack's data
+#   tools/demo logs    # where each service's log is
+#
+# Needs Docker and Bazel (bazelisk); Bazel fetches Rust and Node itself. The first build takes a
+# while. Everything listens on 127.0.0.1 only. The sign-in is the development IdP's: no
+# passwords, a fixed key, sample people. Never expose it.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+state=.demo
+mkdir -p "$state/logs"
+compose=(docker compose -f deploy/local/compose.yaml)
+
+POLICY=8081 PDP=8082 CHALLENGE=8083 CONTEXT=8084 GATEWAY=8086 PORTAL=8080 IDP=5556 DRIVE=8095
+pg=postgres://awzy:awzy@localhost:5432
+clickhouse=(AWZY_CLICKHOUSE_URL=http://localhost:8123 AWZY_CLICKHOUSE_USER=awzy AWZY_CLICKHOUSE_PASSWORD=awzy
+  AWZY_CLICKHOUSE_DATABASE=awzy)
+scim_token=demo-scim-token
+gateway_secret=demo-gateway-secret
+
+targets=(
+  //authz/jobs/clickhouse-migrate:awzy-clickhouse-migrate
+  //authz/services/policy:awzy-policy
+  //authz/services/policy:awzy-publish
+  //authz/services/pdp:awzy-pdp
+  //authz/services/context:awzy-context
+  //authz/services/challenge:awzy-challenge
+  //authz/services/gateway:awzy-gateway
+  //authz/demo/synthetic:awzy-synthetic
+  //portals/client/backend:awzy-client-portal
+  //portals/client/frontend:build
+  //tools/dev-idp:awzy-dev-idp
+)
+
+log() { printf '\033[1m%s\033[0m %s\n' "demo:" "$*"; }
+
+# The built output of a target, as an absolute path.
+out() { echo "$PWD/$(bazel cquery --output=files "$1" 2>/dev/null | head -1)"; }
+
+# Runs `command…` in the background as `name`, logging to .demo/logs/<name>.log.
+start() {
+  local name=$1
+  shift
+  env AWZY_LOG_FORMAT=json "$@" >"$state/logs/$name.log" 2>&1 &
+  echo $! >"$state/$name.pid"
+}
+
+# Waits up to two minutes for `url` to answer 200.
+wait_for() {
+  local url=$1 what=$2
+  for _ in $(seq 1 120); do
+    if curl -skf -o /dev/null "$url"; then return 0; fi
+    sleep 1
+  done
+  echo "demo: $what didn't come up; see $state/logs" >&2
+  return 1
+}
+
+up() {
+  command -v docker >/dev/null || { echo "demo: needs Docker" >&2; exit 1; }
+  command -v bazel >/dev/null || { echo "demo: needs Bazel (bazelisk)" >&2; exit 1; }
+  down >/dev/null 2>&1 || true
+
+  log "starting Postgres, Kafka, ClickHouse, and Valkey"
+  "${compose[@]}" up -d --wait
+
+  log "building (the first time takes a while)"
+  bazel build "${targets[@]}"
+  migrate=$(out //authz/jobs/clickhouse-migrate:awzy-clickhouse-migrate)
+  policy=$(out //authz/services/policy:awzy-policy)
+  publish=$(out //authz/services/policy:awzy-publish)
+  pdp=$(out //authz/services/pdp:awzy-pdp)
+  context=$(out //authz/services/context:awzy-context)
+  challenge=$(out //authz/services/challenge:awzy-challenge)
+  gateway=$(out //authz/services/gateway:awzy-gateway)
+  synthetic=$(out //authz/demo/synthetic:awzy-synthetic)
+  portal=$(out //portals/client/backend:awzy-client-portal)
+  frontend=$(out //portals/client/frontend:build)
+  idp=$(out //tools/dev-idp:awzy-dev-idp)
+
+  log "ClickHouse tables for the decision log"
+  env "${clickhouse[@]}" AWZY_CLICKHOUSE_KAFKA_BROKERS=kafka:29092 "$migrate" >"$state/logs/clickhouse-migrate.log" 2>&1
+
+  log "awzy-policy, with the base policies published"
+  start policy AWZY_LISTEN_ADDR=127.0.0.1:$POLICY AWZY_POSTGRES_URL=$pg/awzy_policy "$policy"
+  wait_for http://127.0.0.1:$POLICY/readyz awzy-policy
+  "$publish" --endpoint http://127.0.0.1:$POLICY --by demo >"$state/logs/publish.log" 2>&1
+
+  log "awzy-context, awzy-challenge, and the PDP"
+  start context AWZY_LISTEN_ADDR=127.0.0.1:$CONTEXT AWZY_POSTGRES_URL=$pg/awzy_context \
+    AWZY_SCIM_TOKEN=$scim_token "$context"
+  wait_for http://127.0.0.1:$CONTEXT/readyz awzy-context
+  start challenge AWZY_LISTEN_ADDR=127.0.0.1:$CHALLENGE AWZY_POSTGRES_URL=$pg/awzy_challenge \
+    AWZY_PDP_ADDR=http://127.0.0.1:$PDP AWZY_CONTEXT_ADDR=http://127.0.0.1:$CONTEXT "$challenge"
+  start pdp AWZY_LISTEN_ADDR=127.0.0.1:$PDP AWZY_POLICY_ADDR=http://127.0.0.1:$POLICY \
+    AWZY_CONTEXT_ADDR=http://127.0.0.1:$CONTEXT AWZY_CHALLENGE_ADDR=http://127.0.0.1:$CHALLENGE \
+    AWZY_KAFKA_BROKERS=localhost:9092 "$pdp"
+  wait_for http://127.0.0.1:$CHALLENGE/readyz awzy-challenge
+  wait_for http://127.0.0.1:$PDP/readyz awzy-pdp
+
+  log "Larkspur Capital: its people, groups, agents, documents, and work"
+  env AWZY_CONTEXT_URL=http://127.0.0.1:$CONTEXT AWZY_SCIM_TOKEN=$scim_token \
+    AWZY_POLICY_ADDR=http://127.0.0.1:$POLICY "$synthetic" all --profile demo --seed 1 \
+    >"$state/logs/synthetic.log" 2>&1
+
+  log "the dev IdP and the client portal"
+  start idp AWZY_LISTEN_ADDR=127.0.0.1:$IDP AWZY_DEV_IDP_CA_OUT="$PWD/$state/idp-ca.pem" "$idp"
+  wait_for https://127.0.0.1:$IDP/.well-known/openid-configuration "the dev IdP"
+  start portal AWZY_LISTEN_ADDR=127.0.0.1:$PORTAL AWZY_POLICY_ADDR=http://127.0.0.1:$POLICY \
+    AWZY_PDP_ADDR=http://127.0.0.1:$PDP AWZY_CONTEXT_ADDR=http://127.0.0.1:$CONTEXT \
+    AWZY_CHALLENGE_ADDR=http://127.0.0.1:$CHALLENGE AWZY_SERVICE_ACCOUNT_REGISTRY=awzy-context \
+    AWZY_AUTH_ISSUER=https://127.0.0.1:$IDP AWZY_AUTH_JWKS_URL=https://127.0.0.1:$IDP/jwks \
+    AWZY_AUTH_CA_FILE="$PWD/$state/idp-ca.pem" AWZY_PORTAL_STATIC_DIR="$frontend" "${clickhouse[@]}" "$portal"
+  wait_for http://127.0.0.1:$PORTAL/readyz "the client portal"
+
+  log "the MCP gateway in front of larkspur-drive and larkspur-admin"
+  cat >"$state/gateway.json" <<EOF
+{
+  "token": { "issuer": "https://idp.local", "audience": "awzy-gateway", "hs256_secret_env": "AWZY_GATEWAY_DEV_SECRET" },
+  "service_account_registry": "awzy-context",
+  "upstreams": [
+    { "name": "larkspur-drive", "url": "http://127.0.0.1:$DRIVE/mcp",
+      "resource_tools": { "read_document": { "argument": "id" }, "list_folder": { "argument": "id" } } },
+    { "name": "larkspur-admin", "url": "http://127.0.0.1:$DRIVE/admin/mcp" }
+  ],
+  "outage": { "cached_allow_ttl_secs": 300 }
+}
+EOF
+  start drive AWZY_LISTEN_ADDR=127.0.0.1:$DRIVE AWZY_CONTEXT_URL=http://127.0.0.1:$CONTEXT "$synthetic" drive
+  start gateway AWZY_LISTEN_ADDR=127.0.0.1:$GATEWAY AWZY_GATEWAY_CONFIG="$PWD/$state/gateway.json" \
+    AWZY_GATEWAY_DEV_SECRET=$gateway_secret AWZY_PDP_ADDR=http://127.0.0.1:$PDP \
+    AWZY_POLICY_ADDR=http://127.0.0.1:$POLICY AWZY_CHALLENGE_ADDR=http://127.0.0.1:$CHALLENGE "$gateway"
+  wait_for http://127.0.0.1:$DRIVE/readyz larkspur-drive
+  wait_for http://127.0.0.1:$GATEWAY/readyz awzy-gateway
+
+  log "a day of Larkspur's work through the gateway, in the background"
+  start activity AWZY_GATEWAY_URL=http://127.0.0.1:$GATEWAY AWZY_GATEWAY_DEV_SECRET=$gateway_secret \
+    "$synthetic" activity --days 1 --rate 20
+
+  cat <<EOF
+
+  awzy is running. Open http://127.0.0.1:$PORTAL and sign in as alice (the security team).
+
+  Your browser will warn about the sign-in page's certificate: the dev IdP made it for itself.
+  Accept it once, or run \`mkcert -install\` and see DEVELOPMENT.md ("Local HTTPS") for one it trusts.
+
+  - Decisions: every tool call Larkspur's people and agents make, decided per action. They
+    arrive over the next few minutes, in monitor mode: would-deny and would-challenge, nothing blocked.
+  - Directory and Look up: ~200 people, their teams, and four AI agents, from SCIM.
+  - Enforcement: switch to enforce and watch challenges appear (it asks for a security key;
+    Chrome's DevTools can add a virtual one).
+  - Policies: the Cedar the decisions came from.
+
+  tools/demo check   is everything answering?
+  tools/demo down    stop it all
+EOF
+}
+
+check() {
+  local failed=0
+  for svc in policy:$POLICY context:$CONTEXT challenge:$CHALLENGE pdp:$PDP portal:$PORTAL drive:$DRIVE gateway:$GATEWAY; do
+    if curl -sf -o /dev/null "http://127.0.0.1:${svc#*:}/readyz"; then echo "ok   ${svc%%:*}"; else echo "FAIL ${svc%%:*}"; failed=1; fi
+  done
+  if curl -skf -o /dev/null https://127.0.0.1:$IDP/.well-known/openid-configuration; then echo "ok   dev IdP"; else echo "FAIL dev IdP"; failed=1; fi
+  # The portal tells the browser where to sign in.
+  if curl -sf http://127.0.0.1:$PORTAL/auth/config | grep -q "127.0.0.1:$IDP"; then echo "ok   portal sign-in config"; else echo "FAIL portal sign-in config"; failed=1; fi
+  # The company is in awzy-context, as SCIM wrote it.
+  people=$(curl -sf "http://127.0.0.1:$CONTEXT/scim/v2/Users?count=1" -H "authorization: Bearer $scim_token" |
+    sed -nE 's/.*"totalResults": ?([0-9]+).*/\1/p')
+  if [ "${people:-0}" -gt 100 ]; then echo "ok   $people people provisioned"; else echo "FAIL people provisioned: ${people:-none}"; failed=1; fi
+  # A decision about one of them.
+  verdict=$(curl -sf http://127.0.0.1:$PDP/v1/access/evaluation -H 'content-type: application/json' -d '{
+    "principal": {"type": "Human", "id": "bob"}, "action": "read",
+    "resource": {"type": "Resource", "id": "demo-check"}, "context": {},
+    "entities": [{"uid": {"type": "Resource", "id": "demo-check"}, "attrs": {"sensitivity": "internal"}, "parents": []}]}' |
+    sed -nE 's/.*"verdict": ?"([a-z]+)".*/\1/p')
+  if [ -n "$verdict" ]; then echo "ok   the PDP decides ($verdict)"; else echo "FAIL the PDP decides"; failed=1; fi
+  return $failed
+}
+
+down() {
+  for f in "$state"/*.pid; do
+    [ -e "$f" ] || continue
+    kill "$(cat "$f")" 2>/dev/null || true
+    rm -f "$f"
+  done
+  if [ "${1:-}" = --wipe ]; then "${compose[@]}" down -v; else "${compose[@]}" stop; fi
+}
+
+case "${1:-}" in
+  up) up ;;
+  check) check ;;
+  down) shift; down "$@" ;;
+  logs) ls -1 "$PWD/$state/logs/"* ;;
+  *) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

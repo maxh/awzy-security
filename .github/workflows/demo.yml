@@ -1,0 +1,31 @@
+name: demo
+
+# tools/demo, the local demo the README points to, starts and answers: every service ready, the
+# synthetic company provisioned, and a decision. Weekly and on demand, and on changes to the
+# script; it builds most of awzy, so it isn't part of every pull request's CI.
+on:
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/demo"
+      - ".github/workflows/demo.yml"
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-bazel
+        with:
+          buildbuddy-api-key: ${{ secrets.AWZY_CORP_BUILDBUDDY_API_KEY }}
+      - run: tools/demo up
+      - run: tools/demo check
+      - name: Logs
+        if: failure()
+        run: for f in .demo/logs/*.log; do echo "::group::$f"; tail -50 "$f"; echo "::endgroup::"; done
+      - if: always()
+        run: tools/demo down --wipe
