@@ -41,6 +41,7 @@ export default defineConfig({
           label: "Guides",
           items: [
             "guides/install",
+            "guides/connecting-your-idp",
             "guides/upgrading",
             "guides/monitoring",
             "guides/troubleshooting",

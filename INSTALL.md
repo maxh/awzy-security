@@ -175,8 +175,9 @@ the cluster on it.
    record existed cache the miss for the zone's negative TTL (30 minutes on Cloudflare), so
    issuing can wait that long; it retries on its own.
 2. **SCIM:** `tofu output -json scim` gives the SCIM URL (`https://<hostname>/scim/v2`) and
-   bearer token. Enter both in your IdP's provisioning settings (Okta, Entra) so people and
-   groups reach awzy-context.
+   bearer token. Enter both in your IdP's provisioning settings so people and groups reach
+   awzy-context: [Connecting your IdP](https://docs.awzysecurity.com/guides/connecting-your-idp/)
+   has the steps for Okta, Entra ID, and Google Workspace.
 3. **Sign-in:** register the client portal as an OIDC application in your IdP, with the issuer
    and JWKS URL you gave bootstrap as `client_portal`. awzy takes tokens for three audiences, kept
    apart so a token handed to an agent for one doesn't open another: the portal's own (`awzy`),
