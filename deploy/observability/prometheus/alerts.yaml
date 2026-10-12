@@ -108,6 +108,21 @@ groups:
         annotations:
           summary: "PDPs are deciding on cached resources because awzy-context can't be reached"
 
+      # Every decision is recorded (platform plan); a dropped record is a gap in the audit trail
+      # that nothing else shows.
+      - alert: AwzyPdpDroppingDecisions
+        expr: sum(increase(awzy_pdp_decisions_dropped_total[5m])) > 0
+        labels: { severity: page }
+        annotations:
+          summary: "PDPs dropped {{ $value | humanize }} decision records in 5 minutes; the audit trail is missing them"
+          description: "reason=buffer_full: Kafka is slow or down. reason=produce_failed: Kafka refused the records after every retry. The PDP's log says why."
+
+      - alert: AwzyPdpDroppingPlans
+        expr: sum(increase(awzy_pdp_plans_dropped_total[5m])) > 0
+        labels: { severity: ticket }
+        annotations:
+          summary: "PDPs dropped {{ $value | humanize }} query plan records in 5 minutes"
+
       - alert: AwzyGatewayCantReachPdp
         expr: sum(rate(awzy_gateway_pdp_unreachable_total[5m])) > 0
         for: 1m

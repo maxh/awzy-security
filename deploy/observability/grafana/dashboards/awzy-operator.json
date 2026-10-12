@@ -378,13 +378,63 @@
       ]
     },
     {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Records dropped before Kafka (any is a gap in the audit trail)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (reason) (increase(awzy_pdp_decisions_dropped_total[5m]))",
+          "legendFormat": "decisions: {{reason}}"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (reason) (increase(awzy_pdp_plans_dropped_total[5m]))",
+          "legendFormat": "plans: {{reason}}"
+        }
+      ]
+    },
+    {
       "id": 30,
       "type": "row",
       "title": "Freshness (platform plan targets)",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 21,
+        "y": 29,
         "w": 24,
         "h": 1
       },
@@ -400,7 +450,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 22,
+        "y": 30,
         "w": 8,
         "h": 8
       },
@@ -459,7 +509,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 22,
+        "y": 30,
         "w": 8,
         "h": 8
       },
@@ -518,7 +568,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 22,
+        "y": 30,
         "w": 8,
         "h": 8
       },
@@ -574,7 +624,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 30,
+        "y": 38,
         "w": 24,
         "h": 1
       },
@@ -590,7 +640,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 31,
+        "y": 39,
         "w": 12,
         "h": 8
       },
@@ -631,7 +681,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 31,
+        "y": 39,
         "w": 12,
         "h": 8
       },
@@ -669,7 +719,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 39,
+        "y": 47,
         "w": 24,
         "h": 1
       },
@@ -685,7 +735,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 40,
+        "y": 48,
         "w": 8,
         "h": 8
       },
@@ -726,7 +776,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 40,
+        "y": 48,
         "w": 8,
         "h": 8
       },
@@ -767,7 +817,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 40,
+        "y": 48,
         "w": 8,
         "h": 8
       },
@@ -808,7 +858,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 48,
+        "y": 56,
         "w": 24,
         "h": 8
       },

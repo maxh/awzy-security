@@ -2,8 +2,9 @@
 //!
 //! Recording is fire-and-forget: records go into a bounded buffer and a background task
 //! batches them to the topic, partitioned by principal so one principal's decisions stay in order.
-//! When Kafka is slow or down and the buffer fills, records are dropped and counted rather
-//! than slowing decisions down.
+//! When Kafka is slow or down and the buffer fills, records are dropped rather than slowing
+//! decisions down. Every dropped record is counted in `awzy_pdp_decisions_dropped_total`, which
+//! an alert watches, because the audit trail is missing it.
 
 use std::{
     collections::BTreeMap,
@@ -76,11 +77,16 @@ impl DecisionLog {
 
         let (tx, rx) = mpsc::channel(BUFFER);
         tokio::spawn(send_batches(rx, clients));
-        Ok(Arc::new(Self { tx, dropped: AtomicU64::new(0) }))
+        Ok(Arc::new(Self::sending_to(tx)))
+    }
+
+    fn sending_to(tx: mpsc::Sender<DecisionRecord>) -> Self {
+        Self { tx, dropped: AtomicU64::new(0) }
     }
 
     pub fn record(&self, record: DecisionRecord) {
         if self.tx.try_send(record).is_err() {
+            crate::metrics::DECISIONS_DROPPED_BUFFER_FULL.inc();
             let dropped = self.dropped.fetch_add(1, Ordering::Relaxed) + 1;
             if dropped.is_power_of_two() {
                 tracing::warn!(dropped, "decision log buffer full; dropping decision records");
@@ -118,7 +124,10 @@ async fn produce_with_retry(client: &PartitionClient, records: Vec<Record>) {
                 tracing::warn!(%error, attempt, "producing decision records failed; retrying");
                 tokio::time::sleep(Duration::from_millis(100 * 2u64.pow(attempt))).await;
             }
-            Err(error) => tracing::error!(%error, count, "dropping decision records after retries"),
+            Err(error) => {
+                crate::metrics::DECISIONS_DROPPED_PRODUCE_FAILED.inc_by(count as u64);
+                tracing::error!(%error, count, "dropping decision records after retries");
+            }
         }
     }
 }
@@ -176,6 +185,19 @@ mod tests {
         let a = partition_for(&record("alice"), 6);
         assert_eq!(a, partition_for(&record("alice"), 6));
         assert!(a < 6);
+    }
+
+    #[test]
+    fn a_full_buffer_drops_and_counts_records() {
+        let (tx, _rx) = mpsc::channel(1);
+        let log = DecisionLog::sending_to(tx);
+        let before = crate::metrics::DECISIONS_DROPPED_BUFFER_FULL.get();
+        log.record(record("alice"));
+        log.record(record("alice"));
+        log.record(record("alice"));
+        assert_eq!(log.dropped(), 2);
+        // Other tests may drop records too, so the process-wide counter is at least this.
+        assert!(crate::metrics::DECISIONS_DROPPED_BUFFER_FULL.get() >= before + 2);
     }
 
     /// Runs with --config=local-stack: produces through DecisionLog, reads the records back.
