@@ -64,7 +64,7 @@ pub fn validate(name: &str, s: &Value) -> Result<(), Invalid> {
             }
             Ok(())
         }
-        other => Err(format!("{other:?} isn't a connector")),
+        other => Err(format!("{other:?} isn't a connector").into()),
     }
 }
 
