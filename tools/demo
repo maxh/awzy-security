@@ -40,6 +40,37 @@ targets=(
   //tools/dev-idp:awzy-dev-idp
 )
 
+# Who each part runs as, as the chart's service accounts name them (ADR 0055).
+backend=awzy-system/awzy
+portal_sa=awzy-portal/awzy
+policy_sa=awzy-system/awzy-policy
+demo_data=awzy-system/awzy-demo-data
+
+# Service auth is on, as in an install: the dev IdP mints each service account's tokens, one per
+# service it calls, and every service checks the tokens it's sent against the dev IdP's keys.
+mint_tokens() {
+  local who aud dir
+  for who in $backend $portal_sa $policy_sa $demo_data; do
+    dir="$state/tokens/$who"
+    mkdir -p "$dir"
+    for aud in awzy-policy awzy-context awzy-challenge awzy-pdp; do
+      curl -sf --cacert "$state/idp-ca.pem" "https://127.0.0.1:$IDP/service-token" -H 'content-type: application/json' \
+        -d "{\"namespace\": \"${who%/*}\", \"service_account\": \"${who#*/}\", \"audience\": \"$aud\"}" |
+        sed -nE 's/.*"token": ?"([^"]+)".*/\1/p' >"$dir/$aud"
+    done
+  done
+}
+
+# The settings that turn service auth on for something running as service account `$1`.
+auth() {
+  echo AWZY_SERVICE_AUTH=on AWZY_SERVICE_AUTH_JWKS_URL=https://127.0.0.1:$IDP/jwks \
+    AWZY_SERVICE_AUTH_ISSUER=https://127.0.0.1:$IDP/service-accounts \
+    AWZY_SERVICE_AUTH_CA_FILE="$PWD/$state/idp-ca.pem" AWZY_SERVICE_TOKEN_DIR="$PWD/$state/tokens/$1"
+}
+
+# An Authorization header with service account `$1`'s token for `$2`, for calls the script makes.
+bearer() { echo "authorization: Bearer $(cat "$state/tokens/$1/$2")"; }
+
 log() { printf '\033[1m%s\033[0m %s\n' "demo:" "$*"; }
 
 # The built output of a target, as an absolute path.
@@ -86,35 +117,49 @@ up() {
   frontend=$(out //portals/client/frontend:build)
   idp=$(out //tools/dev-idp:awzy-dev-idp)
 
+  log "the dev IdP, and service tokens from it"
+  start idp AWZY_LISTEN_ADDR=127.0.0.1:$IDP AWZY_DEV_IDP_CA_OUT="$PWD/$state/idp-ca.pem" "$idp"
+  wait_for https://127.0.0.1:$IDP/.well-known/openid-configuration "the dev IdP"
+  mint_tokens
+
   log "ClickHouse tables for the decision log"
   env "${clickhouse[@]}" AWZY_CLICKHOUSE_KAFKA_BROKERS=kafka:29092 "$migrate" >"$state/logs/clickhouse-migrate.log" 2>&1
 
   log "awzy-policy, with the base policies published"
-  start policy AWZY_LISTEN_ADDR=127.0.0.1:$POLICY AWZY_POSTGRES_URL=$pg/awzy_policy "$policy"
+  # shellcheck disable=SC2046 # auth's settings are separate words
+  start policy $(auth $policy_sa) AWZY_LISTEN_ADDR=127.0.0.1:$POLICY AWZY_POSTGRES_URL=$pg/awzy_policy \
+    AWZY_POLICY_READERS=$backend,$portal_sa,$demo_data AWZY_POLICY_WRITERS=$portal_sa,$demo_data "$policy"
   wait_for http://127.0.0.1:$POLICY/readyz awzy-policy
-  "$publish" --endpoint http://127.0.0.1:$POLICY --by demo >"$state/logs/publish.log" 2>&1
+  # shellcheck disable=SC2046
+  env $(auth $demo_data) "$publish" --endpoint http://127.0.0.1:$POLICY --by demo >"$state/logs/publish.log" 2>&1
 
   log "awzy-context, awzy-challenge, and the PDP"
-  start context AWZY_LISTEN_ADDR=127.0.0.1:$CONTEXT AWZY_POSTGRES_URL=$pg/awzy_context \
-    AWZY_SCIM_TOKEN=$scim_token "$context"
+  # shellcheck disable=SC2046
+  start context $(auth $backend) AWZY_LISTEN_ADDR=127.0.0.1:$CONTEXT AWZY_POSTGRES_URL=$pg/awzy_context \
+    AWZY_SCIM_TOKEN=$scim_token AWZY_CONTEXT_READERS=$backend,$portal_sa \
+    AWZY_CONTEXT_WRITERS=$backend,$demo_data AWZY_CONTEXT_DIRECTORY=$backend,$portal_sa,$demo_data "$context"
   wait_for http://127.0.0.1:$CONTEXT/readyz awzy-context
-  start challenge AWZY_LISTEN_ADDR=127.0.0.1:$CHALLENGE AWZY_POSTGRES_URL=$pg/awzy_challenge \
-    AWZY_PDP_ADDR=http://127.0.0.1:$PDP AWZY_CONTEXT_ADDR=http://127.0.0.1:$CONTEXT "$challenge"
-  start pdp AWZY_LISTEN_ADDR=127.0.0.1:$PDP AWZY_POLICY_ADDR=http://127.0.0.1:$POLICY \
+  # shellcheck disable=SC2046
+  start challenge $(auth $backend) AWZY_LISTEN_ADDR=127.0.0.1:$CHALLENGE AWZY_POSTGRES_URL=$pg/awzy_challenge \
+    AWZY_PDP_ADDR=http://127.0.0.1:$PDP AWZY_CONTEXT_ADDR=http://127.0.0.1:$CONTEXT \
+    AWZY_CHALLENGE_ANSWERERS=$portal_sa AWZY_CHALLENGE_CONTAINERS=$backend,$portal_sa \
+    AWZY_CHALLENGE_PDPS=$backend AWZY_CHALLENGE_POLICY=$policy_sa "$challenge"
+  # shellcheck disable=SC2046
+  start pdp $(auth $backend) AWZY_LISTEN_ADDR=127.0.0.1:$PDP AWZY_POLICY_ADDR=http://127.0.0.1:$POLICY \
     AWZY_CONTEXT_ADDR=http://127.0.0.1:$CONTEXT AWZY_CHALLENGE_ADDR=http://127.0.0.1:$CHALLENGE \
     AWZY_KAFKA_BROKERS=localhost:9092 "$pdp"
   wait_for http://127.0.0.1:$CHALLENGE/readyz awzy-challenge
   wait_for http://127.0.0.1:$PDP/readyz awzy-pdp
 
   log "Larkspur Capital: its people, groups, agents, documents, and work"
-  env AWZY_CONTEXT_URL=http://127.0.0.1:$CONTEXT AWZY_SCIM_TOKEN=$scim_token \
+  # shellcheck disable=SC2046
+  env $(auth $demo_data) AWZY_CONTEXT_URL=http://127.0.0.1:$CONTEXT AWZY_SCIM_TOKEN=$scim_token \
     AWZY_POLICY_ADDR=http://127.0.0.1:$POLICY "$synthetic" all --profile demo --seed 1 \
     >"$state/logs/synthetic.log" 2>&1
 
-  log "the dev IdP and the client portal"
-  start idp AWZY_LISTEN_ADDR=127.0.0.1:$IDP AWZY_DEV_IDP_CA_OUT="$PWD/$state/idp-ca.pem" "$idp"
-  wait_for https://127.0.0.1:$IDP/.well-known/openid-configuration "the dev IdP"
-  start portal AWZY_LISTEN_ADDR=127.0.0.1:$PORTAL AWZY_POLICY_ADDR=http://127.0.0.1:$POLICY \
+  log "the client portal"
+  # shellcheck disable=SC2046
+  start portal $(auth $portal_sa) AWZY_LISTEN_ADDR=127.0.0.1:$PORTAL AWZY_POLICY_ADDR=http://127.0.0.1:$POLICY \
     AWZY_PDP_ADDR=http://127.0.0.1:$PDP AWZY_CONTEXT_ADDR=http://127.0.0.1:$CONTEXT \
     AWZY_CHALLENGE_ADDR=http://127.0.0.1:$CHALLENGE AWZY_SERVICE_ACCOUNT_REGISTRY=awzy-context \
     AWZY_AUTH_ISSUER=https://127.0.0.1:$IDP AWZY_AUTH_JWKS_URL=https://127.0.0.1:$IDP/jwks \
@@ -135,15 +180,18 @@ up() {
   "outage": { "cached_allow_ttl_secs": 300 }
 }
 EOF
-  start drive AWZY_LISTEN_ADDR=127.0.0.1:$DRIVE AWZY_CONTEXT_URL=http://127.0.0.1:$CONTEXT "$synthetic" drive
-  start gateway AWZY_LISTEN_ADDR=127.0.0.1:$GATEWAY AWZY_GATEWAY_CONFIG="$PWD/$state/gateway.json" \
+  # shellcheck disable=SC2046
+  start drive $(auth $backend) AWZY_LISTEN_ADDR=127.0.0.1:$DRIVE AWZY_CONTEXT_URL=http://127.0.0.1:$CONTEXT "$synthetic" drive
+  # shellcheck disable=SC2046
+  start gateway $(auth $backend) AWZY_LISTEN_ADDR=127.0.0.1:$GATEWAY AWZY_GATEWAY_CONFIG="$PWD/$state/gateway.json" \
     AWZY_GATEWAY_DEV_SECRET=$gateway_secret AWZY_PDP_ADDR=http://127.0.0.1:$PDP \
     AWZY_POLICY_ADDR=http://127.0.0.1:$POLICY AWZY_CHALLENGE_ADDR=http://127.0.0.1:$CHALLENGE "$gateway"
   wait_for http://127.0.0.1:$DRIVE/readyz larkspur-drive
   wait_for http://127.0.0.1:$GATEWAY/readyz awzy-gateway
 
   log "a day of Larkspur's work through the gateway, in the background"
-  start activity AWZY_GATEWAY_URL=http://127.0.0.1:$GATEWAY AWZY_GATEWAY_DEV_SECRET=$gateway_secret \
+  # shellcheck disable=SC2046
+  start activity $(auth $backend) AWZY_GATEWAY_URL=http://127.0.0.1:$GATEWAY AWZY_GATEWAY_DEV_SECRET=$gateway_secret \
     "$synthetic" activity --days 1 --rate 20
 
   cat <<EOF
@@ -178,7 +226,8 @@ check() {
     sed -nE 's/.*"totalResults": ?([0-9]+).*/\1/p')
   if [ "${people:-0}" -gt 100 ]; then echo "ok   $people people provisioned"; else echo "FAIL people provisioned: ${people:-none}"; failed=1; fi
   # A decision about one of them.
-  verdict=$(curl -sf http://127.0.0.1:$PDP/v1/access/evaluation -H 'content-type: application/json' -d '{
+  verdict=$(curl -sf http://127.0.0.1:$PDP/v1/access/evaluation -H "$(bearer $backend awzy-pdp)" \
+    -H 'content-type: application/json' -d '{
     "principal": {"type": "Human", "id": "bob"}, "action": "read",
     "resource": {"type": "Resource", "id": "demo-check"}, "context": {},
     "entities": [{"uid": {"type": "Resource", "id": "demo-check"}, "attrs": {"sensitivity": "internal"}, "parents": []}]}' |
@@ -192,6 +241,9 @@ check() {
     sleep 2
   done
   if [ "${decisions:-0}" -gt 0 ]; then echo "ok   $decisions decisions logged"; else echo "FAIL no decisions logged"; failed=1; fi
+  # Service auth is on, as in an install: a call without a service token is refused.
+  status=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$CONTEXT/v1/service-accounts")
+  if [ "$status" = 401 ]; then echo "ok   service auth is on"; else echo "FAIL a call with no service token got $status"; failed=1; fi
   return $failed
 }
 
@@ -207,12 +259,13 @@ partner() {
     sed -nE 's/.*"access_token": ?"([^"]+)".*/\1/p'; }
 
   # Someone in Larkspur's directory owns the agent and is the person it acts for.
-  human=$(curl -sf "http://127.0.0.1:$CONTEXT/v1/directory/humans?limit=1" | grep -o '"user_name": *"[^"]*"' |
+  human=$(curl -sf "http://127.0.0.1:$CONTEXT/v1/directory/humans?limit=1" -H "$(bearer $portal_sa awzy-context)" | grep -o '"user_name": *"[^"]*"' |
     head -1 | sed -E 's/.*"([^"]+)"$/\1/')
   if [ -n "$human" ]; then pass "$human from the directory owns the agent"; else fail "no one in the directory"; fi
 
   # An admin trusts the app (here straight in awzy-context; the portal's Directory page does it).
   if curl -sf -X PUT "http://127.0.0.1:$CONTEXT/v1/token-issuers/$app" -H 'content-type: application/json' \
+    -H "$(bearer $portal_sa awzy-context)" \
     -H 'x-awzy-actor: Human::alice' \
     -d "{\"issuer\": \"$idp/apps/$app\", \"jwks_url\": \"$idp/apps/$app/jwks\", \"audience\": \"awzy-agents\"}" >/dev/null; then
     pass "$app trusted to sign its agents' tokens"
@@ -270,7 +323,8 @@ partner() {
   if [ "$status" = 404 ]; then pass "the agent can wait on its challenges"; else fail "waiting on a challenge: $status"; fi
 
   # A query plan for what the agent may read, for its list tools.
-  outcome=$(curl -sf "http://127.0.0.1:$PDP/v1/access/plan" -H 'content-type: application/json' -d "{
+  outcome=$(curl -sf "http://127.0.0.1:$PDP/v1/access/plan" -H "$(bearer $backend awzy-pdp)" \
+    -H 'content-type: application/json' -d "{
     \"principal\": {\"type\": \"ServiceAccount\", \"id\": \"$agent\"}, \"on_behalf_of\": {\"type\": \"Human\", \"id\": \"$human\"},
     \"action\": \"read\", \"resource_type\": \"Resource\", \"context\": {}}" | sed -nE 's/.*"outcome": ?"([a-z_]+)".*/\1/p')
   if [ -n "$outcome" ]; then pass "a query plan for $agent ($outcome)"; else fail "no query plan"; fi

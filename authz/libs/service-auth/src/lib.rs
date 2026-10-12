@@ -11,7 +11,9 @@
 //!
 //! Both sides are on in Kubernetes (every pod has `KUBERNETES_SERVICE_HOST`) and off elsewhere,
 //! where there's no service-account token: a laptop, a test. `AWZY_SERVICE_AUTH=on|off`
-//! overrides that.
+//! overrides that. Outside Kubernetes with it on, `AWZY_SERVICE_AUTH_JWKS_URL` and
+//! `AWZY_SERVICE_AUTH_ISSUER` (and `AWZY_SERVICE_AUTH_CA_FILE` for a private CA) stand in for the
+//! cluster's keys and issuer: `tools/demo` runs this way, with the dev IdP minting the tokens.
 
 use std::{
     collections::HashMap,
@@ -161,6 +163,14 @@ impl Verifier {
                 "service auth is off (not in Kubernetes, or AWZY_SERVICE_AUTH=off): callers are not authenticated"
             );
             return Ok(Self::off());
+        }
+        // Outside Kubernetes: another issuer's keys stand in for the cluster's.
+        if let Ok(url) = std::env::var("AWZY_SERVICE_AUTH_JWKS_URL") {
+            let issuer = std::env::var("AWZY_SERVICE_AUTH_ISSUER")
+                .map_err(|_| anyhow::anyhow!("AWZY_SERVICE_AUTH_ISSUER is required with AWZY_SERVICE_AUTH_JWKS_URL"))?;
+            let ca = std::env::var("AWZY_SERVICE_AUTH_CA_FILE").ok().map(std::fs::read).transpose()?;
+            tracing::info!(audience, %issuer, %url, "checking service tokens against the configured issuer");
+            return Ok(Self::with_keys(audience, &issuer, Keys::Cluster(Box::new(Jwks::new(&url, ca.as_deref())?))));
         }
         let own = std::fs::read_to_string(POD_TOKEN).map_err(|e| anyhow::anyhow!("reading {POD_TOKEN}: {e}"))?;
         let issuer = issuer_of(&own)?;
