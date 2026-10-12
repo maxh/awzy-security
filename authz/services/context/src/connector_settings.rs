@@ -13,7 +13,7 @@ use axum::{
 use serde_json::{json, Value};
 use sqlx::Row;
 
-use crate::store::ContextStore;
+use crate::{store::ContextStore, Invalid};
 
 /// The connectors awzy has.
 pub const CONNECTORS: &[&str] = &["drive", "jira"];
@@ -24,7 +24,7 @@ fn text<'a>(s: &'a Value, key: &str) -> Option<&'a str> {
     s[key].as_str().map(str::trim).filter(|v| !v.is_empty())
 }
 
-fn interval(s: &Value) -> Result<(), String> {
+fn interval(s: &Value) -> Result<(), Invalid> {
     match s.get("interval_secs") {
         None | Some(Value::Null) => Ok(()),
         Some(v) => match v.as_u64() {
@@ -35,7 +35,7 @@ fn interval(s: &Value) -> Result<(), String> {
 }
 
 /// What `name`'s settings must hold, so a connector never starts on settings it can't use.
-pub fn validate(name: &str, s: &Value) -> Result<(), String> {
+pub fn validate(name: &str, s: &Value) -> Result<(), Invalid> {
     if !s.is_object() {
         return Err("settings is an object".into());
     }
@@ -64,7 +64,7 @@ pub fn validate(name: &str, s: &Value) -> Result<(), String> {
             }
             Ok(())
         }
-        other => Err(format!("{other:?} isn't a connector")),
+        other => Err(format!("{other:?} isn't a connector").into()),
     }
 }
 
@@ -144,7 +144,7 @@ async fn put_one(
         return (StatusCode::NOT_FOUND, format!("{name:?} isn't a connector")).into_response();
     }
     if let Err(e) = validate(&name, &put.settings) {
-        return (StatusCode::BAD_REQUEST, e).into_response();
+        return e.into_response();
     }
     if put.updated_by.trim().is_empty() {
         return (StatusCode::BAD_REQUEST, "updated_by is required").into_response();

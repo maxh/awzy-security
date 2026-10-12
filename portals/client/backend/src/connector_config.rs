@@ -11,7 +11,8 @@ use awzy_context_api::{
     ContextError,
 };
 use awzy_model::ChallengeId;
-use awzy_portal::{JsonObject, Qid, UtcTimestamp};
+use awzy_portal::{ErrorCode, JsonObject, Qid, UtcTimestamp};
+use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
@@ -47,21 +48,29 @@ impl ConnectorName {
 
     /// Whether `credential` looks like this connector's, so a paste of the wrong thing is caught
     /// here and not at the connector's next round.
-    fn check(self, credential: &str) -> Result<(), String> {
+    fn check(self, credential: &str) -> Result<(), async_graphql::Error> {
+        /// The fields of a Google service account key the Drive connector signs in with.
+        #[derive(Deserialize)]
+        struct ServiceAccountKey {
+            r#type: String,
+            #[expect(dead_code, reason = "only checked to be there")]
+            private_key: String,
+            #[expect(dead_code, reason = "only checked to be there")]
+            client_email: String,
+        }
+        let invalid = |m: &str| Err(ErrorCode::InvalidInput.error(m));
         match self {
             Self::Drive => {
-                let key: Value = serde_json::from_str(credential)
-                    .map_err(|_| "Drive's credential is the service account's JSON key".to_string())?;
-                if key["type"] != "service_account"
-                    || !key["private_key"].is_string()
-                    || !key["client_email"].is_string()
-                {
-                    return Err("that isn't a Google service account key".into());
+                let Ok(key) = serde_json::from_str::<Value>(credential) else {
+                    return invalid("Drive's credential is the service account's JSON key");
+                };
+                match serde_json::from_value::<ServiceAccountKey>(key) {
+                    Ok(k) if k.r#type == "service_account" => Ok(()),
+                    _ => invalid("that isn't a Google service account key"),
                 }
-                Ok(())
             }
             Self::Jira if credential.trim().is_empty() || credential.trim().contains(char::is_whitespace) => {
-                Err("Jira's credential is the account's API token".into())
+                invalid("Jira's credential is the account's API token")
             }
             Self::Jira => Ok(()),
         }

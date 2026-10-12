@@ -90,44 +90,62 @@ impl SupportSignIn {
     }
 
     /// The viewer a support token names, if it's valid and its session is approved now.
-    pub async fn viewer(&self, token: &str) -> Result<Viewer, String> {
+    pub async fn viewer(&self, token: &str) -> Result<Viewer, SupportRefused> {
         let mut validation = Validation::new(Algorithm::ES256);
         validation.set_issuer(&[ISSUER]);
         validation.set_audience(&[&self.audience]);
         validation.set_required_spec_claims(&["exp", "iss", "aud", "sub"]);
-        let claims = jsonwebtoken::decode::<Claims>(token, &self.key, &validation)
-            .map_err(|e| format!("support token refused: {e}"))?
-            .claims;
+        let claims =
+            jsonwebtoken::decode::<Claims>(token, &self.key, &validation).map_err(SupportRefused::Token)?.claims;
         let mut challenge = self.challenge.clone();
         let session = challenge
             .get_support_session(GetSupportSessionRequest { qid: claims.sid.clone() })
             .await
-            .map_err(|e| format!("support session {}: {}", claims.sid, e.message()))?
+            .map_err(|e| SupportRefused::Unreachable { session: claims.sid.clone(), message: e.message().to_string() })?
             .into_inner()
             .session
-            .ok_or("awzy-challenge returned no support session")?;
+            .ok_or(SupportRefused::Missing)?;
         let grant = grant(&session, &claims.sub)?;
         Ok(viewer_for(grant))
     }
 }
 
+/// Why a support token signs no one in.
+#[derive(Debug, thiserror::Error)]
+pub enum SupportRefused {
+    #[error("support token refused: {0}")]
+    Token(jsonwebtoken::errors::Error),
+    #[error("support session {session}: {message}")]
+    Unreachable { session: String, message: String },
+    #[error("awzy-challenge returned no support session")]
+    Missing,
+    #[error("support session {0} isn't approved now")]
+    NotApproved(String),
+    #[error("support session {0} is another staff member's")]
+    NotYours(String),
+    #[error("support session {0} has ended")]
+    Ended(String),
+    #[error(transparent)]
+    BadQid(#[from] awzy_model::QidError),
+}
+
 /// The grant an approved session gives `staff`, or why there's none.
-fn grant(session: &WireSession, staff: &str) -> Result<SupportGrant, String> {
-    let request = session.request.as_ref().ok_or("a support session without its request")?;
+fn grant(session: &WireSession, staff: &str) -> Result<SupportGrant, SupportRefused> {
+    let request = session.request.as_ref().ok_or(SupportRefused::Missing)?;
     if session.status() != WireStatus::Approved {
-        return Err(format!("support session {} isn't approved now", request.qid));
+        return Err(SupportRefused::NotApproved(request.qid.clone()));
     }
     if request.requested_by != staff {
-        return Err(format!("support session {} is another staff member's", request.qid));
+        return Err(SupportRefused::NotYours(request.qid.clone()));
     }
     let expires_at = session
         .expires_at
         .as_ref()
         .and_then(|t| DateTime::from_timestamp(t.seconds, t.nanos.max(0) as u32))
         .filter(|t| *t > Utc::now())
-        .ok_or_else(|| format!("support session {} has ended", request.qid))?;
+        .ok_or_else(|| SupportRefused::Ended(request.qid.clone()))?;
     Ok(SupportGrant {
-        session: request.qid.parse().map_err(|e: awzy_model::QidError| e.to_string())?,
+        session: request.qid.parse()?,
         staff: staff.to_string(),
         areas: session.approved_areas.clone(),
         expires_at,

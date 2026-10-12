@@ -696,14 +696,20 @@ async fn heartbeat(State(store): State<FleetStore>, headers: HeaderMap, body: By
 
 /// Orders versions like `0.10.0` after `0.9.0`: runs of digits compare as numbers.
 pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
-    fn chunks(s: &str) -> Vec<Result<u64, String>> {
+    /// A run of digits or of anything else; a number sorts before text at the same place.
+    #[derive(PartialEq, Eq, PartialOrd, Ord)]
+    enum Chunk<'a> {
+        Number(u64),
+        Text(&'a str),
+    }
+    fn chunks(s: &str) -> Vec<Chunk<'_>> {
         let mut out = Vec::new();
         let mut rest = s;
         while !rest.is_empty() {
             let digits = rest.chars().take_while(char::is_ascii_digit).count();
             let n = if digits > 0 { digits } else { rest.chars().take_while(|c| !c.is_ascii_digit()).count() };
             let (head, tail) = rest.split_at(n);
-            out.push(head.parse::<u64>().map_err(|_| head.to_string()));
+            out.push(head.parse::<u64>().map_or(Chunk::Text(head), Chunk::Number));
             rest = tail;
         }
         out
