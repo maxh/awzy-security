@@ -21,7 +21,8 @@ POLICY=8081 PDP=8082 CHALLENGE=8083 CONTEXT=8084 GATEWAY=8086 PORTAL=8080 IDP=55
 pg=postgres://awzy:awzy@localhost:5432
 clickhouse=(AWZY_CLICKHOUSE_URL=http://localhost:8123 AWZY_CLICKHOUSE_USER=awzy AWZY_CLICKHOUSE_PASSWORD=awzy
   AWZY_CLICKHOUSE_DATABASE=awzy)
-scim_token=demo-scim-token
+# awzy-context wants at least 32 characters.
+scim_token=demo-scim-token-for-the-local-demo-only
 gateway_secret=demo-gateway-secret
 
 targets=(
