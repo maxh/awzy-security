@@ -1,9 +1,11 @@
-# Sourced by the corp Terraform scripts in CI (terraform-corp.sh, terraform-drift.sh): writes the
-# corp deployment.env from DEPLOYMENT_ENV and loads it, and points the profiles the modules name at
-# this job's AWS credentials. Plans hold account IDs and these logs are public, so `redact` hides
-# them and the scripts print resource addresses only.
+# Sourced by the Terraform scripts in CI (terraform-ci.sh, terraform-drift.sh): writes a
+# deployment's deployment.env (into $env_dir) from DEPLOYMENT_ENV and loads it, and points the
+# profiles its modules name at this job's AWS credentials: the management account's at
+# MANAGEMENT_AWS_* when the job has a role there of its own, every other at AWS_*. Plans hold
+# account IDs and these logs are public, so `redact` hides them and the scripts print resource
+# addresses only.
 
-env_file=deploy/terraform/corp/deployment.env
+env_file=${env_dir:?env_dir is not set}/deployment.env
 printf '%s\n' "${DEPLOYMENT_ENV:?DEPLOYMENT_ENV is not set}" > "$env_file"
 set -a
 # shellcheck disable=SC1090
@@ -11,11 +13,15 @@ source "$env_file"
 set +a
 
 mkdir -p ~/.aws
-for profile in "${TF_VAR_build_profile:-}" "${TF_VAR_management_profile:-}"; do
-  [ -n "$profile" ] || continue
-  printf '[%s]\naws_access_key_id = %s\naws_secret_access_key = %s\naws_session_token = %s\n' \
-    "$profile" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" "$AWS_SESSION_TOKEN" >> ~/.aws/credentials
+write_profile() { # <name> <key id> <secret> <session token>
+  [ -n "$1" ] || return 0
+  printf '[%s]\naws_access_key_id = %s\naws_secret_access_key = %s\naws_session_token = %s\n' "$@" >> ~/.aws/credentials
+}
+for profile in "${TF_VAR_build_profile:-}" "${TF_VAR_install_profile:-}"; do
+  write_profile "$profile" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" "$AWS_SESSION_TOKEN"
 done
+write_profile "${TF_VAR_management_profile:-}" "${MANAGEMENT_AWS_ACCESS_KEY_ID:-$AWS_ACCESS_KEY_ID}" \
+  "${MANAGEMENT_AWS_SECRET_ACCESS_KEY:-$AWS_SECRET_ACCESS_KEY}" "${MANAGEMENT_AWS_SESSION_TOKEN:-$AWS_SESSION_TOKEN}"
 
 # corp-portal's Cloudflare provider reads its token from a file. A plan without a refresh reads
 # nothing from Cloudflare, so it only needs one to start.

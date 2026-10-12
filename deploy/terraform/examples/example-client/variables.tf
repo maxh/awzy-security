@@ -82,3 +82,15 @@ variable "vertex_api_key" {
   type        = string
   sensitive   = true
 }
+
+variable "github_oidc_subject_repo" {
+  description = "GitHub's immutable OIDC subject for the repository whose CI plans and applies these modules (ADR 0115): owner@<owner id>/repo@<repo id>"
+  type        = string
+  default     = null
+}
+
+variable "cluster_admins" {
+  description = "People's IAM roles with cluster admin, besides CI's apply role: { name = role ARN }. The one who created the cluster is `operator`"
+  type        = map(string)
+  default     = {}
+}

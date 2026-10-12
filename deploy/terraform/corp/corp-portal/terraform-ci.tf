@@ -1,5 +1,5 @@
 # The role CI applies the build account's corp modules as, after merge (ADR 0115,
-# .github/workflows/terraform-corp.yml). It can change anything in this account, CI's other roles
+# .github/workflows/terraform.yml). It can change anything in this account, CI's other roles
 # included, so only the GitHub environment corp-terraform can assume it, and that environment
 # waits for a person's approval. Applied by hand once: a pipeline can't create its own role.
 

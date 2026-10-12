@@ -1,27 +1,44 @@
 #!/usr/bin/env bash
-# terraform-corp.sh plan|apply <module>...: plans each corp Terraform module (deploy/terraform/<module>),
-# in order, and with `apply` applies what it planned (ADR 0115).
+# terraform-ci.sh <deployment> plan|apply: plans a deployment's Terraform modules, in order, and
+# with `apply` applies what it planned (ADR 0115). A deployment is the GitHub environment that
+# applies it: corp-terraform (the build account's corp modules) or example-aws (the example
+# client's install account).
 #
 # `plan`, for a pull request: against the recorded state without refreshing or locking, as the
-# read-only plan role, and with PR_NUMBER set keeps one comment on the pull request listing the
-# changes. `apply`, after merge: refreshes, plans, and applies that plan, as the apply role.
+# read-only plan roles, and with PR_NUMBER set keeps one comment on the pull request listing the
+# changes. `apply`, after merge: refreshes, plans, and applies that plan, as the apply roles.
 #
 # Prints resource addresses only, never plan details: plans hold account IDs, and these logs and
-# comments are public. Needs DEPLOYMENT_ENV, AWS credentials for the build account, GH_TOKEN, and
-# for `apply` CLOUDFLARE_TOKEN.
+# comments are public. Needs DEPLOYMENT_ENV, AWS credentials (see terraform-env.sh), GH_TOKEN, and
+# for corp's `apply` CLOUDFLARE_TOKEN.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
-mode=${1:?usage: terraform-corp.sh plan|apply <module>...}
-shift
-case $mode in plan | apply) ;; *) echo "usage: terraform-corp.sh plan|apply <module>..." >&2; exit 2 ;; esac
+usage="usage: terraform-ci.sh corp-terraform|example-aws plan|apply"
+deployment=${1:?$usage}
+mode=${2:?$usage}
+case $mode in plan | apply) ;; *) echo "$usage" >&2; exit 2 ;; esac
+case $deployment in
+  corp-terraform)
+    env_dir=deploy/terraform/corp
+    title="Corp Terraform"
+    modules=(corp/build corp/corp-portal)
+    ;;
+  example-aws)
+    env_dir=deploy/terraform/examples/example-client
+    title="The example client's Terraform (AWS)"
+    # In order: each reads the outputs of those before it.
+    modules=(examples/example-client/install examples/example-client/monitoring examples/example-client/grafana examples/example-client/bootstrap)
+    ;;
+  *) echo "$usage" >&2; exit 2 ;;
+esac
 
 # shellcheck source=tools/ci/terraform-env.sh
 source tools/ci/terraform-env.sh
 
 status=0
 report=""
-for module in "$@"; do
+for module in "${modules[@]}"; do
   dir=deploy/terraform/$module
   if ! (cd "$dir" && tofu init -input=false >/dev/null 2>init.err); then
     echo "$module: init failed"
@@ -68,8 +85,8 @@ for module in "$@"; do
 done
 
 if [ "$mode" = plan ] && [ -n "${PR_NUMBER:-}" ]; then
-  marker='<!-- terraform-corp -->'
-  body=$(printf '%s\n### Corp Terraform\n\nWhat merging this changes, planned against the recorded state (without a refresh). The `terraform-corp` workflow applies it after merge, once someone approves the `corp-terraform` environment.\n%s' "$marker" "$report")
+  marker="<!-- terraform-ci $deployment -->"
+  body=$(printf '%s\n### %s\n\nWhat merging this changes, planned against the recorded state (without a refresh). The `terraform` workflow applies it after merge, once someone approves the `%s` environment.\n%s' "$marker" "$title" "$deployment" "$report")
   existing=$(gh api "repos/{owner}/{repo}/issues/$PR_NUMBER/comments" --paginate \
     --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
   if [ -n "$existing" ]; then

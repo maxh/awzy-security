@@ -25,9 +25,9 @@ way a client meets them, but split every change to a module and its use across t
 
 ## Decision
 
-- **Terraform is planned on every pull request and applied on merge**, by a workflow per
-  deployment: `terraform-corp` for the build account's corp modules (`corp/build`,
-  `corp/corp-portal`), and one per example client for its modules in its install account.
+- **Terraform is planned on every pull request and applied on merge**, by the `terraform`
+  workflow, for each deployment a change touches: the build account's corp modules (`corp/build`,
+  `corp/corp-portal`), and each example client's modules in its install account.
 - **A pull request gets the list of changes as a comment**, from a read-only plan role that pull
   requests and `main` can assume. Pull requests from forks get no token.
 - **The apply runs after merge in a GitHub environment of the deployment's own**

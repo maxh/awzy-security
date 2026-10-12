@@ -1,0 +1,157 @@
+name: terraform
+
+# Terraform is planned on pull requests and applied on merge (ADR 0115, tools/ci/terraform-ci.sh),
+# for each deployment whose files changed: corp-terraform (corp/build and corp/corp-portal, in the
+# build account) and example-aws (the example client's install account). A pull request gets a
+# comment per deployment listing what merging would change; after merge, each apply waits in its
+# GitHub environment for a person's approval. Management-account modules stay with a person.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deployment:
+        description: "Apply one deployment now: corp-terraform or example-aws"
+        required: true
+
+# One plan per pull request, and one apply per deployment at a time; a running apply finishes.
+concurrency:
+  group: terraform-${{ github.event_name == 'pull_request' && github.event.number || 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      deployments: ${{ github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.deployment) || steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            corp-terraform:
+              - "deploy/terraform/corp/build/**"
+              - "deploy/terraform/corp/corp-portal/**"
+              - "deploy/terraform/corp/variables.tf"
+              - "tools/ci/terraform-*.sh"
+              - ".github/workflows/terraform.yml"
+            example-aws:
+              - "deploy/terraform/examples/example-client/install/**"
+              - "deploy/terraform/examples/example-client/monitoring/**"
+              - "deploy/terraform/examples/example-client/grafana/**"
+              - "deploy/terraform/examples/example-client/bootstrap/**"
+              - "deploy/terraform/examples/example-client/variables.tf"
+              - "deploy/terraform/aws/**"
+              - "deploy/terraform/bootstrap/**"
+              - "deploy/release/*.pub"
+              - "tools/ci/terraform-*.sh"
+              - ".github/workflows/terraform.yml"
+
+  plan:
+    needs: changes
+    # Pull requests from forks get no OIDC token.
+    if: >-
+      github.event_name == 'pull_request' && needs.changes.outputs.deployments != '[]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    strategy:
+      fail-fast: false
+      matrix:
+        deployment: ${{ fromJSON(needs.changes.outputs.deployments) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    env:
+      # Each deployment's plan roles; empty until they're set up, and then the job says so and skips.
+      PLAN_ROLE: ${{ matrix.deployment == 'corp-terraform' && vars.AWZY_CORP_AWS_PLAN_ROLE_ARN || vars.AWZY_CORP_EXAMPLE_AWS_PLAN_ROLE_ARN }}
+      STATE_PLAN_ROLE: ${{ matrix.deployment == 'example-aws' && vars.AWZY_CORP_EXAMPLE_AWS_STATE_PLAN_ROLE_ARN || '' }}
+    steps:
+      - if: env.PLAN_ROLE == ''
+        run: echo "::notice::No plan role set for ${{ matrix.deployment }} yet; skipping its plan."
+      - if: env.PLAN_ROLE != ''
+        uses: actions/checkout@v4
+      - if: env.PLAN_ROLE != ''
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.13.1
+          tofu_wrapper: false
+      - id: management
+        if: env.PLAN_ROLE != '' && env.STATE_PLAN_ROLE != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.STATE_PLAN_ROLE }}
+          aws-region: ${{ vars.AWZY_CORP_AWS_REGION }}
+          output-credentials: true
+      - if: env.PLAN_ROLE != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.PLAN_ROLE }}
+          aws-region: ${{ vars.AWZY_CORP_AWS_REGION }}
+      - name: What merging changes
+        if: env.PLAN_ROLE != ''
+        env:
+          DEPLOYMENT_ENV: ${{ matrix.deployment == 'corp-terraform' && secrets.AWZY_CORP_DEPLOYMENT_ENV || secrets.AWZY_CORP_EXAMPLE_AWS_DEPLOYMENT_ENV }}
+          GH_TOKEN: ${{ github.token }}
+          MANAGEMENT_AWS_ACCESS_KEY_ID: ${{ steps.management.outputs.aws-access-key-id }}
+          MANAGEMENT_AWS_SECRET_ACCESS_KEY: ${{ steps.management.outputs.aws-secret-access-key }}
+          MANAGEMENT_AWS_SESSION_TOKEN: ${{ steps.management.outputs.aws-session-token }}
+          PR_NUMBER: ${{ github.event.number }}
+        run: tools/ci/terraform-ci.sh ${{ matrix.deployment }} plan
+
+  apply:
+    needs: changes
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.changes.outputs.deployments != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        deployment: ${{ fromJSON(needs.changes.outputs.deployments) }}
+    runs-on: ubuntu-latest
+    # Waits for a person's approval; only this environment can assume its apply roles.
+    environment: ${{ matrix.deployment }}
+    concurrency:
+      group: terraform-apply-${{ matrix.deployment }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      APPLY_ROLE: ${{ matrix.deployment == 'corp-terraform' && vars.AWZY_CORP_AWS_TERRAFORM_ROLE_ARN || vars.AWZY_CORP_EXAMPLE_AWS_TERRAFORM_ROLE_ARN }}
+      STATE_APPLY_ROLE: ${{ matrix.deployment == 'example-aws' && vars.AWZY_CORP_EXAMPLE_AWS_STATE_TERRAFORM_ROLE_ARN || '' }}
+    steps:
+      - if: env.APPLY_ROLE == ''
+        run: echo "::notice::No apply role set for ${{ matrix.deployment }} yet; skipping its apply."
+      - if: env.APPLY_ROLE != ''
+        uses: actions/checkout@v4
+      - if: env.APPLY_ROLE != ''
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.13.1
+          tofu_wrapper: false
+      - id: management
+        if: env.APPLY_ROLE != '' && env.STATE_APPLY_ROLE != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.STATE_APPLY_ROLE }}
+          aws-region: ${{ vars.AWZY_CORP_AWS_REGION }}
+          output-credentials: true
+      - if: env.APPLY_ROLE != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.APPLY_ROLE }}
+          aws-region: ${{ vars.AWZY_CORP_AWS_REGION }}
+      - name: Apply
+        if: env.APPLY_ROLE != ''
+        env:
+          CLOUDFLARE_TOKEN: ${{ secrets.AWZY_CORP_CLOUDFLARE_TOKEN }}
+          DEPLOYMENT_ENV: ${{ matrix.deployment == 'corp-terraform' && secrets.AWZY_CORP_DEPLOYMENT_ENV || secrets.AWZY_CORP_EXAMPLE_AWS_DEPLOYMENT_ENV }}
+          GH_TOKEN: ${{ github.token }}
+          MANAGEMENT_AWS_ACCESS_KEY_ID: ${{ steps.management.outputs.aws-access-key-id }}
+          MANAGEMENT_AWS_SECRET_ACCESS_KEY: ${{ steps.management.outputs.aws-secret-access-key }}
+          MANAGEMENT_AWS_SESSION_TOKEN: ${{ steps.management.outputs.aws-session-token }}
+        run: tools/ci/terraform-ci.sh ${{ matrix.deployment }} apply
