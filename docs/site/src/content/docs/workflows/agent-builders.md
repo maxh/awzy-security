@@ -54,11 +54,12 @@ instead. See
 
 A blocked MCP tool call comes back as a tool error, with `_meta`:
 
-| `_meta` field | Meaning |
-| --- | --- |
-| `awzy/verdict` | `deny`, `challenge`, or `unavailable` (awzy couldn't reach its PDP) |
-| `awzy/decision_qid` | The decision's ID, for the security team to explain |
-| `awzy/challenge_qid` | For a challenge: the one to answer |
+| `_meta` field         | Meaning                                                             |
+| --------------------- | ------------------------------------------------------------------- |
+| `awzy/verdict`        | `deny`, `challenge`, or `unavailable` (awzy couldn't reach its PDP) |
+| `awzy/decision_qid`   | The decision's ID, for the security team to explain                 |
+| `awzy/challenge_qid`  | For a challenge: the one to answer                                  |
+| `awzy/challenge_wait` | For a challenge: where to wait for its answer, on the same gateway  |
 
 What your agent should do:
 
@@ -68,6 +69,26 @@ What your agent should do:
   tool.
 - **Deny:** stop, and tell its person, with the decision ID. Retrying won't change it.
 - **Unavailable:** retry after a short wait.
+
+### When nobody is in the agent's session
+
+An agent running a script can't show its person a prompt. It doesn't need to: awzy sends the
+challenge to the person, tells them in Slack when that's set up, and they answer in the client
+portal. The agent waits for the answer, then retries:
+
+```sh
+curl https://<gateway>/mcp/challenges/<challenge_qid>?wait=25 -H "authorization: Bearer $AGENT_TOKEN"
+```
+
+```json
+{ "outcome": "pending", "expires_at": "2026-10-12T15:04:05Z", "grant_expires_at": null, "retry": false }
+```
+
+Each call waits up to 25 seconds. Ask again while `outcome` is `pending`. On `passed`, retry the
+same call before `grant_expires_at`. On `rejected`, stop: the request is denied until
+`expires_at`. On `expired`, a retry opens a new challenge. Only the agent whose call opened the
+challenge, acting for the same person, gets an answer; for anyone else it isn't found. Waiting
+hands the agent nothing it could replay, and an agent can't answer a challenge itself.
 
 ## 5. Test in monitor mode
 

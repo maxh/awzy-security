@@ -480,9 +480,16 @@ fn a_challenged_call_links_to_the_challenge_in_the_portal() {
     let (text, meta) = blocked_message("drive/read_document", &res, Some("https://portal.test/"));
     assert!(text.contains(&format!("Answer it at {url}.")), "{text}");
     assert_eq!(meta["awzy/challenge_url"], url);
+    assert_eq!(
+        meta["awzy/challenge_wait"], "/mcp/challenges/challenge_0199a8f2-6c1e-7b3a-9d4e-2f8c1a5b7e91?wait=25",
+        "an agent with no person at hand waits there"
+    );
     let (text, meta) = blocked_message("drive/read_document", &res, None);
     assert!(!text.contains("Answer it at") && meta.get("awzy/challenge_url").is_none(), "no portal, no link");
     let no_challenge = CheckResponse { challenge_qid: String::new(), ..res };
     let (_, meta) = blocked_message("drive/read_document", &no_challenge, Some("https://portal.test"));
-    assert!(meta.get("awzy/challenge_url").is_none(), "nothing to link to");
+    assert!(
+        meta.get("awzy/challenge_url").is_none() && meta.get("awzy/challenge_wait").is_none(),
+        "nothing to link to"
+    );
 }

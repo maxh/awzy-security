@@ -9,7 +9,10 @@ use awzy_service_auth::{grpc_channel, AuthChannel};
 use std::time::Duration;
 
 use awzy_authz_proto::{
-    challenge::v1::{challenge_service_client::ChallengeServiceClient, ChallengedPolicy, ResolveRequest},
+    challenge::v1::{
+        challenge_service_client::ChallengeServiceClient, Challenge, ChallengedPolicy, GetChallengeRequest,
+        ResolveRequest,
+    },
     challenges_from_wire, challenges_to_wire,
 };
 use awzy_model::{ChallengeId, Challenges, Check, DecisionId, EntityRef};
@@ -50,6 +53,21 @@ impl ChallengeResolver {
 
     pub fn is_configured(&self) -> bool {
         self.client.is_some()
+    }
+
+    /// One challenge as awzy-challenge has it now, for an agent waiting on it (ADR 0111). None
+    /// when there's no such challenge.
+    pub async fn get(&self, id: ChallengeId) -> Result<Option<Challenge>, crate::waiting::WaitError> {
+        use crate::waiting::WaitError;
+        let Some(client) = &self.client else { return Err(WaitError::NotConfigured) };
+        let mut client = client.clone();
+        let call = client.get_challenge(GetChallengeRequest { challenge_qid: id.to_string() });
+        match tokio::time::timeout(RESOLVE_TIMEOUT, call).await {
+            Ok(Ok(res)) => Ok(res.into_inner().challenge),
+            Ok(Err(status)) if status.code() == tonic::Code::NotFound => Ok(None),
+            Ok(Err(status)) => Err(WaitError::Unavailable(status.message().to_string())),
+            Err(_) => Err(WaitError::Unavailable("it didn't answer in time".into())),
+        }
     }
 
     pub async fn resolve(

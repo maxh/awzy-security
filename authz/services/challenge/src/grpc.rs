@@ -115,7 +115,9 @@ impl Access {
         rules.extend(group(&["WatchChallenges"], &either(&self.answerers, &self.containers)));
         // Listing containments: a PDP whose feed is stale, and the portal showing them to admins.
         rules.extend(group(&["ListContainments"], &either(&self.pdps, &self.containers)));
-        rules.extend(group(&["GetChallenge", "Justify", "Decide"], &self.answerers));
+        rules.extend(group(&["Justify", "Decide"], &self.answerers));
+        // Reading one challenge: the portal, and the PDPs for an agent waiting on its own (ADR 0111).
+        rules.extend(group(&["GetChallenge"], &either(&self.answerers, &self.pdps)));
         // Listing challenges: the portal, and awzy-reasoner reading rejections (ADR 0066).
         rules.extend(group(&["ListChallenges"], &either(&self.answerers, &self.containers)));
         // Security keys (ADR 0059): only the portal, which authenticates the person they belong to.

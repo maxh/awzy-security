@@ -5,10 +5,16 @@ package awzy.authz.v1;
 
 import "awzy/authz/v1/qid.proto";
 import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
 
 service Authorizer {
   // Decides one action by one principal on one resource: allow, deny, or challenge.
   rpc Check(CheckRequest) returns (CheckResponse);
+  // Waits, up to `wait_secs`, for a challenge a check opened to be answered (ADR 0111): for an
+  // agent with no person in its session, which retries once it's passed. Only the principal the
+  // challenge was opened for, with the same person, gets an answer; for anyone else it isn't
+  // found. The grant stays in awzy, so the caller never holds anything it could replay.
+  rpc WaitForChallenge(WaitForChallengeRequest) returns (WaitForChallengeResponse);
 }
 
 // A typed reference to a world-model entity, e.g. type "Human", id "alice".
@@ -104,4 +110,37 @@ message DelegationCheck {
   Verdict verdict = 1;
   repeated ChallengeKind challenges = 2;
   repeated string policies = 3;
+}
+
+message WaitForChallengeRequest {
+  // QID: challenge_<uuid>, from CheckResponse.challenge_qid.
+  string challenge_qid = 1 [(awzy.authz.v1.qid) = "challenge"];
+  // The check's principal and the person it acted for, as the enforcement point validated them.
+  EntityRef principal = 2;
+  EntityRef on_behalf_of = 3;
+  // How long to wait for an answer before replying PENDING: 0 to look without waiting, at most 25.
+  uint32 wait_secs = 4;
+}
+
+// What became of a challenge.
+enum ChallengeOutcome {
+  CHALLENGE_OUTCOME_UNSPECIFIED = 0;
+  // Still waiting for the person: ask again.
+  CHALLENGE_OUTCOME_PENDING = 1;
+  // Passed: retry the same request, before `grant_expires_at`.
+  CHALLENGE_OUTCOME_PASSED = 2;
+  // An approver said no: the request is denied until `expires_at`. Don't retry.
+  CHALLENGE_OUTCOME_REJECTED = 3;
+  // Not answered in time: a retry opens a new challenge.
+  CHALLENGE_OUTCOME_EXPIRED = 4;
+}
+
+message WaitForChallengeResponse {
+  ChallengeOutcome outcome = 1;
+  // Pending: when it expires unanswered. Rejected: when the request stops being denied.
+  google.protobuf.Timestamp expires_at = 2;
+  // Passed: until when a retry is allowed.
+  google.protobuf.Timestamp grant_expires_at = 3;
+  // Pending: the kinds still to be passed.
+  repeated ChallengeKind pending = 4;
 }

@@ -19,6 +19,7 @@ awzy-identity.workspace = true
 awzy-model.workspace = true
 awzy-signing.workspace = true
 bytes.workspace = true
+chrono.workspace = true
 http-body-util.workspace = true
 hyper-util.workspace = true
 serde.workspace = true
