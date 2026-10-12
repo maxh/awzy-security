@@ -51,12 +51,33 @@ const UNKNOWN_TTL: Duration = Duration::from_secs(5);
 const CAPACITY: usize = 100_000;
 const TIMEOUT: Duration = Duration::from_secs(1);
 
+/// `GET /v1/resources/{id}/entities` from awzy-context.
+#[derive(serde::Deserialize)]
+struct EntitiesBody {
+    entities: Vec<Value>,
+    /// Absent from an awzy-context older than ADR 0046: no one is known to be assigned.
+    #[serde(default)]
+    assignees: Vec<String>,
+    /// Absent from one older than ADR 0118: no work item is known to link it.
+    #[serde(default)]
+    work: Vec<WorkLink>,
+}
+
+#[derive(serde::Deserialize)]
+struct WorkLink {
+    id: String,
+    #[serde(default)]
+    assignees: Vec<String>,
+}
+
 /// What awzy-context says about a resource.
 pub struct Loaded {
     /// The resource and its ancestors, nearest first.
     pub entities: Vec<Value>,
     /// The `userName`s and service-account IDs assigned to open work on it.
     pub assignees: Arc<HashSet<String>>,
+    /// Each open work item that links it, by ID, with who is on it (ADR 0118).
+    pub work: Arc<HashMap<String, HashSet<String>>>,
 }
 
 /// The request's entities after the lookup, and, for a `Resource` checked with awzy-context,
@@ -64,6 +85,8 @@ pub struct Loaded {
 pub struct Merged {
     pub entities: Value,
     pub assignees: Option<Arc<HashSet<String>>>,
+    /// The open work items that link it, with who is on each (ADR 0118); empty when unknown.
+    pub work: Arc<HashMap<String, HashSet<String>>>,
     /// Where the resource's attributes came from (ADR 0108).
     pub from: AttributesFrom,
 }
@@ -187,33 +210,34 @@ impl Resources {
     /// The request's entities with the resource, and its ancestors, from awzy-context. Fails
     /// only when awzy-context can't be reached and nothing is cached for the resource.
     pub async fn merge(&self, request: Value, resource: &EntityRef) -> anyhow::Result<Merged> {
-        let unchanged = |entities| Ok(Merged { entities, assignees: None, from: AttributesFrom::EnforcementPoint });
+        let unchanged =
+            |entities| Ok(Merged { entities, assignees: None, work: Arc::default(), from: AttributesFrom::EnforcementPoint });
         let Some(endpoint) = &self.endpoint else { return unchanged(request) };
         if resource.kind != entity_type::RESOURCE {
             return unchanged(request);
         }
         let Value::Array(mut entities) = request else { return unchanged(request) };
-        let (assignees, from) = match self.lookup(endpoint, &resource.id).await? {
+        let (assignees, work, from) = match self.lookup(endpoint, &resource.id).await? {
             Some(loaded) => {
                 entities.retain(|e| !loaded.entities.iter().any(|c| c["uid"] == e["uid"]));
                 entities.extend(loaded.entities.iter().cloned());
-                (loaded.assignees.clone(), AttributesFrom::AwzyContext)
+                (loaded.assignees.clone(), loaded.work.clone(), AttributesFrom::AwzyContext)
             }
             None => {
                 let uid = json!({ "type": entity_type::RESOURCE, "id": resource.id });
                 if entities.iter().any(|e| e["uid"] == uid) {
-                    (Arc::default(), AttributesFrom::EnforcementPoint)
+                    (Arc::default(), Arc::default(), AttributesFrom::EnforcementPoint)
                 } else {
                     entities.push(json!({
                         "uid": uid,
                         "attrs": { "sensitivity": DEFAULT_SENSITIVITY, "unclassified": true },
                         "parents": [],
                     }));
-                    (Arc::default(), AttributesFrom::Default)
+                    (Arc::default(), Arc::default(), AttributesFrom::Default)
                 }
             }
         };
-        Ok(Merged { entities: Value::Array(entities), assignees: Some(assignees), from })
+        Ok(Merged { entities: Value::Array(entities), assignees: Some(assignees), work, from })
     }
 
     async fn lookup(&self, endpoint: &str, id: &str) -> anyhow::Result<Option<Arc<Loaded>>> {
@@ -252,19 +276,14 @@ impl Resources {
         match res.status().as_u16() {
             404 => Ok(None),
             200 => {
-                let body: Value = serde_json::from_slice(&res.into_body().collect().await?.to_bytes())?;
-                let entities = body["entities"]
-                    .as_array()
-                    .cloned()
-                    .ok_or_else(|| anyhow::anyhow!("no entities for resource {id}"))?;
-                // Absent from an awzy-context older than ADR 0046: no one is known to be assigned.
-                let assignees = body["assignees"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|a| a.as_str().map(str::to_string))
-                    .collect();
-                Ok(Some(Arc::new(Loaded { entities, assignees: Arc::new(assignees) })))
+                let body: EntitiesBody = serde_json::from_slice(&res.into_body().collect().await?.to_bytes())
+                    .map_err(|e| anyhow::anyhow!("no entities for resource {id}: {e}"))?;
+                let work = body.work.into_iter().map(|w| (w.id, w.assignees.into_iter().collect())).collect();
+                Ok(Some(Arc::new(Loaded {
+                    entities: body.entities,
+                    assignees: Arc::new(body.assignees.into_iter().collect()),
+                    work: Arc::new(work),
+                })))
             }
             status => anyhow::bail!("{url} returned {status}"),
         }
@@ -295,7 +314,7 @@ mod tests {
         let r = Resources::new(Some("http://context".into()), TTL, UNKNOWN_TTL);
         let loaded = |ids: &[&str]| {
             let entities = ids.iter().map(|id| json!({ "uid": { "type": "Resource", "id": id } })).collect();
-            Some(Arc::new(Loaded { entities, assignees: Arc::default() }))
+            Some(Arc::new(Loaded { entities, assignees: Arc::default(), work: Arc::default() }))
         };
         r.store("doc", loaded(&["doc", "folder"]));
         r.store("folder", loaded(&["folder"]));

@@ -62,6 +62,7 @@ fn request(i: usize) -> CheckRequest {
         entities,
         human_present: Some(true),
         always_enforced: false,
+        work_item_id: None,
     }
 }
 

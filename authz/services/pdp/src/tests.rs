@@ -31,6 +31,7 @@ fn read(who: &str, what: &str, risk: i64) -> Check {
         on_behalf_of: None,
         human_present: None,
         always_enforced: false,
+        work_item_id: None,
     }
 }
 
@@ -721,6 +722,7 @@ fn an_app_owned_type_is_decided_on_the_enforcement_points_attributes() {
             on_behalf_of: None,
             human_present: None,
             always_enforced: false,
+            work_item_id: None,
         };
         pdp.decide(&check, &entities).unwrap()
     };

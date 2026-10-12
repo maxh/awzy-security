@@ -68,6 +68,11 @@ pub struct Check {
     /// decision is recorded as enforced.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub always_enforced: bool,
+    /// The work item (a ticket or task in the client's own systems) the principal says it's
+    /// doing, from a validated token. When set, `context.assigned` is about that item alone
+    /// (ADR 0118).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work_item_id: Option<String>,
 }
 
 impl Check {
@@ -349,6 +354,9 @@ pub struct DecisionRecord {
     /// `enforcement-point`, or `default`. Empty in records from before it was kept.
     #[serde(default)]
     pub resource_attributes_from: String,
+    /// The work item the request named (ADR 0118); empty when it named none.
+    #[serde(default)]
+    pub work_item_id: String,
 }
 
 /// Where a decision's resource attributes came from (ADR 0108), so an explanation says whom it
@@ -415,6 +423,7 @@ impl DecisionRecord {
             policy_version,
             context: Value::Object(req.context.clone()).to_string(),
             resource_attributes_from: String::new(),
+            work_item_id: req.work_item_id.clone().unwrap_or_default(),
         }
     }
 
@@ -511,6 +520,7 @@ mod tests {
             on_behalf_of: Some(EntityRef::new("Human", "bob")),
             human_present: None,
             always_enforced: false,
+            work_item_id: None,
         };
         let d = Decision {
             id: DecisionId::new(),

@@ -94,6 +94,7 @@ impl TryFrom<CheckRequest> for Check {
             on_behalf_of: req.on_behalf_of.map(Into::into),
             human_present: req.human_present,
             always_enforced: req.always_enforced,
+            work_item_id: req.work_item_id.filter(|w| !w.is_empty()),
         })
     }
 }

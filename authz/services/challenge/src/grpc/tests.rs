@@ -68,6 +68,7 @@ fn read(who: &str, what: &str) -> (Check, serde_json::Value) {
         on_behalf_of: None,
         human_present: None,
         always_enforced: false,
+        work_item_id: None,
     };
     let entities = json!([
         { "uid": { "type": "Human", "id": who }, "attrs": {}, "parents": [] },

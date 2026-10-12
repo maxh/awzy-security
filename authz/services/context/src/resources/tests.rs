@@ -294,6 +294,11 @@ async fn the_http_api_writes_reads_and_renders_entities() {
     send("POST", "/v1/work-items/batch", Some(work)).await;
     let (_, body) = send("GET", "/v1/resources/synthetic:folder:a%2Fb%2Fc/entities", None).await;
     assert_eq!(body["assignees"], json!(["code-helper", "sam.okafor@larkspur.example"]));
+    assert_eq!(
+        body["work"],
+        json!([{ "id": "synthetic:ticket:1", "assignees": ["sam.okafor@larkspur.example", "code-helper"] }]),
+        "each open item that links it, with who's on it (ADR 0118)"
+    );
 
     let (status, _) = send("GET", "/v1/resources/synthetic:nothing/entities", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);

@@ -260,6 +260,7 @@ async fn locks_out(ctx: &Context<'_>, viewer: &crate::access::Viewer, id: Policy
         on_behalf_of: viewer.on_behalf_of.clone(),
         human_present: viewer.human_present,
         always_enforced: true,
+        work_item_id: None,
     };
     let mut entities = viewer.entities.clone();
     entities.push(serde_json::json!({

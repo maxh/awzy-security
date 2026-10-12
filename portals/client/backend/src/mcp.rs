@@ -186,6 +186,7 @@ impl ClientPortalMcp {
             on_behalf_of: p.on_behalf_of_id.map(|h| awzy_model::EntityRef::new(awzy_model::entity_type::HUMAN, h)),
             human_present: p.human_present,
             always_enforced: true,
+            work_item_id: None,
         };
         let replayer = crate::dry_run::replayer(&self.services).await.map_err(internal)?;
         let d = replayer.decide(&pdp, &check, serde_json::json!([])).await.map_err(internal)?;

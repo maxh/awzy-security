@@ -38,12 +38,14 @@ pub struct RequestGroup {
     pub resource_type: String,
     pub resource_id: String,
     pub context: String,
+    /// The work item the request named (ADR 0118); empty when none.
+    pub work_item_id: String,
     pub decisions: u64,
     pub sample_id: String,
 }
 
 const GROUP_BY: &str =
-    "principal_type, principal_id, on_behalf_of_type, on_behalf_of_id, human_present, action, resource_type, resource_id, context";
+    "principal_type, principal_id, on_behalf_of_type, on_behalf_of_id, human_present, action, resource_type, resource_id, context, work_item_id";
 
 /// The most frequent distinct requests since `days` ago, how many decisions there were in all,
 /// and how many distinct requests.
@@ -96,6 +98,7 @@ fn request_of(g: &RequestGroup) -> anyhow::Result<Check> {
         on_behalf_of: (!g.on_behalf_of_id.is_empty()).then(|| EntityRef::new(&g.on_behalf_of_type, &g.on_behalf_of_id)),
         human_present: Some(g.human_present),
         always_enforced: false,
+        work_item_id: (!g.work_item_id.is_empty()).then(|| g.work_item_id.clone()),
     })
 }
 
@@ -342,6 +345,7 @@ mod tests {
             resource_type: "Resource".into(),
             resource_id: resource.into(),
             context: context.into(),
+            work_item_id: String::new(),
             decisions,
             sample_id: Uuid::now_v7().to_string(),
         }

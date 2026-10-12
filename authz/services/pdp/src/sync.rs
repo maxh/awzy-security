@@ -351,6 +351,7 @@ mod tests {
             on_behalf_of: None,
             human_present: None,
             always_enforced: false,
+            work_item_id: None,
         };
         let decision = pdp.load().decide(&req, &entities).unwrap();
         assert_eq!(decision.verdict, Verdict::Allow);

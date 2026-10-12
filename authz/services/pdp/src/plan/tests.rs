@@ -276,6 +276,7 @@ fn a_filter_never_matches_a_row_a_check_would_deny() {
                 on_behalf_of: req.on_behalf_of.clone(),
                 human_present: None,
                 always_enforced: false,
+                work_item_id: None,
             };
             let verdict = p.decide_passed(&check, &entities, None, &HashSet::new()).unwrap().verdict;
             let id = EntityRef::new("Customer", format!("c{i}"));
