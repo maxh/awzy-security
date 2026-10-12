@@ -14,8 +14,8 @@ use awzy_http::{encode, Body, Method, Request, StatusCode};
 use serde::de::DeserializeOwned;
 
 use crate::model::{
-    CloseInvestigation, ConnectorSettings, ConnectorSettingsList, ConnectorSettingsOne, IdPage, Investigation,
-    InvestigationList, InvestigationOne, InvestigationUsage, InvestigationUsageOne, PrincipalsSnapshot,
+    CloseInvestigation, ConnectorSettings, ConnectorSettingsList, ConnectorSettingsOne, HumanContact, IdPage,
+    Investigation, InvestigationList, InvestigationOne, InvestigationUsage, InvestigationUsageOne, PrincipalsSnapshot,
     PutConnectorSettings, Resource, ResourceEntities, ResourceList, ResourceOne, RiskBatch, RiskScore,
 };
 
