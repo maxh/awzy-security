@@ -28,7 +28,7 @@ pub(crate) fn review(list: &[WireContainment], since: DateTime<Utc>) -> Containm
     // A person lifts it; awzy's own services never count as a review.
     let service = format!("{}::", awzy_model::actor_type::AWZY_SERVICE);
     let lifted = automated.iter().filter(|c| !c.lifted_by.is_empty() && !c.lifted_by.starts_with(&service)).count();
-    let count = |n: usize| i32::try_from(n).unwrap_or(i32::MAX);
+    let count = | n : usize |   i32::try_from(n).unwrap_or(i32::MAX);
     ContainmentReview { automated: count(automated.len()), lifted_on_review: count(lifted), since: UtcTimestamp(since) }
 }
 

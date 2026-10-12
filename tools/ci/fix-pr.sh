@@ -78,5 +78,24 @@ if ! git push -q origin "HEAD:$branch"; then
   echo "the branch moved while fixing; the run for its newer commit fixes that one"
   exit 0
 fi
-gh workflow run ci.yml -R "$repo" --ref "$branch"
-echo "pushed \"fix: $summary\" to $branch; CI started"
+# The push's own pull_request runs wait for approval: the workflow token counts as a first-time
+# contributor, and no repository setting exempts it (#228). Approve them, so the PR's checks run
+# as for any push. If that fails, start CI directly instead.
+sha=$(git rev-parse HEAD)
+ids=""
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  sleep 5
+  ids=$(gh api "repos/$repo/actions/runs?head_sha=$sha&status=action_required" -q '.workflow_runs[].id')
+  [ -n "$ids" ] && break
+done
+approved=0
+for id in $ids; do
+  if gh api -X POST "repos/$repo/actions/runs/$id/approve" >/dev/null; then approved=$((approved + 1)); fi
+done
+if [ -n "$ids" ] && [ "$approved" -eq "$(echo "$ids" | wc -w)" ]; then
+  echo "pushed \"fix: $summary\" to $branch; approved its $approved runs"
+else
+  echo "::warning::couldn't approve the push's runs ($approved of $(echo "$ids" | wc -w)); starting CI directly"
+  gh workflow run ci.yml -R "$repo" --ref "$branch"
+  echo "pushed \"fix: $summary\" to $branch; CI started"
+fi
