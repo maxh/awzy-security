@@ -70,8 +70,11 @@ spec:
           labelSelector:
             matchLabels: {{- include "awzy.selector" . | nindent 14 }}
       {{- end }}
-      {{- if or .tokens .volumes }}
       volumes:
+        # The root filesystem is read-only; a little scratch space for what needs a temporary file,
+        # such as a CPU profile (AWZY_PROFILING).
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
         {{- with .tokens }}
         # Service tokens this workload sends, one per service it calls (ADR 0055).
         - name: awzy-service-tokens
@@ -84,7 +87,6 @@ spec:
         {{- with .volumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- end }}
       {{- with .root.Values.image.pullSecret }}
       imagePullSecrets: [{ name: {{ . }} }]
       {{- end }}
@@ -118,15 +120,14 @@ spec:
             {{- with .env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- if or .tokens .mounts }}
           volumeMounts:
+            - { name: tmp, mountPath: /tmp }
             {{- if .tokens }}
             - { name: awzy-service-tokens, mountPath: /var/run/secrets/awzy/tokens, readOnly: true }
             {{- end }}
             {{- with .mounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- end }}
           readinessProbe:
             httpGet: { path: /readyz, port: http }
           livenessProbe:
