@@ -333,13 +333,12 @@ impl Pdp {
             cedar_policy::Decision::Allow => Verdict::Allow,
             cedar_policy::Decision::Deny => {
                 // Challenge only when every forbid that fired asks for one; then all of them are required.
-                let kinds: Option<Vec<ChallengeKind>> = determining.iter().map(|id| self.prepared.challenge(id)).collect();
+                let kinds: Option<Vec<ChallengeKind>> =
+                    determining.iter().map(|id| self.prepared.challenge(id)).collect();
                 match kinds {
                     // And only in front of something policy would otherwise allow: passing a
                     // challenge on a request nothing permits would still end in a deny.
-                    Some(kinds)
-                        if !kinds.is_empty() && self.allowed_without_challenges(&request, entities) =>
-                    {
+                    Some(kinds) if !kinds.is_empty() && self.allowed_without_challenges(&request, entities) => {
                         Verdict::Challenge { challenges: kinds.into_iter().collect() }
                     }
                     _ => Verdict::Deny,
@@ -355,7 +354,8 @@ impl Pdp {
     fn allowed_without_challenges(&self, request: &Request, entities: &Entities) -> bool {
         let rest = &self.prepared.without_challenges;
         let evaluating = std::time::Instant::now();
-        let allowed = self.authorizer.is_authorized(request, rest, entities).decision() == cedar_policy::Decision::Allow;
+        let allowed =
+            self.authorizer.is_authorized(request, rest, entities).decision() == cedar_policy::Decision::Allow;
         metrics::CEDAR_EVALUATION.observe(evaluating.elapsed());
         allowed
     }

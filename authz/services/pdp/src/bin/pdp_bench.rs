@@ -75,7 +75,12 @@ fn snapshot() -> Vec<serde_json::Value> {
     vec![
         e("Human", "alice", json!({}), &["security"]),
         e("Human", "bob", json!({}), &["engineering"]),
-        e("ServiceAccount", "sales-genie", json!({ "owner": { "__entity": { "type": "Human", "id": "bob" } }, "ai": true }), &["engineering"]),
+        e(
+            "ServiceAccount",
+            "sales-genie",
+            json!({ "owner": { "__entity": { "type": "Human", "id": "bob" } }, "ai": true }),
+            &["engineering"],
+        ),
         e("Group", "security", json!({}), &["everyone"]),
         e("Group", "engineering", json!({}), &["everyone"]),
         e("Group", "everyone", json!({}), &[]),

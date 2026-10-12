@@ -184,7 +184,9 @@ mod tests {
         .unwrap()
         .0;
         let cache = ParsedEntities::new(&grouped).unwrap();
-        let entities = cache.entities(&grouped, vec![json!({ "uid": { "type": "Human", "id": "a" }, "attrs": {}, "parents": [] })]).unwrap();
+        let entities = cache
+            .entities(&grouped, vec![json!({ "uid": { "type": "Human", "id": "a" }, "attrs": {}, "parents": [] })])
+            .unwrap();
         let read: EntityUid = r#"Action::"read""#.parse().unwrap();
         let up: Vec<String> = entities.ancestors(&read).unwrap().map(|u| u.to_string()).collect();
         assert_eq!(up, vec![r#"Action::"reading""#]);
@@ -205,13 +207,18 @@ mod tests {
     fn json_values_become_the_cedar_values_cedars_parser_makes() {
         let json = json!({ "n": -3, "yes": true, "s": "text", "set": ["a", "b"], "nested": { "deep": [1, 2] },
             "who": { "__entity": { "type": "Human", "id": "bob" } }, "empty": [] });
-        let pairs: Vec<_> = json.as_object().unwrap().iter().map(|(k, v)| (k.clone(), restricted(v).unwrap())).collect();
+        let pairs: Vec<_> =
+            json.as_object().unwrap().iter().map(|(k, v)| (k.clone(), restricted(v).unwrap())).collect();
         let direct = Context::from_pairs(pairs).unwrap();
         let parsed = Context::from_json_value(json, None).unwrap();
         assert_eq!(direct.to_json_value().unwrap(), parsed.to_json_value().unwrap());
 
-        for unread in [json!(1.5), json!(null), json!({ "__extn": { "fn": "ip", "arg": "10.0.0.1" } }),
-            json!({ "__entity": { "type": "Human", "id": "bob" }, "extra": 1 })] {
+        for unread in [
+            json!(1.5),
+            json!(null),
+            json!({ "__extn": { "fn": "ip", "arg": "10.0.0.1" } }),
+            json!({ "__entity": { "type": "Human", "id": "bob" }, "extra": 1 }),
+        ] {
             assert!(restricted(&unread).is_none(), "{unread} is left to Cedar's parser");
         }
     }
@@ -228,7 +235,8 @@ mod tests {
         assert_eq!(format!("{:?}", fast.get("risk_score")), format!("{:?}", directed.get("risk_score")));
 
         // An entity reference without `__entity` only the schema can read.
-        let implicit = json!({ "risk_score": 7, "human_present": true, "on_behalf_of": { "type": "Human", "id": "bob" } });
+        let implicit =
+            json!({ "risk_score": 7, "human_present": true, "on_behalf_of": { "type": "Human", "id": "bob" } });
         let fallback = context(&schema, &read, implicit.as_object().unwrap().clone()).unwrap();
         assert_eq!(format!("{:?}", fallback.get("on_behalf_of")), format!("{:?}", directed.get("on_behalf_of")));
 
