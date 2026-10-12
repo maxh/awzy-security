@@ -1,5 +1,5 @@
 {
-  "about": "What every awzy client library does with each answer the PDP can give (ADR 0045, 0114). Each library's tests run every scenario against a fake PDP: before each step the fake is set to answer /v1/access/evaluation as `evaluation` says, and /v1/access/challenge as `challenge` says; `down` refuses the connection, `hang` never answers. Each step's call is made as `principal` acting for `on_behalf_of`, a fresh client per scenario with its `options` (defaults: budget_ms 250, nothing fails open). `expect` lists the fields the result must have; `sent`, when present, is the JSON body the PDP must receive.",
+  "about": "What every awzy client library does with each answer the PDP can give (ADR 0045, 0114). Each library's tests run every scenario against a fake PDP: before each step the fake is set to answer /v1/access/evaluation as `evaluation` says, and /v1/access/challenge as `challenge` says; `down` refuses the connection, `hang` never answers. Each step's call is made as `principal` acting for `on_behalf_of` (on the scenario's `work_item_id`, when it has one), a fresh client per scenario with its `options` (defaults: budget_ms 250, nothing fails open). `expect` lists the fields the result must have; `sent`, when present, is the JSON body the PDP must receive.",
   "principal": {
     "type": "ServiceAccount",
     "id": "acme-crm.renewals-bot"
@@ -59,6 +59,59 @@
           }
         }
       ]
+    },
+    {
+      "name": "sends the work item the token names",
+      "about": "An agent's task (the token's awzy_work_item_id) goes to the PDP, which decides assignment by it alone.",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "allow",
+              "policies": [
+                "p"
+              ],
+              "mode": "enforce"
+            }
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "sent": {
+            "principal": {
+              "type": "ServiceAccount",
+              "id": "acme-crm.renewals-bot"
+            },
+            "on_behalf_of": {
+              "type": "Human",
+              "id": "dana"
+            },
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7"
+            },
+            "context": {},
+            "entities": [],
+            "work_item_id": "jira:SALES-12"
+          },
+          "expect": {
+            "allowed": true,
+            "kind": "allowed",
+            "mode": "enforce",
+            "verdict": "allow",
+            "decision_qid": "decision_0192a000-0000-7000-8000-000000000001"
+          }
+        }
+      ],
+      "work_item_id": "jira:SALES-12"
     },
     {
       "name": "monitor allows a deny and says what enforcing would do",

@@ -270,7 +270,7 @@ export class Awzy {
       return { allowed: false, kind: "unauthenticated", reason: e instanceof Error ? e.message : String(e) };
     }
     const resource = { type: req.resource.type, id: req.resource.id };
-    const key = JSON.stringify([p.principal, p.onBehalfOf ?? null, req.action, resource]);
+    const key = JSON.stringify([p.principal, p.onBehalfOf ?? null, p.workItemId ?? null, req.action, resource]);
     const body = {
       principal: p.principal,
       action: req.action,
@@ -279,6 +279,7 @@ export class Awzy {
       entities: req.entities ?? [],
       ...(p.onBehalfOf ? { on_behalf_of: p.onBehalfOf } : {}),
       ...(p.humanPresent === undefined ? {} : { human_present: p.humanPresent }),
+      ...(p.workItemId ? { work_item_id: p.workItemId } : {}),
     };
     const note = (result: CheckResult, extra: Partial<DecisionNote> = {}) => {
       this.#options.onDecision?.({

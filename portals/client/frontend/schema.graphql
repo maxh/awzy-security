@@ -528,6 +528,11 @@ type Decision implements Node {
 	"""
 	resourceAttributesFrom: AttributesFrom
 	"""
+	The work item (a ticket or task, in the client's own IDs) the request said it was for,
+	which decided whether the principal was assigned (ADR 0118); null when it named none.
+	"""
+	workItemId: String
+	"""
 	The policy bundle version in force; 0 means the built-in defaults.
 	"""
 	policyVersion: Int!

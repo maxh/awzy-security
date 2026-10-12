@@ -30,6 +30,13 @@ def test_a_plain_token_is_a_person_and_act_is_an_agent_acting_for_them() -> None
     )
 
 
+def test_the_work_item_an_agents_token_names_is_carried() -> None:
+    v = verifier()
+    p = v.principal(token({"sub": "alice", "act": {"sub": "sales-genie"}, "awzy_work_item_id": "jira:SALES-12"}))
+    assert p.work_item_id == "jira:SALES-12"
+    assert v.principal(token({"sub": "alice", "awzy_work_item_id": "  "})).work_item_id is None
+
+
 def test_an_applications_own_token_is_known_by_its_client_credentials_claims() -> None:
     v = verifier(subject_claim="email")
     for claims in [

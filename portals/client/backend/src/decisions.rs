@@ -30,7 +30,7 @@ const MAX_WINDOW: Duration = Duration::days(30);
 
 const COLUMNS: &str = "id, at, principal_type, principal_id, on_behalf_of_type, on_behalf_of_id, human_present, \
     action, resource_type, resource_id, verdict, mode, challenge, policies, on_behalf_of_verdict, on_behalf_of_policies, \
-    policy_version, context, resource_attributes_from";
+    policy_version, context, resource_attributes_from, work_item_id";
 
 #[derive(::clickhouse::Row, serde::Deserialize, Clone, Debug)]
 pub struct DecisionRow {
@@ -57,6 +57,8 @@ pub struct DecisionRow {
     pub context: String,
     /// awzy-context | enforcement-point | default (ADR 0108); empty before it was kept.
     pub resource_attributes_from: String,
+    /// The work item the request named (ADR 0118); empty when none.
+    pub work_item_id: String,
 }
 
 /// Where a decision's resource attributes came from (ADR 0108), so an explanation says whom it
@@ -175,6 +177,12 @@ impl Decision {
             awzy_model::AttributesFrom::EnforcementPoint => Some(AttributesFrom::EnforcementPoint),
             awzy_model::AttributesFrom::Default => Some(AttributesFrom::Default),
         }
+    }
+
+    /// The work item (a ticket or task, in the client's own IDs) the request said it was for,
+    /// which decided whether the principal was assigned (ADR 0118); null when it named none.
+    async fn work_item_id(&self) -> Option<&str> {
+        Some(self.0.work_item_id.as_str()).filter(|w| !w.is_empty())
     }
 
     /// The policy bundle version in force; 0 means the built-in defaults.
@@ -587,6 +595,7 @@ mod tests {
             policy_version: 0,
             context: String::new(),
             resource_attributes_from: "awzy-context".into(),
+            work_item_id: String::new(),
         };
         assert_eq!(parse_cursor(&cursor_for(&row)).unwrap(), (row.at, row.id));
         assert!(parse_cursor("nonsense").is_err());

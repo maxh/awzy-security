@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ssl
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import jwt
@@ -93,13 +93,13 @@ class TokenVerifier:
         sub = claims["sub"]
         act = claims.get("act")
         if isinstance(act, dict) and isinstance(act.get("sub"), str):
-            return self._with_presence(
+            return self._with_awzy_claims(
                 claims,
                 Principal(EntityRef("ServiceAccount", act["sub"]), EntityRef("Human", self._human(claims))),
             )
         if _is_client_credentials(claims) or sub in self._service_accounts:
-            return self._with_presence(claims, Principal(EntityRef("ServiceAccount", sub)))
-        return self._with_presence(claims, Principal(EntityRef("Human", self._human(claims))))
+            return self._with_awzy_claims(claims, Principal(EntityRef("ServiceAccount", sub)))
+        return self._with_awzy_claims(claims, Principal(EntityRef("Human", self._human(claims))))
 
     def _verify(self, token: str, keys: KeyFinder, issuer: str, audience: str) -> dict[str, Any]:
         try:
@@ -132,11 +132,15 @@ class TokenVerifier:
         if not agent.startswith(prefix) or agent == prefix:
             raise TokenError(f'{app.name} signs tokens only for service accounts under "{prefix}", not "{agent}"')
         on_behalf_of = EntityRef("Human", str(claims["sub"])) if isinstance(acting, str) else None
-        return self._with_presence(claims, Principal(EntityRef("ServiceAccount", agent), on_behalf_of))
+        return self._with_awzy_claims(claims, Principal(EntityRef("ServiceAccount", agent), on_behalf_of))
 
     @staticmethod
-    def _with_presence(claims: dict[str, Any], p: Principal) -> Principal:
+    def _with_awzy_claims(claims: dict[str, Any], p: Principal) -> Principal:
+        """What awzy's own claims add: whether a person is present, and the work item."""
         present = claims.get("awzy_human_present")
-        if isinstance(present, bool):
-            return Principal(p.principal, p.on_behalf_of, present)
-        return p
+        item = claims.get("awzy_work_item_id")
+        return replace(
+            p,
+            human_present=present if isinstance(present, bool) else p.human_present,
+            work_item_id=item.strip() or None if isinstance(item, str) else p.work_item_id,
+        )

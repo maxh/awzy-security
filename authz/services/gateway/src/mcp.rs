@@ -147,7 +147,7 @@ fn initialize_client(msg: &Value) -> Option<String> {
 }
 
 /// Recent allows, keyed by everything that identified the call: principal, the person it acted
-/// for, and the tool. Bounded; entries older than the TTL are dropped when it fills up.
+/// for, the work item it named (ADR 0118), and the tool. Bounded; entries older than the TTL are dropped when it fills up.
 struct AllowCache {
     ttl: std::time::Duration,
     entries: std::sync::Mutex<std::collections::HashMap<String, std::time::Instant>>,
@@ -158,7 +158,8 @@ const ALLOW_CACHE_MAX: usize = 100_000;
 impl AllowCache {
     fn key(principal: &Principal, tool_id: &str) -> String {
         let human = principal.on_behalf_of.as_ref().map(|p| format!("{}::{}", p.kind, p.id)).unwrap_or_default();
-        format!("{}::{}|{human}|{tool_id}", principal.subject.kind, principal.subject.id)
+        let item = principal.work_item_id.as_deref().unwrap_or_default();
+        format!("{}::{}|{human}|{item}|{tool_id}", principal.subject.kind, principal.subject.id)
     }
 
     fn record(&self, key: String) {
@@ -454,7 +455,7 @@ async fn check(
         entities,
         human_present: principal.human_present,
         always_enforced: false,
-        work_item_id: None,
+        work_item_id: principal.work_item_id.clone(),
     };
     // A PDP pod shutting down can break the connection under one check; ask again before
     // treating it as an outage.

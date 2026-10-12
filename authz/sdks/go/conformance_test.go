@@ -21,8 +21,9 @@ type spec struct {
 }
 
 type scenario struct {
-	Name    string `json:"name"`
-	Options struct {
+	Name       string `json:"name"`
+	WorkItemID string `json:"work_item_id"`
+	Options    struct {
 		BudgetMS      int      `json:"budget_ms"`
 		FailOpen      []string `json:"fail_open"`
 		FailOpenTiers []string `json:"fail_open_tiers"`
@@ -137,6 +138,8 @@ func TestConformance(t *testing.T) {
 	principal := Principal{Principal: s.Principal, OnBehalfOf: &s.OnBehalfOf}
 	for _, sc := range s.Scenarios {
 		t.Run(sc.Name, func(t *testing.T) {
+			principal := principal
+			principal.WorkItemID = sc.WorkItemID
 			pdp := &fakePDP{}
 			server := httptest.NewServer(pdp)
 			defer server.Close()

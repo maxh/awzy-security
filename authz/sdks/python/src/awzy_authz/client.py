@@ -318,7 +318,13 @@ class Awzy:
             return Unauthenticated(str(e))
         resource = {"type": req.resource.type, "id": req.resource.id}
         key = json.dumps(
-            [p.principal.to_json(), p.on_behalf_of.to_json() if p.on_behalf_of else None, req.action, resource]
+            [
+                p.principal.to_json(),
+                p.on_behalf_of.to_json() if p.on_behalf_of else None,
+                p.work_item_id,
+                req.action,
+                resource,
+            ]
         )
         body: dict[str, Any] = {
             "principal": p.principal.to_json(),
@@ -331,6 +337,8 @@ class Awzy:
             body["on_behalf_of"] = p.on_behalf_of.to_json()
         if p.human_present is not None:
             body["human_present"] = p.human_present
+        if p.work_item_id:
+            body["work_item_id"] = p.work_item_id
 
         try:
             status, d = self._post("/v1/access/evaluation", body, deadline - time.monotonic())

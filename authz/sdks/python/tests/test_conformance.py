@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +50,7 @@ def test_conformance(scenario: dict[str, Any]) -> None:
                 CheckRequest(
                     action=request["action"],
                     resource=Resource(resource["type"], resource["id"], resource.get("tier")),
-                    principal=PRINCIPAL,
+                    principal=replace(PRINCIPAL, work_item_id=scenario.get("work_item_id")),
                 )
             )
             got = fields(result)
