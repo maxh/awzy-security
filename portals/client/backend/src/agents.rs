@@ -135,7 +135,9 @@ async fn put_one(
         return plain(StatusCode::INTERNAL_SERVER_ERROR, "couldn't encode the agent");
     };
     let actor = awzy_model::Actor::app(&app).to_string();
-    match context.call("PUT", &format!("/v1/service-accounts/{}", awzy_http::encode(&id)), Some(&actor), Some(body)).await
+    match context
+        .call("PUT", &format!("/v1/service-accounts/{}", awzy_http::encode(&id)), Some(&actor), Some(body))
+        .await
     {
         Ok((200, res)) => match serde_json::from_slice::<Value>(&res) {
             Ok(v) => Json(json!({ "agent": v["service_account"] })).into_response(),
@@ -163,7 +165,8 @@ async fn delete_one(State(state): State<AgentsState>, Path(id): Path<String>, he
         Err(res) => return res,
     };
     let actor = awzy_model::Actor::app(&app).to_string();
-    match context.call("DELETE", &format!("/v1/service-accounts/{}", awzy_http::encode(&id)), Some(&actor), None).await {
+    match context.call("DELETE", &format!("/v1/service-accounts/{}", awzy_http::encode(&id)), Some(&actor), None).await
+    {
         Ok((204, _)) => StatusCode::NO_CONTENT.into_response(),
         Ok((404, _)) => plain(StatusCode::NOT_FOUND, format!("no agent {id:?}")),
         Ok((status, res)) => {

@@ -74,11 +74,12 @@ impl ContextStore {
     pub async fn put_token_issuer(&self, issuer: &TrustedIssuer, by: &str) -> Result<IssuerRecord, IssuerError> {
         issuer.validate().map_err(|e| Invalid(e.to_string()))?;
         let mut tx = self.pool().begin().await?;
-        let taken: Option<String> = sqlx::query_scalar("SELECT name FROM token_issuers WHERE issuer = $1 AND name <> $2")
-            .bind(&issuer.issuer)
-            .bind(&issuer.name)
-            .fetch_optional(&mut *tx)
-            .await?;
+        let taken: Option<String> =
+            sqlx::query_scalar("SELECT name FROM token_issuers WHERE issuer = $1 AND name <> $2")
+                .bind(&issuer.issuer)
+                .bind(&issuer.name)
+                .fetch_optional(&mut *tx)
+                .await?;
         if let Some(other) = taken {
             return Err(Invalid(format!("{other} already signs tokens as {:?}", issuer.issuer)).into());
         }
@@ -102,9 +103,12 @@ impl ContextStore {
     /// Stops trusting an app's tokens. Its agents stay registered until they're removed.
     pub async fn delete_token_issuer(&self, name: &str) -> Result<bool, sqlx::Error> {
         let mut tx = self.pool().begin().await?;
-        let deleted =
-            sqlx::query("DELETE FROM token_issuers WHERE name = $1").bind(name).execute(&mut *tx).await?.rows_affected()
-                > 0;
+        let deleted = sqlx::query("DELETE FROM token_issuers WHERE name = $1")
+            .bind(name)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected()
+            > 0;
         if deleted {
             bump(&mut tx).await?;
         }

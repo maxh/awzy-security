@@ -1,10 +1,10 @@
 type Actor {
 	"""
-	`Human`, `ServiceAccount`, `AwzyService`, `BreakGlassKey`, or `AwzyStaff`.
+	`Human`, `ServiceAccount`, `AwzyService`, `BreakGlassKey`, `AwzyStaff`, or `App`.
 	"""
 	type: String!
 	"""
-	A person's IdP ID, a service account ID, an awzy service name, a key fingerprint, or a staff user name.
+	A person's IdP ID, a service account ID, an awzy service name, a key fingerprint, a staff user name, or an app's name.
 	"""
 	id: String!
 	"""
@@ -844,6 +844,15 @@ type Mutation {
 	"""
 	removeServiceAccount(input: RemoveServiceAccountInput!): RemoveServiceAccountPayload!
 	"""
+	Trusts an app to sign tokens for its own agents, or changes how. Enforcement points accept
+	its tokens within seconds.
+	"""
+	registerTokenIssuer(input: RegisterTokenIssuerInput!): RegisterTokenIssuerPayload!
+	"""
+	Stops trusting an app's tokens. Its agents stay registered until they're removed.
+	"""
+	removeTokenIssuer(input: RemoveTokenIssuerInput!): RemoveTokenIssuerPayload!
+	"""
 	One turn of a conversation with Awzy Bot.
 	"""
 	askAwzyBot(input: AskAwzyBotInput!): AskAwzyBotPayload!
@@ -1224,6 +1233,10 @@ type Query {
 	groups: [DirectoryGroup!]!
 	serviceAccounts: [ServiceAccount!]!
 	"""
+	Apps trusted to sign tokens for their own agents, besides the IdP.
+	"""
+	tokenIssuers: [TokenIssuer!]!
+	"""
 	What a draft bundle would change (ADR 0049): recent requests replayed under the active
 	bundle and the draft, with today's people and resources, and the verdicts compared.
 	`days` defaults to 7, at most 30.
@@ -1355,6 +1368,23 @@ type RegisterServiceAccountPayload {
 	serviceAccount: ServiceAccount!
 }
 
+input RegisterTokenIssuerInput {
+	"""
+	Lowercase letters, digits, and dashes. Its agents' IDs start with it and a dot.
+	"""
+	name: String!
+	issuer: String!
+	"""
+	https://
+	"""
+	jwksUrl: String!
+	audience: String!
+}
+
+type RegisterTokenIssuerPayload {
+	tokenIssuer: TokenIssuer!
+}
+
 input RemoveSecurityKeyInput {
 	securityKeyQid: Qid!
 	"""
@@ -1369,6 +1399,14 @@ input RemoveServiceAccountInput {
 
 type RemoveServiceAccountPayload {
 	removedId: String!
+}
+
+input RemoveTokenIssuerInput {
+	name: String!
+}
+
+type RemoveTokenIssuerPayload {
+	removedName: String!
 }
 
 """
@@ -1661,6 +1699,37 @@ enum SupportSessionStatus {
 	REJECTED
 	ENDED
 	EXPIRED
+}
+
+"""
+An app that signs tokens for its own agents: the service accounts whose ID starts with its name
+and a dot.
+"""
+type TokenIssuer {
+	"""
+	The app's name: the `sub` of the tokens it signs for itself, to register its agents.
+	"""
+	name: String!
+	"""
+	The `iss` its tokens carry.
+	"""
+	issuer: String!
+	"""
+	Where its signing keys are published.
+	"""
+	jwksUrl: String!
+	"""
+	The `aud` its tokens must carry.
+	"""
+	audience: String!
+	"""
+	What its agents' IDs start with.
+	"""
+	agentPrefix: String!
+	createdBy: Actor
+	createdAt: UtcTimestamp!
+	updatedBy: Actor
+	updatedAt: UtcTimestamp!
 }
 
 """

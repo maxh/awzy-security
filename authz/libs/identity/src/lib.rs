@@ -232,7 +232,9 @@ impl TrustedIssuers {
             every.tick().await;
             match fetch().await {
                 Ok(issuers) => lists.iter().for_each(|l| l.set(issuers.clone())),
-                Err(e) => tracing::warn!(error = %e, "couldn't refresh the trusted token issuers; keeping the last list"),
+                Err(e) => {
+                    tracing::warn!(error = %e, "couldn't refresh the trusted token issuers; keeping the last list")
+                }
             }
         }
     }
@@ -443,16 +445,14 @@ fn principal_from_claims<R: ServiceAccounts + ?Sized>(
             entities: vec![service_account(&actor.sub)?, human(&claims.sub, &claims.groups)],
             expires_at,
         },
-        None if acts_for_itself => {
-            Principal {
-                subject: EntityRef::new(entity_type::SERVICE_ACCOUNT, &claims.sub),
-                on_behalf_of: None,
-                human_present: claims.awzy_human_present,
-                name: claims.name,
-                entities: vec![service_account(&claims.sub)?],
-                expires_at,
-            }
-        }
+        None if acts_for_itself => Principal {
+            subject: EntityRef::new(entity_type::SERVICE_ACCOUNT, &claims.sub),
+            on_behalf_of: None,
+            human_present: claims.awzy_human_present,
+            name: claims.name,
+            entities: vec![service_account(&claims.sub)?],
+            expires_at,
+        },
         None => Principal {
             subject: EntityRef::new(entity_type::HUMAN, &claims.sub),
             on_behalf_of: None,

@@ -1,10 +1,10 @@
 type Actor {
 	"""
-	`Human`, `ServiceAccount`, `AwzyService`, `BreakGlassKey`, or `AwzyStaff`.
+	`Human`, `ServiceAccount`, `AwzyService`, `BreakGlassKey`, `AwzyStaff`, or `App`.
 	"""
 	type: String!
 	"""
-	A person's IdP ID, a service account ID, an awzy service name, a key fingerprint, or a staff user name.
+	A person's IdP ID, a service account ID, an awzy service name, a key fingerprint, a staff user name, or an app's name.
 	"""
 	id: String!
 	"""
