@@ -1,6 +1,6 @@
 """The design partner's path through this library, against a running install (tools/demo partner):
 an app-minted agent's token validated, a check in monitor, a query plan turned into SQL, and the
-plan's results reported to awzy-intake. Inputs are AWZY_TEST_* variables; it exits non-zero on the
+plan's results sent to awzy-intake. Inputs are AWZY_TEST_* variables; it exits non-zero on the
 first thing that isn't as it should be."""
 
 from __future__ import annotations
@@ -96,10 +96,11 @@ def main() -> None:
     sql = to_postgres(plan.filter, RESOURCES)
     ok(f"a plan ({plan.outcome}) maps to WHERE {sql.where[:80]}{'…' if len(sql.where) > 80 else ''}")
 
-    # 4. Its results reported to awzy-intake as a listed access linked to the plan.
+    # 4. Its results sent to awzy-intake as a listed access linked to the plan. Sending is best effort,
+    # so this can't see that they arrived; tools/demo checks ClickHouse for them.
     awzy.report_plan(plan, "read", "Resource", 3, authorization=authorization)
     activity.flush()
-    ok(f"the plan's results are reported to awzy-intake ({plan.qid})")
+    ok(f"the plan's results are sent to awzy-intake ({plan.qid})")
 
 
 if __name__ == "__main__":
