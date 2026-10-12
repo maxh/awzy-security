@@ -80,19 +80,19 @@ pub struct Directory<'a> {
 }
 
 impl<'a> Directory<'a> {
-    /// `people` are each person's SCIM ID, external ID if any, and user name.
-    pub fn new(people: impl Iterator<Item = (String, Option<&'a str>, &'a str)> + Clone) -> Self {
+    /// `humans` are each person's SCIM ID, external ID if any, and user name.
+    pub fn new(humans: impl Iterator<Item = (String, Option<&'a str>, &'a str)> + Clone) -> Self {
         let mut ids = HashMap::new();
         // Least preferred first, so a more preferred ID overwrites a clash.
-        for (_, _, user_name) in people.clone() {
+        for (_, _, user_name) in humans.clone() {
             ids.insert(user_name.to_lowercase(), user_name);
         }
-        for (_, external_id, user_name) in people.clone() {
+        for (_, external_id, user_name) in humans.clone() {
             if let Some(external_id) = external_id {
                 ids.insert(external_id.to_lowercase(), user_name);
             }
         }
-        for (scim_id, _, user_name) in people {
+        for (scim_id, _, user_name) in humans {
             ids.insert(scim_id.to_lowercase(), user_name);
         }
         Self { ids }
@@ -151,11 +151,11 @@ mod tests {
 
     #[test]
     fn a_manager_is_found_by_scim_id_then_external_id_then_user_name() {
-        let people = [
+        let humans = [
             ("0190-aaaa".to_string(), Some("E-1"), "pat@example.com"),
             ("0190-bbbb".to_string(), Some("pat@example.com"), "lee@example.com"),
         ];
-        let directory = Directory::new(people.iter().map(|(s, e, u)| (s.clone(), *e, *u)));
+        let directory = Directory::new(humans.iter().map(|(s, e, u)| (s.clone(), *e, *u)));
         assert_eq!(directory.resolve("0190-AAAA"), Some("pat@example.com"));
         assert_eq!(directory.resolve("e-1"), Some("pat@example.com"));
         assert_eq!(directory.resolve("pat@example.com"), Some("lee@example.com"), "an external ID wins a clash");
