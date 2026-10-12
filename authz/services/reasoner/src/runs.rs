@@ -445,8 +445,11 @@ mod tests {
         awzy_clickhouse::migrate(&ch, &settings).await.unwrap();
 
         let as_of = Utc::now();
-        let (now, end, start) =
-            (as_of.timestamp_millis() - 1000, as_of.timestamp_millis(), (as_of - chrono::Duration::days(1)).timestamp_millis());
+        let (now, end, start) = (
+            as_of.timestamp_millis() - 1000,
+            as_of.timestamp_millis(),
+            (as_of - chrono::Duration::days(1)).timestamp_millis(),
+        );
         ch.query(&format!(
             "INSERT INTO decisions (id, at, principal_type, principal_id, resource_type, resource_id, verdict) VALUES
              (generateUUIDv4(), fromUnixTimestamp64Milli({now}, 'UTC'), 'Human', 'sam', 'Resource', 'payments', 'deny')"
