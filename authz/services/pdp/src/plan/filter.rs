@@ -40,7 +40,7 @@ impl Cmp {
 }
 
 /// Which rows of the type a principal may act on. `attr` is a path into the resource's
-/// attributes: `["owner"]`, `["address", "country"]`.
+/// attributes, one name per level: `owner`, or `address` then `country`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Filter {
