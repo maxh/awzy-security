@@ -15,6 +15,23 @@ pub const SCHEMA_VERSION: u32 = 1;
 /// The most support sessions one heartbeat reports.
 pub const MAX_SUPPORT_SESSIONS: usize = 100;
 
+/// The heartbeat an install's reporter last tried to send, and whether the corp portal took it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LastSend {
+    pub heartbeat: Heartbeat,
+    pub delivered: bool,
+    pub error: Option<String>,
+}
+
+/// What awzy-reporter serves its install's client portal at `GET /v1/last-heartbeat`: where
+/// heartbeats go, how often, and the last one exactly as sent (none before the first).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LastHeartbeat {
+    pub corp_url: String,
+    pub interval_secs: u64,
+    pub last: Option<LastSend>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Heartbeat {

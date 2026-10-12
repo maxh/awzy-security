@@ -33,6 +33,7 @@ members = [
     "authz/libs/secrets-aws",
     "libs/http",
     "libs/kube",
+    "authz/libs/connectors-api",
     "authz/libs/context-api",
     "authz/libs/classify",
     "authz/libs/service-auth",
@@ -118,6 +119,7 @@ awzy-challenge = { path = "authz/services/challenge" }
 awzy-clickhouse = { path = "authz/jobs/clickhouse-migrate" }
 awzy-cloud = { path = "libs/cloud" }
 awzy-context = { path = "authz/services/context" }
+awzy-connectors-api = { path = "authz/libs/connectors-api" }
 awzy-context-api = { path = "authz/libs/context-api" }
 awzy-gateway = { path = "authz/services/gateway" }
 awzy-heartbeat = { path = "libs/heartbeat" }

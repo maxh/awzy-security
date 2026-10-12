@@ -1,0 +1,9 @@
+load("//tools:rust.bzl", "awzy_rust_library")
+
+# awzy-connectors' status API as types (#222): what awzy-connectors serves and the client portal
+# reads, from one definition.
+awzy_rust_library(
+    name = "connectors-api",
+    crate_name = "awzy_connectors_api",
+    visibility = ["//tools:client_side"],
+)

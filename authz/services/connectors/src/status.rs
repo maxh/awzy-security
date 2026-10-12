@@ -77,9 +77,31 @@ pub fn all() -> Vec<ConnectorStatus> {
     STATUS.lock().unwrap_or_else(|e| e.into_inner()).values().cloned().collect()
 }
 
+impl ConnectorStatus {
+    /// As `GET /v1/status` serves it, in the type the client portal reads (#222).
+    pub fn wire(&self) -> awzy_connectors_api::ConnectorStatus {
+        awzy_connectors_api::ConnectorStatus {
+            name: self.name.to_string(),
+            settings: self.settings.iter().map(|(k, v)| (k.to_string(), v.clone())).collect(),
+            interval_secs: self.interval_secs,
+            last_success_at: self.last_success_at,
+            last_failure_at: self.last_failure_at,
+            last_error: self.last_error.clone(),
+            failures: self.failures,
+            written: self.written,
+            deleted: self.deleted,
+        }
+    }
+}
+
 /// `GET /v1/status`: every configured connector, by name.
 pub fn router() -> Router {
-    Router::new().route("/v1/status", get(|| async { Json(serde_json::json!({ "connectors": all() })) }))
+    Router::new().route(
+        "/v1/status",
+        get(|| async {
+            Json(awzy_connectors_api::StatusList { connectors: all().iter().map(ConnectorStatus::wire).collect() })
+        }),
+    )
 }
 
 #[cfg(test)]

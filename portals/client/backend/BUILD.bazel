@@ -12,6 +12,8 @@ awzy_service(
     ],
     visibility = ["//tools:client_side"],
     deps = [
+        "//authz/libs/connectors-api",
+        "//libs/heartbeat",
         "//authz/libs/context-api",
         "//authz/libs/activity",
         "//authz/libs/secrets-aws",
