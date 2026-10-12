@@ -2,7 +2,8 @@ name: terraform
 
 # Terraform is planned on pull requests and applied on merge (ADR 0115, tools/ci/terraform-ci.sh),
 # for each deployment whose files changed: corp-terraform (corp/build and corp/corp-portal, in the
-# build account) and example-aws (the example client's install account). A pull request gets a
+# build account), example-aws (the example client's install account), and example-gcp (its Google
+# Cloud project, through workload identity federation). A pull request gets a
 # comment per deployment listing what merging would change; after merge, each apply waits in its
 # GitHub environment for a person's approval. Management-account modules stay with a person.
 on:
@@ -12,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       deployment:
-        description: "Apply one deployment now: corp-terraform or example-aws"
+        description: "Apply one deployment now: corp-terraform, example-aws, or example-gcp"
         required: true
 
 # One plan per pull request, and one apply per deployment at a time; a running apply finishes.
@@ -51,6 +52,15 @@ jobs:
               - "deploy/release/*.pub"
               - "tools/ci/terraform-*.sh"
               - ".github/workflows/terraform.yml"
+            example-gcp:
+              - "deploy/terraform/examples/example-client-gcp/install/**"
+              - "deploy/terraform/examples/example-client-gcp/bootstrap/**"
+              - "deploy/terraform/examples/example-client-gcp/variables.tf"
+              - "deploy/terraform/gcp/**"
+              - "deploy/terraform/bootstrap/**"
+              - "deploy/release/*.pub"
+              - "tools/ci/terraform-*.sh"
+              - ".github/workflows/terraform.yml"
 
   plan:
     needs: changes
@@ -68,15 +78,18 @@ jobs:
       id-token: write
       pull-requests: write
     env:
-      # Each deployment's plan roles; empty until they're set up, and then the job says so and skips.
-      PLAN_ROLE: ${{ matrix.deployment == 'corp-terraform' && vars.AWZY_CORP_AWS_PLAN_ROLE_ARN || vars.AWZY_CORP_EXAMPLE_AWS_PLAN_ROLE_ARN }}
+      # Each deployment's plan identity: an AWS role, or a Google Cloud service account. Empty until
+      # it's set up, and then the job says so and skips.
+      PLAN_ROLE: ${{ (matrix.deployment == 'corp-terraform' && vars.AWZY_CORP_AWS_PLAN_ROLE_ARN) || (matrix.deployment == 'example-aws' && vars.AWZY_CORP_EXAMPLE_AWS_PLAN_ROLE_ARN) || '' }}
       STATE_PLAN_ROLE: ${{ matrix.deployment == 'example-aws' && vars.AWZY_CORP_EXAMPLE_AWS_STATE_PLAN_ROLE_ARN || '' }}
+      GCP_PROVIDER: ${{ matrix.deployment == 'example-gcp' && vars.AWZY_CORP_EXAMPLE_GCP_WIF_PROVIDER || '' }}
+      GCP_SERVICE_ACCOUNT: ${{ matrix.deployment == 'example-gcp' && vars.AWZY_CORP_EXAMPLE_GCP_PLAN_SERVICE_ACCOUNT || '' }}
     steps:
-      - if: env.PLAN_ROLE == ''
-        run: echo "::notice::No plan role set for ${{ matrix.deployment }} yet; skipping its plan."
-      - if: env.PLAN_ROLE != ''
+      - if: env.PLAN_ROLE == '' && env.GCP_SERVICE_ACCOUNT == ''
+        run: echo "::notice::No plan identity set for ${{ matrix.deployment }} yet; skipping its plan."
+      - if: env.PLAN_ROLE != '' || env.GCP_SERVICE_ACCOUNT != ''
         uses: actions/checkout@v4
-      - if: env.PLAN_ROLE != ''
+      - if: env.PLAN_ROLE != '' || env.GCP_SERVICE_ACCOUNT != ''
         uses: opentofu/setup-opentofu@v1
         with:
           tofu_version: 1.13.1
@@ -93,10 +106,15 @@ jobs:
         with:
           role-to-assume: ${{ env.PLAN_ROLE }}
           aws-region: ${{ vars.AWZY_CORP_AWS_REGION }}
+      - if: env.GCP_SERVICE_ACCOUNT != ''
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.GCP_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
       - name: What merging changes
-        if: env.PLAN_ROLE != ''
+        if: env.PLAN_ROLE != '' || env.GCP_SERVICE_ACCOUNT != ''
         env:
-          DEPLOYMENT_ENV: ${{ matrix.deployment == 'corp-terraform' && secrets.AWZY_CORP_DEPLOYMENT_ENV || secrets.AWZY_CORP_EXAMPLE_AWS_DEPLOYMENT_ENV }}
+          DEPLOYMENT_ENV: ${{ (matrix.deployment == 'corp-terraform' && secrets.AWZY_CORP_DEPLOYMENT_ENV) || (matrix.deployment == 'example-aws' && secrets.AWZY_CORP_EXAMPLE_AWS_DEPLOYMENT_ENV) || secrets.AWZY_CORP_EXAMPLE_GCP_DEPLOYMENT_ENV }}
           GH_TOKEN: ${{ github.token }}
           MANAGEMENT_AWS_ACCESS_KEY_ID: ${{ steps.management.outputs.aws-access-key-id }}
           MANAGEMENT_AWS_SECRET_ACCESS_KEY: ${{ steps.management.outputs.aws-secret-access-key }}
@@ -121,14 +139,16 @@ jobs:
       contents: read
       id-token: write
     env:
-      APPLY_ROLE: ${{ matrix.deployment == 'corp-terraform' && vars.AWZY_CORP_AWS_TERRAFORM_ROLE_ARN || vars.AWZY_CORP_EXAMPLE_AWS_TERRAFORM_ROLE_ARN }}
+      APPLY_ROLE: ${{ (matrix.deployment == 'corp-terraform' && vars.AWZY_CORP_AWS_TERRAFORM_ROLE_ARN) || (matrix.deployment == 'example-aws' && vars.AWZY_CORP_EXAMPLE_AWS_TERRAFORM_ROLE_ARN) || '' }}
       STATE_APPLY_ROLE: ${{ matrix.deployment == 'example-aws' && vars.AWZY_CORP_EXAMPLE_AWS_STATE_TERRAFORM_ROLE_ARN || '' }}
+      GCP_PROVIDER: ${{ matrix.deployment == 'example-gcp' && vars.AWZY_CORP_EXAMPLE_GCP_WIF_PROVIDER || '' }}
+      GCP_SERVICE_ACCOUNT: ${{ matrix.deployment == 'example-gcp' && vars.AWZY_CORP_EXAMPLE_GCP_TERRAFORM_SERVICE_ACCOUNT || '' }}
     steps:
-      - if: env.APPLY_ROLE == ''
-        run: echo "::notice::No apply role set for ${{ matrix.deployment }} yet; skipping its apply."
-      - if: env.APPLY_ROLE != ''
+      - if: env.APPLY_ROLE == '' && env.GCP_SERVICE_ACCOUNT == ''
+        run: echo "::notice::No apply identity set for ${{ matrix.deployment }} yet; skipping its apply."
+      - if: env.APPLY_ROLE != '' || env.GCP_SERVICE_ACCOUNT != ''
         uses: actions/checkout@v4
-      - if: env.APPLY_ROLE != ''
+      - if: env.APPLY_ROLE != '' || env.GCP_SERVICE_ACCOUNT != ''
         uses: opentofu/setup-opentofu@v1
         with:
           tofu_version: 1.13.1
@@ -145,11 +165,16 @@ jobs:
         with:
           role-to-assume: ${{ env.APPLY_ROLE }}
           aws-region: ${{ vars.AWZY_CORP_AWS_REGION }}
+      - if: env.GCP_SERVICE_ACCOUNT != ''
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.GCP_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
       - name: Apply
-        if: env.APPLY_ROLE != ''
+        if: env.APPLY_ROLE != '' || env.GCP_SERVICE_ACCOUNT != ''
         env:
           CLOUDFLARE_TOKEN: ${{ secrets.AWZY_CORP_CLOUDFLARE_TOKEN }}
-          DEPLOYMENT_ENV: ${{ matrix.deployment == 'corp-terraform' && secrets.AWZY_CORP_DEPLOYMENT_ENV || secrets.AWZY_CORP_EXAMPLE_AWS_DEPLOYMENT_ENV }}
+          DEPLOYMENT_ENV: ${{ (matrix.deployment == 'corp-terraform' && secrets.AWZY_CORP_DEPLOYMENT_ENV) || (matrix.deployment == 'example-aws' && secrets.AWZY_CORP_EXAMPLE_AWS_DEPLOYMENT_ENV) || secrets.AWZY_CORP_EXAMPLE_GCP_DEPLOYMENT_ENV }}
           GH_TOKEN: ${{ github.token }}
           MANAGEMENT_AWS_ACCESS_KEY_ID: ${{ steps.management.outputs.aws-access-key-id }}
           MANAGEMENT_AWS_SECRET_ACCESS_KEY: ${{ steps.management.outputs.aws-secret-access-key }}

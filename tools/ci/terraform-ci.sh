@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 # terraform-ci.sh <deployment> plan|apply: plans a deployment's Terraform modules, in order, and
 # with `apply` applies what it planned (ADR 0115). A deployment is the GitHub environment that
-# applies it: corp-terraform (the build account's corp modules) or example-aws (the example
-# client's install account).
+# applies it: corp-terraform (the build account's corp modules), example-aws (the example
+# client's install account), or example-gcp (the example client's Google Cloud project).
 #
 # `plan`, for a pull request: against the recorded state without refreshing or locking, as the
 # read-only plan roles, and with PR_NUMBER set keeps one comment on the pull request listing the
 # changes. `apply`, after merge: refreshes, plans, and applies that plan, as the apply roles.
 #
 # Prints resource addresses only, never plan details: plans hold account IDs, and these logs and
-# comments are public. Needs DEPLOYMENT_ENV, AWS credentials (see terraform-env.sh), GH_TOKEN, and
-# for corp's `apply` CLOUDFLARE_TOKEN.
+# comments are public. Needs DEPLOYMENT_ENV, the cloud's credentials (AWS's, see terraform-env.sh;
+# Google Cloud's, from google-github-actions/auth), GH_TOKEN, and for corp's `apply`
+# CLOUDFLARE_TOKEN.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
-usage="usage: terraform-ci.sh corp-terraform|example-aws plan|apply"
+usage="usage: terraform-ci.sh corp-terraform|example-aws|example-gcp plan|apply"
 deployment=${1:?$usage}
 mode=${2:?$usage}
 case $mode in plan | apply) ;; *) echo "$usage" >&2; exit 2 ;; esac
@@ -29,6 +30,11 @@ case $deployment in
     title="The example client's Terraform (AWS)"
     # In order: each reads the outputs of those before it.
     modules=(examples/example-client/install examples/example-client/monitoring examples/example-client/grafana examples/example-client/bootstrap)
+    ;;
+  example-gcp)
+    env_dir=deploy/terraform/examples/example-client-gcp
+    title="The example client's Terraform (Google Cloud)"
+    modules=(examples/example-client-gcp/install examples/example-client-gcp/bootstrap)
     ;;
   *) echo "$usage" >&2; exit 2 ;;
 esac

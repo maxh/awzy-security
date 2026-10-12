@@ -40,3 +40,9 @@ variable "chart_version" {
   type        = string
   default     = ">=0.0.0-0"
 }
+
+variable "github_oidc_subject_repo" {
+  description = "GitHub's immutable OIDC subject for the repository whose CI plans and applies these modules (ADR 0115): owner@<owner id>/repo@<repo id>"
+  type        = string
+  default     = null
+}
