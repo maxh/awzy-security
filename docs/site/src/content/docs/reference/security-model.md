@@ -41,3 +41,37 @@ description: What awzy can and can't see, and how releases reach your install.
   tokens for their own audience, so a token handed to an agent for one doesn't open the others.
   See
   [People, agents, and delegation](/concepts/principals-and-delegation/).
+
+## Your apps, their agents, and client libraries
+
+When your own apps check with awzy and mint their own agents, these are what you're trusting,
+and what limits each.
+
+- **A trusted app vouches only for its own agents.** Trusting an app as a token issuer means
+  trusting its signing key, so treat that key like a credential. awzy limits what it can sign:
+  tokens only for service accounts whose ID starts with the app's name and a dot, on their own or
+  acting for a person, and never for a person on their own or for any other service account. No two apps share an
+  issuer, a token with your IdP's issuer is always checked as your IdP's, and an app's keys come
+  over HTTPS only. Removing the app
+  stops its tokens within about ten seconds; agents it registered stay registered until removed.
+- **An app manages only the agents under its name.** Its registration API takes a token the app
+  signs for itself, and registers or retires only IDs under its prefix. Every agent still needs
+  an owner your IdP provisioned, and every change is recorded with the app as who made it. A
+  token minted for an agent can't register agents.
+- **A client library is an enforcement point in your app.** It validates callers' tokens itself
+  and applies awzy's answer, so awzy decides what it's asked, and your app has to ask. Calls to
+  awzy-pdp need a service token from a workload the install trusts. When awzy can't be reached, a
+  library refuses in enforce mode unless you set that action to fail open on a tier your client
+  portal allows, and awzy allowed the same call recently; `confidential` and `crown_jewels` never
+  fail open.
+- **Waiting on a challenge reveals nothing else.** An agent can wait only on a challenge its own
+  call opened, acting for the same person; anyone else's isn't found. The answer stays in awzy, so
+  waiting hands the agent nothing it could replay, and only the person, never the agent, can
+  answer.
+- **A query plan shows the shape of a principal's policy.** A plan's filter carries the
+  conditions policy applies to that principal, such as which tenants or folders it may see and the
+  groups it's in. It goes only to the enforcement point that asked, which should apply it and not
+  pass it on to people or agents. A filter over awzy's own resource labels is only as current as
+  your app's copy of them, and what a filter can't decide from the row is left for row-by-row
+  checks rather than guessed. Plans are recorded, a contained principal's next plan or next page is
+  refused, and your app reports what each one returned, so a bulk read through plans still counts toward risk.
