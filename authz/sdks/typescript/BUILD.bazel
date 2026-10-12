@@ -1,3 +1,4 @@
+load("@aspect_rules_js//js:defs.bzl", "js_binary")
 load("@bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
 load("@npm//:defs.bzl", "npm_link_all_packages")
 load("@npm//authz/sdks/typescript:typescript/package_json.bzl", tsc_bin = "bin")
@@ -9,14 +10,24 @@ npm_link_all_packages()
 # One copy of the sources in bazel-bin, shared by both targets below.
 copy_to_bin(
     name = "srcs",
-    srcs = glob(["src/**/*.ts", "example/**/*.ts"]) + [
+    srcs = glob(
+        ["src/**/*.ts", "example/**/*.ts"],
+        exclude = ["example/partner-e2e.ts"],
+    ) + [
         "package.json",
         "tsconfig.json",
     ],
 )
 
+# The design partner's path through the library, which tools/demo partner runs against the demo.
+copy_to_bin(
+    name = "partner_e2e_entry",
+    srcs = ["example/partner-e2e.ts"],
+)
+
 SRCS = [
     ":srcs",
+    ":partner_e2e_entry",
     # The conformance spec every client library runs (ADR 0114).
     "//authz/sdks/conformance:scenarios",
     "//:tsconfig_base",
@@ -39,4 +50,10 @@ vitest_bin.vitest_test(
     chdir = package_name(),
     data = SRCS,
     tags = ["no-sandbox"],
+)
+
+js_binary(
+    name = "partner_e2e",
+    data = SRCS,
+    entry_point = ":partner_e2e_entry",
 )

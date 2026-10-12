@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_binary")
+
+# The design partner's path through the library, which tools/demo partner runs against the demo.
+go_binary(
+    name = "partner-e2e",
+    srcs = ["main.go"],
+    pure = "on",
+    deps = ["//authz/sdks/go:awzyauthz"],
+)

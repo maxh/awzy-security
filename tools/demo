@@ -18,13 +18,15 @@ state=.demo
 mkdir -p "$state/logs"
 compose=(docker compose -f deploy/local/compose.yaml)
 
-POLICY=8081 PDP=8082 CHALLENGE=8083 CONTEXT=8084 GATEWAY=8086 PORTAL=8080 IDP=5556 DRIVE=8095
+POLICY=8081 PDP=8082 CHALLENGE=8083 CONTEXT=8084 INTAKE=8085 GATEWAY=8086 PORTAL=8080 IDP=5556 DRIVE=8095
 pg=postgres://awzy:awzy@localhost:5432
 clickhouse=(AWZY_CLICKHOUSE_URL=http://localhost:8123 AWZY_CLICKHOUSE_USER=awzy AWZY_CLICKHOUSE_PASSWORD=awzy
   AWZY_CLICKHOUSE_DATABASE=awzy)
 # awzy-context wants at least 32 characters.
 scim_token=demo-scim-token-for-the-local-demo-only
 gateway_secret=demo-gateway-secret
+# awzy-intake wants at least 32 characters too.
+intake_token=demo-intake-token-for-the-local-demo-only
 
 targets=(
   //authz/jobs/clickhouse-migrate:awzy-clickhouse-migrate
@@ -34,6 +36,7 @@ targets=(
   //authz/services/context:awzy-context
   //authz/services/challenge:awzy-challenge
   //authz/services/gateway:awzy-gateway
+  //authz/services/intake:awzy-intake
   //authz/demo/synthetic:awzy-synthetic
   //portals/client/backend:awzy-client-portal
   //portals/client/frontend:build
@@ -112,6 +115,7 @@ up() {
   context=$(out //authz/services/context:awzy-context)
   challenge=$(out //authz/services/challenge:awzy-challenge)
   gateway=$(out //authz/services/gateway:awzy-gateway)
+  intake=$(out //authz/services/intake:awzy-intake)
   synthetic=$(out //authz/demo/synthetic:awzy-synthetic)
   portal=$(out //portals/client/backend:awzy-client-portal)
   frontend=$(out //portals/client/frontend:build)
@@ -150,6 +154,10 @@ up() {
     AWZY_KAFKA_BROKERS=localhost:9092 "$pdp"
   wait_for http://127.0.0.1:$CHALLENGE/readyz awzy-challenge
   wait_for http://127.0.0.1:$PDP/readyz awzy-pdp
+
+  log "awzy-intake, for apps' activity"
+  start intake AWZY_LISTEN_ADDR=127.0.0.1:$INTAKE AWZY_INTAKE_TOKEN=$intake_token AWZY_KAFKA_BROKERS=localhost:9092 "$intake"
+  wait_for http://127.0.0.1:$INTAKE/readyz awzy-intake
 
   log "Larkspur Capital: its people, groups, agents, documents, and work"
   # shellcheck disable=SC2046
@@ -215,7 +223,7 @@ EOF
 
 check() {
   local failed=0
-  for svc in policy:$POLICY context:$CONTEXT challenge:$CHALLENGE pdp:$PDP portal:$PORTAL drive:$DRIVE gateway:$GATEWAY; do
+  for svc in policy:$POLICY context:$CONTEXT challenge:$CHALLENGE pdp:$PDP intake:$INTAKE portal:$PORTAL drive:$DRIVE gateway:$GATEWAY; do
     if curl -sf -o /dev/null "http://127.0.0.1:${svc#*:}/readyz"; then echo "ok   ${svc%%:*}"; else echo "FAIL ${svc%%:*}"; failed=1; fi
   done
   if curl -skf -o /dev/null https://127.0.0.1:$IDP/.well-known/openid-configuration; then echo "ok   dev IdP"; else echo "FAIL dev IdP"; failed=1; fi
@@ -328,6 +336,29 @@ partner() {
     \"principal\": {\"type\": \"ServiceAccount\", \"id\": \"$agent\"}, \"on_behalf_of\": {\"type\": \"Human\", \"id\": \"$human\"},
     \"action\": \"read\", \"resource_type\": \"Resource\", \"context\": {}}" | sed -nE 's/.*"outcome": ?"([a-z_]+)".*/\1/p')
   if [ -n "$outcome" ]; then pass "a query plan for $agent ($outcome)"; else fail "no query plan"; fi
+
+  # The same path through each client library, as the partner's app would take it.
+  local lib language
+  for lib in //authz/sdks/typescript:partner_e2e //authz/sdks/python:partner_e2e //authz/sdks/go/cmd/partner-e2e; do
+    language=${lib#//authz/sdks/}
+    language=${language%%[:/]*}
+    env AWZY_TEST_PDP_URL=http://127.0.0.1:$PDP AWZY_TEST_SERVICE_TOKEN_DIR="$PWD/$state/tokens/$backend" \
+      AWZY_TEST_IDP_ISSUER=$idp AWZY_TEST_IDP_JWKS_URL=$idp/jwks AWZY_TEST_CA_FILE="$ca" NODE_EXTRA_CA_CERTS="$ca" \
+      AWZY_TEST_APP_NAME=$app AWZY_TEST_APP_ISSUER=$idp/apps/$app AWZY_TEST_APP_JWKS_URL=$idp/apps/$app/jwks \
+      AWZY_TEST_APP_AUDIENCE=awzy-agents AWZY_TEST_AGENT_TOKEN="$token" AWZY_TEST_AGENT=$agent AWZY_TEST_HUMAN="$human" \
+      AWZY_TEST_INTAKE_URL=http://127.0.0.1:$INTAKE AWZY_TEST_INTAKE_TOKEN=$intake_token \
+      AWZY_TEST_SYSTEM="$app-$language" bazel run -q "$lib" 2>"$state/logs/partner-$language.log" || failed=1
+  done
+
+  # Each library's plan results reached the events log as listed accesses, linked to their plans.
+  local reported=0
+  for _ in $(seq 1 30); do
+    reported=$(curl -sf "http://localhost:8123/?user=awzy&password=awzy" --data "SELECT uniqExact(system) FROM awzy.events
+      WHERE system LIKE '$app-%' AND access = 'listed' AND count = 3 AND attributes LIKE '%plan_%'" || echo 0)
+    [ "${reported:-0}" -ge 3 ] && break
+    sleep 2
+  done
+  if [ "${reported:-0}" -ge 3 ]; then pass "each library's plan results are in the events log"; else fail "plan results from ${reported:-0} of 3 libraries in the events log"; fi
   return $failed
 }
 

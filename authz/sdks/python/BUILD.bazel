@@ -1,4 +1,4 @@
-load("@rules_python//python:defs.bzl", "py_library", "py_test")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 
 # The Python client library (ADR 0114). pyproject.toml is the source of truth for its dependencies;
 # requirements_lock.txt is made from it (`pip-compile --extra test --generate-hashes
@@ -30,4 +30,12 @@ py_test(
         ":awzy_authz",
         "@pypi_sdk//pytest",
     ],
+)
+
+# The design partner's path through the library, which tools/demo partner runs against the demo.
+py_binary(
+    name = "partner_e2e",
+    srcs = ["e2e/partner_e2e.py"],
+    main = "e2e/partner_e2e.py",
+    deps = [":awzy_authz"],
 )
