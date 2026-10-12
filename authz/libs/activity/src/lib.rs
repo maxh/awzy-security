@@ -2,8 +2,8 @@
 //! awzy-intake (ADR 0084), so awzy-reasoner scores an agent's tool calls through awzy-gateway or
 //! the client portal's MCP endpoint like any other activity.
 //!
-//! Best effort: an event is queued and sent in the background, a batch a second, and dropped when
-//! the queue is full or awzy-intake can't be reached. Recording never slows or fails the call.
+//! Best effort: an event is queued and sent in the background in batches, and dropped when the
+//! queue is full or awzy-intake can't be reached. Recording never slows or fails the call.
 
 use std::time::Duration;
 
@@ -19,6 +19,9 @@ const QUEUE: usize = 10_000;
 /// Most events in one request; awzy-intake takes up to 1,000.
 const BATCH: usize = 500;
 const EVERY: Duration = Duration::from_secs(1);
+/// How long a batch waits for more events after its first: a busy gateway sends a few full
+/// batches a second instead of a request per call.
+const LINGER: Duration = Duration::from_millis(100);
 
 /// One thing a principal did, in awzy-intake's app event schema.
 #[derive(Debug, Clone, PartialEq)]
@@ -68,12 +71,13 @@ impl Activity {
 #[derive(Clone, Default)]
 pub struct ActivityLog {
     tx: Option<mpsc::Sender<Activity>>,
+    dropped: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl ActivityLog {
     /// Records nothing: no awzy-intake.
     pub fn off() -> Self {
-        Self { tx: None }
+        Self::default()
     }
 
     /// AWZY_INTAKE_URL (awzy-intake's base URL) and AWZY_INTAKE_TOKEN; off when either is unset.
@@ -93,14 +97,18 @@ impl ActivityLog {
         let (tx, rx) = mpsc::channel(QUEUE);
         let endpoint = format!("{}/v1/events", url.trim_end_matches('/'));
         tokio::spawn(send(rx, endpoint, format!("Bearer {token}"), system.to_string()));
-        Self { tx: Some(tx) }
+        Self { tx: Some(tx), dropped: Default::default() }
     }
 
     /// Queues `activity` to be sent. Never waits.
     pub fn record(&self, activity: Activity) {
         if let Some(tx) = &self.tx {
             if tx.try_send(activity).is_err() {
-                tracing::warn!("the activity queue is full or closed; an event was dropped");
+                // Logged at each power of two, so a full queue doesn't also flood the log.
+                let dropped = self.dropped.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                if dropped.is_power_of_two() {
+                    tracing::warn!(dropped, "the activity queue is full or closed; events were dropped");
+                }
             }
         }
     }
@@ -146,11 +154,15 @@ async fn send(mut rx: mpsc::Receiver<Activity>, endpoint: String, authorization:
             _ = tokio::time::sleep(EVERY) => None,
         };
         let closed = first.is_none() && rx.is_closed();
+        let lingering = first.is_some();
         batch.extend(first);
-        while batch.len() < BATCH {
-            match rx.try_recv() {
-                Ok(a) => batch.push(a),
-                Err(_) => break,
+        if lingering {
+            let until = tokio::time::Instant::now() + LINGER;
+            while batch.len() < BATCH {
+                match tokio::time::timeout_at(until, rx.recv()).await {
+                    Ok(Some(a)) => batch.push(a),
+                    Ok(None) | Err(_) => break,
+                }
             }
         }
         if !batch.is_empty() {
@@ -251,5 +263,30 @@ mod tests {
             .collect();
         assert_eq!(tools, [json!("drive/read_file"), json!("drive/search")]);
         ActivityLog::off().record(bob_calls("nowhere"));
+    }
+
+    #[tokio::test]
+    async fn calls_close_together_go_in_one_request() {
+        let requests: Arc<Mutex<Vec<usize>>> = Arc::default();
+        let app = Router::new()
+            .route(
+                "/v1/events",
+                post(|State(seen): State<Arc<Mutex<Vec<usize>>>>, Json(body): Json<Value>| async move {
+                    seen.lock().unwrap().push(body["events"].as_array().map_or(0, Vec::len));
+                    "ok"
+                }),
+            )
+            .with_state(requests.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let log = ActivityLog::new(&url, "t0k3n", "awzy-gateway");
+        for _ in 0..10 {
+            log.record(bob_calls("drive/search"));
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert_eq!(*requests.lock().unwrap(), vec![10], "one request for ten calls 5 ms apart");
     }
 }
