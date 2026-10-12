@@ -5,6 +5,7 @@ awzy_service(
     crate_name = "awzy_pdp",
     binary_name = "awzy-pdp",
     extra_binaries = [
+        "pdp_bench",
         "pdp_freshness",
         "pdp_loadtest",
     ],
