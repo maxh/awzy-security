@@ -195,9 +195,12 @@ resource "helm_release" "config" {
       }
       # What the models can reach, and the routing to start with (ADR 0114).
       models = {
-        connections   = local.llm_connections
-        routing       = local.llm_routing_json == "" ? null : jsondecode(local.llm_routing_json)
-        apiKeySecrets = var.llm_api_key_secrets
+        connections = local.llm_connections
+        routing     = local.llm_routing_json == "" ? null : jsondecode(local.llm_routing_json)
+        apiKeySecrets = merge(
+          { for env in nonsensitive(keys(var.llm_api_keys)) : env => { secret = "awzy-llm-keys", key = env } },
+          var.llm_api_key_secrets,
+        )
       }
       reasoner = {
         investigations = {

@@ -22,7 +22,8 @@ pub enum Connection {
     /// Amazon Bedrock in `region`, with the workload's AWS identity. Any Bedrock model.
     Bedrock { region: String },
     /// Vertex AI in `project`, at `region` or `global`, with the workload's Google identity. Model
-    /// Gemini, Claude, and open models through chat completions.
+    /// Gemini, Claude, and open models through chat completions. From another cloud, with an API
+    /// key bound to a service account instead.
     Vertex {
         project: String,
         #[serde(default = "global")]
@@ -31,6 +32,10 @@ pub enum Connection {
         /// `gcloud auth print-access-token`). Unset: the metadata server.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         token_env: Option<String>,
+        /// An environment variable holding an API key bound to a service account that may call
+        /// models, for an install outside Google Cloud. Takes the place of a token.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        api_key_env: Option<String>,
     },
     /// Anything that speaks OpenAI's chat completions at `url` (its `/v1` base): OpenAI, Azure,
     /// vLLM, Ollama. The API key, if it needs one, is in the environment variable `api_key_env`.
@@ -80,6 +85,7 @@ pub(crate) enum Endpoint {
 }
 
 pub(crate) enum TokenSource {
+    ApiKey(String),
     Fixed(String),
     Metadata(Mutex<Option<(String, Instant)>>),
 }
@@ -95,13 +101,14 @@ impl Endpoint {
     pub(crate) async fn connect(connection: &Connection) -> Result<Self, LlmError> {
         Ok(match connection {
             Connection::Bedrock { region } => Self::Bedrock(converse::client(region).await),
-            Connection::Vertex { project, region, token_env } => Self::Vertex {
+            Connection::Vertex { project, region, token_env, api_key_env } => Self::Vertex {
                 http: awzy_http::client(),
                 project: project.clone(),
                 region: region.clone(),
-                token: match token_env {
-                    Some(var) => TokenSource::Fixed(env_secret(var)?),
-                    None => TokenSource::Metadata(Mutex::new(None)),
+                token: match (api_key_env, token_env) {
+                    (Some(var), _) => TokenSource::ApiKey(env_secret(var)?),
+                    (None, Some(var)) => TokenSource::Fixed(env_secret(var)?),
+                    (None, None) => TokenSource::Metadata(Mutex::new(None)),
                 },
             },
             Connection::Openai { url, api_key_env } => Self::Openai {
@@ -129,8 +136,8 @@ impl Endpoint {
                     format!("{region}-aiplatform.googleapis.com")
                 };
                 let base = format!("https://{host}/v1/projects/{project}/locations/{region}");
-                let bearer = format!("Bearer {}", token.get(http).await?);
-                let headers = [(header::AUTHORIZATION.as_str(), bearer.as_str())];
+                let (auth, credential) = token.header(http).await?;
+                let headers = [(auth, credential.as_str())];
                 match spec {
                     ModelSpec::Gemini(s) => {
                         let url = format!("{base}/publishers/google/models/{}:generateContent", s.model);
@@ -172,10 +179,18 @@ fn mismatch(entry: &ModelEntry) -> LlmError {
 }
 
 impl TokenSource {
+    /// The header that authenticates a request: an API key, or a token as a bearer.
+    async fn header(&self, http: &awzy_http::Client) -> Result<(&'static str, String), LlmError> {
+        match self {
+            Self::ApiKey(key) => Ok(("x-goog-api-key", key.clone())),
+            _ => Ok((header::AUTHORIZATION.as_str(), format!("Bearer {}", self.get(http).await?))),
+        }
+    }
+
     /// A token good for at least another minute.
     async fn get(&self, http: &awzy_http::Client) -> Result<String, LlmError> {
         let cache = match self {
-            Self::Fixed(token) => return Ok(token.clone()),
+            Self::ApiKey(key) | Self::Fixed(key) => return Ok(key.clone()),
             Self::Metadata(cache) => cache,
         };
         if let Some((token, until)) = cache.lock().unwrap_or_else(|e| e.into_inner()).clone() {
@@ -249,9 +264,18 @@ mod tests {
             "azure": { "kind": "openai", "url": "https://acme.openai.azure.com/openai/v1", "api_key_env": "AWZY_LLM_KEY_AZURE" },
         }))
         .unwrap();
-        assert_eq!(c["gcp"], Connection::Vertex { project: "acme".into(), region: "global".into(), token_env: None });
+        assert_eq!(c["gcp"], Connection::Vertex { project: "acme".into(), region: "global".into(), token_env: None, api_key_env: None });
         assert!(matches!(&c["azure"], Connection::Openai { api_key_env: Some(k), .. } if k == "AWZY_LLM_KEY_AZURE"));
         assert!(serde_json::from_value::<Connections>(json!({ "x": { "kind": "carrier-pigeon" } })).is_err());
+    }
+
+    #[tokio::test]
+    async fn vertex_takes_an_api_key_in_place_of_a_token() {
+        let http = awzy_http::client();
+        let (name, value) = TokenSource::ApiKey("k".into()).header(&http).await.unwrap();
+        assert_eq!((name, value.as_str()), ("x-goog-api-key", "k"));
+        let (name, value) = TokenSource::Fixed("t".into()).header(&http).await.unwrap();
+        assert_eq!((name, value.as_str()), ("authorization", "Bearer t"));
     }
 
     #[test]

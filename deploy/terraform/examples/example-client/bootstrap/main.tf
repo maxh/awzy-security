@@ -148,10 +148,17 @@ module "bootstrap" {
   demo_data     = true
   demo_activity = true
   mcp_gateway   = { upstreams = [] }
-  # awzy-reasoner investigates the people the scenarios flag (ADR 0071), with Claude on Bedrock.
-  investigations = true
-  llm_model      = { api = "converse", model_id = "us.anthropic.claude-opus-5-5", cache_points = true }
-  tracing        = local.otlp_endpoint == null ? null : { otlp_endpoint = local.otlp_endpoint }
+  # awzy-reasoner investigates the people the scenarios flag (ADR 0071). This account can't use
+  # Bedrock's models yet, so with Gemini on the Google Cloud demo's Vertex AI, through an API key
+  # bound to a service account that may only call models (ADR 0114).
+  investigations  = true
+  llm_connections = { vertex = { kind = "vertex", project = var.vertex_project, api_key_env = "AWZY_LLM_KEY_VERTEX" } }
+  llm_api_keys    = { AWZY_LLM_KEY_VERTEX = var.vertex_api_key }
+  llm_routing = {
+    models = [{ name = "gemini", connection = "vertex", spec = { api = "gemini", model = "gemini-2.5-pro" } }]
+    routes = { investigations = { targets = [{ model = "gemini" }] } }
+  }
+  tracing = local.otlp_endpoint == null ? null : { otlp_endpoint = local.otlp_endpoint }
 }
 
 variable "chart_version" {

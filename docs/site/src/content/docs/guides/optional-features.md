@@ -42,7 +42,8 @@ llm_model = { api = "anthropic_messages", model = "claude-opus-5-5" }
 
 **Another service:** add it with `llm_connections` and describe its models with `llm_routing`.
 Anything that speaks OpenAI's chat completions works (vLLM, Ollama, Azure OpenAI), as does
-Anthropic's API. An API key comes from a Secret, through `llm_api_key_secrets`:
+Anthropic's API, and Vertex AI from another cloud. An API key goes in `llm_api_keys`, which
+bootstrap keeps in a Secret, or comes from a Secret you manage, through `llm_api_key_secrets`:
 
 ```hcl
 llm_connections     = { vllm = { kind = "openai", url = "http://vllm.models.svc:8000/v1", api_key_env = "AWZY_LLM_KEY_VLLM" } }
@@ -57,6 +58,14 @@ llm_routing = {
     investigations = { targets = [{ model = "gemini" }] }
   }
 }
+```
+
+Vertex AI from outside Google Cloud takes an API key bound to a service account that may call
+models (`roles/aiplatform.user`), made with `gcloud services api-keys create --service-account=…`:
+
+```hcl
+llm_connections = { vertex = { kind = "vertex", project = "your-project", api_key_env = "AWZY_LLM_KEY_VERTEX" } }
+llm_api_keys    = { AWZY_LLM_KEY_VERTEX = var.vertex_api_key }
 ```
 
 A route splits a feature's conversations between models by weight, so you can try a model on a

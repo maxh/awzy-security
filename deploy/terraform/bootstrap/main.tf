@@ -226,6 +226,17 @@ resource "kubernetes_secret_v1" "policy_verify_portal" {
   data = { "verify.pem" = local.c.policy_signing.public_key_pem }
 }
 
+# API keys for model services beyond the cloud's own (ADR 0114), for the portal (Awzy Bot) and
+# awzy-reasoner (investigations).
+resource "kubernetes_secret_v1" "llm_keys" {
+  for_each = length(var.llm_api_keys) == 0 ? toset([]) : toset(["portal", "system"])
+  metadata {
+    name      = "awzy-llm-keys"
+    namespace = kubernetes_namespace_v1.awzy[each.key].metadata[0].name
+  }
+  data = var.llm_api_keys
+}
+
 # The public keys of the admins enrolled for break-glass rollback (ADR 0022).
 resource "kubernetes_secret_v1" "break_glass" {
   count = var.break_glass_public_keys == null ? 0 : 1
