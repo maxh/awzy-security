@@ -5,6 +5,7 @@ import {
   createRoute,
   createRouter,
   lazyRouteComponent,
+  Link,
   Outlet,
   useRouterState,
 } from "@tanstack/react-router";
@@ -30,6 +31,7 @@ function Root() {
     <PortalShell
       product="Client portal"
       audience="client"
+      renderHome={(props) => <Link to="/" {...props} />}
       nav={
         <Suspense fallback={null}>
           <Nav />

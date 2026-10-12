@@ -11,6 +11,7 @@ const SIDEBAR = "var(--mantine-color-ink-9)";
 export function PortalShell({
   product,
   audience,
+  renderHome,
   nav,
   account,
   children,
@@ -18,6 +19,11 @@ export function PortalShell({
   /** "Corp portal", "Client portal": under the wordmark. */
   product: string;
   audience: "client" | "corp";
+  /**
+   * The router's link to the portal's home, which the wordmark is:
+   * `renderHome={(props) => <Link to="/" {...props} />}`.
+   */
+  renderHome: (props: Record<string, unknown>) => ReactElement;
   /** The sidebar's links: `ShellNavLink`s. */
   nav: ReactNode;
   /** Who is signed in, at the foot of the sidebar: a `ShellAccount`. */
@@ -35,13 +41,17 @@ export function PortalShell({
       <AppShell.Header hiddenFrom="sm" style={{ background: SIDEBAR, border: 0 }}>
         <Group h="100%" px="md">
           <Burger opened={opened} onClick={toggle} size="sm" color="white" aria-label="Menu" />
-          <AwzyWordmark size={24} />
+          <UnstyledButton renderRoot={renderHome} aria-label="Home">
+            <AwzyWordmark size={24} />
+          </UnstyledButton>
         </Group>
       </AppShell.Header>
       <AppShell.Navbar style={{ background: SIDEBAR, border: 0 }} p="md">
         <AppShell.Section visibleFrom="sm" mb="lg">
           <Group justify="space-between" align="center" wrap="nowrap">
-            <AwzyWordmark product={product} />
+            <UnstyledButton renderRoot={renderHome} aria-label={`${product} home`}>
+              <AwzyWordmark product={product} />
+            </UnstyledButton>
             {audience === "corp" && (
               <Badge size="xs" variant="filled" color="grape">
                 Staff
