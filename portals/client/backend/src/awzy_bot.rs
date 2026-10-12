@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 
 use async_graphql::{Context, InputObject, Object, Result, SimpleObject};
 use awzy_llm::{
-    bedrock::Bedrock, fake::FakeModel, run_with_tools, Content, LlmError, Message, ModelProvider, ModelRequest,
+    fake::FakeModel, run_with_tools, CloudModel, Content, LlmError, Message, ModelProvider, ModelRequest,
     ModelResponse, Role, StopReason, Tool, ToolOutcome, ToolSpec,
 };
 use awzy_model::DecisionId;
@@ -30,31 +30,38 @@ use crate::{
     Services,
 };
 
-/// The model Awzy Bot uses: Bedrock in an install, a scripted model in tests.
+/// The model Awzy Bot uses: the install's cloud model service, a scripted model in tests.
 #[derive(Clone)]
 pub enum BotModel {
-    Bedrock(Arc<Bedrock>),
+    Cloud(Arc<CloudModel>),
     Scripted(Arc<FakeModel>),
 }
 
 impl ModelProvider for BotModel {
     async fn respond(&self, request: &ModelRequest) -> Result<ModelResponse, LlmError> {
         match self {
-            Self::Bedrock(m) => m.respond(request).await,
+            Self::Cloud(m) => m.respond(request).await,
             Self::Scripted(m) => m.respond(request).await,
         }
     }
 }
 
-/// AWZY_BOT_ENABLED=true turns Awzy Bot on, with Claude on Bedrock (`awzy_llm::bedrock`:
-/// AWZY_LLM_MODEL, AWZY_LLM_EFFORT, and the AWS region and credentials from the environment).
+/// AWZY_BOT_ENABLED=true turns Awzy Bot on, with Claude in the install's cloud model service
+/// ([`CloudModel::from_env`]: AWZY_LLM_PROVIDER, AWZY_LLM_MODEL, and the rest).
 pub async fn model_from_env() -> Option<BotModel> {
     if std::env::var("AWZY_BOT_ENABLED").as_deref() != Ok("true") {
         return None;
     }
-    let config = awzy_llm::bedrock::BedrockConfig::from_env();
-    tracing::info!(model = %config.model, "Awzy Bot is on");
-    Some(BotModel::Bedrock(Arc::new(Bedrock::from_env(config).await)))
+    match CloudModel::from_env().await {
+        Ok(model) => {
+            tracing::info!(model = %model.model(), "Awzy Bot is on");
+            Some(BotModel::Cloud(Arc::new(model)))
+        }
+        Err(error) => {
+            tracing::warn!(%error, "Awzy Bot is off: its model service isn't set up");
+            None
+        }
+    }
 }
 
 const SYSTEM: &str = "You are Awzy Bot, the assistant in awzy's client portal. awzy decides, per action and per \

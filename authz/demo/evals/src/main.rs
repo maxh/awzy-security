@@ -7,7 +7,7 @@
 //! checks.
 
 use awzy_evals::{cases, compromised::CompromisedModel, report};
-use awzy_llm::bedrock::{Bedrock, BedrockConfig};
+use awzy_llm::CloudModel;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -15,9 +15,8 @@ async fn main() -> anyhow::Result<()> {
     let (model, results) = if std::env::args().any(|a| a == "--compromised") {
         ("compromised".to_string(), report::run(&CompromisedModel, &cases).await?)
     } else {
-        let config = BedrockConfig::from_env();
-        let name = config.model.clone();
-        (name, report::run(&Bedrock::from_env(config).await, &cases).await?)
+        let model = CloudModel::from_env().await?;
+        (model.model().to_string(), report::run(&model, &cases).await?)
     };
     println!("{}", report::markdown(&model, &results));
     let violations: usize = results.iter().map(|r| r.violations.len()).sum();

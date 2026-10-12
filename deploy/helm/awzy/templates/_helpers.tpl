@@ -186,3 +186,29 @@ spec:
 {{- define "awzy.demoIdpIssuer" -}}
 https://{{ required "clientPortal.hostname is required for demoIdp" .Values.clientPortal.hostname }}/idp
 {{- end -}}
+
+{{/*
+The environment for Claude in the install's model service (ADR 0114): .root, .component (the
+feature's values: an older region, model, and effort), and .what (the feature, for errors). Each
+service reads it through awzy_llm::CloudModel.
+*/}}
+{{- define "awzy.modelServiceEnv" -}}
+{{- $ms := .root.Values.modelService | default dict -}}
+{{- $provider := $ms.provider | default "bedrock" -}}
+{{- $region := $ms.region | default .component.region -}}
+- { name: AWZY_LLM_PROVIDER, value: {{ $provider | quote }} }
+{{- if eq $provider "bedrock" }}
+- { name: AWS_REGION, value: {{ required (printf "modelService.region is required when %s is on" .what) $region | quote }} }
+{{- else if eq $provider "vertex" }}
+- { name: AWZY_LLM_PROJECT, value: {{ required (printf "modelService.project is required when %s is on" .what) $ms.project | quote }} }
+- { name: AWZY_LLM_REGION, value: {{ $region | default "global" | quote }} }
+{{- else }}
+{{- fail (printf "modelService.provider is bedrock or vertex, not %q" $provider) }}
+{{- end }}
+{{- with .component.model }}
+- { name: AWZY_LLM_MODEL, value: {{ . | quote }} }
+{{- end }}
+{{- with .component.effort }}
+- { name: AWZY_LLM_EFFORT, value: {{ . | quote }} }
+{{- end }}
+{{- end }}

@@ -25,6 +25,8 @@ terraform {
 
 locals {
   c = var.install_contract
+  # The model service's region, for charts that still read it per feature.
+  model_region = try(local.c.model_service.region, "")
 
   # What this bootstrap (and the install contract it reads) provides, as one number the chart checks
   # before it installs (ADR 0098). Raise it when a chart starts needing something new from here or

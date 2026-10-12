@@ -21,6 +21,9 @@ variable "install_contract" {
     registry_prefix = string
     # Each connector's credential in the cloud's secrets manager (ADR 0104).
     connector_secrets = map(string)
+    # The cloud's model service for Awzy Bot and investigations (ADR 0114): bedrock or vertex,
+    # its region, and for vertex the project. Null: the cloud has none, and both stay off.
+    model_service = optional(object({ provider = string, region = string, project = optional(string, "") }))
   })
 }
 
@@ -64,13 +67,13 @@ variable "client_portal" {
 }
 
 variable "awzy_bot" {
-  description = "Awzy Bot in the client portal (ADR 0048). Needs Claude enabled in your cloud's model service, in the install's account (Amazon Bedrock, the only one so far)"
+  description = "Awzy Bot in the client portal (ADR 0048). Needs Claude enabled in your cloud's model service, in the install's account (Amazon Bedrock on AWS, Vertex AI on Google Cloud)"
   type        = bool
   default     = false
 }
 
 variable "investigations" {
-  description = "awzy-reasoner's investigations of the people it flags (ADR 0071). Needs Claude enabled in your cloud's model service, in the install's account (Amazon Bedrock, the only one so far)"
+  description = "awzy-reasoner's investigations of the people it flags (ADR 0071). Needs Claude enabled in your cloud's model service, in the install's account (Amazon Bedrock on AWS, Vertex AI on Google Cloud)"
   type        = bool
   default     = false
 }
@@ -85,7 +88,7 @@ variable "investigation_budget" {
 }
 
 variable "llm_model" {
-  description = "The model ID in your cloud's model service for Awzy Bot and investigations, when the default (anthropic.claude-opus-5-5) isn't reachable directly: on Bedrock, e.g. a cross-region profile like us.anthropic.claude-opus-5-5"
+  description = "The model ID in your cloud's model service for Awzy Bot and investigations, when the default (Claude Opus 5.5) isn't reachable directly: on Bedrock, e.g. a cross-region profile like us.anthropic.claude-opus-5-5; on Vertex AI, a pinned version like claude-opus-5-5@YYYYMMDD"
   type        = string
   default     = ""
 }

@@ -49,14 +49,10 @@
 {{- if $p.hostname }}
 {{- $env = append $env (dict "name" "AWZY_MCP_ALLOWED_HOSTS" "value" $p.hostname) }}
 {{- end }}
-{{- with $p.awzyBot }}{{- if .enabled }}
-{{- $env = concat $env (list
-  (dict "name" "AWZY_BOT_ENABLED" "value" "true")
-  (dict "name" "AWS_REGION" "value" (required "clientPortal.awzyBot.region is required when Awzy Bot is on" .region))
-) }}
-{{- if .model }}{{- $env = append $env (dict "name" "AWZY_LLM_MODEL" "value" .model) }}{{- end }}
-{{- if .effort }}{{- $env = append $env (dict "name" "AWZY_LLM_EFFORT" "value" .effort) }}{{- end }}
-{{- end }}{{- end }}
+{{- if $p.awzyBot.enabled }}
+{{- $env = append $env (dict "name" "AWZY_BOT_ENABLED" "value" "true") }}
+{{- $env = concat $env (include "awzy.modelServiceEnv" (dict "root" . "component" $p.awzyBot "what" "Awzy Bot") | fromYamlArray) }}
+{{- end }}
 {{- /* Its MCP calls, recorded as activity (ADR 0084); the token's Secret is in its namespace too. */ -}}
 {{- if .Values.intake.enabled }}
 {{- $env = concat $env (list

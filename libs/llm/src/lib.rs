@@ -1,23 +1,38 @@
 //! Model access for awzy's AI features, Awzy Bot first (ADR 0048): policy drafting, explaining
 //! decisions, and later classification, justification checks, and investigations.
 //!
-//! Services build a [`ModelRequest`] and call a [`ModelProvider`]. The provider is the
-//! install's own cloud model service, so prompts never leave the client's account: Amazon
-//! Bedrock today ([`bedrock`]); Vertex AI and Azure follow behind the same trait.
+//! Services build a [`ModelRequest`] and call a [`ModelProvider`], a [`CloudModel`] in an install:
+//! the install's own cloud model service, so prompts never leave the client's account. Amazon
+//! Bedrock on AWS ([`bedrock`]) and Vertex AI on Google Cloud ([`vertex`]); Azure's can follow
+//! behind the same trait.
 //!
 //! Nothing on the awzy-pdp hot path may call this, and model output is only ever a proposal:
 //! the callers' tools read, explain, and draft, and a person acts.
 
 pub mod bedrock;
+mod cloud;
 pub mod fake;
+mod messages;
 mod tools;
+pub mod vertex;
 
 use std::future::Future;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub use cloud::CloudModel;
 pub use tools::{run_with_tools, Tool, ToolOutcome, ToolRun};
+
+/// What every model service takes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelSettings {
+    /// The model's ID in that service.
+    pub model: String,
+    /// How hard the model works: low, medium, high, xhigh, or max. None leaves the model's
+    /// default.
+    pub effort: Option<String>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -156,7 +171,8 @@ pub enum LlmError {
     Malformed(String),
 }
 
-/// A model service. Implementations: [`bedrock::Bedrock`], and [`fake::FakeModel`] for tests.
+/// A model service. Implementations: [`CloudModel`] (and the providers it chooses between), and
+/// [`fake::FakeModel`] for tests.
 pub trait ModelProvider: Send + Sync {
     fn respond(&self, request: &ModelRequest) -> impl Future<Output = Result<ModelResponse, LlmError>> + Send;
 }

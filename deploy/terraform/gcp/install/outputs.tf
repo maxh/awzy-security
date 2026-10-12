@@ -2,9 +2,11 @@
 # module outputs.
 output "install_contract" {
   value = {
-    cloud        = "gcp"
-    region       = var.region
-    size_profile = var.size_profile
+    cloud  = "gcp"
+    region = var.region
+    # Claude on Vertex AI in the install's project (vertex.tf, ADR 0114).
+    model_service = { provider = "vertex", region = var.model_region, project = var.project }
+    size_profile  = var.size_profile
     cluster = {
       name     = google_container_cluster.this.name
       endpoint = google_container_cluster.this.endpoint

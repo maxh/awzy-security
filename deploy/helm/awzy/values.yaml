@@ -135,9 +135,9 @@ clientPortal:
   readOnly: ~
   # Public hostname; when set, the portal is served through the Gateway below.
   hostname: ""
-  # Awzy Bot (ADR 0048): the Policies page's assistant, with Claude on the install's own
-  # Bedrock. Off until the client enables Claude in Bedrock and the portal's workload role may
-  # invoke it (deploy/terraform/aws/install). Bootstrap sets region.
+  # Awzy Bot (ADR 0048): the Policies page's assistant, with Claude in the install's own model
+  # service (modelService). Off until the client enables Claude there; the cloud layer already
+  # lets the portal call it.
   awzyBot:
     enabled: false
     region: ""
@@ -165,18 +165,26 @@ reporter:
     requests: { cpu: 10m, memory: 32Mi }
     limits: { memory: 64Mi }
 
+# The install's own cloud model service, for Awzy Bot and investigations (ADR 0114). Bootstrap
+# sets it from the cloud layer: bedrock (with region) on AWS, vertex (with project, and a region
+# or global) on Google Cloud. Without a region here, each feature's own region is used.
+modelService:
+  provider: bedrock # bedrock | vertex
+  region: ""
+  project: "" # vertex only
+
 # awzy-reasoner: risk scores from ClickHouse activity, written to awzy-context (ADR 0056).
 reasoner:
   enabled: true
   intervalSeconds: 900
   replicas: 1
-  # Investigations (ADR 0071): Claude on the install's own Bedrock looks into the people the
-  # reasoner flags. Off until the client enables Claude in Bedrock; the services' workload role
-  # may already invoke it (deploy/terraform/aws/install). Bootstrap sets region.
+  # Investigations (ADR 0071): Claude in the install's own model service (modelService) looks
+  # into the people the reasoner flags. Off until the client enables Claude there; the cloud
+  # layer already lets the reasoner call it.
   investigations:
     enabled: false
     region: ""
-    model: "" # default anthropic.claude-opus-5-5; some accounts need us.anthropic.claude-opus-5-5
+    model: "" # default: the service's Claude Opus; on Bedrock some accounts need us.anthropic.claude-opus-5-5
     effort: "" # low | medium | high | xhigh | max; default: the model's own
     # The most tokens a calendar month may spend on investigations.
     monthlyTokens: 2000000

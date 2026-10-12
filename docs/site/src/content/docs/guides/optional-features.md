@@ -14,17 +14,28 @@ Each is a variable in the cluster layer's Terraform (`deploy/terraform/bootstrap
 
 Both use Claude through your cloud's own model service, in the install's account, with the
 permissions the cloud layer already gives awzy's workloads. Prompts and answers stay in your
-account. Amazon Bedrock is the only model service so far; Google's Vertex AI and Azure's are
-planned behind the same interface.
+account. That's Amazon Bedrock on AWS and Vertex AI on Google Cloud; Azure's is planned behind
+the same interface.
 
-First, enable Anthropic's Claude models in your cloud's model service, in the install's region.
-If the default model ID isn't reachable there, set the one that is with `llm_model`.
+First, enable Anthropic's Claude models in your cloud's model service. If the default model ID
+isn't reachable there, set the one that is with `llm_model`.
 
-**On AWS:** request access to Claude in the install account's Bedrock console. Some accounts can
-only reach Claude through a cross-region inference profile, a model ID starting `us.`:
+**On AWS:** request access to Claude in the install account's Bedrock console, in the install's
+region. Some accounts can only reach Claude through a cross-region inference profile, a model ID
+starting `us.`:
 
 ```hcl
 llm_model = "us.anthropic.claude-opus-5-5"
+```
+
+**On Google Cloud:** enable Claude Opus in the install project's Vertex AI Model Garden (Model
+Garden, then Claude Opus, then Enable). The cloud layer turns on the Vertex AI API and lets
+awzy's workloads call it. Requests go to Vertex AI's `global` endpoint, which serves Claude from
+any region with capacity; to keep them in one region that offers Claude, set the cloud layer's
+`model_region` (for example `us-east5`). To pin a model version:
+
+```hcl
+llm_model = "claude-opus-5-5@YYYYMMDD"
 ```
 
 ### Awzy Bot

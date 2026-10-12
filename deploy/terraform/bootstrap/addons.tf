@@ -191,12 +191,15 @@ resource "helm_release" "config" {
         }
         publicUrl = coalesce(var.client_portal.public_url, "https://${var.ingress.hostname}")
         hostname  = var.ingress.hostname
-        awzyBot   = { enabled = var.awzy_bot && local.c.cloud == "aws", region = local.c.region, model = var.llm_model }
+        # region also for a chart from before modelService.
+        awzyBot = { enabled = var.awzy_bot && local.c.model_service != null, region = local.model_region, model = var.llm_model }
       }
+      # Claude in the cloud's own model service (ADR 0114), from the cloud layer.
+      modelService = local.c.model_service == null ? { provider = "bedrock", region = "", project = "" } : local.c.model_service
       reasoner = {
         investigations = {
-          enabled          = var.investigations && local.c.cloud == "aws"
-          region           = local.c.region
+          enabled          = var.investigations && local.c.model_service != null
+          region           = local.model_region
           model            = var.llm_model
           monthlyTokens    = var.investigation_budget.monthly_tokens
           privilegedGroups = var.investigation_budget.privileged_groups
