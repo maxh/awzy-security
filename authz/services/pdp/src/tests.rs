@@ -423,9 +423,9 @@ fn a_bundle_from_before_hr_attributes_still_loads_its_people() {
     old_schema.replace_range(start..end, "");
     let policies = "permit (principal, action == Action::\"read\", resource);";
     let pdp = Pdp::new(&old_schema, policies).unwrap();
-    let person = json!([{ "uid": { "type": "Human", "id": "jo" }, "parents": [],
+    let jo = json!([{ "uid": { "type": "Human", "id": "jo" }, "parents": [],
         "attrs": { "active": true, "employee_type": "contractor", "title": "Engineer" } }]);
-    assert!(pdp.entities(person).is_ok());
+    assert!(pdp.entities(jo).is_ok());
 }
 
 #[test]
