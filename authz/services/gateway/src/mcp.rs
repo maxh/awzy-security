@@ -454,6 +454,7 @@ async fn check(
         entities,
         human_present: principal.human_present,
         always_enforced: false,
+        work_item_id: None,
     };
     // A PDP pod shutting down can break the connection under one check; ask again before
     // treating it as an outage.

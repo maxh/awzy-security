@@ -22,6 +22,7 @@ const MIGRATIONS: &[(u32, &str, &str)] = &[
     (9, "attributes_from", include_str!("../migrations/0009_attributes_from.sql")),
     (10, "event_access", include_str!("../migrations/0010_event_access.sql")),
     (11, "plans", include_str!("../migrations/0011_plans.sql")),
+    (12, "work_item", include_str!("../migrations/0012_work_item.sql")),
 ];
 
 /// The tables whose rows expire after the install's retention.
@@ -434,6 +435,7 @@ mod tests {
             on_behalf_of: Some(awzy_model::EntityRef::new("Human", "alice")),
             human_present: Some(true),
             always_enforced: false,
+            work_item_id: None,
         };
         let entities = pdp
             .entities(serde_json::from_str(

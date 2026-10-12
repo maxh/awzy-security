@@ -175,6 +175,7 @@ mod tests {
             on_behalf_of,
             human_present: None,
             always_enforced: false,
+            work_item_id: None,
         }
     }
 

@@ -177,6 +177,7 @@ mod tests {
                 on_behalf_of: Some(r("Human", "bob")),
                 human_present: Some(true),
                 always_enforced: false,
+                work_item_id: None,
                 entities: vec![
                     Entity {
                         uid: Some(r("ServiceAccount", "sales-genie")),

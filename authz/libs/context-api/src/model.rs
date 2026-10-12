@@ -109,6 +109,17 @@ pub struct ResourceEntities {
     pub entities: Vec<CedarEntity>,
     #[serde(default)]
     pub assignees: Vec<String>,
+    /// The open work items that link it, each with who is on it (ADR 0118).
+    #[serde(default)]
+    pub work: Vec<WorkLink>,
+}
+
+/// An open work item that links a resource, and who is assigned to it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkLink {
+    pub id: String,
+    #[serde(default)]
+    pub assignees: Vec<String>,
 }
 
 /// A Cedar entity: its type and ID, and its attributes and parents as Cedar JSON.

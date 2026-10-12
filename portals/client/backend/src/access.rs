@@ -233,6 +233,7 @@ async fn check(
         entities,
         human_present: viewer.human_present,
         always_enforced: true,
+        work_item_id: None,
     };
     let res = pdp.check(req).await.map_err(|s| AccessError::Unavailable(s.message().to_string()))?.into_inner();
     let (actor, decision) = (viewer.actor().label(), res.decision_qid.clone());

@@ -423,16 +423,13 @@ impl ContextStore {
         Ok(chain)
     }
 
-    /// Everyone assigned to an open work item that links any of `resources`: a resource and its
-    /// ancestors, so work on a folder covers what's in it. Sorted, each once.
-    pub async fn assignees_of(&self, resources: &[String]) -> Result<Vec<String>, sqlx::Error> {
-        sqlx::query_scalar(
-            "SELECT DISTINCT a FROM work_items, unnest(assignees) AS a
-             WHERE state = 'open' AND resources && $1 ORDER BY a",
-        )
-        .bind(resources)
-        .fetch_all(self.pool())
-        .await
+    /// The open work items that link any of `resources` (a resource and its ancestors, so work
+    /// on a folder covers what's in it), each with who is assigned to it, by ID.
+    pub async fn open_work_on(&self, resources: &[String]) -> Result<Vec<(String, Vec<String>)>, sqlx::Error> {
+        sqlx::query_as("SELECT id, assignees FROM work_items WHERE state = 'open' AND resources && $1 ORDER BY id")
+            .bind(resources)
+            .fetch_all(self.pool())
+            .await
     }
 
     /// Resources never classified, or changed since, oldest change first (ADR 0047).
@@ -615,8 +612,8 @@ async fn get_resource_entity(State(store): State<ContextStore>, Path(id): Path<S
     }
 }
 
-/// The resource and its ancestors as Cedar entities, nearest first, and who is assigned to work
-/// on it: what the PDP loads.
+/// The resource and its ancestors as Cedar entities, nearest first, who is assigned to work on
+/// it, and the open work items that link it with their assignees (ADR 0118): what the PDP loads.
 async fn get_resource_entities(State(store): State<ContextStore>, Path(id): Path<String>) -> Response {
     let chain = match store.resource_with_ancestors(&id).await {
         Ok(chain) if chain.is_empty() => return (StatusCode::NOT_FOUND, "no such resource").into_response(),
@@ -624,8 +621,12 @@ async fn get_resource_entities(State(store): State<ContextStore>, Path(id): Path
         Err(e) => return internal(e),
     };
     let ids: Vec<String> = chain.iter().map(|r| r.id.clone()).collect();
-    match store.assignees_of(&ids).await {
-        Ok(assignees) => Json(json!({ "entities": chain_entities(&chain), "assignees": assignees })).into_response(),
+    match store.open_work_on(&ids).await {
+        Ok(work) => {
+            let assignees: std::collections::BTreeSet<&String> = work.iter().flat_map(|(_, a)| a).collect();
+            let work: Vec<Value> = work.iter().map(|(id, a)| json!({ "id": id, "assignees": a })).collect();
+            Json(json!({ "entities": chain_entities(&chain), "assignees": assignees, "work": work })).into_response()
+        }
         Err(e) => internal(e),
     }
 }

@@ -67,6 +67,11 @@ message CheckRequest {
   // The enforcement point applies this verdict whatever the install's mode, and the decision
   // is recorded as enforced. The client portal does this for its own access (ADR 0020).
   bool always_enforced = 8;
+  // The work item (a ticket or task, in your own systems' IDs, as awzy-context's connectors write
+  // them) the principal says it's doing, from a validated token. When set, whether the principal
+  // is assigned to work on the resource is decided by that item alone: it must link the resource,
+  // and the principal (or the person it acts for) must be on it.
+  optional string work_item_id = 9;
 }
 
 enum Verdict {

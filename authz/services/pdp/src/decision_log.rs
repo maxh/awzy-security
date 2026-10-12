@@ -167,6 +167,7 @@ mod tests {
             policy_version: 0,
             context: "{}".into(),
             resource_attributes_from: String::new(),
+            work_item_id: String::new(),
         }
     }
 

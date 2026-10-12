@@ -4,7 +4,10 @@
 //! [`assemble`] is the one place that turns a request into Cedar entities. Live checks
 //! (`AppState::check`) and replays both go through it, so a replay sees what a PDP would.
 
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use awzy_model::{Check, Decision, DecisionId, EnforcementMode, Verdict};
 use serde_json::Value;
@@ -29,6 +32,19 @@ pub(crate) enum Assembled {
         /// Where the resource's attributes came from (ADR 0108).
         attributes_from: awzy_model::AttributesFrom,
     },
+}
+
+/// Who counts as assigned when `req` names the work item it's for (ADR 0118): nobody unless that
+/// item is open and links the resource. Then its assignees; and for a delegated request, the
+/// agent and the person both when the person is on it, so an agent works within the task it was
+/// given rather than everything the person is assigned.
+pub(crate) fn on_work_item(req: &Check, work: &HashMap<String, HashSet<String>>) -> HashSet<String> {
+    let Some(on_item) = req.work_item_id.as_ref().and_then(|w| work.get(w)) else { return HashSet::new() };
+    match &req.on_behalf_of {
+        Some(human) if on_item.contains(&human.id) => HashSet::from([req.principal.id.clone(), human.id.clone()]),
+        Some(_) => HashSet::new(),
+        None => on_item.clone(),
+    }
 }
 
 /// The person an `approve` check answers for, which awzy-challenge sets in its context.
@@ -60,13 +76,12 @@ pub(crate) async fn assemble(
     let merged = resources.merge(entities, &req.resource).await?;
     let risk = principals.risk_of(&who);
     let automation = principals.automation_of(&who);
-    Ok(Assembled::Ready {
-        entities: merged.entities,
-        assignees: merged.assignees,
-        risk,
-        automation,
-        attributes_from: merged.from,
-    })
+    // A request that names its work item is assigned by that item alone (ADR 0118).
+    let assignees = match (&req.work_item_id, merged.assignees) {
+        (Some(_), Some(_)) => Some(Arc::new(on_work_item(req, &merged.work))),
+        (_, assignees) => assignees,
+    };
+    Ok(Assembled::Ready { entities: merged.entities, assignees, risk, automation, attributes_from: merged.from })
 }
 
 /// The decision for a service account awzy-context doesn't know.
@@ -147,6 +162,7 @@ mod tests {
             on_behalf_of: None,
             human_present: Some(true),
             always_enforced: false,
+            work_item_id: None,
         }
     }
 
@@ -204,6 +220,29 @@ mod tests {
         assert_eq!((d.verdict, d.policies), (Verdict::Allow, vec!["managers-approve".to_string()]));
         let (d, _) = replay.compare(&pdp, &pdp, &approve("bob")).await.unwrap();
         assert_eq!(d.verdict, Verdict::Deny, "not dave's manager");
+    }
+
+    #[test]
+    fn a_named_work_item_alone_decides_who_is_assigned() {
+        let work = HashMap::from([
+            ("jira:SALES-1".to_string(), HashSet::from(["nora".to_string()])),
+            ("jira:SALES-2".to_string(), HashSet::from(["sam".to_string()])),
+        ]);
+        let mut agent = request("sales-genie");
+        agent.principal = EntityRef::new("ServiceAccount", "sales-genie");
+        agent.on_behalf_of = Some(EntityRef::new("Human", "nora"));
+        let named = |mut req: Check, item: &str| {
+            req.work_item_id = Some(item.to_string());
+            on_work_item(&req, &work)
+        };
+        assert_eq!(
+            named(agent.clone(), "jira:SALES-1"),
+            HashSet::from(["sales-genie".to_string(), "nora".to_string()]),
+            "nora's ticket links it: the agent works within it"
+        );
+        assert!(named(agent.clone(), "jira:SALES-2").is_empty(), "a ticket she isn't on");
+        assert!(named(agent, "jira:OTHER-9").is_empty(), "closed, unknown, or not linking it");
+        assert_eq!(named(request("sam"), "jira:SALES-2"), HashSet::from(["sam".to_string()]));
     }
 
     #[tokio::test]

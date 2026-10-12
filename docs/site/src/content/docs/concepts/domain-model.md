@@ -80,6 +80,13 @@ forbid (principal is ServiceAccount, action == Action::"read", resource)
 when { context has assigned && !context.assigned };
 ```
 
+A request can also name the one work item it's for, `work_item_id` on the check (an agent's
+task, from its token). Then `context.assigned` is about that item alone: it's true only when the
+item is open, links the resource or a folder above it, and the principal is on it. For an agent
+acting for a person, it's the person who must be on it, and then the agent's check and the
+person's are both assigned. So an agent sent to work on one ticket reaches what that ticket
+needs, and not everything else the person is working on.
+
 ## Decisions
 
 A decision's **verdict** is `allow`, `deny`, or `challenge`. A challenge lists one or more
