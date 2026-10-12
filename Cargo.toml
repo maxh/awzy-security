@@ -46,7 +46,7 @@ members = [
 version = "0.1.0"
 edition = "2021"
 publish = false
-license = "UNLICENSED"
+license = "MIT"
 
 [workspace.dependencies]
 aws-config = { version = "1", default-features = false, features = ["rt-tokio", "behavior-version-latest", "sso", "credentials-process"] }

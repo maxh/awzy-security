@@ -3,7 +3,7 @@
 # awzy
 
 Beyond Zero authorization for the AI era: per-action, per-resource decisions for humans and
-agents, deployed single-tenant inside each client's cloud (AWS, Google Cloud, or Azure).
+agents, deployed single-tenant inside each client's cloud (AWS or Google Cloud; Azure is planned).
 
 **Try it:** [aws.demo.awzysecurity.com](https://aws.demo.awzysecurity.com), a live install with a
 synthetic 200-person company. Sign in as any sample person (no password) and look around. Or run it
@@ -18,8 +18,10 @@ resource, and the moment. awzy implements it.
 
 - **Every action is a decision.** An agent reading a document, a person exporting a report, an
   admin changing a role: each is checked against Cedar policies by a policy decision point, and
-  logged with the policies and attributes that decided it. The decision itself averages 0.4 ms;
-  the [measurements](docs/plans/platform-plan.md) hold p99 under 10 ms in a real install.
+  logged with the policies and attributes that decided it. A decision takes about half a
+  millisecond of CPU. Pushed to their limit, the two-node example installs decide 4,500 to
+  5,800 checks a second, at p99 9 ms on Google Cloud and 14 ms on AWS's burstable nodes
+  ([measurements](docs/perf/2026-10-12-hot-path.md)).
 - **Agents never exceed the person they act for.** An agent acting for someone is checked as
   itself and as them, and the stricter verdict wins.
 - **More than allow and deny.** A risky request can be *challenged* instead: a justification, a
@@ -103,3 +105,7 @@ read [AGENTS.md](AGENTS.md).
 
 [INSTALL.md](INSTALL.md) is the runbook for installing awzy in your own cloud account: the cloud
 layer, bootstrap, DNS and your IdP, and checking the install.
+
+## License
+
+[MIT](LICENSE).
