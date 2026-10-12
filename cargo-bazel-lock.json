@@ -1,5 +1,5 @@
 {
-  "checksum": "f8f27d9ed26c24090394339c749ca385ad66edf4b8e98a4331e3f4886cd33618",
+  "checksum": "3452bd1fc86ececfb6f933986c1469bc656d5184b6a3641ec671768dfa5f7d50",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -4149,6 +4149,10 @@
           {
             "id": "bytes 1.12.1",
             "target": "bytes"
+          },
+          {
+            "id": "chrono 0.4.45",
+            "target": "chrono"
           },
           {
             "id": "http-body-util 0.1.5",

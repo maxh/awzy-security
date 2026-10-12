@@ -42,7 +42,7 @@ pub(super) async fn wait(
         on_behalf_of: principal.on_behalf_of.map(Into::into),
         wait_secs: params.wait.min(25),
     };
-    let mut pdp = state.0.pdp.clone();
+    let mut pdp = state.0.pdp.next();
     // The call's own timeout is a check's; a wait needs as long as it asked for.
     let mut request = tonic::Request::new(req);
     request.set_timeout(std::time::Duration::from_secs(30));
