@@ -1,0 +1,32 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+# The Go client library (ADR 0114). go.mod is the source of truth for its dependencies; Bazel
+# resolves modules from it.
+exports_files([
+    "go.mod",
+    "go.sum",
+])
+
+go_library(
+    name = "awzyauthz",
+    srcs = glob(
+        ["*.go"],
+        exclude = ["*_test.go"],
+    ),
+    importpath = "github.com/maxh/awzy-security/authz/sdks/go",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_golang_jwt_jwt_v5//:jwt",
+        "@com_github_micahparks_keyfunc_v3//:keyfunc",
+    ],
+)
+
+# Its tests, the shared conformance spec among them.
+go_test(
+    name = "unit",
+    size = "small",
+    srcs = glob(["*_test.go"]),
+    data = ["//authz/sdks/conformance:scenarios"],
+    embed = [":awzyauthz"],
+    deps = ["@com_github_golang_jwt_jwt_v5//:jwt"],
+)
