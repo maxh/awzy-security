@@ -1,5 +1,5 @@
 {
-  "checksum": "bcb6d32744f5e8b7d3c8821d2522aea55ed4938965cce436bf45df06dcccaa96",
+  "checksum": "f8f27d9ed26c24090394339c749ca385ad66edf4b8e98a4331e3f4886cd33618",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -4159,6 +4159,10 @@
             "target": "hyper_util"
           },
           {
+            "id": "jsonwebtoken 11.1.0",
+            "target": "jsonwebtoken"
+          },
+          {
             "id": "serde 1.0.229",
             "target": "serde"
           },
@@ -4184,10 +4188,6 @@
           }
         ],
         "deps_dev": [
-          {
-            "id": "jsonwebtoken 11.1.0",
-            "target": "jsonwebtoken"
-          },
           {
             "id": "p256 0.13.2",
             "target": "p256"

@@ -27,11 +27,12 @@ thiserror.workspace = true
 tonic.workspace = true
 
 awzy-service-auth.workspace = true
+# gateway_bench mints tokens; awzy-identity already builds it in.
+jsonwebtoken.workspace = true
 
 [dev-dependencies]
 p256.workspace = true
 awzy-challenge.workspace = true
-jsonwebtoken.workspace = true
 sqlx.workspace = true
 uuid.workspace = true
 awzy-pdp.workspace = true

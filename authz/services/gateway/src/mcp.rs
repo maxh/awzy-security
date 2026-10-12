@@ -9,7 +9,7 @@
 
 use awzy_service_auth::AuthChannel;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc,
 };
 
@@ -50,7 +50,7 @@ pub struct GatewayState(Arc<Inner>);
 struct Inner {
     config: GatewayConfig,
     verifier: Verifier,
-    pdp: AuthorizerClient<AuthChannel>,
+    pdp: PdpClients,
     upstream: awzy_http::Client,
     /// The last mode the PDP reported. If the PDP becomes unreachable, a monitoring install
     /// keeps allowing; an enforcing one (or one never heard from) falls back to `outage`.
@@ -65,6 +65,34 @@ struct Inner {
     sessions: SessionClients,
     /// Where forwarded tool calls are recorded as activity (ADR 0084).
     activity: awzy_activity::ActivityLog,
+}
+
+/// Connections to the PDP, taken in turn. Every check on one HTTP/2 connection waits on that
+/// connection's lock, and lands on the one PDP pod it reached; a few spread both.
+pub struct PdpClients {
+    clients: Vec<AuthorizerClient<AuthChannel>>,
+    next: AtomicUsize,
+}
+
+impl PdpClients {
+    fn next(&self) -> AuthorizerClient<AuthChannel> {
+        let i = self.next.fetch_add(1, Ordering::Relaxed) % self.clients.len();
+        self.clients[i].clone()
+    }
+}
+
+impl From<AuthorizerClient<AuthChannel>> for PdpClients {
+    fn from(client: AuthorizerClient<AuthChannel>) -> Self {
+        vec![client].into()
+    }
+}
+
+/// At least one.
+impl From<Vec<AuthorizerClient<AuthChannel>>> for PdpClients {
+    fn from(clients: Vec<AuthorizerClient<AuthChannel>>) -> Self {
+        assert!(!clients.is_empty(), "the gateway needs a connection to the PDP");
+        Self { clients, next: AtomicUsize::new(0) }
+    }
 }
 
 /// The client name each MCP session started with, by session ID, for the principal that started
@@ -167,14 +195,14 @@ impl AllowCache {
 
 impl GatewayState {
     /// Without awzy-challenge: outages replay without regard to containments.
-    pub fn new(config: GatewayConfig, pdp: AuthorizerClient<AuthChannel>) -> anyhow::Result<Self> {
+    pub fn new(config: GatewayConfig, pdp: impl Into<PdpClients>) -> anyhow::Result<Self> {
         Self::with_containments(config, pdp, Arc::new(Containments::none()))
     }
 
     /// Following awzy-challenge's containments; call [`Self::forget_allows`] with each list.
     pub fn with_containments(
         config: GatewayConfig,
-        pdp: AuthorizerClient<AuthChannel>,
+        pdp: impl Into<PdpClients>,
         containments: Arc<Containments>,
     ) -> anyhow::Result<Self> {
         config.validate()?;
@@ -187,7 +215,7 @@ impl GatewayState {
         Ok(Self(Arc::new(Inner {
             config,
             verifier,
-            pdp,
+            pdp: pdp.into(),
             upstream,
             last_seen_monitor: AtomicBool::new(false),
             allows,
@@ -423,7 +451,7 @@ async fn check(
     // A PDP pod shutting down can break the connection under one check; ask again before
     // treating it as an outage.
     let ask = || {
-        let (mut pdp, req) = (state.0.pdp.clone(), req.clone());
+        let (mut pdp, req) = (state.0.pdp.next(), req.clone());
         async move { pdp.check(req).await }
     };
     match awzy_service_auth::retry_once_if_unanswered(ask).await {
@@ -440,7 +468,9 @@ async fn check(
                 }
                 (_, true) => {
                     crate::metrics::MONITOR_FORWARDED.inc();
-                    tracing::info!(decision = %res.decision_qid, what = %c.what, verdict = ?res.verdict(), "monitor mode: forwarding a call that would be blocked");
+                    // Debug, not info: the decision log records every verdict, and a line per
+                    // call held stdout's lock across the gateway's threads under load.
+                    tracing::debug!(decision = %res.decision_qid, what = %c.what, verdict = ?res.verdict(), "monitor mode: forwarding a call that would be blocked");
                     None
                 }
                 _ => {

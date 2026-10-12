@@ -4,6 +4,7 @@ awzy_service(
     name = "gateway",
     crate_name = "awzy_gateway",
     binary_name = "awzy-gateway",
+    extra_binaries = ["gateway_bench"],
     test_deps = [
         "//authz/services/challenge",
         "//authz/services/pdp",
