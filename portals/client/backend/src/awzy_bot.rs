@@ -287,8 +287,8 @@ impl BotTool {
                 self.allow(PortalAction::Administer, PortalArea::Policies).await?;
                 if services.read_only {
                     return Err(ToolOutcome::Error(
-                        "This portal is a read-only public demo, so drafts can't be saved. Show the person the \
-                         Cedar you would propose instead."
+                        "This portal is a read-only public demo, so drafts can't be saved. Put the Cedar you \
+                         would propose in your answer instead."
                             .into(),
                     ));
                 }
