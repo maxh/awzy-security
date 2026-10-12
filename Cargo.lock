@@ -1164,6 +1164,8 @@ dependencies = [
  "aws-sdk-bedrockruntime",
  "aws-smithy-http-client",
  "aws-smithy-types",
+ "awzy-http",
+ "hyper",
  "serde",
  "serde_json",
  "thiserror 2.0.21",

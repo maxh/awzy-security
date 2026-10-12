@@ -121,7 +121,8 @@ impl ModelProvider for Vertex {
             .header(header::CONTENT_TYPE, "application/json")
             .body(awzy_http::Body::from(body))
             .map_err(|e| LlmError::Failed(e.to_string()))?;
-        let res = awzy_http::send(&self.client, req, RESPOND_TIMEOUT).await.map_err(|e| LlmError::Failed(e.to_string()))?;
+        let res =
+            awzy_http::send(&self.client, req, RESPOND_TIMEOUT).await.map_err(|e| LlmError::Failed(e.to_string()))?;
         if !res.status.is_success() {
             return Err(classify(res.status, &String::from_utf8_lossy(&res.body)));
         }
@@ -177,15 +178,17 @@ mod tests {
     /// optionally AWZY_TEST_VERTEX_REGION; skipped otherwise.
     #[tokio::test]
     async fn answers_through_vertex() {
-        let (Ok(project), Ok(token)) = (std::env::var("AWZY_TEST_VERTEX_PROJECT"), std::env::var("AWZY_TEST_VERTEX_TOKEN"))
+        let (Ok(project), Ok(token)) =
+            (std::env::var("AWZY_TEST_VERTEX_PROJECT"), std::env::var("AWZY_TEST_VERTEX_TOKEN"))
         else {
             eprintln!("skipping: AWZY_TEST_VERTEX_PROJECT or AWZY_TEST_VERTEX_TOKEN is not set");
             return;
         };
         let region = std::env::var("AWZY_TEST_VERTEX_REGION").unwrap_or_else(|_| DEFAULT_REGION.into());
         let model = std::env::var("AWZY_TEST_VERTEX_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.into());
-        let vertex = Vertex::new(ModelSettings { model, effort: Some("low".into()) }, VertexLocation { project, region })
-            .with_token(token);
+        let vertex =
+            Vertex::new(ModelSettings { model, effort: Some("low".into()) }, VertexLocation { project, region })
+                .with_token(token);
         let request = ModelRequest {
             system: String::new(),
             messages: vec![Message::user("Reply with the single word: ready")],

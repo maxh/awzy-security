@@ -5,14 +5,14 @@
 //! identity (EKS Pod Identity), so there's no key to manage. The client enables Claude in their
 //! Bedrock account and region; until then requests fail with [`LlmError::NotConfigured`].
 
-use aws_config::BehaviorVersion;
-use aws_sdk_bedrockruntime::{error::ProvideErrorMetadata, primitives::Blob, Client};
-use aws_smithy_http_client::tls;
-use aws_smithy_types::error::display::DisplayErrorContext;
 use crate::{
     messages::{parse_response, request_body},
     LlmError, ModelProvider, ModelRequest, ModelResponse, ModelSettings,
 };
+use aws_config::BehaviorVersion;
+use aws_sdk_bedrockruntime::{error::ProvideErrorMetadata, primitives::Blob, Client};
+use aws_smithy_http_client::tls;
+use aws_smithy_types::error::display::DisplayErrorContext;
 
 /// The Bedrock model ID for Claude Opus 5.5. Some accounts need a regional inference profile
 /// instead (e.g. `us.anthropic.claude-opus-5-5`); set AWZY_LLM_MODEL.

@@ -1,5 +1,5 @@
 {
-  "checksum": "0024e214889f9d0c053f21406ccae7d7f09a3cca8151a641087e536ba5725a2e",
+  "checksum": "c7f9ebd409fb47efd70e5322a35f7946a2a0e2df8b955ec2a22480572d2e5b8e",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -4674,6 +4674,10 @@
           {
             "id": "aws-smithy-types 1.8.1",
             "target": "aws_smithy_types"
+          },
+          {
+            "id": "hyper 1.12.0",
+            "target": "hyper"
           },
           {
             "id": "serde 1.0.229",
