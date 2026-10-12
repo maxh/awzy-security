@@ -1260,6 +1260,7 @@ dependencies = [
  "anyhow",
  "awzy-authz-proto",
  "awzy-clickhouse",
+ "awzy-context-api",
  "awzy-http",
  "awzy-llm",
  "awzy-model",
