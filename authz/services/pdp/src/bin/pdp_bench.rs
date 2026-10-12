@@ -24,11 +24,11 @@ fn r(kind: &str, id: &str) -> EntityRef {
     EntityRef { r#type: kind.into(), id: id.into() }
 }
 
-fn entity(kind: &str, id: &str, attrs: serde_json::Value, groups: &[&str]) -> Entity {
+fn entity(kind: &str, id: &str, attrs: serde_json::Value, group: Option<&str>) -> Entity {
     Entity {
         uid: Some(r(kind, id)),
         attrs: attrs.as_object().map(|o| json_to_struct(o.clone())),
-        parents: groups.iter().map(|g| r("Group", g)).collect(),
+        parents: group.map(|g| r("Group", g)).into_iter().collect(),
     }
 }
 
@@ -37,9 +37,9 @@ fn request(i: usize) -> CheckRequest {
     let resources = [("design-doc", "internal"), ("q3-strategy", "confidential"), ("board-deck", "crown_jewels")];
     let (res_id, sensitivity) = resources[i % resources.len()];
     let mut entities = vec![
-        entity("Human", "alice", json!({}), &["security"]),
-        entity("Human", "bob", json!({}), &["engineering"]),
-        entity("Resource", res_id, json!({ "sensitivity": sensitivity }), &[]),
+        entity("Human", "alice", json!({}), Some("security")),
+        entity("Human", "bob", json!({}), Some("engineering")),
+        entity("Resource", res_id, json!({ "sensitivity": sensitivity }), None),
     ];
     let delegated = i.is_multiple_of(3);
     let (principal, on_behalf_of) = if delegated {
@@ -47,7 +47,7 @@ fn request(i: usize) -> CheckRequest {
             "ServiceAccount",
             "sales-genie",
             json!({ "owner": { "__entity": { "type": "Human", "id": "bob" } }, "ai": true }),
-            &["engineering"],
+            Some("engineering"),
         ));
         (r("ServiceAccount", "sales-genie"), Some(r("Human", if i.is_multiple_of(2) { "alice" } else { "bob" })))
     } else {
@@ -68,22 +68,22 @@ fn request(i: usize) -> CheckRequest {
 /// The principals as awzy-context's snapshot has them: people in nested groups, and the
 /// registered service account.
 fn snapshot() -> Vec<serde_json::Value> {
-    let e = |kind: &str, id: &str, attrs: serde_json::Value, parents: &[&str]| {
-        let parents: Vec<_> = parents.iter().map(|g| json!({ "type": "Group", "id": g })).collect();
+    let e = |kind: &str, id: &str, attrs: serde_json::Value, parent: Option<&str>| {
+        let parents: Vec<_> = parent.map(|g| json!({ "type": "Group", "id": g })).into_iter().collect();
         json!({ "uid": { "type": kind, "id": id }, "attrs": attrs, "parents": parents })
     };
     vec![
-        e("Human", "alice", json!({}), &["security"]),
-        e("Human", "bob", json!({}), &["engineering"]),
+        e("Human", "alice", json!({}), Some("security")),
+        e("Human", "bob", json!({}), Some("engineering")),
         e(
             "ServiceAccount",
             "sales-genie",
             json!({ "owner": { "__entity": { "type": "Human", "id": "bob" } }, "ai": true }),
-            &["engineering"],
+            Some("engineering"),
         ),
-        e("Group", "security", json!({}), &["everyone"]),
-        e("Group", "engineering", json!({}), &["everyone"]),
-        e("Group", "everyone", json!({}), &[]),
+        e("Group", "security", json!({}), Some("everyone")),
+        e("Group", "engineering", json!({}), Some("everyone")),
+        e("Group", "everyone", json!({}), None),
     ]
 }
 
