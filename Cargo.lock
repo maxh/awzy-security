@@ -762,6 +762,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "awzy-authz-proto",
+ "awzy-context-api",
  "awzy-http",
  "awzy-migrations",
  "awzy-model",

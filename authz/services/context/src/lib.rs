@@ -10,6 +10,7 @@
 
 pub mod classify;
 pub mod connector_settings;
+pub mod contact;
 #[cfg(test)]
 mod contract_tests;
 mod invalid;
@@ -234,6 +235,8 @@ pub fn router(store: ContextStore, scim_token: &str, access: &Access) -> Router 
         .with_state(store.clone());
     guarded(readers, &access.readers)
         .merge(guarded(resources::read_router(store.clone()), &access.readers))
+        // How to reach a person, for awzy-challenge's notifications (#65).
+        .merge(guarded(contact::router(store.clone()), &access.readers))
         .merge(guarded(resources::write_router(store.clone()), &access.writers))
         // The reasoner's scores (ADR 0056): the backend writes them, like resources.
         .merge(guarded(risk::router(store.clone()), &access.writers))

@@ -14,8 +14,8 @@ use awzy_http::{encode, Body, Method, Request, StatusCode};
 use serde::de::DeserializeOwned;
 
 use crate::model::{
-    CloseInvestigation, ConnectorSettings, ConnectorSettingsList, ConnectorSettingsOne, IdPage, Investigation,
-    InvestigationList, InvestigationOne, InvestigationUsage, InvestigationUsageOne, PrincipalsSnapshot,
+    CloseInvestigation, ConnectorSettings, ConnectorSettingsList, ConnectorSettingsOne, HumanContact, IdPage,
+    Investigation, InvestigationList, InvestigationOne, InvestigationUsage, InvestigationUsageOne, PrincipalsSnapshot,
     PutConnectorSettings, Resource, ResourceEntities, ResourceList, ResourceOne, RiskBatch, RiskScore,
 };
 
@@ -273,6 +273,11 @@ impl ContextApi {
             ids.extend(page.into_iter().map(|i| i.id));
             after = Some(last);
         }
+    }
+
+    /// How to reach a person; `None` when the IdP hasn't provisioned them, or deactivated them.
+    pub async fn human_contact(&self, user_name: &str) -> Result<Option<HumanContact>, ContextError> {
+        self.read(&format!("/v1/humans/{}/contact", encode(user_name))).await
     }
 
     /// Resources whose ID or name contains `query`, ignoring case: at most `limit`.
