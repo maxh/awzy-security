@@ -47,7 +47,10 @@ fn a_resource_reads_back_through_the_client_api() {
         (read.entities[0].uid.id.as_str(), read.assignees.as_slice()),
         ("gdrive:1", ["bob".to_string()].as_slice())
     );
-    assert_eq!((read.work[0].id.as_str(), read.work[0].assignees.as_slice()), ("jira:OPS-1", ["bob".to_string()].as_slice()));
+    assert_eq!(
+        (read.work[0].id.as_str(), read.work[0].assignees.as_slice()),
+        ("jira:OPS-1", ["bob".to_string()].as_slice())
+    );
 }
 
 /// An investigation as this server writes it reads back through the client's type.

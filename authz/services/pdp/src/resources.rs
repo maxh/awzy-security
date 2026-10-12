@@ -210,8 +210,9 @@ impl Resources {
     /// The request's entities with the resource, and its ancestors, from awzy-context. Fails
     /// only when awzy-context can't be reached and nothing is cached for the resource.
     pub async fn merge(&self, request: Value, resource: &EntityRef) -> anyhow::Result<Merged> {
-        let unchanged =
-            |entities| Ok(Merged { entities, assignees: None, work: Arc::default(), from: AttributesFrom::EnforcementPoint });
+        let unchanged = |entities| {
+            Ok(Merged { entities, assignees: None, work: Arc::default(), from: AttributesFrom::EnforcementPoint })
+        };
         let Some(endpoint) = &self.endpoint else { return unchanged(request) };
         if resource.kind != entity_type::RESOURCE {
             return unchanged(request);

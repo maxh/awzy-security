@@ -81,13 +81,7 @@ pub(crate) async fn assemble(
         (Some(_), Some(_)) => Some(Arc::new(on_work_item(req, &merged.work))),
         (_, assignees) => assignees,
     };
-    Ok(Assembled::Ready {
-        entities: merged.entities,
-        assignees,
-        risk,
-        automation,
-        attributes_from: merged.from,
-    })
+    Ok(Assembled::Ready { entities: merged.entities, assignees, risk, automation, attributes_from: merged.from })
 }
 
 /// The decision for a service account awzy-context doesn't know.
