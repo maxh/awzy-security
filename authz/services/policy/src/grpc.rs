@@ -31,6 +31,25 @@ use crate::{
     PolicyStore, StoreError, INSTALL_SCOPE,
 };
 
+/// What readers may call. A method in no list is refused for everyone, so every one the service
+/// has must be in one (a test checks against policy.proto).
+const READ_METHODS: &[&str] = &[
+    "GetActive",
+    "GetBundle",
+    "GetEnforcement",
+    "GetModelRouting",
+    "GetOutageFallback",
+    "ListBundles",
+    "ListEnforcementChanges",
+    "ListEnforcementSettings",
+];
+
+/// What writers may call.
+const WRITE_METHODS: &[&str] = &["CreateDraft", "Publish", "SetEnforcement", "SetModelRouting", "SetOutageFallback"];
+
+/// Signed by enrolled admin keys instead, and needed when everything else is broken (ADR 0022).
+const EXEMPT_METHODS: &[&str] = &["BreakGlassRollback"];
+
 /// Who may call which methods (ADR 0055). Each group's callers come from the chart, as
 /// `namespace/service-account`; a method no group names is refused.
 pub struct Access {
@@ -64,25 +83,10 @@ impl Access {
 
     fn guard(&self) -> PathGuard {
         let method = |m: &str| format!("/awzy.policy.v1.PolicyService/{m}");
-        let mut rules: Vec<(String, Rule)> = [
-            "GetActive",
-            "GetEnforcement",
-            "ListBundles",
-            "GetBundle",
-            "ListEnforcementChanges",
-            "GetOutageFallback",
-            "GetModelRouting",
-        ]
-        .into_iter()
-        .map(|m| (method(m), Rule::Allow(self.readers.clone())))
-        .collect();
-        rules.extend(
-            ["CreateDraft", "Publish", "SetEnforcement", "SetOutageFallback", "SetModelRouting"]
-                .into_iter()
-                .map(|m| (method(m), Rule::Allow(self.writers.clone()))),
-        );
-        // Signed by enrolled admin keys, and needed when everything else is broken (ADR 0022).
-        rules.push((method("BreakGlassRollback"), Rule::Exempt));
+        let mut rules: Vec<(String, Rule)> =
+            READ_METHODS.iter().map(|m| (method(m), Rule::Allow(self.readers.clone()))).collect();
+        rules.extend(WRITE_METHODS.iter().map(|m| (method(m), Rule::Allow(self.writers.clone()))));
+        rules.extend(EXEMPT_METHODS.iter().map(|m| (method(m), Rule::Exempt)));
         PathGuard::new(self.verifier.clone(), rules)
     }
 }
@@ -459,6 +463,27 @@ mod tests {
     use super::*;
     use awzy_authz_proto::policy::v1::policy_service_client::PolicyServiceClient;
     use tonic::Code;
+
+    #[test]
+    fn every_method_the_service_has_is_in_an_access_list() {
+        // A method in no list is refused for every caller: ListEnforcementSettings once was, and
+        // the Enforcement page couldn't load.
+        let proto = include_str!("../../../libs/proto/awzy/policy/v1/policy.proto");
+        let methods: Vec<&str> = proto
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix("rpc "))
+            .filter_map(|l| l.split('(').next())
+            .map(str::trim)
+            .collect();
+        assert!(methods.len() > 10, "read the methods from policy.proto: {methods:?}");
+        for m in &methods {
+            let lists = [READ_METHODS, WRITE_METHODS, EXEMPT_METHODS];
+            assert_eq!(lists.iter().filter(|l| l.contains(m)).count(), 1, "{m} is in exactly one access list");
+        }
+        for m in READ_METHODS.iter().chain(WRITE_METHODS).chain(EXEMPT_METHODS) {
+            assert!(methods.contains(m), "{m} is listed but isn't a method of the service");
+        }
+    }
 
     async fn admin_client(endpoint: &str) -> PolicyServiceClient<tonic::transport::Channel> {
         PolicyServiceClient::connect(endpoint.to_string()).await.unwrap()
