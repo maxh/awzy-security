@@ -6,6 +6,8 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
+awzy-heartbeat.workspace = true
+awzy-connectors-api.workspace = true
 awzy-context-api.workspace = true
 jsonwebtoken.workspace = true
 async-trait.workspace = true

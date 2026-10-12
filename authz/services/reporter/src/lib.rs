@@ -33,8 +33,7 @@ use awzy_model::InstallId;
 use axum::{extract::State, routing, Json, Router};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde::Deserialize;
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 const SEND_TIMEOUT: Duration = Duration::from_secs(10);
@@ -419,13 +418,7 @@ fn bracket(ip: &str) -> String {
     }
 }
 
-/// The heartbeat the reporter last tried to send, and whether the corp portal took it.
-#[derive(Debug, Clone, Serialize)]
-pub struct LastSend {
-    pub heartbeat: Heartbeat,
-    pub delivered: bool,
-    pub error: Option<String>,
-}
+pub use awzy_heartbeat::LastSend;
 
 /// Shared between [`run`], which writes it, and [`router`], which serves it.
 pub type LastSent = Arc<RwLock<Option<LastSend>>>;
@@ -460,16 +453,13 @@ pub async fn run(mut reporter: Reporter, last: LastSent) {
 /// `GET /v1/last-heartbeat`: where heartbeats go, how often, and the last one exactly as sent
 /// (null before the first). For the client portal, inside the cluster only.
 pub fn router(config: &Config, last: LastSent) -> Router {
-    let about = json!({ "corp_url": config.corp_url, "interval_secs": config.interval.as_secs() });
+    let (corp_url, interval_secs) = (config.corp_url.clone(), config.interval.as_secs());
     Router::new()
         .route(
             "/v1/last-heartbeat",
-            routing::get(move |State(last): State<LastSent>| {
-                let mut body = about.clone();
-                async move {
-                    body["last"] = json!(*last.read().unwrap_or_else(|e| e.into_inner()));
-                    Json(body)
-                }
+            routing::get(move |State(last): State<LastSent>| async move {
+                let last = last.read().unwrap_or_else(|e| e.into_inner()).clone();
+                Json(awzy_heartbeat::LastHeartbeat { corp_url, interval_secs, last })
             }),
         )
         .with_state(last)

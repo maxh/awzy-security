@@ -8,7 +8,6 @@ use async_graphql::{Context, Object, Result, SimpleObject};
 use bytes::Bytes;
 
 use awzy_portal::{JsonObject, UtcTimestamp};
-use chrono::{DateTime, Utc};
 
 use crate::{
     access::{require, PortalAction, PortalArea},
@@ -99,18 +98,19 @@ async fn heartbeat_export(client: &HttpClient, addr: Option<String>) -> Heartbea
         Ok((code, _)) => return unreachable(format!("awzy-reporter answered {code}")),
         Err(e) => return unreachable(format!("awzy-reporter is unreachable: {e}")),
     };
-    let Ok(v) = serde_json::from_slice::<serde_json::Value>(&body) else {
-        return unreachable("awzy-reporter's answer isn't JSON".into());
+    let report = match serde_json::from_slice::<awzy_heartbeat::LastHeartbeat>(&body) {
+        Ok(r) => r,
+        Err(e) => return unreachable(format!("awzy-reporter's answer isn't what this portal expects: {e}")),
     };
-    let last = &v["last"];
+    let last = report.last.as_ref();
     HeartbeatExport {
         enabled: true,
-        corp_url: v["corp_url"].as_str().map(str::to_string),
-        interval_secs: v["interval_secs"].as_i64(),
-        sent_at: last["heartbeat"]["sent_at"].as_str().and_then(|t| t.parse::<DateTime<Utc>>().ok()).map(UtcTimestamp),
-        delivered: last["delivered"].as_bool(),
-        error: last["error"].as_str().map(str::to_string),
-        heartbeat: last.get("heartbeat").cloned().and_then(JsonObject::from_json),
+        corp_url: Some(report.corp_url),
+        interval_secs: i64::try_from(report.interval_secs).ok(),
+        sent_at: last.map(|l| UtcTimestamp(l.heartbeat.sent_at)),
+        delivered: last.map(|l| l.delivered),
+        error: last.and_then(|l| l.error.clone()),
+        heartbeat: last.and_then(|l| serde_json::to_value(&l.heartbeat).ok()).and_then(JsonObject::from_json),
     }
 }
 
@@ -220,7 +220,10 @@ mod tests {
                 axum::Json(serde_json::json!({
                     "corp_url": "https://corp.example.com",
                     "interval_secs": 60,
-                    "last": { "delivered": true, "error": null, "heartbeat": { "sent_at": "2026-10-11T12:00:00Z" } },
+                    "last": { "delivered": true, "error": null, "heartbeat": {
+                        "schema_version": 1, "install_qid": "install_00000000-0000-7000-8000-000000000001",
+                        "sent_at": "2026-10-11T12:00:00Z", "chart_version": "0.1.0", "services": [],
+                    } },
                 }))
             }),
         );

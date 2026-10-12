@@ -4,8 +4,6 @@
 
 use async_graphql::{Context, Object, Result, SimpleObject};
 use awzy_portal::UtcTimestamp;
-use chrono::{DateTime, Utc};
-use serde_json::Value;
 
 use crate::{
     access::{require, PortalAction, PortalArea},
@@ -37,29 +35,18 @@ pub struct Connector {
     pub deleted: i64,
 }
 
-fn time(v: &Value) -> Option<UtcTimestamp> {
-    v.as_str().and_then(|t| t.parse::<DateTime<Utc>>().ok()).map(UtcTimestamp)
-}
-
-fn connector(c: &Value) -> Connector {
+fn connector(c: awzy_connectors_api::ConnectorStatus) -> Connector {
+    let count = |n: u64| i64::try_from(n).unwrap_or(i64::MAX);
     Connector {
-        name: c["name"].as_str().unwrap_or_default().to_string(),
-        settings: c["settings"]
-            .as_object()
-            .into_iter()
-            .flatten()
-            .map(|(name, value)| ConnectorSetting {
-                name: name.clone(),
-                value: value.as_str().unwrap_or_default().to_string(),
-            })
-            .collect(),
-        interval_secs: c["interval_secs"].as_i64().unwrap_or_default(),
-        last_success_at: time(&c["last_success_at"]),
-        last_failure_at: time(&c["last_failure_at"]),
-        last_error: c["last_error"].as_str().map(str::to_string),
-        failures: c["failures"].as_i64().unwrap_or_default(),
-        written: c["written"].as_i64().unwrap_or_default(),
-        deleted: c["deleted"].as_i64().unwrap_or_default(),
+        name: c.name,
+        settings: c.settings.into_iter().map(|(name, value)| ConnectorSetting { name, value }).collect(),
+        interval_secs: count(c.interval_secs),
+        last_success_at: c.last_success_at.map(UtcTimestamp),
+        last_failure_at: c.last_failure_at.map(UtcTimestamp),
+        last_error: c.last_error,
+        failures: count(c.failures),
+        written: count(c.written),
+        deleted: count(c.deleted),
     }
 }
 
@@ -72,8 +59,9 @@ async fn connectors(client: &HttpClient, addr: Option<String>) -> Result<Vec<Con
         Ok((code, _)) => return Err(format!("awzy-connectors answered {code}").into()),
         Err(e) => return Err(format!("awzy-connectors is unreachable: {e}").into()),
     };
-    let v: Value = serde_json::from_slice(&body)?;
-    Ok(v["connectors"].as_array().into_iter().flatten().map(connector).collect())
+    let list: awzy_connectors_api::StatusList = serde_json::from_slice(&body)
+        .map_err(|e| format!("awzy-connectors' status isn't what this portal expects: {e}"))?;
+    Ok(list.connectors.into_iter().map(connector).collect())
 }
 
 #[derive(Default)]

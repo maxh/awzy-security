@@ -829,7 +829,9 @@ dependencies = [
  "awzy-challenge",
  "awzy-clickhouse",
  "awzy-cloud",
+ "awzy-connectors-api",
  "awzy-context-api",
+ "awzy-heartbeat",
  "awzy-http",
  "awzy-identity",
  "awzy-kube",
@@ -871,6 +873,7 @@ name = "awzy-connectors"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "awzy-connectors-api",
  "awzy-context-api",
  "awzy-http",
  "awzy-server",
@@ -885,6 +888,15 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "awzy-connectors-api"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
