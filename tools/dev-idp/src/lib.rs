@@ -10,6 +10,8 @@
 //! - Tokens are ES256 JWTs with `groups` and `name`, signed by a fixed key so they survive
 //!   restarts. Their audience is `awzy`, or the `audience` asked for at `/token`: `awzy-mcp` for
 //!   the portal's MCP endpoint, `awzy-gateway` for awzy-gateway (ADR 0081). Keys at `/jwks`, discovery at `/.well-known/openid-configuration`.
+//! - Apps that mint their own agents' tokens (ADR 0110): `/apps/<name>/token` signs for
+//!   `<issuer>/apps/<name>`, with keys at `/apps/<name>/jwks`, so the demo can trust one.
 
 use std::{
     collections::HashMap,
@@ -133,6 +135,8 @@ pub fn router(idp: DevIdp) -> Router {
         .route("/authorize", get(authorize))
         .route("/authorize/as", get(authorize_as))
         .route("/token", post(token))
+        .route("/apps/{name}/jwks", get(jwks))
+        .route("/apps/{name}/token", post(app_token))
         .layer(CorsLayer::permissive())
         .with_state(idp)
 }
@@ -155,6 +159,38 @@ async fn discovery(State(idp): State<DevIdp>) -> Json<Value> {
 
 async fn jwks(State(idp): State<DevIdp>) -> Json<Value> {
     Json(json!({ "keys": [idp.0.jwk] }))
+}
+
+#[derive(Deserialize)]
+struct AppTokenRequest {
+    sub: String,
+    #[serde(default)]
+    act: Option<String>,
+    /// Default `awzy-agents`.
+    #[serde(default)]
+    audience: Option<String>,
+}
+
+/// A token an app signs, as `<issuer>/apps/<name>`: for one of its agents (`sub`, or `act` acting
+/// for the person in `sub`), or for itself (`sub` is its name). Development only.
+async fn app_token(
+    State(idp): State<DevIdp>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+    Json(req): Json<AppTokenRequest>,
+) -> Json<Value> {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    let mut claims = json!({
+        "iss": format!("{}/apps/{name}", idp.0.issuer),
+        "aud": req.audience.unwrap_or_else(|| "awzy-agents".into()),
+        "sub": req.sub, "iat": now, "exp": now + TOKEN_LIFETIME.as_secs(),
+    });
+    if let Some(a) = req.act {
+        claims["act"] = json!({ "sub": a });
+    }
+    let mut header = Header::new(Algorithm::ES256);
+    header.kid = Some(KID.into());
+    let token = encode(&header, &claims, &idp.0.encoding).expect("signing with a valid key");
+    Json(json!({ "access_token": token, "token_type": "Bearer" }))
 }
 
 #[derive(Deserialize)]

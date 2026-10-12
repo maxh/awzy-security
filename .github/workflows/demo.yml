@@ -10,6 +10,7 @@ on:
   pull_request:
     paths:
       - "tools/demo"
+      - "tools/dev-idp/**"
       - ".github/workflows/demo.yml"
 
 jobs:
@@ -24,6 +25,7 @@ jobs:
           buildbuddy-api-key: ${{ secrets.AWZY_CORP_BUILDBUDDY_API_KEY }}
       - run: tools/demo up
       - run: tools/demo check
+      - run: tools/demo partner
       - name: Logs
         if: failure()
         run: for f in .demo/logs/*.log; do echo "::group::$f"; tail -50 "$f"; echo "::endgroup::"; done
