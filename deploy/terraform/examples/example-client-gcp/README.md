@@ -17,6 +17,9 @@ to AWS Secrets Manager only), and managed monitoring.
 ## Once per project
 
 1. Copy `deployment.env.example` to `deployment.env` (gitignored), fill it in, and `source` it.
+   Back it up in the project's own Secret Manager (`tools/deployment-env push
+   example-client-gcp`); restore it with `tools/deployment-env pull example-client-gcp --project
+   $TF_VAR_project`.
 2. Make the state bucket: `gcloud storage buckets create gs://$TF_VAR_state_bucket --project
    $TF_VAR_project --location $TF_VAR_region --uniform-bucket-level-access`, and turn on its
    versioning (`gcloud storage buckets update gs://$TF_VAR_state_bucket --versioning`).

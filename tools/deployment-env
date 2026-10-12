@@ -3,10 +3,13 @@
 #
 # deployment.env is gitignored (ADR 0053) and is the only record of which accounts, buckets,
 # and names a deployment's Terraform targets. The backup lives in that deployment's own
-# management account, as the secret awzy/deployment-env/<deployment>.
+# management account, as the secret awzy/deployment-env/<deployment>. A GCP deployment (its file
+# sets TF_VAR_project) is backed up in its project's Secret Manager instead, as
+# awzy-deployment-env-<deployment>.
 #
 #   tools/deployment-env push corp
 #   tools/deployment-env pull corp --profile awzy-corp --region us-east-2
+#   tools/deployment-env pull example-client-gcp --project <project id>
 #
 # A deployment is a folder with a deployment.env: deploy/terraform/<name> or
 # deploy/terraform/examples/<name>. `push` reads the profile and region from the file; `pull`
@@ -32,6 +35,7 @@ main() {
 usage() {
   echo "usage: tools/deployment-env push <deployment>" >&2
   echo "       tools/deployment-env pull <deployment> --profile <aws profile> --region <region> [--force]" >&2
+  echo "       tools/deployment-env pull <deployment> --project <gcp project> [--force]" >&2
   exit 2
 }
 
@@ -50,6 +54,11 @@ secret_name() {
   echo "awzy/deployment-env/$1"
 }
 
+# Secret Manager names can't hold a slash.
+gcp_secret_name() {
+  echo "awzy-deployment-env-$1"
+}
+
 # The value of TF_VAR_<name> in a deployment.env, without quotes.
 setting() {
   sed -n "s/^export TF_VAR_$2=//p" "$1" | tr -d "'\""
@@ -58,6 +67,12 @@ setting() {
 push() {
   local deployment=$1 file=$2
   [ -f "$file" ] || { echo "no $file to back up" >&2; exit 1; }
+  local project
+  project=$(setting "$file" project)
+  if [ -n "$project" ]; then
+    push_gcp "$deployment" "$file" "$project"
+    return
+  fi
   local profile region account
   profile=$(setting "$file" management_profile)
   region=$(setting "$file" region)
@@ -80,27 +95,46 @@ push() {
   echo "backed up $file to $name in account $account"
 }
 
+# Only ever stored in the project the file itself names.
+push_gcp() {
+  local deployment=$1 file=$2 project=$3 name
+  name=$(gcp_secret_name "$deployment")
+  if gcloud secrets describe "$name" --project "$project" >/dev/null 2>&1; then
+    gcloud secrets versions add "$name" --project "$project" --data-file "$file" >/dev/null
+  else
+    gcloud secrets create "$name" --project "$project" --replication-policy automatic --data-file "$file" \
+      --labels purpose=deployment-env >/dev/null
+  fi
+  echo "backed up $file to $name in project $project"
+}
+
 pull() {
   local deployment=$1 file=$2
   shift 2
-  local profile="" region="" force=false
+  local profile="" region="" project="" force=false
   while [ $# -gt 0 ]; do
     case "$1" in
       --profile) profile=$2; shift 2 ;;
+      --project) project=$2; shift 2 ;;
       --region) region=$2; shift 2 ;;
       --force) force=true; shift ;;
       *) usage ;;
     esac
   done
-  [ -n "$profile" ] && [ -n "$region" ] || usage
+  [ -n "$project" ] || { [ -n "$profile" ] && [ -n "$region" ]; } || usage
 
   local name
-  name=$(secret_name "$deployment")
   backup=$(mktemp)
   trap 'rm -f "$backup"' EXIT
-  # JSON rather than text: --output text adds a newline the file doesn't have.
-  aws --profile "$profile" --region "$region" secretsmanager get-secret-value --secret-id "$name" \
-    --query SecretString --output json | python3 -c 'import json, sys; sys.stdout.write(json.load(sys.stdin))' > "$backup"
+  if [ -n "$project" ]; then
+    name=$(gcp_secret_name "$deployment")
+    gcloud secrets versions access latest --secret "$name" --project "$project" > "$backup"
+  else
+    name=$(secret_name "$deployment")
+    # JSON rather than text: --output text adds a newline the file doesn't have.
+    aws --profile "$profile" --region "$region" secretsmanager get-secret-value --secret-id "$name" \
+      --query SecretString --output json | python3 -c 'import json, sys; sys.stdout.write(json.load(sys.stdin))' > "$backup"
+  fi
 
   if [ -f "$file" ] && ! cmp -s "$backup" "$file" && ! $force; then
     diff -u "$file" "$backup" >&2 || true
