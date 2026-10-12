@@ -1,12 +1,13 @@
 import { EmptyState, oneOf, PageHeader, PageLoader, Section, Stat, StatusBadge } from "@awzy/ui";
 import { Alert, Button, Group, Modal, Select, SimpleGrid, Stack, Table, Text, TextInput } from "@mantine/core";
-import { IconArchive, IconBox, IconHistory, IconPin } from "@tabler/icons-react";
+import { IconArchive, IconBox, IconHistory, IconPencil, IconPin } from "@tabler/icons-react";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { Suspense, useState } from "react";
 import { graphql, type PreloadedQuery, useMutation, usePreloadedQuery } from "react-relay";
 
 import type { InstallPageQuery } from "./__generated__/InstallPageQuery.graphql";
 import type { InstallPageReleaseMutation } from "./__generated__/InstallPageReleaseMutation.graphql";
+import type { InstallPageRenameClientMutation } from "./__generated__/InstallPageRenameClientMutation.graphql";
 import type { InstallPageRetireMutation } from "./__generated__/InstallPageRetireMutation.graphql";
 import { ago, CHANNEL_NAMES, channelLabel, CHANNELS, formatTime, healthOf, shortDigest } from "./format";
 import { InstallCharts } from "./InstallCharts";
@@ -127,6 +128,7 @@ function Install({ id, queryRef }: { id: string; queryRef: PreloadedQuery<Instal
           i.retiredAt ? undefined : (
             <Group gap="xs">
               <ReleaseButton id={id} channel={i.channel ?? "FAST"} pinnedVersion={i.pinnedVersion ?? null} />
+              <RenameClientButton client={i.client ?? ""} />
               <RetireButton id={id} name={`${i.client} / ${i.environment}`} />
             </Group>
           )
@@ -298,6 +300,63 @@ function ReleaseButton({
             </Button>
             <Button loading={isSaving} onClick={save}>
               Save
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </>
+  );
+}
+
+/** Renames the install's client, which moves all its installs and its license to the new name. */
+function RenameClientButton({ client }: { client: string }) {
+  const [open, setOpen] = useState(false);
+  const [newName, setNewName] = useState(client);
+  const [error, setError] = useState<string | null>(null);
+  const [commit, isSaving] = useMutation<InstallPageRenameClientMutation>(graphql`
+    mutation InstallPageRenameClientMutation($input: RenameClientInput!) {
+      renameClient(input: $input) {
+        installs {
+          id
+          client
+        }
+      }
+    }
+  `);
+  const save = () =>
+    commit({
+      variables: { input: { client, newName: newName.trim() } },
+      onCompleted: () => setOpen(false),
+      onError: (e) => setError(e.message),
+    });
+  return (
+    <>
+      <Button variant="default" leftSection={<IconPencil size={16} />} onClick={() => setOpen(true)}>
+        Rename client
+      </Button>
+      <Modal opened={open} onClose={() => setOpen(false)} title={<Text fw={600}>Rename {client}</Text>}>
+        <Stack gap="sm">
+          <TextInput
+            label="New name"
+            description="Lowercase letters, digits, and hyphens"
+            value={newName}
+            onChange={(e) => setNewName(e.currentTarget.value)}
+          />
+          <Text size="sm" c="dimmed">
+            Every install of {client} and its license move to the new name. The installs keep their tokens, so nothing
+            changes on their side.
+          </Text>
+          {error && (
+            <Alert color="red" title="Not renamed">
+              {error}
+            </Alert>
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button loading={isSaving} onClick={save} disabled={newName.trim() === client}>
+              Rename
             </Button>
           </Group>
         </Stack>

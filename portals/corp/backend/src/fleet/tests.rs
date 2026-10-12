@@ -102,6 +102,24 @@ async fn an_install_moves_between_channels_and_pins() {
     assert!(store.set_release(install.id, Channel::Stable, None).await.unwrap().is_none(), "not once it's retired");
 }
 
+#[tokio::test]
+async fn renaming_a_client_keeps_its_installs_tokens_and_license() {
+    let Some(store) = test_store().await else { return };
+    let (install, token) = store.register(&new_install("example-client", "demo"), "max").await.unwrap();
+    store.register(&new_install("example-gcp", "demo"), "max").await.unwrap();
+    store.set_license("example-client", crate::licenses::LicensePlan::Trial, 25, None, &[], "max").await.unwrap();
+
+    let renamed = store.rename_client("example-client", "example-aws").await.unwrap();
+    assert_eq!(renamed.iter().map(|r| (r.id, r.client.as_str())).collect::<Vec<_>>(), [(install.id, "example-aws")]);
+    assert_eq!(store.authenticate(&token).await.unwrap(), Some(install.id), "its token still works");
+    assert!(store.license("example-aws").await.unwrap().is_some(), "its license moved with it");
+    assert!(store.license("example-client").await.unwrap().is_none());
+
+    assert!(matches!(store.rename_client("example-aws", "example-gcp").await, Err(RegisterError::ClientExists(_))));
+    assert!(matches!(store.rename_client("example-aws", "Example AWS").await, Err(RegisterError::Invalid(_))));
+    assert!(store.rename_client("nobody", "somebody").await.unwrap().is_empty());
+}
+
 fn beat(install: InstallId, p99: f64, dps: f64, ready: u32) -> Heartbeat {
     serde_json::from_value(serde_json::json!({
         "schema_version": 1, "install_qid": install, "sent_at": Utc::now(), "chart_version": "0.5.0",

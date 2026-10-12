@@ -118,6 +118,8 @@ pub enum RegisterError {
     Invalid(String),
     #[error("{client} already has an install called {environment}")]
     Exists { client: String, environment: String },
+    #[error("{0} is already a client")]
+    ClientExists(String),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -409,6 +411,37 @@ impl FleetStore {
             tokens.revoke(id).await?;
         }
         InstallRecord::from_row(&row).map(Some)
+    }
+
+    /// Renames a client: its installs, retired ones included, and its license move to the new
+    /// name, keeping their tokens and history. Returns its active installs; none if it had none.
+    pub async fn rename_client(&self, client: &str, new_name: &str) -> Result<Vec<InstallRecord>, RegisterError> {
+        if !is_slug(new_name) {
+            return Err(RegisterError::Invalid("a client is lowercase letters, digits, and hyphens".into()));
+        }
+        let mut tx = self.pool.begin().await?;
+        let taken: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM installs WHERE client = $1) OR EXISTS (SELECT 1 FROM licenses WHERE client = $1)",
+        )
+        .bind(new_name)
+        .fetch_one(&mut *tx)
+        .await?;
+        if taken {
+            return Err(RegisterError::ClientExists(new_name.to_string()));
+        }
+        let rows = sqlx::query(&format!("UPDATE installs SET client = $2 WHERE client = $1 RETURNING {COLUMNS}"))
+            .bind(client)
+            .bind(new_name)
+            .fetch_all(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE licenses SET client = $2 WHERE client = $1")
+            .bind(client)
+            .bind(new_name)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        let records = rows.iter().map(InstallRecord::from_row).collect::<Result<Vec<_>, _>>()?;
+        Ok(records.into_iter().filter(|r| r.retired_at.is_none()).collect())
     }
 
     pub async fn migrate(&self) -> Result<(), sqlx::migrate::MigrateError> {

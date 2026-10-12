@@ -503,6 +503,19 @@ pub struct RetireInstallPayload {
     pub install: Install,
 }
 
+#[derive(InputObject)]
+pub struct RenameClientInput {
+    pub client: String,
+    /// Lowercase slug, e.g. acme.
+    pub new_name: String,
+}
+
+#[derive(SimpleObject)]
+pub struct RenameClientPayload {
+    /// The client's active installs, under the new name.
+    pub installs: Vec<Install>,
+}
+
 #[derive(Default)]
 pub struct FleetMutation;
 
@@ -548,6 +561,24 @@ impl FleetMutation {
         };
         tracing::warn!(install = %record.id, channel = record.channel.as_str(), pinned = ?record.pinned_version, by = %staff.username, "install's release changed");
         Ok(SetInstallReleasePayload { install: Install(record) })
+    }
+
+    /// Renames a client. Its installs keep their tokens, so nothing changes on the installs'
+    /// side, and its license moves with it.
+    async fn rename_client(&self, ctx: &Context<'_>, input: RenameClientInput) -> Result<RenameClientPayload> {
+        let staff = ctx.data::<Staff>().map_err(|_| ErrorCode::Unauthenticated.error("sign in first"))?;
+        let records = match store(ctx)?.rename_client(&input.client, &input.new_name).await {
+            Ok(records) if records.is_empty() => {
+                return Err(ErrorCode::NotFound.error("no client with active installs by that name"));
+            }
+            Ok(records) => records,
+            Err(e @ (RegisterError::Invalid(_) | RegisterError::ClientExists(_))) => {
+                return Err(ErrorCode::InvalidInput.error(e.to_string()));
+            }
+            Err(e) => return Err(e.into()),
+        };
+        tracing::warn!(client = %input.client, new_name = %input.new_name, by = %staff.username, "client renamed");
+        Ok(RenameClientPayload { installs: records.into_iter().map(Install).collect() })
     }
 
     /// Retires an install: its reporting and pull tokens stop working at once, it leaves the
