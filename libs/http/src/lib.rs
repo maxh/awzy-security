@@ -73,8 +73,11 @@ fn connector() -> HttpConnector {
 pub fn client_with_roots(roots: rustls::RootCertStore) -> Client {
     let _ = rustls::crypto::ring::default_provider().install_default();
     let tls = rustls::ClientConfig::builder().with_root_certificates(roots).with_no_client_auth();
-    let https =
-        hyper_rustls::HttpsConnectorBuilder::new().with_tls_config(tls).https_only().enable_http1().wrap_connector(connector());
+    let https = hyper_rustls::HttpsConnectorBuilder::new()
+        .with_tls_config(tls)
+        .https_only()
+        .enable_http1()
+        .wrap_connector(connector());
     Hyper::builder(TokioExecutor::new()).build(https)
 }
 
