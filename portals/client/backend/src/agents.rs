@@ -50,18 +50,21 @@ struct ServiceAccountBody<'a> {
     description: &'a str,
 }
 
-fn plain(status: StatusCode, message: impl Into<String>) -> Response {
-    (status, message.into()).into_response()
+/// Why a request did nothing, answered as its status and a sentence.
+type Refused = (StatusCode, String);
+
+fn refused(status: StatusCode, message: impl Into<String>) -> Refused {
+    (status, message.into())
 }
 
 /// The app whose own token this is, or 401.
-async fn signed_in_app(state: &AgentsState, headers: &HeaderMap) -> Result<String, Response> {
+async fn signed_in_app(state: &AgentsState, headers: &HeaderMap) -> Result<String, Refused> {
     let authorization = headers.get(header::AUTHORIZATION).and_then(|v| v.to_str().ok());
-    state.auth.app(authorization).await.map_err(|e| plain(StatusCode::UNAUTHORIZED, e.to_string()))
+    state.auth.app(authorization).await.map_err(|e| refused(StatusCode::UNAUTHORIZED, e.to_string()))
 }
 
-fn context(state: &AgentsState) -> Result<&ContextClient, Response> {
-    state.context.as_ref().ok_or_else(|| plain(StatusCode::SERVICE_UNAVAILABLE, "awzy-context is not configured"))
+fn context(state: &AgentsState) -> Result<&ContextClient, Refused> {
+    state.context.as_ref().ok_or_else(|| refused(StatusCode::SERVICE_UNAVAILABLE, "awzy-context is not configured"))
 }
 
 /// Its agents' IDs start with its name and a dot.
@@ -69,42 +72,35 @@ fn prefix(app: &str) -> String {
     format!("{app}.")
 }
 
-fn under_prefix(app: &str, id: &str) -> Result<(), Response> {
+fn under_prefix(app: &str, id: &str) -> Result<(), Refused> {
     match id.strip_prefix(&prefix(app)) {
         Some(rest) if !rest.is_empty() => Ok(()),
-        _ => Err(plain(StatusCode::FORBIDDEN, format!("{app} registers only agents under {:?}", prefix(app)))),
+        _ => Err(refused(StatusCode::FORBIDDEN, format!("{app} registers only agents under {:?}", prefix(app)))),
     }
 }
 
-fn unavailable(e: anyhow::Error) -> Response {
+fn unavailable(e: impl std::fmt::Display) -> Refused {
     tracing::error!(error = %e, "awzy-context call failed");
-    plain(StatusCode::SERVICE_UNAVAILABLE, "awzy-context is unavailable")
+    refused(StatusCode::SERVICE_UNAVAILABLE, "awzy-context is unavailable")
 }
 
-async fn list(State(state): State<AgentsState>, headers: HeaderMap) -> Response {
-    let app = match signed_in_app(&state, &headers).await {
-        Ok(app) => app,
-        Err(res) => return res,
-    };
-    let context = match context(&state) {
-        Ok(c) => c,
-        Err(res) => return res,
-    };
+/// A service account as awzy-context sends it, passed on as it is.
+#[derive(Deserialize, Serialize)]
+struct Agent {
+    id: String,
+    #[serde(flatten)]
+    rest: serde_json::Map<String, Value>,
+}
+
+async fn list(State(state): State<AgentsState>, headers: HeaderMap) -> Result<Response, Refused> {
+    let app = signed_in_app(&state, &headers).await?;
     #[derive(Deserialize)]
     struct Wire {
-        service_accounts: Vec<Value>,
+        service_accounts: Vec<Agent>,
     }
-    match context.get::<Wire>("/v1/service-accounts").await {
-        Ok(w) => {
-            let mine: Vec<Value> = w
-                .service_accounts
-                .into_iter()
-                .filter(|sa| sa["id"].as_str().is_some_and(|id| id.starts_with(&prefix(&app))))
-                .collect();
-            Json(json!({ "agents": mine })).into_response()
-        }
-        Err(e) => unavailable(e),
-    }
+    let w: Wire = context(&state)?.get("/v1/service-accounts").await.map_err(unavailable)?;
+    let mine: Vec<Agent> = w.service_accounts.into_iter().filter(|sa| sa.id.starts_with(&prefix(&app))).collect();
+    Ok(Json(json!({ "agents": mine })).into_response())
 }
 
 async fn put_one(
@@ -112,18 +108,9 @@ async fn put_one(
     Path(id): Path<String>,
     headers: HeaderMap,
     Json(input): Json<AgentInput>,
-) -> Response {
-    let app = match signed_in_app(&state, &headers).await {
-        Ok(app) => app,
-        Err(res) => return res,
-    };
-    if let Err(res) = under_prefix(&app, &id) {
-        return res;
-    }
-    let context = match context(&state) {
-        Ok(c) => c,
-        Err(res) => return res,
-    };
+) -> Result<Response, Refused> {
+    let app = signed_in_app(&state, &headers).await?;
+    under_prefix(&app, &id)?;
     let body = ServiceAccountBody {
         id: &id,
         owner: &input.owner,
@@ -131,49 +118,36 @@ async fn put_one(
         groups: &input.groups,
         description: &input.description,
     };
-    let Ok(body) = serde_json::to_value(&body) else {
-        return plain(StatusCode::INTERNAL_SERVER_ERROR, "couldn't encode the agent");
-    };
+    let body = serde_json::to_value(&body).map_err(|e| refused(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let actor = awzy_model::Actor::app(&app).to_string();
-    match context
-        .call("PUT", &format!("/v1/service-accounts/{}", awzy_http::encode(&id)), Some(&actor), Some(body))
-        .await
-    {
-        Ok((200, res)) => match serde_json::from_slice::<Value>(&res) {
-            Ok(v) => Json(json!({ "agent": v["service_account"] })).into_response(),
-            Err(_) => plain(StatusCode::BAD_GATEWAY, "awzy-context answered something unreadable"),
-        },
-        Ok((400, res)) => plain(StatusCode::BAD_REQUEST, String::from_utf8_lossy(&res)),
-        Ok((status, res)) => {
-            tracing::error!(status, body = %String::from_utf8_lossy(&res), "awzy-context refused an agent");
-            plain(StatusCode::SERVICE_UNAVAILABLE, "awzy-context is unavailable")
+    let path = format!("/v1/service-accounts/{}", awzy_http::encode(&id));
+    match context(&state)?.call("PUT", &path, Some(&actor), Some(body)).await.map_err(unavailable)? {
+        (200, res) => {
+            #[derive(Deserialize)]
+            struct Wire {
+                service_account: Agent,
+            }
+            let w: Wire = serde_json::from_slice(&res).map_err(unavailable)?;
+            Ok(Json(json!({ "agent": w.service_account })).into_response())
         }
-        Err(e) => unavailable(e),
+        (400, res) => Err(refused(StatusCode::BAD_REQUEST, String::from_utf8_lossy(&res))),
+        (status, res) => Err(unavailable(format!("{status}: {}", String::from_utf8_lossy(&res)))),
     }
 }
 
-async fn delete_one(State(state): State<AgentsState>, Path(id): Path<String>, headers: HeaderMap) -> Response {
-    let app = match signed_in_app(&state, &headers).await {
-        Ok(app) => app,
-        Err(res) => return res,
-    };
-    if let Err(res) = under_prefix(&app, &id) {
-        return res;
-    }
-    let context = match context(&state) {
-        Ok(c) => c,
-        Err(res) => return res,
-    };
+async fn delete_one(
+    State(state): State<AgentsState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> Result<Response, Refused> {
+    let app = signed_in_app(&state, &headers).await?;
+    under_prefix(&app, &id)?;
     let actor = awzy_model::Actor::app(&app).to_string();
-    match context.call("DELETE", &format!("/v1/service-accounts/{}", awzy_http::encode(&id)), Some(&actor), None).await
-    {
-        Ok((204, _)) => StatusCode::NO_CONTENT.into_response(),
-        Ok((404, _)) => plain(StatusCode::NOT_FOUND, format!("no agent {id:?}")),
-        Ok((status, res)) => {
-            tracing::error!(status, body = %String::from_utf8_lossy(&res), "awzy-context didn't retire an agent");
-            plain(StatusCode::SERVICE_UNAVAILABLE, "awzy-context is unavailable")
-        }
-        Err(e) => unavailable(e),
+    let path = format!("/v1/service-accounts/{}", awzy_http::encode(&id));
+    match context(&state)?.call("DELETE", &path, Some(&actor), None).await.map_err(unavailable)? {
+        (204, _) => Ok(StatusCode::NO_CONTENT.into_response()),
+        (404, _) => Err(refused(StatusCode::NOT_FOUND, format!("no agent {id:?}"))),
+        (status, res) => Err(unavailable(format!("{status}: {}", String::from_utf8_lossy(&res)))),
     }
 }
 
