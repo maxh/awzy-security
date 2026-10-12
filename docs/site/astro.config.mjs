@@ -39,6 +39,7 @@ export default defineConfig({
         {
           label: "Concepts",
           items: [
+            "concepts/domain-model",
             "concepts/principals-and-delegation",
             "concepts/monitor-and-enforce",
             "concepts/challenges-and-containment",
@@ -76,7 +77,7 @@ export default defineConfig({
             "reference/configuration",
             "reference/services",
             "reference/decision-api",
-            "reference/domain-model",
+            "reference/api-conventions",
             "reference/security-model",
             "reference/glossary",
           ],

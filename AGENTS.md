@@ -13,8 +13,9 @@ humans and AI agents, installed single-tenant in each client's cloud. The rules 
 follows are in [PRINCIPLES.md](PRINCIPLES.md). The plans are in [docs/plans/](docs/plans/):
 [platform](docs/plans/platform-plan.md), [deployment](docs/plans/deployment-plan.md), and
 [demo](docs/plans/demo-plan.md).
-The vocabulary (entities, QIDs, actors, timestamps) is on the docs site's
-[domain model](docs/site/src/content/docs/reference/domain-model.md) page. Decisions are recorded in
+The vocabulary (your entities and awzy's records, actors) is on the docs site's
+[domain model](docs/site/src/content/docs/concepts/domain-model.md) page, and how IDs, QIDs, and
+timestamps are written on the wire on its [API conventions](docs/site/src/content/docs/reference/api-conventions.md) page. Decisions are recorded in
 [docs/adr/](docs/adr/README.md). Read the relevant ADR before changing something it covers, and
 don't re-propose a decision an ADR settled (for example, keeping Kafka) without new information.
 
