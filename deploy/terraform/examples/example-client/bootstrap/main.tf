@@ -147,7 +147,10 @@ module "bootstrap" {
   # awzy-gateway (in-cluster only) so the portal has decisions.
   demo_data     = true
   demo_activity = true
-  mcp_gateway   = { upstreams = [] }
+  # awzy-intake, in-cluster only, so apps built on the client libraries can report what they
+  # showed (the partner's path in tools/demo).
+  intake      = {}
+  mcp_gateway = { upstreams = [] }
   # awzy-reasoner investigates the people the scenarios flag (ADR 0071). This account can't use
   # Bedrock's models yet, so with Gemini on the Google Cloud demo's Vertex AI, through an API key
   # bound to a service account that may only call models (ADR 0114).
