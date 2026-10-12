@@ -698,9 +698,10 @@ impl ContextStore {
             sqlx::query_as("SELECT scim_id, user_name, active, resource, external_id FROM humans")
                 .fetch_all(&mut *tx)
                 .await?;
-        let directory = crate::org::Directory::new(
-            humans.iter().map(|(id, user_name, _, _, external_id)| (id.to_string(), external_id.as_deref(), user_name.as_str())),
-        );
+        let directory =
+            crate::org::Directory::new(humans.iter().map(|(id, user_name, _, _, external_id)| {
+                (id.to_string(), external_id.as_deref(), user_name.as_str())
+            }));
         for (id, user_name, active, resource, _) in &humans {
             // Their HR attributes from the IdP (ADR 0116), then whether they're active.
             let mut attrs = crate::human_attributes::of(resource);

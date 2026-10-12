@@ -16,8 +16,8 @@ async fn main() -> anyhow::Result<()> {
     let scim_token = std::env::var("AWZY_SCIM_TOKEN").context("AWZY_SCIM_TOKEN is not set")?;
     anyhow::ensure!(scim_token.len() >= 32, "AWZY_SCIM_TOKEN must be at least 32 characters");
     let pool = sqlx::postgres::PgPoolOptions::new().max_connections(8).connect(&url).await?;
-    let store = awzy_context::store::ContextStore::new(pool)
-        .with_team_groups(awzy_context::org::TeamGroups::from_env());
+    let store =
+        awzy_context::store::ContextStore::new(pool).with_team_groups(awzy_context::org::TeamGroups::from_env());
     store.migrate_on_start().await?;
     // Wakes PDPs waiting for principals or resources to change (ADR 0077).
     tokio::spawn(store.clone().follow_changes());
