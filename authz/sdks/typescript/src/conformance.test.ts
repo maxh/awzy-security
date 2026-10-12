@@ -75,6 +75,8 @@ describe("conformance", () => {
   for (const scenario of scenarios) {
     it(String(scenario["name"]), async () => {
       const options = isRecord(scenario["options"]) ? scenario["options"] : {};
+      const workItemId = scenario["work_item_id"];
+      const asPrincipal = typeof workItemId === "string" ? { ...principal, workItemId } : principal;
       const pdp = fakePdp();
       const awzy = new Awzy({
         pdpUrl: "http://pdp",
@@ -92,7 +94,7 @@ describe("conformance", () => {
         // Steps run in order: each one's answer depends on what the client saw before.
         // oxlint-disable-next-line no-await-in-loop
         const result = await awzy.check({
-          principal: typeof scenario["work_item_id"] === "string" ? { ...principal, workItemId: scenario["work_item_id"] } : principal,
+          principal: asPrincipal,
           action: String(request["action"]),
           resource: {
             ...entity(resource),
