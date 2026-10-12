@@ -58,6 +58,20 @@ shares one root email), console access goes through the IAM Identity Center acce
 profile. Each provider sets `allowed_account_ids`, so a run against the wrong account fails before it
 changes anything.
 
+## Applying, and the drift check
+
+CI builds and deploys code, but never applies Terraform: a person does, with the credentials
+above, so CI's roles can't change the accounts. A merged change to `build/` or `corp-portal/` stays
+unapplied until then. The `terraform-drift` workflow plans both modules against their recorded
+state each day and after every change here, as a read-only role (`corp-portal/drift.tf`), and keeps
+an issue open for each module with changes waiting, listing them, until it's applied.
+
+It needs the role's ARN in the repository variable `AWZY_CORP_AWS_PLAN_ROLE_ARN` (from
+`tofu output ci_plan_role_arn` in `corp-portal/`), and this `deployment.env` in the repository
+secret `AWZY_CORP_DEPLOYMENT_ENV` (`gh secret set AWZY_CORP_DEPLOYMENT_ENV <
+deploy/terraform/corp/deployment.env`). Its logs print resource addresses only, never plan
+details, since those hold account IDs.
+
 ## First run (already done)
 
 `state/` creates the bucket its own backend points at, so it was applied once without the

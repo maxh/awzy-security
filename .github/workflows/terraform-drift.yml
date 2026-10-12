@@ -1,0 +1,45 @@
+name: terraform-drift
+
+# Corp Terraform that's merged but not applied (tools/ci/terraform-drift.sh). CI never applies
+# Terraform; a person does, so this says when one hasn't: a plan of each module against its
+# recorded state, as the read-only plan role (deploy/terraform/corp/corp-portal/drift.tf), with an
+# issue kept open per module until it's applied. Daily, and after every change to that Terraform.
+on:
+  schedule:
+    - cron: "17 13 * * *"
+  push:
+    branches: [main]
+    paths:
+      - "deploy/terraform/corp/**"
+      - "tools/ci/terraform-drift.sh"
+      - ".github/workflows/terraform-drift.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: terraform-drift
+  cancel-in-progress: true
+
+jobs:
+  drift:
+    # Only once the plan role exists and its ARN is set.
+    if: github.ref == 'refs/heads/main' && vars.AWZY_CORP_AWS_PLAN_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # GitHub OIDC token for AWS; only main can assume the plan role
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.13.1
+          tofu_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWZY_CORP_AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWZY_CORP_AWS_REGION }}
+      - name: Merged Terraform is applied
+        env:
+          DEPLOYMENT_ENV: ${{ secrets.AWZY_CORP_DEPLOYMENT_ENV }}
+          GH_TOKEN: ${{ github.token }}
+        run: tools/ci/terraform-drift.sh corp/build corp/corp-portal
