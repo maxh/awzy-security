@@ -1,10 +1,10 @@
 ---
-title: Checking calls in a TypeScript app
+title: TypeScript
 description: "Using awzy's TypeScript SDK to check each tool call or operation in your own app."
 ---
 
 When your own app takes actions for people and agents, such as typed tool functions an agent
-calls from a script, check each one with awzy's TypeScript SDK, `@awzy/sdk`. It's an enforcement
+calls from a script, check each one with awzy's TypeScript SDK, `@awzy/authz-sdk`. It's an enforcement
 point in your app's process, held to the same rules as awzy-gateway:
 
 - It validates the caller's token itself, and takes who's acting from it, never from your code.
@@ -17,7 +17,7 @@ point in your app's process, held to the same rules as awzy-gateway:
 ## Set it up
 
 ```ts
-import { Awzy, TokenVerifier, serviceTokenFromDir } from "@awzy/sdk";
+import { Awzy, TokenVerifier, serviceTokenFromDir } from "@awzy/authz-sdk";
 
 const awzy = new Awzy({
   pdpUrl: "http://awzy-pdp.awzy-system.svc:8080",
@@ -71,7 +71,7 @@ for your own query, instead of checking every row. `toPostgres` is a reference m
 Postgres; write your own for another store from the same filter tree.
 
 ```ts
-import { toPostgres } from "@awzy/sdk";
+import { toPostgres } from "@awzy/authz-sdk";
 
 const req = { authorization, action: "view_customer", resourceType: "Customer", planQid: cursor?.planQid };
 const plan = await awzy.plan(req);

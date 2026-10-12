@@ -1,0 +1,837 @@
+{
+  "about": "What every awzy client library does with each answer the PDP can give (ADR 0045, 0114). Each library's tests run every scenario against a fake PDP: before each step the fake is set to answer /v1/access/evaluation as `evaluation` says, and /v1/access/challenge as `challenge` says; `down` refuses the connection, `hang` never answers. Each step's call is made as `principal` acting for `on_behalf_of`, a fresh client per scenario with its `options` (defaults: budget_ms 250, nothing fails open). `expect` lists the fields the result must have; `sent`, when present, is the JSON body the PDP must receive.",
+  "principal": {
+    "type": "ServiceAccount",
+    "id": "acme-crm.renewals-bot"
+  },
+  "on_behalf_of": {
+    "type": "Human",
+    "id": "dana"
+  },
+  "scenarios": [
+    {
+      "name": "sends IDs and the person, and allows what the PDP allows",
+      "about": "The resource's tier stays in the app; the PDP gets only its type and ID.",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "allow",
+              "policies": [
+                "p"
+              ],
+              "mode": "enforce"
+            }
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "sent": {
+            "principal": {
+              "type": "ServiceAccount",
+              "id": "acme-crm.renewals-bot"
+            },
+            "on_behalf_of": {
+              "type": "Human",
+              "id": "dana"
+            },
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7"
+            },
+            "context": {},
+            "entities": []
+          },
+          "expect": {
+            "allowed": true,
+            "kind": "allowed",
+            "mode": "enforce",
+            "verdict": "allow",
+            "decision_qid": "decision_0192a000-0000-7000-8000-000000000001"
+          }
+        }
+      ]
+    },
+    {
+      "name": "monitor allows a deny and says what enforcing would do",
+      "about": "",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "deny",
+              "policies": [
+                "p"
+              ],
+              "mode": "monitor"
+            }
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": true,
+            "kind": "allowed",
+            "mode": "monitor",
+            "verdict": "deny"
+          }
+        }
+      ]
+    },
+    {
+      "name": "monitor allows a challenge without opening one",
+      "about": "",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "challenge",
+              "policies": [
+                "p"
+              ],
+              "mode": "monitor",
+              "challenges": [
+                "approval"
+              ]
+            }
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": true,
+            "kind": "allowed",
+            "mode": "monitor",
+            "verdict": "challenge"
+          }
+        }
+      ]
+    },
+    {
+      "name": "enforce denies with the policies",
+      "about": "",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "deny",
+              "policies": [
+                "p"
+              ],
+              "mode": "enforce"
+            }
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": false,
+            "kind": "denied",
+            "decision_qid": "decision_0192a000-0000-7000-8000-000000000001",
+            "policies": [
+              "p"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a verdict it can't read is a deny",
+      "about": "",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "maybe",
+              "policies": [
+                "p"
+              ],
+              "mode": "enforce"
+            }
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": false,
+            "kind": "denied"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a mode it can't read is enforce",
+      "about": "",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "deny",
+              "policies": [
+                "p"
+              ],
+              "mode": "later"
+            }
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": false,
+            "kind": "denied"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a challenge comes with its QID, kinds, and expiry",
+      "about": "",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "challenge",
+              "policies": [
+                "p"
+              ],
+              "mode": "enforce",
+              "challenges": [
+                "approval"
+              ],
+              "challenge_qid": "challenge_0192a000-0000-7000-8000-000000000002"
+            }
+          },
+          "challenge": {
+            "status": 200,
+            "body": {
+              "outcome": "pending",
+              "expires_at": "2026-10-12T15:00:00Z",
+              "grant_expires_at": null,
+              "pending": [
+                "approval"
+              ]
+            }
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": false,
+            "kind": "challenged",
+            "decision_qid": "decision_0192a000-0000-7000-8000-000000000001",
+            "challenge_qid": "challenge_0192a000-0000-7000-8000-000000000002",
+            "challenges": [
+              "approval"
+            ],
+            "expires_at": "2026-10-12T15:00:00Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a challenge with none opened is unavailable",
+      "about": "",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "challenge",
+              "policies": [
+                "p"
+              ],
+              "mode": "enforce",
+              "challenges": [
+                "approval"
+              ]
+            }
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": false,
+            "kind": "unavailable"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a refused request is unavailable, never the fallback",
+      "about": "A 400, 401, or 403 means the call itself is wrong; replaying an allow would hide that.",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "allow",
+              "policies": [
+                "p"
+              ],
+              "mode": "monitor"
+            }
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": true,
+            "kind": "allowed"
+          }
+        },
+        {
+          "evaluation": {
+            "status": 400,
+            "body": "bad request"
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": false,
+            "kind": "unavailable"
+          }
+        }
+      ]
+    },
+    {
+      "name": "an outage while monitoring keeps allowing",
+      "about": "",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "deny",
+              "policies": [
+                "p"
+              ],
+              "mode": "monitor"
+            }
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": true,
+            "kind": "allowed"
+          }
+        },
+        {
+          "evaluation": "down",
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": true,
+            "kind": "allowed",
+            "mode": "monitor",
+            "fallback": "monitor"
+          }
+        }
+      ]
+    },
+    {
+      "name": "an outage before any answer fails closed",
+      "about": "",
+      "steps": [
+        {
+          "evaluation": "down",
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": false,
+            "kind": "unavailable"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a server error in enforce fails closed",
+      "about": "",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "deny",
+              "policies": [
+                "p"
+              ],
+              "mode": "enforce"
+            }
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": false,
+            "kind": "denied"
+          }
+        },
+        {
+          "evaluation": {
+            "status": 503,
+            "body": "unavailable"
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": false,
+            "kind": "unavailable"
+          }
+        }
+      ]
+    },
+    {
+      "name": "an answer past the budget fails closed",
+      "about": "",
+      "steps": [
+        {
+          "evaluation": "hang",
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": false,
+            "kind": "unavailable"
+          }
+        }
+      ],
+      "options": {
+        "budget_ms": 50
+      }
+    },
+    {
+      "name": "a recent allow replays for a fail-open action on a fail-open tier",
+      "about": "",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "allow",
+              "policies": [
+                "p"
+              ],
+              "mode": "enforce"
+            }
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": true,
+            "kind": "allowed"
+          }
+        },
+        {
+          "evaluation": "down",
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": true,
+            "kind": "allowed",
+            "mode": "enforce",
+            "fallback": "cached_allow"
+          }
+        }
+      ],
+      "options": {
+        "fail_open": [
+          "update_invoice"
+        ],
+        "fail_open_tiers": [
+          "internal",
+          "crown_jewels"
+        ]
+      }
+    },
+    {
+      "name": "crown jewels never fail open",
+      "about": "Even when the tiers the app was given include them.",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "allow",
+              "policies": [
+                "p"
+              ],
+              "mode": "enforce"
+            }
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "ledger",
+              "tier": "crown_jewels"
+            }
+          },
+          "expect": {
+            "allowed": true,
+            "kind": "allowed"
+          }
+        },
+        {
+          "evaluation": "down",
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "ledger",
+              "tier": "crown_jewels"
+            }
+          },
+          "expect": {
+            "allowed": false,
+            "kind": "unavailable"
+          }
+        }
+      ],
+      "options": {
+        "fail_open": [
+          "update_invoice"
+        ],
+        "fail_open_tiers": [
+          "internal",
+          "crown_jewels"
+        ]
+      }
+    },
+    {
+      "name": "only the same call replays",
+      "about": "",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "allow",
+              "policies": [
+                "p"
+              ],
+              "mode": "enforce"
+            }
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": true,
+            "kind": "allowed"
+          }
+        },
+        {
+          "evaluation": "down",
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-8",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": false,
+            "kind": "unavailable"
+          }
+        }
+      ],
+      "options": {
+        "fail_open": [
+          "update_invoice"
+        ],
+        "fail_open_tiers": [
+          "internal",
+          "crown_jewels"
+        ]
+      }
+    },
+    {
+      "name": "an action not set to fail open fails closed",
+      "about": "",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "allow",
+              "policies": [
+                "p"
+              ],
+              "mode": "enforce"
+            }
+          },
+          "request": {
+            "action": "delete_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": true,
+            "kind": "allowed"
+          }
+        },
+        {
+          "evaluation": "down",
+          "request": {
+            "action": "delete_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-7",
+              "tier": "internal"
+            }
+          },
+          "expect": {
+            "allowed": false,
+            "kind": "unavailable"
+          }
+        }
+      ],
+      "options": {
+        "fail_open": [
+          "update_invoice"
+        ],
+        "fail_open_tiers": [
+          "internal",
+          "crown_jewels"
+        ]
+      }
+    },
+    {
+      "name": "a tier the portal doesn't fail open fails closed",
+      "about": "",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "allow",
+              "policies": [
+                "p"
+              ],
+              "mode": "enforce"
+            }
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-9",
+              "tier": "public"
+            }
+          },
+          "expect": {
+            "allowed": true,
+            "kind": "allowed"
+          }
+        },
+        {
+          "evaluation": "down",
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-9",
+              "tier": "public"
+            }
+          },
+          "expect": {
+            "allowed": false,
+            "kind": "unavailable"
+          }
+        }
+      ],
+      "options": {
+        "fail_open": [
+          "update_invoice"
+        ],
+        "fail_open_tiers": [
+          "internal",
+          "crown_jewels"
+        ]
+      }
+    },
+    {
+      "name": "a resource with no tier fails closed",
+      "about": "",
+      "steps": [
+        {
+          "evaluation": {
+            "status": 200,
+            "body": {
+              "qid": "decision_0192a000-0000-7000-8000-000000000001",
+              "verdict": "allow",
+              "policies": [
+                "p"
+              ],
+              "mode": "enforce"
+            }
+          },
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-10"
+            }
+          },
+          "expect": {
+            "allowed": true,
+            "kind": "allowed"
+          }
+        },
+        {
+          "evaluation": "down",
+          "request": {
+            "action": "update_invoice",
+            "resource": {
+              "type": "Invoice",
+              "id": "inv-10"
+            }
+          },
+          "expect": {
+            "allowed": false,
+            "kind": "unavailable"
+          }
+        }
+      ],
+      "options": {
+        "fail_open": [
+          "update_invoice"
+        ],
+        "fail_open_tiers": [
+          "internal",
+          "crown_jewels"
+        ]
+      }
+    }
+  ]
+}

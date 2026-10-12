@@ -17,6 +17,8 @@ copy_to_bin(
 
 SRCS = [
     ":srcs",
+    # The conformance spec every client library runs (ADR 0114).
+    "//authz/sdks/conformance:scenarios",
     "//:tsconfig_base",
     ":node_modules",
 ]

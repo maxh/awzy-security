@@ -38,7 +38,7 @@ deciding what its customers may do with their data. awzy covers your own staff a
 that act for them, and a call goes ahead only if both allow it:
 
 1. Your app checks its own permissions, as it does today.
-2. It asks awzy, through the [TypeScript SDK](/guides/typescript-sdk/), the
+2. It asks awzy, through the [client libraries](/client-libraries/), the
    [decision API](/reference/decision-api/), or [awzy-gateway](/guides/mcp-gateway/) for MCP tools.
 3. It applies the stricter answer.
 

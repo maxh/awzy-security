@@ -1,0 +1,9 @@
+load("@bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
+
+# What every client library does with each answer the PDP can give (ADR 0114), read by each
+# library's tests.
+copy_to_bin(
+    name = "scenarios",
+    srcs = ["scenarios.json"],
+    visibility = ["//authz/sdks:__subpackages__"],
+)
