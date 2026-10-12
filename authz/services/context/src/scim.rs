@@ -27,7 +27,10 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::store::{ContextStore, Group, GroupInput, StoreError, User, UserInput};
+use crate::{
+    human_attributes::ENTERPRISE_SCHEMA,
+    store::{ContextStore, Group, GroupInput, StoreError, User, UserInput},
+};
 
 const USER_SCHEMA: &str = "urn:ietf:params:scim:schemas:core:2.0:User";
 const GROUP_SCHEMA: &str = "urn:ietf:params:scim:schemas:core:2.0:Group";
@@ -111,7 +114,9 @@ fn meta(kind: &str, id: Uuid, created: chrono::DateTime<chrono::Utc>, updated: c
 fn user_json(u: &User) -> Value {
     let mut r = u.input.resource.as_object().cloned().unwrap_or_default();
     r.remove("password");
-    r.insert("schemas".into(), json!([USER_SCHEMA]));
+    let schemas =
+        if r.contains_key(ENTERPRISE_SCHEMA) { json!([USER_SCHEMA, ENTERPRISE_SCHEMA]) } else { json!([USER_SCHEMA]) };
+    r.insert("schemas".into(), schemas);
     r.insert("id".into(), json!(u.scim_id));
     r.insert("userName".into(), json!(u.input.user_name));
     r.insert("active".into(), json!(u.input.active));
@@ -291,6 +296,28 @@ async fn replace_user(State(s): State<Scim>, Path(id): Path<Uuid>, body: Bytes) 
 /// ignored: awzy doesn't use those attributes.
 fn set_attribute(r: &mut Map<String, Value>, path: &str, value: Value) {
     if path.contains('[') {
+        return;
+    }
+    // The enterprise extension's attributes (Entra ID: `urn:…:enterprise:2.0:User:department`),
+    // whose URN holds a `.` that isn't a sub-attribute.
+    if let Some(rest) = path.strip_prefix(ENTERPRISE_SCHEMA) {
+        match rest.strip_prefix(':') {
+            Some(attr) => {
+                let entry = r.entry(ENTERPRISE_SCHEMA.to_string()).or_insert_with(|| json!({}));
+                if !entry.is_object() {
+                    *entry = json!({});
+                }
+                if let Some(ext) = entry.as_object_mut() {
+                    set_attribute(ext, attr, value);
+                }
+            }
+            None if value.is_null() => {
+                r.remove(ENTERPRISE_SCHEMA);
+            }
+            None => {
+                r.insert(ENTERPRISE_SCHEMA.to_string(), value);
+            }
+        }
         return;
     }
     let path = path.strip_prefix(&format!("{USER_SCHEMA}:")).unwrap_or(path);
@@ -543,6 +570,24 @@ async fn service_provider_config() -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_patch_reaches_the_enterprise_extensions_attributes() {
+        let mut r = Map::new();
+        let department = format!("{ENTERPRISE_SCHEMA}:department");
+        set_attribute(&mut r, &department, json!("finance"));
+        set_attribute(&mut r, &format!("{ENTERPRISE_SCHEMA}:manager"), json!("mgr-id"));
+        assert_eq!(
+            Value::Object(r.clone()),
+            json!({ ENTERPRISE_SCHEMA: { "department": "finance", "manager": "mgr-id" } })
+        );
+        set_attribute(&mut r, &department, Value::Null);
+        assert_eq!(Value::Object(r.clone()), json!({ ENTERPRISE_SCHEMA: { "manager": "mgr-id" } }));
+        set_attribute(&mut r, ENTERPRISE_SCHEMA, json!({ "division": "east" }));
+        assert_eq!(Value::Object(r.clone()), json!({ ENTERPRISE_SCHEMA: { "division": "east" } }));
+        set_attribute(&mut r, "title", json!("Analyst"));
+        assert_eq!(r.get("title"), Some(&json!("Analyst")));
+    }
 
     #[test]
     fn parses_the_filters_idps_send() {

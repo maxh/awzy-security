@@ -5,8 +5,9 @@ description: Humans, service accounts, and the three ways software can act in yo
 
 awzy has two kinds of principal:
 
-- **`Human`**: a person, identified by your IdP. Their groups and whether they're still active
-  come from your IdP over SCIM.
+- **`Human`**: a person, identified by your IdP. Their groups, whether they're still active,
+  and what your IdP says about them (title, employee type, department) come from your IdP over
+  SCIM.
 - **`ServiceAccount`**: anything else with its own credentials: a backend service, a scheduled
   job, or an AI agent. Each is registered in awzy-context with an accountable owner, and marked
   as AI or not. A service account awzy doesn't know is denied before any policy runs.

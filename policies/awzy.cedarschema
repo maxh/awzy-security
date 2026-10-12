@@ -7,6 +7,16 @@ entity Group in [Group];
 // built the entity from a token alone.
 entity Human in [Group] {
   active?: Bool,
+  // What the IdP says about them over SCIM, each absent when it doesn't say: `title`, and from
+  // the enterprise extension `department`, `division`, `organization`, and `cost_center`, as the
+  // IdP sends them. `employee_type` is SCIM's `userType` as a lowercase slug ("contractor",
+  // "employee", "full_time").
+  title?: String,
+  department?: String,
+  division?: String,
+  organization?: String,
+  cost_center?: String,
+  employee_type?: String,
 };
 
 // Any non-human identity with its own credentials: a backend service, a scheduled job, an

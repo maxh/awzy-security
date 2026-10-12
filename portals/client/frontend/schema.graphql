@@ -1175,8 +1175,8 @@ type PrincipalDetail {
 	"""
 	known: Boolean!
 	"""
-	Its Cedar attributes, as JSON: `active`, a service account's `owner` and `ai`. Null when a
-	policy hides them (ADR 0103).
+	Its Cedar attributes, as JSON: a person's `active` and HR attributes, a service account's
+	`owner` and `ai`. Null when a policy hides them (ADR 0103).
 	"""
 	attributes: JSONObject
 	"""

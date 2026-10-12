@@ -13,6 +13,7 @@ pub mod connector_settings;
 pub mod contact;
 #[cfg(test)]
 mod contract_tests;
+pub mod human_attributes;
 mod invalid;
 pub mod investigations;
 pub mod issuers;

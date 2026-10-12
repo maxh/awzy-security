@@ -56,20 +56,30 @@ pub struct Facts<'a> {
     pub automation: Option<&'a std::collections::HashMap<String, i64>>,
 }
 
-/// `Resource` attributes added after the first schema, each with a value of its type: a bundle's
-/// schema is probed for each, and the ones it doesn't declare are dropped from resource entities.
-static OPTIONAL_RESOURCE_ATTRS: std::sync::LazyLock<Vec<(&'static str, serde_json::Value)>> =
+/// Attributes of awzy's own entity types added after the first schema, by type, each with a
+/// value of its type: a bundle's schema is probed for each, and the ones it doesn't declare are
+/// dropped from those entities.
+static OPTIONAL_ATTRS: std::sync::LazyLock<Vec<(&'static str, &'static str, serde_json::Value)>> =
     std::sync::LazyLock::new(|| {
+        use awzy_model::entity_type::{HUMAN, RESOURCE};
         let human = serde_json::json!({ "__entity": { "type": "Human", "id": "probe" } });
         let group = serde_json::json!({ "__entity": { "type": "Group", "id": "probe" } });
+        let text = serde_json::json!("probe");
         vec![
-            ("unclassified", serde_json::json!(true)),
-            ("owner", human.clone()),
-            ("shared_humans", serde_json::json!([human.clone()])),
-            ("shared_groups", serde_json::json!([group.clone()])),
-            ("writer_humans", serde_json::json!([human])),
-            ("writer_groups", serde_json::json!([group])),
-            ("shared_with_everyone", serde_json::json!(true)),
+            (RESOURCE, "unclassified", serde_json::json!(true)),
+            (RESOURCE, "owner", human.clone()),
+            (RESOURCE, "shared_humans", serde_json::json!([human.clone()])),
+            (RESOURCE, "shared_groups", serde_json::json!([group.clone()])),
+            (RESOURCE, "writer_humans", serde_json::json!([human])),
+            (RESOURCE, "writer_groups", serde_json::json!([group])),
+            (RESOURCE, "shared_with_everyone", serde_json::json!(true)),
+            // What the IdP says about a person (ADR 0116).
+            (HUMAN, "title", text.clone()),
+            (HUMAN, "department", text.clone()),
+            (HUMAN, "division", text.clone()),
+            (HUMAN, "organization", text.clone()),
+            (HUMAN, "cost_center", text.clone()),
+            (HUMAN, "employee_type", text),
         ]
     });
 
@@ -79,10 +89,10 @@ pub struct Pdp {
     authorizer: Authorizer,
     /// Version of the policy bundle in force; 0 for the built-in defaults.
     version: i64,
-    /// The optional `Resource` attributes the bundle's schema doesn't declare. A bundle published
-    /// before one existed doesn't, and Cedar rejects attributes a schema doesn't declare, so they
-    /// are dropped before evaluation.
-    unknown_resource_attrs: Vec<&'static str>,
+    /// The optional attributes (by entity type) the bundle's schema doesn't declare. A bundle
+    /// published before one existed doesn't, and Cedar rejects attributes a schema doesn't
+    /// declare, so they are dropped before evaluation.
+    unknown_attrs: Vec<(&'static str, &'static str)>,
     /// Whether the schema declares `context.assigned` for `read` (ADR 0046). Same reason.
     knows_assigned: bool,
     /// Whether the schema declares `context.mcp_client` for `call` (ADR 0081). Same reason: a
@@ -138,15 +148,20 @@ impl Pdp {
             let errors: Vec<String> = result.validation_errors().map(|e| e.to_string()).collect();
             anyhow::bail!("policy validation failed: {}", errors.join("; "));
         }
-        let unknown_resource_attrs = OPTIONAL_RESOURCE_ATTRS
+        let unknown_attrs = OPTIONAL_ATTRS
             .iter()
-            .filter(|(attr, example)| {
-                let mut attrs = serde_json::json!({ "sensitivity": "internal" });
-                attrs[*attr] = example.clone();
-                let probe = serde_json::json!([{ "uid": { "type": "Resource", "id": "probe" }, "attrs": attrs, "parents": [] }]);
+            .filter(|(kind, attr, example)| {
+                // A resource's one required attribute; a person has none.
+                let mut attrs = serde_json::Map::new();
+                if *kind == awzy_model::entity_type::RESOURCE {
+                    attrs.insert("sensitivity".into(), serde_json::json!("internal"));
+                }
+                attrs.insert((*attr).into(), example.clone());
+                let probe =
+                    serde_json::json!([{ "uid": { "type": kind, "id": "probe" }, "attrs": attrs, "parents": [] }]);
                 Entities::from_json_value(probe, Some(&schema)).is_err()
             })
-            .map(|(attr, _)| *attr)
+            .map(|(kind, attr, _)| (*kind, *attr))
             .collect();
         let read = EntityUid::from_type_name_and_id(EntityTypeName::from_str("Action")?, EntityId::new("read"));
         let probe = serde_json::json!({ "risk_score": 0, "human_present": true, "assigned": true });
@@ -166,7 +181,7 @@ impl Pdp {
             policies,
             authorizer: Authorizer::new(),
             version: 0,
-            unknown_resource_attrs,
+            unknown_attrs,
             knows_assigned,
             knows_mcp_client,
             knows_support_areas,
@@ -195,13 +210,12 @@ impl Pdp {
 
     /// Parses Cedar entity JSON (principals, teams, resources) against the schema.
     pub fn entities(&self, mut json: serde_json::Value) -> anyhow::Result<Entities> {
-        if !self.unknown_resource_attrs.is_empty() {
+        if !self.unknown_attrs.is_empty() {
             for e in json.as_array_mut().into_iter().flatten() {
-                if e["uid"]["type"] == awzy_model::entity_type::RESOURCE {
-                    if let Some(attrs) = e["attrs"].as_object_mut() {
-                        for attr in &self.unknown_resource_attrs {
-                            attrs.remove(*attr);
-                        }
+                let kind = e.pointer("/uid/type").and_then(|t| t.as_str()).unwrap_or_default().to_string();
+                if let Some(attrs) = e.pointer_mut("/attrs").and_then(|a| a.as_object_mut()) {
+                    for (_, attr) in self.unknown_attrs.iter().filter(|(k, _)| *k == kind) {
+                        attrs.remove(*attr);
                     }
                 }
             }
