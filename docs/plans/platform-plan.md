@@ -151,6 +151,15 @@ Many clients won't have anyone who has run ClickHouse, so a ClickHouse failure m
 - ClickHouse can be rebuilt from scratch from Kafka and the object-storage cold tier. Restoring from backup is a speed-up, not the only copy.
 - While ClickHouse is down, the reasoner pauses and the client portal shows decision search as unavailable. Enforcement continues on the last attributes.
 
+### Losing Postgres doesn't stop decisions
+
+awzy-policy, awzy-context, and awzy-challenge share the install's one Postgres, and the PDPs fill their memory from all three. A failover must not stop decisions ([ADR 0119](../adr/0119-a-pdp-outlasts-its-control-plane.md)).
+
+- A running PDP keeps deciding on what it has: policy and principals with no limit, containments for up to 5 minutes, and resources up to a limit by sensitivity tier.
+- A starting PDP takes its state from a running one, and verifies the policy it gets.
+- Every decision made on stale input records which input, and the freshness alerts page.
+- Only a cold start, with every PDP gone while a source is down, leaves enforcement points on their outage fallback.
+
 ### LLM budget
 
 Classifying resources, checking justifications, and running investigations is an ongoing model bill in the client's account, limited by their Bedrock, Vertex AI, or Azure OpenAI quota.
