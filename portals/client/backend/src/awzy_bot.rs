@@ -113,6 +113,30 @@ const MAX_ROUNDS: usize = 8;
 /// The transcript the browser sends back: enough for a long conversation, not unbounded.
 const MAX_TRANSCRIPT_BYTES: usize = 400_000;
 
+/// On a read-only portal, a public demo anyone may sign in to, the most turns it takes in an hour
+/// and in a day, so strangers can only spend so much on its model.
+const DEMO_TURNS_PER_HOUR: usize = 30;
+const DEMO_TURNS_PER_DAY: usize = 300;
+
+/// The times of the last day's turns.
+struct TurnLimit(Vec<std::time::Instant>);
+
+impl TurnLimit {
+    /// Takes a turn at `now` if the hour's and the day's limits allow one.
+    fn take(&mut self, now: std::time::Instant) -> bool {
+        let (hour, day) = (std::time::Duration::from_secs(3600), std::time::Duration::from_secs(86_400));
+        self.0.retain(|t| now.duration_since(*t) < day);
+        let last_hour = self.0.iter().filter(|t| now.duration_since(**t) < hour).count();
+        if self.0.len() >= DEMO_TURNS_PER_DAY || last_hour >= DEMO_TURNS_PER_HOUR {
+            return false;
+        }
+        self.0.push(now);
+        true
+    }
+}
+
+static DEMO_TURNS: Mutex<TurnLimit> = Mutex::new(TurnLimit(Vec::new()));
+
 #[derive(Clone, Copy)]
 enum Kind {
     SearchDecisions,
@@ -261,6 +285,13 @@ impl BotTool {
             }
             Kind::DraftPolicy => {
                 self.allow(PortalAction::Administer, PortalArea::Policies).await?;
+                if services.read_only {
+                    return Err(ToolOutcome::Error(
+                        "This portal is a read-only public demo, so drafts can't be saved. Put the Cedar you \
+                         would propose in your answer instead."
+                            .into(),
+                    ));
+                }
                 let p: ProposePolicyParams = parse(input)?;
                 let policy = services.policy.clone().ok_or_else(|| missing("the policy service"))?;
                 let schema = match p.schema {
@@ -343,6 +374,9 @@ impl AwzyBotMutation {
         if message.is_empty() {
             return Err("ask Awzy Bot something".into());
         }
+        if services.read_only && !DEMO_TURNS.lock().unwrap_or_else(|e| e.into_inner()).take(std::time::Instant::now()) {
+            return Err("Awzy Bot has answered as many questions as this demo allows for now; try again later".into());
+        }
         let mut messages: Vec<Message> = match input.transcript.as_deref().filter(|t| !t.is_empty()) {
             Some(t) if t.len() > MAX_TRANSCRIPT_BYTES => {
                 return Err("this conversation is too long; start a new one".into())
@@ -393,6 +427,23 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn a_demo_takes_so_many_turns_an_hour_and_a_day() {
+        let start = std::time::Instant::now();
+        let mut limit = TurnLimit(Vec::new());
+        assert!((0..DEMO_TURNS_PER_HOUR).all(|_| limit.take(start)));
+        assert!(!limit.take(start));
+        // An hour later the hour's turns are spent again, until the day's run out.
+        let mut hours = 1;
+        while limit.0.len() < DEMO_TURNS_PER_DAY {
+            let at = start + std::time::Duration::from_secs(3600 * hours);
+            assert!((0..DEMO_TURNS_PER_HOUR).all(|_| limit.take(at)));
+            hours += 1;
+        }
+        assert!(!limit.take(start + std::time::Duration::from_secs(3600 * hours)));
+        assert!(limit.take(start + std::time::Duration::from_secs(86_400 + 3600 * hours)));
+    }
     use crate::{
         policies::tests::{serve_fake_policy, FakePolicy},
         testing,
