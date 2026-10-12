@@ -2,6 +2,8 @@
 
 import type { Tone } from "@awzy/ui";
 
+import type { SupportSessionStatus } from "./__generated__/SupportSectionQuery.graphql";
+
 // An install that has never reported is a warning, not a neutral state: it was registered and
 // something is keeping its heartbeat from arriving.
 export const HEALTH: Record<string, { label: string; tone: Tone }> = {
@@ -49,4 +51,17 @@ export function shortDigest(d: string | null | undefined): string {
   if (!d) return "";
   const hex = d.replace(/^sha256:/, "");
   return `sha256:${hex.slice(0, 4)}…${hex.slice(-4)}`;
+}
+
+/** A support session's status as staff read it (ADR 0095), one entry per status in the schema. */
+const SUPPORT_STATUS: Record<Exclude<SupportSessionStatus, "%future added value">, { label: string; tone: Tone }> = {
+  REQUESTED: { label: "Waiting for the client", tone: "warning" },
+  APPROVED: { label: "Approved", tone: "success" },
+  REJECTED: { label: "Rejected", tone: "neutral" },
+  ENDED: { label: "Ended by the client", tone: "neutral" },
+  EXPIRED: { label: "Expired", tone: "neutral" },
+};
+
+export function supportStatus(status: SupportSessionStatus): { label: string; tone: Tone } {
+  return status === "%future added value" ? { label: "Unknown", tone: "neutral" } : SUPPORT_STATUS[status];
 }

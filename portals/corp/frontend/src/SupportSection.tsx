@@ -1,4 +1,4 @@
-import { Section, StatusBadge, type Tone } from "@awzy/ui";
+import { Section, StatusBadge } from "@awzy/ui";
 import { Alert, Button, Group, MultiSelect, NumberInput, Stack, Table, Text, TextInput, Textarea } from "@mantine/core";
 import { Suspense, useState } from "react";
 import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
@@ -6,17 +6,9 @@ import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
 import type { SupportSectionQuery } from "./__generated__/SupportSectionQuery.graphql";
 import type { SupportSectionRequestMutation } from "./__generated__/SupportSectionRequestMutation.graphql";
 import type { SupportSectionSignInMutation } from "./__generated__/SupportSectionSignInMutation.graphql";
-import { formatTime } from "./format";
+import { formatTime, supportStatus } from "./format";
 
 const AREAS = ["decisions", "policies", "enforcement", "directory", "challenges", "investigations"];
-
-const STATUS: Record<string, { label: string; tone: Tone }> = {
-  REQUESTED: { label: "Waiting for the client", tone: "warning" },
-  APPROVED: { label: "Approved", tone: "success" },
-  REJECTED: { label: "Rejected", tone: "neutral" },
-  ENDED: { label: "Ended by the client", tone: "neutral" },
-  EXPIRED: { label: "Expired", tone: "neutral" },
-};
 
 /**
  * Support sessions (ADR 0095): ask an install's admins to let you view parts of their client
@@ -99,7 +91,7 @@ function Sessions({ installId, fetchKey, onChanged }: { installId: string; fetch
           </Table.Thead>
           <Table.Tbody>
             {sessions.map((s) => {
-              const status = STATUS[s.status] ?? { label: s.status, tone: "neutral" as Tone };
+              const status = supportStatus(s.status);
               return (
                 <Table.Tr key={s.id}>
                   <Table.Td>

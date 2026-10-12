@@ -386,6 +386,10 @@ type Query {
 	The services an install can report, for filters and empty states.
 	"""
 	knownServices: [String!]!
+	"""
+	Every install's support sessions, newest first, up to 200.
+	"""
+	supportSessions: [SupportSession!]!
 }
 
 input RegisterInstallInput {
@@ -505,6 +509,10 @@ type SupportSession implements Node {
 	Whether the install has the request yet.
 	"""
 	delivered: Boolean!
+	"""
+	The install it's for; None once the install is retired.
+	"""
+	install: Install
 }
 
 enum SupportSessionStatus {
