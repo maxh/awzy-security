@@ -13,6 +13,7 @@ mod decision_log;
 mod enforcement;
 mod grpc;
 pub mod metrics;
+mod prepared;
 pub mod principals;
 pub mod replay;
 pub mod resources;
@@ -89,6 +90,8 @@ pub struct Pdp {
     /// Whether the schema declares `context.support_areas` (ADR 0095). Without it the key is
     /// dropped, so a support session's checks match no policy and are denied.
     knows_support_areas: bool,
+    parsed: prepared::ParsedEntities,
+    prepared: prepared::PreparedPolicies,
 }
 
 /// The PDP every request reads. Policy sync swaps in a new one without blocking readers.
@@ -149,6 +152,8 @@ impl Pdp {
         let probe = serde_json::json!({ "risk_score": 0, "human_present": true, "support_areas": [] });
         let knows_support_areas = Context::from_json_value(probe, Some((&schema, &view))).is_ok();
         Ok(Self {
+            prepared: prepared::PreparedPolicies::new(&policies)?,
+            parsed: prepared::ParsedEntities::new(&schema)?,
             schema,
             policies,
             authorizer: Authorizer::new(),
@@ -187,7 +192,10 @@ impl Pdp {
                 }
             }
         }
-        Ok(Entities::from_json_value(json, Some(&self.schema))?)
+        match json {
+            serde_json::Value::Array(items) => self.parsed.entities(&self.schema, items),
+            other => Ok(Entities::from_json_value(other, Some(&self.schema))?),
+        }
     }
 
     /// Decides one request. A delegated request (`on_behalf_of` set) is checked twice: once
@@ -311,28 +319,26 @@ impl Pdp {
         if let Some(score) = facts.automation.and_then(|a| a.get(&key)) {
             context.insert("automation_score".into(), serde_json::Value::from(*score));
         }
-        let context = Context::from_json_value(serde_json::Value::Object(context), Some((&self.schema, &action)))?;
+        let context = prepared::context(&self.schema, &action, context)?;
         let request = Request::new(uid(principal)?, action, uid(&req.resource)?, context, Some(&self.schema))?;
         let evaluating = std::time::Instant::now();
         let response = self.authorizer.is_authorized(&request, policy_set, entities);
         metrics::CEDAR_EVALUATION.observe(evaluating.elapsed());
 
-        let determining: Vec<_> = response.diagnostics().reason().filter_map(|id| policy_set.policy(id)).collect();
+        let determining: Vec<_> = response.diagnostics().reason().collect();
         // Cedar reports them in no particular order; sort so explanations are stable.
-        let mut policies: Vec<String> = determining.iter().map(|p| policy_id(p)).collect();
+        let mut policies: Vec<String> = determining.iter().map(|id| self.prepared.id(id)).collect();
         policies.sort();
         let verdict = match response.decision() {
             cedar_policy::Decision::Allow => Verdict::Allow,
             cedar_policy::Decision::Deny => {
                 // Challenge only when every forbid that fired asks for one; then all of them are required.
                 let kinds: Option<Vec<ChallengeKind>> =
-                    determining.iter().map(|p| p.annotation("challenge").and_then(ChallengeKind::parse)).collect();
+                    determining.iter().map(|id| self.prepared.challenge(id)).collect();
                 match kinds {
                     // And only in front of something policy would otherwise allow: passing a
                     // challenge on a request nothing permits would still end in a deny.
-                    Some(kinds)
-                        if !kinds.is_empty() && self.allowed_without_challenges(policy_set, &request, entities)? =>
-                    {
+                    Some(kinds) if !kinds.is_empty() && self.allowed_without_challenges(&request, entities) => {
                         Verdict::Challenge { challenges: kinds.into_iter().collect() }
                     }
                     _ => Verdict::Deny,
@@ -345,19 +351,13 @@ impl Pdp {
 
 impl Pdp {
     /// Whether `request` is allowed once every `@challenge` policy is set aside.
-    fn allowed_without_challenges(
-        &self,
-        policy_set: &PolicySet,
-        request: &Request,
-        entities: &Entities,
-    ) -> anyhow::Result<bool> {
-        let rest =
-            PolicySet::from_policies(policy_set.policies().filter(|p| p.annotation("challenge").is_none()).cloned())?;
+    fn allowed_without_challenges(&self, request: &Request, entities: &Entities) -> bool {
+        let rest = &self.prepared.without_challenges;
         let evaluating = std::time::Instant::now();
         let allowed =
-            self.authorizer.is_authorized(request, &rest, entities).decision() == cedar_policy::Decision::Allow;
+            self.authorizer.is_authorized(request, rest, entities).decision() == cedar_policy::Decision::Allow;
         metrics::CEDAR_EVALUATION.observe(evaluating.elapsed());
-        Ok(allowed)
+        allowed
     }
 }
 
