@@ -477,4 +477,29 @@ mod tests {
         hb["support_sessions"][0]["reason"] = json!("customer data here");
         assert!(serde_json::from_value::<Heartbeat>(hb).is_err());
     }
+
+    mod properties {
+        use proptest::prelude::*;
+
+        use super::*;
+
+        proptest! {
+            /// A version is exactly 1 to 64 of `[0-9A-Za-z.+-]`, so nothing else reaches the
+            /// corp portal's pages as one.
+            #[test]
+            fn a_version_is_its_alphabet_and_length(s in "[0-9A-Za-z._+-]{1,64}", other in ".*") {
+                prop_assert!(is_version(&s));
+                let fits = !other.is_empty()
+                    && other.len() <= 64
+                    && other.bytes().all(|b| b.is_ascii_alphanumeric() || b"._+-".contains(&b));
+                prop_assert_eq!(is_version(&other), fits);
+            }
+
+            /// Whatever a reporter sends, reading it answers rather than panicking.
+            #[test]
+            fn reading_any_text_is_total(text in ".*") {
+                let _ = serde_json::from_str::<Heartbeat>(&text).map(|h| h.validate(Utc::now()));
+            }
+        }
+    }
 }

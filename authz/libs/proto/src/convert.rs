@@ -259,6 +259,24 @@ mod tests {
         }
 
         proptest! {
+            /// A Cedar entity's uid and parents come through as sent, and any other JSON reads
+            /// as an entity with empty fields rather than panicking.
+            #[test]
+            fn entities_read_their_uid_and_parents(
+                kind in "[A-Za-z]{1,12}",
+                id in ".*",
+                parents in prop::collection::vec(("[A-Za-z]{1,12}", ".*"), 0..4),
+                junk in json(),
+            ) {
+                let parents_json: Vec<Json> = parents.iter().map(|(t, i)| serde_json::json!({ "type": t, "id": i })).collect();
+                let e = entity_from_json(&serde_json::json!({ "uid": { "type": kind, "id": id }, "attrs": {}, "parents": parents_json }));
+                let uid = e.uid.unwrap();
+                prop_assert_eq!((uid.r#type, uid.id), (kind, id));
+                let read: Vec<(String, String)> = e.parents.into_iter().map(|p| (p.r#type, p.id)).collect();
+                prop_assert_eq!(read, parents);
+                let _ = entity_from_json(&junk);
+            }
+
             /// Context survives the trip through protobuf's Struct unchanged, integers included.
             #[test]
             fn context_round_trips(m in prop::collection::btree_map(".*", json(), 0..6)) {
