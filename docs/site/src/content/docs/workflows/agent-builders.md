@@ -18,6 +18,37 @@ Every agent or service gets a **service account** on the client portal's Directo
 
 An account that isn't registered is denied everything.
 
+### When your app mints its own agents
+
+If your app creates agents as it goes, and signs their tokens itself rather than getting them from
+your IdP, an admin can trust it as a token issuer instead. On the Directory page's **Apps** tab
+they give its name, the `iss` its tokens carry, its JWKS URL (RS256 or ES256 keys, over HTTPS),
+and the `aud` its tokens must carry.
+
+The app then signs tokens only for service accounts whose ID starts with its name and a dot: an
+app named `acme-crm` signs for `acme-crm.renewals-bot`, and nothing else. A token it signs for a
+person on their own, or for any other service account, is refused. To act for a person, it puts
+the person's user name in `sub` and the agent in `act.sub`, as a token exchange would, and awzy
+checks both.
+
+The app registers and retires its agents itself, with a token it signs for itself, whose `sub` is
+its name:
+
+```sh
+# Register or change an agent. Owner: the accountable person, provisioned by your IdP.
+curl -X PUT https://<portal>/api/v1/agents/acme-crm.renewals-bot \
+  -H "authorization: Bearer $APP_TOKEN" -H "content-type: application/json" \
+  -d '{"owner": "dana@example.com", "ai": true, "groups": ["sales"], "description": "Drafts renewals"}'
+
+# Its agents, then retire one.
+curl https://<portal>/api/v1/agents -H "authorization: Bearer $APP_TOKEN"
+curl -X DELETE https://<portal>/api/v1/agents/acme-crm.renewals-bot -H "authorization: Bearer $APP_TOKEN"
+```
+
+Each change is recorded with the app as who made it. An agent that isn't registered yet is denied
+like any other, and the denial is in the decision log. Enforcement points pick up a newly trusted
+app, or stop trusting a removed one, within about ten seconds.
+
 ## 2. Act for a person when there is one
 
 When your agent works for someone, get a token that says so: an OAuth token exchange

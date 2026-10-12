@@ -2,7 +2,8 @@
 
 use awzy_authz_proto::authz::v1::{
     authorizer_server::{Authorizer, AuthorizerServer},
-    CheckRequest, CheckResponse, WaitForChallengeRequest, WaitForChallengeResponse,
+    CheckRequest, CheckResponse, ListTrustedIssuersRequest, ListTrustedIssuersResponse, TrustedIssuer,
+    WaitForChallengeRequest, WaitForChallengeResponse,
 };
 use awzy_model::Check;
 use axum::Router;
@@ -46,6 +47,26 @@ impl Authorizer for Service {
                 crate::waiting::WaitError::Unavailable(_) => Status::unavailable(e.to_string()),
             })
     }
+
+    async fn list_trusted_issuers(
+        &self,
+        _: Request<ListTrustedIssuersRequest>,
+    ) -> Result<Response<ListTrustedIssuersResponse>, Status> {
+        let issuers = self
+            .0
+            .principals
+            .trusted_issuers()
+            .iter()
+            .map(|i| TrustedIssuer {
+                name: i.name.clone(),
+                issuer: i.issuer.clone(),
+                jwks_url: i.jwks_url.clone(),
+                audience: i.audience.clone(),
+                agent_prefix: i.agent_prefix(),
+            })
+            .collect();
+        Ok(Response::new(ListTrustedIssuersResponse { issuers }))
+    }
 }
 
 pub fn router(state: AppState) -> Router {
@@ -64,6 +85,27 @@ mod tests {
 
     fn obj(v: serde_json::Value) -> Option<awzy_authz_proto::prost_types::Struct> {
         Some(awzy_authz_proto::json_to_struct(v.as_object().unwrap().clone()))
+    }
+
+    #[tokio::test]
+    async fn enforcement_points_get_the_trusted_issuers_with_each_ones_prefix() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let state = crate::AppState::new(crate::shared(crate::Pdp::with_defaults().unwrap()));
+        state.principals.set_trusted_issuers(vec![awzy_model::TrustedIssuer {
+            name: "acme-crm".into(),
+            issuer: "https://crm.acme.example".into(),
+            jwks_url: "https://crm.acme.example/jwks".into(),
+            audience: "awzy".into(),
+        }]);
+        let app = crate::router(state);
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let mut client = AuthorizerClient::connect(format!("http://{addr}")).await.unwrap();
+        let res = client.list_trusted_issuers(ListTrustedIssuersRequest {}).await.unwrap().into_inner();
+        assert_eq!(res.issuers.len(), 1);
+        assert_eq!(res.issuers[0].issuer, "https://crm.acme.example");
+        assert_eq!(res.issuers[0].agent_prefix, "acme-crm.");
     }
 
     #[tokio::test]

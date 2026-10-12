@@ -9,6 +9,7 @@ license.workspace = true
 awzy-http.workspace = true
 anyhow.workspace = true
 awzy-model.workspace = true
+base64.workspace = true
 bytes.workspace = true
 http-body-util.workspace = true
 hyper.workspace = true
@@ -25,7 +26,6 @@ tracing.workspace = true
 webpki-roots.workspace = true
 
 [dev-dependencies]
-base64.workspace = true
 axum.workspace = true
 p256.workspace = true
 rcgen.workspace = true

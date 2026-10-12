@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use awzy_authz_proto::{
-    authz::v1::authorizer_client::AuthorizerClient, challenge::v1::challenge_service_client::ChallengeServiceClient,
+    authz::v1::{authorizer_client::AuthorizerClient, ListTrustedIssuersRequest},
+    challenge::v1::challenge_service_client::ChallengeServiceClient,
     policy::v1::policy_service_client::PolicyServiceClient,
 };
 use awzy_gateway::{
@@ -37,6 +38,7 @@ async fn main() -> anyhow::Result<()> {
             "awzy-pdp",
         )));
     }
+    let issuers_pdp = pdp[0].clone();
     // Containments from awzy-challenge, so a PDP outage never replays an allow for a contained
     // principal (ADR 0030). Without it, outages replay as before.
     // Forwarded tool calls, recorded in awzy-intake (ADR 0084).
@@ -63,6 +65,14 @@ async fn main() -> anyhow::Result<()> {
             awzy_gateway::GatewayState::new(config, pdp)?.with_activity(activity).with_fallback(fallback.clone())
         }
     };
+    // Apps trusted to sign tokens for their own agents (ADR 0110), from the PDP.
+    tokio::spawn(awzy_identity::TrustedIssuers::follow(vec![state.trusted_issuers()], move || {
+        let mut pdp = issuers_pdp.clone();
+        async move {
+            let res = pdp.list_trusted_issuers(ListTrustedIssuersRequest {}).await?;
+            Ok(res.into_inner().issuers.into_iter().map(Into::into).collect())
+        }
+    }));
     match std::env::var("AWZY_POLICY_ADDR") {
         Ok(addr) => {
             let policy = PolicyServiceClient::new(awzy_service_auth::grpc_channel(

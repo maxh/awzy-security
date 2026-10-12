@@ -15,6 +15,7 @@ pub mod contact;
 mod contract_tests;
 mod invalid;
 pub mod investigations;
+pub mod issuers;
 pub mod resources;
 pub mod risk;
 pub mod scim;
@@ -77,7 +78,17 @@ async fn principals(
     // back for it.
     let risk = store.risk_scores().await.map_err(fail)?;
     let automation = store.automation_scores().await.map_err(fail)?;
-    Ok(Json(json!({ "version": version, "entities": entities, "risk": risk, "automation": automation })))
+    // Apps trusted to sign tokens for their agents (ADR 0110), which the PDPs pass on to every
+    // enforcement point.
+    let issuers: Vec<awzy_model::TrustedIssuer> =
+        store.token_issuers().await.map_err(fail)?.into_iter().map(|r| r.issuer).collect();
+    Ok(Json(json!({
+        "version": version,
+        "entities": entities,
+        "risk": risk,
+        "automation": automation,
+        "token_issuers": issuers,
+    })))
 }
 
 fn internal(e: impl std::fmt::Display) -> Response {
@@ -249,6 +260,8 @@ pub fn router(store: ContextStore, scim_token: &str, access: &Access) -> Router 
         // Connector settings (ADR 0104): the client portal sets them, and connectors read them.
         .merge(guarded(connector_settings::write_router(store.clone()), &access.directory))
         .merge(guarded(connector_settings::read_router(store.clone()), &either(&access.readers, &access.directory)))
+        // Apps trusted to sign tokens for their own agents (ADR 0110): the client portal sets them.
+        .merge(guarded(issuers::router(store.clone()), &access.directory))
         .merge(guarded(directory, &access.directory))
         .merge(scim::router(store, scim_token))
 }

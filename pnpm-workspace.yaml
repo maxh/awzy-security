@@ -1,4 +1,5 @@
 packages:
+  - authz/sdks/typescript
   - portals/common/*
   - portals/client/frontend
   - portals/client/e2e

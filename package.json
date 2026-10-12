@@ -5,9 +5,9 @@
   "scripts": {
     "prepare": "sh tools/git-setup || true",
     "relay": "pnpm --filter './portals/*/frontend' relay",
-    "lint": "pnpm relay && oxlint --type-aware --deny-warnings portals && node tools/ci/check-graphql-schemas.mjs && node tools/ci/check-proto-qids.mjs",
-    "format": "oxfmt 'portals/**/*.{ts,tsx,js,mjs}'",
-    "format:check": "oxfmt --check 'portals/**/*.{ts,tsx,js,mjs}'"
+    "lint": "pnpm relay && oxlint --type-aware --deny-warnings portals authz/sdks && node tools/ci/check-graphql-schemas.mjs && node tools/ci/check-proto-qids.mjs",
+    "format": "oxfmt 'portals/**/*.{ts,tsx,js,mjs}' 'authz/sdks/**/*.ts'",
+    "format:check": "oxfmt --check 'portals/**/*.{ts,tsx,js,mjs}' 'authz/sdks/**/*.ts'"
   },
   "devDependencies": {
     "graphql": "^16.11.0",

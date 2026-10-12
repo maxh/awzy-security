@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>awzy: authorization for humans and AI agents</title>
+  <meta name="description" content="Beyond Zero authorization: per-action, per-resource decisions for people and AI agents, installed in your own cloud. Open source (MIT).">
+  <style>
+    :root { --fg: #1a1b1e; --muted: #5c5f66; --accent: #0ca678; --bg: #ffffff; --line: #e9ecef; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg: #e9ecef; --muted: #a6a7ab; --bg: #141517; --line: #2c2e33; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg);
+      font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    main { max-width: 640px; margin: 0 auto; padding: 72px 20px; }
+    h1 { display: flex; align-items: center; gap: 12px; margin: 0 0 8px; font-size: 40px; letter-spacing: -0.5px; }
+    p { margin: 0 0 16px; }
+    .lede { font-size: 20px; color: var(--muted); }
+    ul { list-style: none; padding: 0; margin: 32px 0; border-top: 1px solid var(--line); }
+    li { border-bottom: 1px solid var(--line); }
+    li a { display: block; padding: 14px 0; color: var(--fg); text-decoration: none; }
+    li a strong { color: var(--accent); }
+    li a span { color: var(--muted); }
+    li a:hover strong { text-decoration: underline; }
+    footer { color: var(--muted); font-size: 14px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="48" height="48" aria-hidden="true">
+      <g transform="translate(2 0)">
+        <path fill="#0ca678" d="M3 58.5C11 56 17 52.5 21 48C20.5 41 24 34 30 28C33 24.5 36 21 38.5 17.5C39 16 39.5 15 40 14L39.5 8.5Q40.8 6.5 42.2 8.5L43.2 12.5L44.4 8Q45.8 6.2 46.8 8.5L46.2 13.2C49 13.6 52 15 55 17Q56.6 18.6 54.6 19.7C51 20.2 48 20.7 45.8 21.6C44.2 24.2 44.2 27 45.2 30C47.2 34 47.8 39 45.8 43C46.4 47 44.4 50 41.2 51.2L38.8 55.4L52.5 57.6Q54.6 58.9 52.5 60.2L32 60.2C27 60.2 24 59 20 59C13 59 7 59.8 3 58.5Z"/>
+        <path d="M45.4 31L50 35.4M45 34.2L49 38.4" stroke="#0ca678" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+        <circle cx="49.2" cy="16.7" r="0.95" fill="#fff"/>
+      </g>
+    </svg>
+    awzy
+  </h1>
+  <p class="lede">Authorization for people and AI agents: every action on every resource decided on its own, in your own cloud.</p>
+  <p>awzy implements Google's Beyond Zero. An agent acting for someone is held to what both may do, a risky request can be challenged instead of denied, and every decision is logged with the policies that made it. Open source, under the MIT license.</p>
+  <ul>
+    <li><a href="${repository_url}"><strong>Source on GitHub</strong> <span>— the code, the plans, and how it's built</span></a></li>
+    <li><a href="https://docs.${domain}"><strong>Documentation</strong> <span>— concepts, installing, and running it</span></a></li>
+    <li><a href="https://aws.demo.${domain}"><strong>Live demo</strong> <span>— a synthetic 200-person company; sign in as anyone</span></a></li>
+  </ul>
+  <footer>awzy · <a href="${repository_url}/blob/main/SECURITY.md" style="color: inherit">security</a></footer>
+</main>
+</body>
+</html>

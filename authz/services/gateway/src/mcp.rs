@@ -239,6 +239,12 @@ impl GatewayState {
         self
     }
 
+    /// The apps trusted to sign tokens for their own agents (ADR 0110), for
+    /// [`awzy_identity::TrustedIssuers::follow`] to keep current.
+    pub fn trusted_issuers(&self) -> awzy_identity::TrustedIssuers {
+        self.0.verifier.trusted_issuers()
+    }
+
     /// Drops cached allows for calls by, or for, the contained principals (`Type::id`).
     pub fn forget_allows(&self, contained: &std::collections::HashSet<String>) {
         self.0.allows.forget(contained);

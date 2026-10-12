@@ -397,6 +397,16 @@ impl Auth {
 }
 
 impl Auth {
+    /// The apps trusted to sign tokens for their own agents (ADR 0110), to keep current.
+    pub fn trusted_issuers(&self) -> awzy_identity::TrustedIssuers {
+        self.0.verifier.trusted_issuers()
+    }
+
+    /// The app a token it signed for itself names, for its agent registration API (ADR 0110).
+    pub async fn app(&self, authorization: Option<&str>) -> Result<String, awzy_identity::IdentityError> {
+        self.0.verifier.app_token(authorization).await
+    }
+
     /// The viewer a bearer token (`Bearer …`) names, if it's valid. For the middleware below,
     /// and for a GraphQL WebSocket, whose token comes in its first message instead.
     pub async fn viewer(&self, authorization: Option<&str>) -> Result<Viewer, SignInError> {

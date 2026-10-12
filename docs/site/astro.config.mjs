@@ -47,6 +47,7 @@ export default defineConfig({
             "guides/troubleshooting",
             "guides/writing-policies",
             "guides/mcp-gateway",
+            "guides/typescript-sdk",
             "guides/sending-events",
             "guides/connectors",
             "guides/optional-features",

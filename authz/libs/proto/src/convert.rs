@@ -8,6 +8,13 @@ use awzy_model::EnforcementMode as ModelMode;
 
 use crate::authz::v1::{DelegationCheck, EnforcementMode};
 
+/// The prefix is the name's; it's on the wire for SDKs to read.
+impl From<crate::authz::v1::TrustedIssuer> for awzy_model::TrustedIssuer {
+    fn from(i: crate::authz::v1::TrustedIssuer) -> Self {
+        Self { name: i.name, issuer: i.issuer, jwks_url: i.jwks_url, audience: i.audience }
+    }
+}
+
 impl From<ModelMode> for EnforcementMode {
     fn from(m: ModelMode) -> Self {
         match m {

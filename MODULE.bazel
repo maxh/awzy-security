@@ -91,6 +91,7 @@ npm.npm_translate_lock(
     data = [
         "//:package.json",
         "//:pnpm-workspace.yaml",
+        "//authz/sdks/typescript:package.json",
         "//portals/client/e2e:package.json",
         "//portals/client/frontend:package.json",
         "//portals/corp/frontend:package.json",
