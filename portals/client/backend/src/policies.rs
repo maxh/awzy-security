@@ -397,6 +397,12 @@ pub(crate) mod tests {
         ) -> Result<Response<awzy_authz_proto::policy::v1::BreakGlassRollbackResponse>, Status> {
             Err(Status::unimplemented("fake"))
         }
+        async fn list_enforcement_settings(
+            &self,
+            _: Request<awzy_authz_proto::policy::v1::ListEnforcementSettingsRequest>,
+        ) -> Result<Response<awzy_authz_proto::policy::v1::ListEnforcementSettingsResponse>, Status> {
+            Ok(Response::new(awzy_authz_proto::policy::v1::ListEnforcementSettingsResponse::default()))
+        }
         async fn get_outage_fallback(
             &self,
             _: Request<GetOutageFallbackRequest>,

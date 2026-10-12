@@ -67,6 +67,42 @@ impl EnforcementScope {
     }
 }
 
+/// What a scope below the install covers (ADR 0109).
+#[derive(Enum, Copy, Clone, Eq, PartialEq)]
+pub enum ScopeKind {
+    /// One Cedar action, such as `write` or an app's `view_customer`.
+    Action,
+    /// One MCP tool behind awzy-gateway, `<server>/<tool>`.
+    Tool,
+}
+
+/// An action or a tool, to give a mode of its own.
+#[derive(InputObject)]
+pub struct EnforcementTarget {
+    pub kind: ScopeKind,
+    /// The action's name, or the tool's `<server>/<tool>`.
+    pub name: String,
+}
+
+impl EnforcementTarget {
+    /// The scope awzy-policy keeps its mode under, if the name is one.
+    fn scope(&self) -> Result<String> {
+        let prefix = match self.kind {
+            ScopeKind::Action => awzy_model::ACTION_SCOPE_PREFIX,
+            ScopeKind::Tool => awzy_model::TOOL_SCOPE_PREFIX,
+        };
+        let scope = format!("{prefix}{}", self.name.trim());
+        if awzy_model::is_valid_scope(&scope) {
+            Ok(scope)
+        } else {
+            Err(awzy_portal::ErrorCode::InvalidInput.error(match self.kind {
+                ScopeKind::Action => "an action is named like a Cedar identifier, such as write or view_customer",
+                ScopeKind::Tool => "a tool is named <server>/<tool>, such as larkspur-drive/read_document",
+            }))
+        }
+    }
+}
+
 // ---- Operations, shared with the MCP tools.
 
 /// A scope's current setting. awzy-policy answers monitor for a scope never switched.
@@ -88,14 +124,30 @@ pub async fn history(
     Ok(policy.list_enforcement_changes(req).await?.into_inner().changes)
 }
 
+/// Every action and tool scope that has been switched, at its current setting.
+pub async fn scoped(mut policy: PolicyClient) -> anyhow::Result<Vec<EnforcementSetting>> {
+    let req = awzy_authz_proto::policy::v1::ListEnforcementSettingsRequest {};
+    Ok(policy.list_enforcement_settings(req).await?.into_inner().settings)
+}
+
 pub async fn set(
-    mut policy: PolicyClient,
+    policy: PolicyClient,
     scope: EnforcementScope,
     mode: EnforcementMode,
     actor: &awzy_model::Actor,
 ) -> anyhow::Result<EnforcementSetting> {
+    set_scope(policy, scope.as_str(), mode, actor).await
+}
+
+/// Switches any scope, named as awzy-policy keeps it.
+pub async fn set_scope(
+    mut policy: PolicyClient,
+    scope: &str,
+    mode: EnforcementMode,
+    actor: &awzy_model::Actor,
+) -> anyhow::Result<EnforcementSetting> {
     let req = SetEnforcementRequest {
-        scope: scope.as_str().into(),
+        scope: scope.into(),
         mode: WireMode::from(mode).into(),
         changed_by_actor: Some(actor.clone().into()),
         ..Default::default()
@@ -130,6 +182,50 @@ impl Setting {
             .as_ref()
             .and_then(|t| DateTime::from_timestamp(t.seconds, t.nanos.max(0) as u32))
             .map(UtcTimestamp)
+    }
+}
+
+/// An action's or a tool's own mode (ADR 0109), and what enforcing it would change.
+pub struct ScopedEnforcement {
+    setting: EnforcementSetting,
+    counts: decisions::ModeCounts,
+}
+
+#[Object]
+impl ScopedEnforcement {
+    async fn kind(&self) -> ScopeKind {
+        if self.setting.scope.starts_with(awzy_model::TOOL_SCOPE_PREFIX) {
+            ScopeKind::Tool
+        } else {
+            ScopeKind::Action
+        }
+    }
+
+    /// The action's name, or the tool's `<server>/<tool>`.
+    async fn name(&self) -> &str {
+        let s = &self.setting.scope;
+        s.strip_prefix(awzy_model::TOOL_SCOPE_PREFIX)
+            .or_else(|| s.strip_prefix(awzy_model::ACTION_SCOPE_PREFIX))
+            .unwrap_or(s)
+    }
+
+    async fn setting(&self) -> Setting {
+        Setting(self.setting.clone())
+    }
+
+    /// Its checks in the last 24 hours.
+    async fn total(&self) -> u64 {
+        self.counts.total
+    }
+
+    /// Of those in MONITOR, the ones that would have been denied.
+    async fn would_deny(&self) -> u64 {
+        self.counts.would_deny
+    }
+
+    /// Of those in MONITOR, the ones that would have been challenged.
+    async fn would_challenge(&self) -> u64 {
+        self.counts.would_challenge
     }
 }
 
@@ -168,6 +264,21 @@ impl EnforcementQuery {
     ) -> Result<Vec<Setting>> {
         require(ctx, View, PortalArea::Enforcement).await?;
         Ok(history(policy_client(ctx)?, scope, first).await?.into_iter().map(Setting).collect())
+    }
+
+    /// Actions and tools with a mode of their own (ADR 0109), which a check takes over the
+    /// install's: its tool's first, then its action's.
+    async fn enforcement_scopes(&self, ctx: &Context<'_>) -> Result<Vec<ScopedEnforcement>> {
+        require(ctx, View, PortalArea::Enforcement).await?;
+        let ch = clickhouse(ctx)?;
+        let mut out = Vec::new();
+        for setting in scoped(policy_client(ctx)?).await? {
+            let action = setting.scope.strip_prefix(awzy_model::ACTION_SCOPE_PREFIX);
+            let tool = setting.scope.strip_prefix(awzy_model::TOOL_SCOPE_PREFIX);
+            let (_, counts) = decisions::mode_counts_for(&ch, None, action.or(tool.map(|_| "call")), tool).await?;
+            out.push(ScopedEnforcement { setting, counts });
+        }
+        Ok(out)
     }
 
     /// Would-deny and would-challenge counts since `since` (default 24 hours, at most 30 days).
@@ -233,6 +344,12 @@ pub(crate) async fn action_challenge(
     }
 }
 
+#[derive(InputObject)]
+pub struct SetScopedEnforcementModeInput {
+    pub target: EnforcementTarget,
+    pub mode: Mode,
+}
+
 #[derive(Default)]
 pub struct EnforcementMutation;
 
@@ -252,6 +369,23 @@ impl EnforcementMutation {
             return Ok(SetEnforcementModePayload { enforcement: None, challenge_qid: Some(challenge_qid) });
         }
         let setting = set(policy_client(ctx)?, input.scope, input.mode.into(), &viewer.actor()).await?;
+        Ok(SetEnforcementModePayload { enforcement: Some(Setting(setting)), challenge_qid: None })
+    }
+
+    /// Gives an action or a tool a mode of its own (ADR 0109), so, for example, agents' writes
+    /// are enforced while their reads stay in MONITOR. Policy can ask for a security key first, as
+    /// for the install's (`switch_enforcement`).
+    async fn set_scoped_enforcement_mode(
+        &self,
+        ctx: &Context<'_>,
+        input: SetScopedEnforcementModeInput,
+    ) -> Result<SetEnforcementModePayload> {
+        let viewer = require(ctx, Administer, PortalArea::Enforcement).await?;
+        let scope = input.target.scope()?;
+        if let Some(challenge_qid) = switch_challenge(ctx, &viewer).await? {
+            return Ok(SetEnforcementModePayload { enforcement: None, challenge_qid: Some(challenge_qid) });
+        }
+        let setting = set_scope(policy_client(ctx)?, &scope, input.mode.into(), &viewer.actor()).await?;
         Ok(SetEnforcementModePayload { enforcement: Some(Setting(setting)), challenge_qid: None })
     }
 }

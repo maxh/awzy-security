@@ -11,9 +11,9 @@ use awzy_authz_proto::{
         CreateDraftResponse, EnforcementSetting as WireSetting, GetActiveRequest, GetActiveResponse, GetBundleRequest,
         GetBundleResponse, GetEnforcementRequest, GetEnforcementResponse, GetOutageFallbackRequest,
         GetOutageFallbackResponse, ListBundlesRequest, ListBundlesResponse, ListEnforcementChangesRequest,
-        ListEnforcementChangesResponse, OutageFallback as WireFallback, PolicyBundle as WireBundle, PublishRequest,
-        PublishResponse, SetEnforcementRequest, SetEnforcementResponse, SetOutageFallbackRequest,
-        SetOutageFallbackResponse,
+        ListEnforcementChangesResponse, ListEnforcementSettingsRequest, ListEnforcementSettingsResponse,
+        OutageFallback as WireFallback, PolicyBundle as WireBundle, PublishRequest, PublishResponse,
+        SetEnforcementRequest, SetEnforcementResponse, SetOutageFallbackRequest, SetOutageFallbackResponse,
     },
     prost_types::Timestamp,
 };
@@ -214,6 +214,16 @@ impl PolicyService for Service {
         let changes = self.0.enforcement_changes(&scope_or_install(req.scope), limit.into()).await.map_err(status)?;
         Ok(Response::new(ListEnforcementChangesResponse {
             changes: changes.into_iter().map(setting_to_wire).collect(),
+        }))
+    }
+
+    async fn list_enforcement_settings(
+        &self,
+        _: Request<ListEnforcementSettingsRequest>,
+    ) -> Result<Response<ListEnforcementSettingsResponse>, Status> {
+        let settings = self.0.scoped_settings().await.map_err(status)?;
+        Ok(Response::new(ListEnforcementSettingsResponse {
+            settings: settings.into_iter().map(setting_to_wire).collect(),
         }))
     }
 

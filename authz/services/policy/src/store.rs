@@ -391,6 +391,19 @@ impl PolicyStore {
         Ok(setting)
     }
 
+    /// The current setting of every scope below the install that has been switched (ADR 0109): an
+    /// action's or a tool's, each its latest signed change.
+    pub async fn scoped_settings(&self) -> Result<Vec<EnforcementSetting>, StoreError> {
+        let rows = sqlx::query(
+            "SELECT DISTINCT ON (scope) scope, mode, changed_by, changed_at, signature, signing_key_id
+             FROM enforcement_mode_changes WHERE scope LIKE 'action:%' OR scope LIKE 'tool:%'
+             ORDER BY scope, changed_at DESC, id DESC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.iter().map(setting_from_row).collect::<Result<_, _>>()?)
+    }
+
     /// Newest first.
     pub async fn enforcement_changes(&self, scope: &str, limit: i64) -> Result<Vec<EnforcementSetting>, StoreError> {
         check_scope(scope)?;
@@ -478,8 +491,7 @@ impl PolicyStore {
 }
 
 fn check_scope(scope: &str) -> Result<(), StoreError> {
-    // Policy sets come later.
-    if scope == INSTALL_SCOPE || scope == AUTOMATED_CONTAINMENTS_SCOPE {
+    if awzy_model::is_valid_scope(scope) {
         Ok(())
     } else {
         Err(StoreError::UnknownScope(scope.to_string()))
@@ -592,6 +604,27 @@ pub(crate) mod tests {
         assert_eq!(store.enforcement(scope).await.unwrap().mode, EnforcementMode::Monitor, "apart from the install's");
         store.set_enforcement(scope, EnforcementMode::Enforce, "alice").await.unwrap();
         assert_eq!(store.enforcement(scope).await.unwrap().mode, EnforcementMode::Enforce);
+    }
+
+    /// An action or a tool gets a mode of its own (ADR 0109), listed with the rest that were
+    /// switched, each at its latest change; anything else isn't a scope.
+    #[tokio::test]
+    async fn actions_and_tools_get_modes_of_their_own() {
+        let Some(store) = test_store().await else { return };
+        assert!(store.scoped_settings().await.unwrap().is_empty(), "none switched yet");
+        store.set_enforcement("action:write", EnforcementMode::Enforce, "alice").await.unwrap();
+        store.set_enforcement("tool:drive/read_document", EnforcementMode::Enforce, "alice").await.unwrap();
+        store.set_enforcement("tool:drive/read_document", EnforcementMode::Monitor, "bob").await.unwrap();
+        let scoped: Vec<(String, EnforcementMode)> =
+            store.scoped_settings().await.unwrap().into_iter().map(|s| (s.scope, s.mode)).collect();
+        assert_eq!(
+            scoped,
+            [
+                ("action:write".to_string(), EnforcementMode::Enforce),
+                ("tool:drive/read_document".to_string(), EnforcementMode::Monitor)
+            ]
+        );
+        assert!(store.set_enforcement("policy-set:x", EnforcementMode::Enforce, "alice").await.is_err());
     }
 
     #[tokio::test]

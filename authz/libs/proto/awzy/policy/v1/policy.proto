@@ -23,6 +23,8 @@ service PolicyService {
   rpc SetEnforcement(SetEnforcementRequest) returns (SetEnforcementResponse);
   // Every switch of a scope, newest first.
   rpc ListEnforcementChanges(ListEnforcementChangesRequest) returns (ListEnforcementChangesResponse);
+  // The current setting of every action and tool scope that has been switched (ADR 0109).
+  rpc ListEnforcementSettings(ListEnforcementSettingsRequest) returns (ListEnforcementSettingsResponse);
 
   // What enforcement points do while the PDP is unreachable (ADR 0089): each MCP tool's tier and
   // which tiers fail open. Never set means every tool is unclassified and everything fails closed.
@@ -132,7 +134,9 @@ message GetBundleResponse {
 }
 
 message EnforcementSetting {
-  // "install" for now. Policy sets and automated containments get their own scopes later.
+  // "install", "automated-containments" (ADR 0066), "action:<action>", or "tool:<server>/<tool>"
+  // (ADR 0109). A check takes the mode of the most specific switched scope: its tool's, then its
+  // action's, then the install's.
   string scope = 1;
   awzy.authz.v1.EnforcementMode mode = 2;
   // Empty, with no changed_at, when the scope has never been switched.
@@ -180,6 +184,13 @@ message ListEnforcementChangesRequest {
 
 message ListEnforcementChangesResponse {
   repeated EnforcementSetting changes = 1;
+}
+
+message ListEnforcementSettingsRequest {}
+
+message ListEnforcementSettingsResponse {
+  // Each switched action or tool scope's latest change, signed as any switch is (ADR 0080).
+  repeated EnforcementSetting settings = 1;
 }
 
 message BreakGlassRollbackRequest {

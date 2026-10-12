@@ -20,7 +20,7 @@ pub mod resources;
 mod sync;
 
 pub use decision_log::{DecisionLog, DEFAULT_DECISIONS_TOPIC};
-pub use enforcement::Enforcement;
+pub use enforcement::{Enforcement, ScopedMode};
 pub use sync::{sync_once, sync_policies};
 
 use std::{collections::HashSet, str::FromStr, sync::Arc};
@@ -495,7 +495,12 @@ impl AppState {
         if !self.is_ready() {
             return Err(CheckError::NotReady);
         }
-        let mode = if req.always_enforced { EnforcementMode::Enforce } else { self.enforcement.mode() };
+        // The check's own scope first, its tool's or its action's, then the install's (ADR 0109).
+        let mode = if req.always_enforced {
+            EnforcementMode::Enforce
+        } else {
+            self.enforcement.mode_for(&req.action, &req.resource)
+        };
         let who: Vec<&awzy_model::EntityRef> =
             std::iter::once(&req.principal).chain(req.on_behalf_of.as_ref()).collect();
         let contained = self.containments.find(&who).await.map_err(CheckError::Unavailable)?;

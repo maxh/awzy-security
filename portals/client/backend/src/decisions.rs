@@ -359,6 +359,17 @@ pub async fn mode_counts(
     ch: &::clickhouse::Client,
     since: Option<DateTime<Utc>>,
 ) -> anyhow::Result<(DateTime<Utc>, ModeCounts)> {
+    mode_counts_for(ch, since, None, None).await
+}
+
+/// The same counts for checks of one action, and optionally on one MCP tool: what a scope's
+/// enforcing would change (ADR 0109).
+pub async fn mode_counts_for(
+    ch: &::clickhouse::Client,
+    since: Option<DateTime<Utc>>,
+    action: Option<&str>,
+    tool: Option<&str>,
+) -> anyhow::Result<(DateTime<Utc>, ModeCounts)> {
     #[derive(::clickhouse::Row, serde::Deserialize)]
     struct Row {
         total: u64,
@@ -377,9 +388,14 @@ pub async fn mode_counts(
                     countIf(mode = 'monitor' AND verdict = 'challenge') AS would_challenge,
                     countIf(mode = 'enforce' AND verdict = 'deny') AS enforced_deny,
                     countIf(mode = 'enforce' AND verdict = 'challenge') AS enforced_challenge
-             FROM decisions WHERE at >= fromUnixTimestamp64Milli(?, 'UTC')",
+             FROM decisions WHERE at >= fromUnixTimestamp64Milli(?, 'UTC')
+               AND (? = '' OR action = ?) AND (? = '' OR (resource_type = 'McpTool' AND resource_id = ?))",
         )
         .bind(since.timestamp_millis())
+        .bind(action.unwrap_or_default())
+        .bind(action.unwrap_or_default())
+        .bind(tool.unwrap_or_default())
+        .bind(tool.unwrap_or_default())
         .fetch_one()
         .await?;
     Ok((

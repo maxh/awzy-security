@@ -9,13 +9,14 @@ use std::{sync::Arc, time::Duration};
 
 use awzy_authz_proto::policy::v1::{
     policy_service_client::PolicyServiceClient, EnforcementSetting, GetActiveRequest, GetEnforcementRequest,
+    ListEnforcementSettingsRequest,
 };
 use awzy_model::EnforcementMode;
 use tonic::transport::Channel;
 
 use awzy_signing::BundleVerifier;
 
-use crate::{Enforcement, Pdp, SharedPdp};
+use crate::{enforcement::ScopedMode, Enforcement, Pdp, SharedPdp};
 
 /// Runs forever, checking for a new active bundle and mode every `every`. With a verifier,
 /// bundles that aren't signed by a trusted key are refused and the current one stays.
@@ -125,7 +126,45 @@ pub async fn sync_waiting(
     if enforcement.synced(mode) {
         tracing::info!(mode = mode.as_str(), changed_by = %setting.changed_by, "enforcement mode");
     }
+    sync_scoped(enforcement, verifier, client).await?;
     Ok(loaded)
+}
+
+/// The modes actions and tools have of their own (ADR 0109), each verified as the install's is.
+/// One that fails verification keeps the mode in force for its scope.
+async fn sync_scoped(
+    enforcement: &Enforcement,
+    verifier: Option<&BundleVerifier>,
+    client: &mut PolicyServiceClient<AuthChannel>,
+) -> anyhow::Result<()> {
+    let settings = client.list_enforcement_settings(ListEnforcementSettingsRequest {}).await?.into_inner().settings;
+    let current = enforcement.scoped();
+    let mut next = std::collections::HashMap::new();
+    for setting in settings {
+        let mode = EnforcementMode::from(setting.mode());
+        let at = setting.changed_at.as_ref().map_or(i64::MIN, |t| t.seconds);
+        if let Some(verifier) = verifier {
+            let payload = awzy_signing::enforcement_payload(&setting.scope, mode.as_str(), &setting.changed_by, at);
+            let older = current.get(&setting.scope).is_some_and(|c| c.changed_at > at);
+            if let Err(error) = verifier.verify_payload(&payload, &setting.signature, &setting.signing_key_id) {
+                tracing::error!(scope = %setting.scope, %error, "refusing a scoped enforcement mode; keeping the one in force");
+                if let Some(kept) = current.get(&setting.scope) {
+                    next.insert(setting.scope, *kept);
+                }
+                continue;
+            }
+            if older {
+                tracing::error!(scope = %setting.scope, at, "refusing a scoped enforcement mode older than the one in force");
+                next.insert(setting.scope.clone(), current[&setting.scope]);
+                continue;
+            }
+        }
+        next.insert(setting.scope, ScopedMode { mode, changed_at: at });
+    }
+    for scope in enforcement.set_scoped(next) {
+        tracing::info!(%scope, "scoped enforcement mode changed");
+    }
+    Ok(())
 }
 
 /// Applies a mode only if awzy-policy signed it and it's no older than the one in force (ADR
@@ -230,6 +269,12 @@ mod tests {
             _: Request<awzy_authz_proto::policy::v1::BreakGlassRollbackRequest>,
         ) -> Result<Response<awzy_authz_proto::policy::v1::BreakGlassRollbackResponse>, Status> {
             Err(Status::unimplemented("fake"))
+        }
+        async fn list_enforcement_settings(
+            &self,
+            _: Request<awzy_authz_proto::policy::v1::ListEnforcementSettingsRequest>,
+        ) -> Result<Response<awzy_authz_proto::policy::v1::ListEnforcementSettingsResponse>, Status> {
+            Ok(Response::new(awzy_authz_proto::policy::v1::ListEnforcementSettingsResponse::default()))
         }
         async fn get_outage_fallback(
             &self,
