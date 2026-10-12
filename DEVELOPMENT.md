@@ -529,7 +529,7 @@ run it as a Job after each sync (`demoData.enabled` in the chart, `demo_data` in
 
 awzy-connectors syncs a real Workspace's shared drives into awzy-context. It needs a Google
 service account key with domain-wide delegation (see
-[the connector's README](authz/services/connectors/README.md)), and awzy-context running. Its
+[the connector's README](authz/services/connectors/)), and awzy-context running. Its
 settings come from awzy-context, as the client portal sets them (ADR 0104); locally, set them
 there directly, and point it at the key file:
 

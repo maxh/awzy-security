@@ -1,7 +1,7 @@
 # awzy-connectors · ingest jobs
 
-Pull-based sync from systems of record into [awzy-context](../context/README.md). Part of
-[awzy-authz](../../README.md).
+Pull-based sync from systems of record into [awzy-context](../context/). Part of
+[awzy-authz](../../).
 
 Sources: IdP (Okta, Entra ID, Google Workspace), HR (Workday), work tracking (Jira, Linear), code
 hosts, data catalogs, Google Drive or SharePoint metadata. One crate per connector behind a

@@ -21,21 +21,21 @@ cloud SDK directly; they go through the `libs/cloud` traits.
 
 | Service | Role |
 | --- | --- |
-| [awzy-pdp](services/pdp/README.md) | Hot path: decides allow, deny, or challenge for one action on one resource |
-| [awzy-gateway](services/gateway/README.md) | Enforcement point: MCP proxy today, HTTP reverse proxy next |
-| [awzy-policy](services/policy/README.md) | Versioned, signed policy bundles and each scope's enforcement mode |
-| [awzy-context](services/context/README.md) | World model: people, groups, service accounts, resources, and the attribute feed |
-| [awzy-connectors](services/connectors/README.md) | Sync from systems of record (IdP, HR, work tracking) into awzy-context |
-| [awzy-intake](services/intake/README.md) | Normalizes logs, audit trails, and agent traces into events on Kafka |
-| [awzy-reasoner](services/reasoner/README.md) | Slow path: activity baselines, investigations, risk attributes |
-| [awzy-challenge](services/challenge/README.md) | Challenges (justification, security key, approval) and containments |
-| [awzy-reporter](services/reporter/README.md) | The install's heartbeat to the corp portal |
+| [awzy-pdp](services/pdp/) | Hot path: decides allow, deny, or challenge for one action on one resource |
+| [awzy-gateway](services/gateway/) | Enforcement point: MCP proxy today, HTTP reverse proxy next |
+| [awzy-policy](services/policy/) | Versioned, signed policy bundles and each scope's enforcement mode |
+| [awzy-context](services/context/) | World model: people, groups, service accounts, resources, and the attribute feed |
+| [awzy-connectors](services/connectors/) | Sync from systems of record (IdP, HR, work tracking) into awzy-context |
+| [awzy-intake](services/intake/) | Normalizes logs, audit trails, and agent traces into events on Kafka |
+| [awzy-reasoner](services/reasoner/) | Slow path: activity baselines, investigations, risk attributes |
+| [awzy-challenge](services/challenge/) | Challenges (justification, security key, approval) and containments |
+| [awzy-reporter](services/reporter/) | The install's heartbeat to the corp portal |
 
 ## Jobs
 
 | Job | Does |
 | --- | --- |
-| [awzy-clickhouse-migrate](jobs/clickhouse-migrate/README.md) | Applies the ClickHouse schema before the services roll out |
+| [awzy-clickhouse-migrate](jobs/clickhouse-migrate/) | Applies the ClickHouse schema before the services roll out |
 
 ## Demo
 
@@ -43,17 +43,17 @@ Never on a real install. Bazel refuses a dependency on these from anywhere else.
 
 | Crate | Does |
 | --- | --- |
-| [awzy-synthetic](demo/synthetic/README.md) | Larkspur Capital, the demo's synthetic company: provisions it, serves its stand-in MCP servers (larkspur-drive, larkspur-admin), and drives its activity and scenarios |
+| [awzy-synthetic](demo/synthetic/) | Larkspur Capital, the demo's synthetic company: provisions it, serves its stand-in MCP servers (larkspur-drive, larkspur-admin), and drives its activity and scenarios |
 
 ## Libraries
 
 | Crate | For |
 | --- | --- |
-| [classify](libs/classify/README.md) | Placing resources in a sensitivity tier from labels, content markings, names, and folders |
-| [identity](libs/identity/README.md) | Who is calling, from a validated bearer token |
-| [proto](libs/proto/README.md) | Protobuf definitions and generated gRPC types |
-| [service-auth](libs/service-auth/README.md) | Services in an install proving who is calling, with Kubernetes service-account tokens |
-| [signing](libs/signing/README.md) | Signing and verifying policy bundles |
+| [classify](libs/classify/) | Placing resources in a sensitivity tier from labels, content markings, names, and folders |
+| [identity](libs/identity/) | Who is calling, from a validated bearer token |
+| [proto](libs/proto/) | Protobuf definitions and generated gRPC types |
+| [service-auth](libs/service-auth/) | Services in an install proving who is calling, with Kubernetes service-account tokens |
+| [signing](libs/signing/) | Signing and verifying policy bundles |
 
 How these fit together for one decision: [Decision path](../docs/plans/platform-plan.md#decision-path).
 Which component of the Beyond Zero paper each service implements:

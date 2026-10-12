@@ -2,7 +2,7 @@
 
 Sends this install's heartbeat to the corp portal every minute
 ([ADR 0026](../../../docs/adr/0026-install-registry-and-heartbeats.md)). Part of
-[awzy-authz](../../README.md).
+[awzy-authz](../../).
 
 The heartbeat is the only thing that leaves an install for awzy
 ([ADR 0009](../../../docs/adr/0009-no-vendor-access-to-client-data.md)), in the fixed schema of

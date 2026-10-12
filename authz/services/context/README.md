@@ -1,7 +1,7 @@
 # awzy-context · world model
 
 Owns the entity graph: principals, agents, teams, projects, resources, and edges between them.
-Part of [awzy-authz](../../README.md).
+Part of [awzy-authz](../../).
 
 Runs LLM preprocessing to classify resource sensitivity and derive work assignments. Publishes
 attribute changes so PDP snapshots stay current. People and groups come from the client's IdP
@@ -20,7 +20,7 @@ open work that links the resource or a folder above it, which the PDP turns into
 in the path (`%2F`).
 
 Resources without a label are classified in the background by
-[awzy-classify](../../libs/classify/README.md)'s rules, using content markings, then names and
+[awzy-classify](../../libs/classify/)'s rules, using content markings, then names and
 folders. Policies see the higher of the label's tier and the classifier's
 ([ADR 0047](../../../docs/adr/0047-metadata-first-classification-rules.md)).
 

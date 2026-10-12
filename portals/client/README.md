@@ -1,7 +1,7 @@
 # Client portal · awzy-client-portal
 
 The client's view of awzy, installed in their cluster with the rest of the install. Part of the
-[portals](../README.md).
+[portals](../).
 
 | Page | Shows |
 | --- | --- |

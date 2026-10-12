@@ -1,6 +1,6 @@
 # awzy-challenge · exceptions
 
-Challenges and containments. Part of [awzy-authz](../../README.md).
+Challenges and containments. Part of [awzy-authz](../../).
 Design: [ADR 0054](../../../docs/adr/0054-challenges-and-containments-over-grpc.md).
 
 - **Challenges.** On an enforced challenge verdict, the PDP calls `Resolve`. A challenge opens

@@ -2,8 +2,8 @@
 
 Generates Larkspur Capital, the synthetic company in the [demo plan](../../../docs/plans/demo-plan.md)
 ([ADR 0039](../../../docs/adr/0039-synthetic-organization-for-demo-and-tests.md)), and sends it to
-[awzy-context](../../services/context/README.md) the way a client's IdP would. Part of
-[awzy-authz](../../README.md).
+[awzy-context](../../services/context/) the way a client's IdP would. Part of
+[awzy-authz](../../).
 
 - **Directory** (demo plan step 1): people with Okta/Entra-style SCIM resources, team and
   department groups, contractors, managers, and AI service accounts (SalesGenie, CodeHelper,

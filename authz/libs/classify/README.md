@@ -3,7 +3,7 @@
 Places a resource in a sensitivity tier (`public`, `internal`, `confidential`, `crown_jewels`)
 from what a connector sends, without a model
 ([ADR 0047](../../../docs/adr/0047-metadata-first-classification-rules.md)). Part of
-[awzy-authz](../../README.md).
+[awzy-authz](../../).
 
 A sensitivity label decides; marked content (a text excerpt saying "Confidential", "Approved
 for external distribution") decides next; names and folder paths ("Board", "Payroll",

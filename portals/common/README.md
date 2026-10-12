@@ -2,7 +2,7 @@
 
 TypeScript both portal frontends use. Shared code lives here so the two apps look and behave
 alike; the backends share Rust through the top-level `libs/` instead. Part of the
-[portals](../README.md).
+[portals](../).
 
 | Package | For |
 | --- | --- |

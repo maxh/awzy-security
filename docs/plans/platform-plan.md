@@ -18,7 +18,7 @@ Development and the first design partners are on AWS. Google Cloud has a cloud l
 
 ## Decisions so far
 
-One line per decision, for readers who won't read the whole plan. Details are in the linked sections, and the reasons are recorded as decision records in [`docs/adr/`](../adr/README.md).
+One line per decision, for readers who won't read the whole plan. Details are in the linked sections, and the reasons are recorded as decision records in [`docs/adr/`](../adr/).
 
 | Topic | Decision | Status |
 | --- | --- | --- |
@@ -96,12 +96,12 @@ The paper describes four cooperating components in a feedback loop. Each one map
 
 ## awzy-authz services
 
-Each service's design is in its README, starting from [authz/README.md](../../authz/README.md):
-[pdp](../../authz/services/pdp/README.md) (hot path), [gateway](../../authz/services/gateway/README.md) (enforcement),
-[context](../../authz/services/context/README.md) (world model), [connectors](../../authz/services/connectors/README.md)
-(ingest jobs), [intake](../../authz/services/intake/README.md) (events),
-[reasoner](../../authz/services/reasoner/README.md) (slow path), [challenge](../../authz/services/challenge/README.md)
-(exceptions), and [policy](../../authz/services/policy/README.md) (management).
+Each service's design is in its README, starting from [authz/README.md](../../authz/):
+[pdp](../../authz/services/pdp/) (hot path), [gateway](../../authz/services/gateway/) (enforcement),
+[context](../../authz/services/context/) (world model), [connectors](../../authz/services/connectors/)
+(ingest jobs), [intake](../../authz/services/intake/) (events),
+[reasoner](../../authz/services/reasoner/) (slow path), [challenge](../../authz/services/challenge/)
+(exceptions), and [policy](../../authz/services/policy/) (management).
 
 ## Data layer
 
