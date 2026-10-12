@@ -191,12 +191,12 @@ mod tests {
     fn a_bulk_export_moves_risk_more_than_listing_the_same_rows() {
         let baseline = [day(12); 20];
         let peers = [day(11), day(12), day(13)];
-        let with_rows = |weight: f64, exported: u64| Day { rows: 500.0 * weight, exported, ..day(12) };
+        let with_rows = |weight: f64, exported: u64| Day { rows: 40.0 * weight, exported, ..day(12) };
         let listed = score(with_rows(ACCESS_WEIGHTS.listed, 0), &baseline, &peers);
-        let exported = score(with_rows(ACCESS_WEIGHTS.exported, 500), &baseline, &peers);
+        let exported = score(with_rows(ACCESS_WEIGHTS.exported, 40), &baseline, &peers);
         assert!(exported.score > listed.score, "{exported:?} against {listed:?}");
-        assert!(exported.reasons[0].contains("500 of them exported"), "{:?}", exported.reasons);
-        // The same 500 rows as one event each would be 500 resources; as one listed event, 125.
-        assert!(listed.score > 0, "a 500-row list still stands out against 12 a day");
+        assert!(exported.reasons[0].contains("40 of them exported"), "{:?}", exported.reasons);
+        // Listed, 40 rows weigh 10 resources: 22 against 12 a day still stands out, a little.
+        assert!(listed.score > 0, "a 40-row list still stands out against 12 a day");
     }
 }
