@@ -51,14 +51,14 @@ function Sessions({ installId }: { installId: string }) {
     graphql`
       query SupportSectionQuery($id: ID!) {
         node(id: $id) {
-          ...SupportSection_install
+          ...SupportSection_install @alias(as: "install")
         }
       }
     `,
     { id: installId },
     { fetchPolicy: "store-and-network" },
   );
-  return data.node ? <SessionList installId={installId} install={data.node} /> : null;
+  return data.node?.install ? <SessionList installId={installId} install={data.node.install} /> : null;
 }
 
 /** The connection a new request is prepended to, so the list shows it without a refetch. */
