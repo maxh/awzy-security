@@ -148,6 +148,35 @@ type Challenge implements Node {
 	grantExpiresAt: UtcTimestamp
 }
 
+type ChallengeConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [ChallengeEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [Challenge!]!
+}
+
+"""
+An edge in a connection.
+"""
+type ChallengeEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: Challenge!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
 enum ChallengeKind {
 	"""
 	The person says why they need the access.
@@ -367,6 +396,35 @@ type Containment implements Node {
 	monitor: Boolean!
 }
 
+type ContainmentConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [ContainmentEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [Containment!]!
+}
+
+"""
+An edge in a connection.
+"""
+type ContainmentEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: Containment!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
 type ContainmentPayload {
 	containment: Containment!
 }
@@ -544,6 +602,35 @@ type DirectoryGroup {
 	updatedAt: UtcTimestamp!
 }
 
+type DirectoryGroupConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [DirectoryGroupEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [DirectoryGroup!]!
+}
+
+"""
+An edge in a connection.
+"""
+type DirectoryGroupEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: DirectoryGroup!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
 type DirectorySummary {
 	humans: Int!
 	activeHumans: Int!
@@ -587,6 +674,35 @@ type EnforcementSetting {
 	"""
 	changedBy: Actor
 	changedAt: UtcTimestamp
+}
+
+type EnforcementSettingConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [EnforcementSettingEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [EnforcementSetting!]!
+}
+
+"""
+An edge in a connection.
+"""
+type EnforcementSettingEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: EnforcementSetting!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
 }
 
 """
@@ -705,6 +821,35 @@ type Human {
 	updatedAt: UtcTimestamp!
 }
 
+type HumanConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [HumanEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [Human!]!
+}
+
+"""
+An edge in a connection.
+"""
+type HumanEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: Human!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
 type Investigation implements Node {
 	"""
 	QID: investigation_<uuid>.
@@ -742,6 +887,21 @@ type Investigation implements Node {
 	closeReason: String
 }
 
+type InvestigationConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [InvestigationEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [Investigation!]!
+}
+
 enum InvestigationContainment {
 	"""
 	None was recommended, or awzy's checks dropped it.
@@ -755,6 +915,20 @@ enum InvestigationContainment {
 	Sent to automated containments, which apply it only when enforcing.
 	"""
 	RECOMMEND
+}
+
+"""
+An edge in a connection.
+"""
+type InvestigationEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: Investigation!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
 }
 
 enum InvestigationStatus {
@@ -1033,6 +1207,35 @@ type PolicyBundle implements Node {
 	publishedAt: UtcTimestamp
 }
 
+type PolicyBundleConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [PolicyBundleEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [PolicyBundle!]!
+}
+
+"""
+An edge in a connection.
+"""
+type PolicyBundleEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: PolicyBundle!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
 enum PolicyBundleStatus {
 	DRAFT
 	ACTIVE
@@ -1252,7 +1455,7 @@ type Query {
 	"""
 	Newest first.
 	"""
-	policyBundles(first: Int! = 50): [PolicyBundle!]!
+	policyBundles(after: String, first: Int): PolicyBundleConnection!
 	"""
 	Decisions newest first. Cursors are opaque.
 	"""
@@ -1264,7 +1467,7 @@ type Query {
 	"""
 	Every switch of a scope's mode, newest first.
 	"""
-	enforcementHistory(scope: EnforcementScope! = INSTALL, first: Int! = 20): [EnforcementSetting!]!
+	enforcementHistory(scope: EnforcementScope! = INSTALL, after: String, first: Int): EnforcementSettingConnection!
 	"""
 	Actions and tools with a mode of their own (ADR 0109), which a check takes over the
 	install's: its tool's first, then its action's.
@@ -1278,13 +1481,13 @@ type Query {
 	"""
 	Humans by userName; `search` matches userName or display name.
 	"""
-	humans(search: String, first: Int! = 200): [Human!]!
-	groups: [DirectoryGroup!]!
-	serviceAccounts: [ServiceAccount!]!
+	humans(search: String, after: String, first: Int): HumanConnection!
+	groups(after: String, first: Int): DirectoryGroupConnection!
+	serviceAccounts(after: String, first: Int): ServiceAccountConnection!
 	"""
 	Apps trusted to sign tokens for their own agents, besides the IdP.
 	"""
-	tokenIssuers: [TokenIssuer!]!
+	tokenIssuers(after: String, first: Int): TokenIssuerConnection!
 	"""
 	What a draft bundle would change (ADR 0049): recent requests replayed under the active
 	bundle and the draft, with today's people and resources, and the verdicts compared.
@@ -1298,16 +1501,16 @@ type Query {
 	"""
 	Challenges sent to the signed-in person, newest first.
 	"""
-	myChallenges(status: ChallengeStatus, first: Int): [Challenge!]!
+	myChallenges(status: ChallengeStatus, after: String, first: Int): ChallengeConnection!
 	"""
 	Requests waiting for an approval the signed-in principal may give, newest first: a
 	resource's owner, say, or an overseer agent policy names.
 	"""
-	challengesToApprove(first: Int): [Challenge!]!
+	challengesToApprove(after: String, first: Int): ChallengeConnection!
 	"""
 	Every challenge, newest first. For those who administer challenges.
 	"""
-	challenges(status: ChallengeStatus, first: Int): [Challenge!]!
+	challenges(status: ChallengeStatus, after: String, first: Int): ChallengeConnection!
 	"""
 	How awzy-reasoner's containments held up on review over the last `days` (default 30): for
 	the Enforcement page, beside automated containments' mode. Counts the 500 most recent.
@@ -1317,7 +1520,7 @@ type Query {
 	"""
 	Containments, newest first. For those who administer challenges.
 	"""
-	containments(activeOnly: Boolean! = true, first: Int): [Containment!]!
+	containments(activeOnly: Boolean! = true, after: String, first: Int): ContainmentConnection!
 	"""
 	The signed-in person's security keys.
 	"""
@@ -1329,7 +1532,7 @@ type Query {
 	"""
 	Investigations, newest first, optionally only those with one status.
 	"""
-	investigations(status: InvestigationStatus, first: Int! = 50): [Investigation!]!
+	investigations(status: InvestigationStatus, after: String, first: Int): InvestigationConnection!
 	"""
 	Whether each of awzy's services the portal uses is ready, and the release it runs. For
 	those who may view the enforcement area.
@@ -1362,7 +1565,7 @@ type Query {
 	"""
 	Support sessions awzy staff asked for, newest first. For those who may view enforcement.
 	"""
-	supportSessions: [SupportSession!]!
+	supportSessions(after: String, first: Int): SupportSessionConnection!
 	"""
 	Null unless the viewer is awzy staff in a support session.
 	"""
@@ -1375,7 +1578,7 @@ type Query {
 	"""
 	Resources whose ID or name contains `query`, ignoring case. At most 50.
 	"""
-	searchResources(query: String!): [ResourceSummary!]!
+	searchResources(query: String!, after: String, first: Int): ResourceSummaryConnection!
 	"""
 	One resource: its tiers and the classifier's reason, owner, sharing, the folders above it,
 	and who is assigned to work that links it. Null when awzy-context doesn't know it.
@@ -1396,7 +1599,7 @@ type Query {
 	Recent repair runs, newest first; a finished one is kept for a week. For those who may
 	administer the enforcement area.
 	"""
-	repairRuns: [RepairRun!]!
+	repairRuns(after: String, first: Int): RepairRunConnection!
 	"""
 	Which models Awzy Bot and investigations use, and the services this install can reach.
 	"""
@@ -1491,6 +1694,35 @@ type RepairRun {
 	finishedAt: UtcTimestamp
 }
 
+type RepairRunConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [RepairRunEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [RepairRun!]!
+}
+
+"""
+An edge in a connection.
+"""
+type RepairRunEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: RepairRun!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
 enum RepairStatus {
 	RUNNING
 	SUCCEEDED
@@ -1560,6 +1792,35 @@ type ResourceSummary {
 	The connector's tier; the classifier's may be higher (see `resource`).
 	"""
 	sensitivity: String
+}
+
+type ResourceSummaryConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [ResourceSummaryEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [ResourceSummary!]!
+}
+
+"""
+An edge in a connection.
+"""
+type ResourceSummaryEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: ResourceSummary!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
 }
 
 """
@@ -1666,6 +1927,35 @@ type ServiceAccount {
 	updatedAt: UtcTimestamp!
 }
 
+type ServiceAccountConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [ServiceAccountEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [ServiceAccount!]!
+}
+
+"""
+An edge in a connection.
+"""
+type ServiceAccountEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: ServiceAccount!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
 input SetEnforcementModeInput {
 	mode: EnforcementMode!
 	"""
@@ -1764,6 +2054,35 @@ type SupportSession implements Node {
 	actionCount: Int!
 }
 
+type SupportSessionConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [SupportSessionEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [SupportSession!]!
+}
+
+"""
+An edge in a connection.
+"""
+type SupportSessionEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: SupportSession!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
 enum SupportSessionStatus {
 	REQUESTED
 	APPROVED
@@ -1801,6 +2120,35 @@ type TokenIssuer {
 	createdAt: UtcTimestamp!
 	updatedBy: Actor
 	updatedAt: UtcTimestamp!
+}
+
+type TokenIssuerConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [TokenIssuerEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [TokenIssuer!]!
+}
+
+"""
+An edge in a connection.
+"""
+type TokenIssuerEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: TokenIssuer!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
 }
 
 """
