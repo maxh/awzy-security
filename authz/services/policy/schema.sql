@@ -33,6 +33,16 @@ CREATE TABLE public.enforcement_mode_changes (
     CONSTRAINT enforcement_mode_changes_mode_check CHECK ((mode = ANY (ARRAY['monitor'::text, 'enforce'::text])))
 );
 
+CREATE TABLE public.model_routing_changes (
+    version bigint NOT NULL,
+    routing_json text NOT NULL,
+    changed_by text NOT NULL,
+    changed_at timestamp with time zone NOT NULL,
+    signature bytea,
+    signing_key_id text,
+    CONSTRAINT model_routing_changes_version_check CHECK ((version > 0))
+);
+
 CREATE TABLE public.outage_fallback_changes (
     version bigint NOT NULL,
     tools jsonb NOT NULL,
@@ -77,6 +87,9 @@ ALTER TABLE ONLY public.break_glass_events
 
 ALTER TABLE ONLY public.enforcement_mode_changes
     ADD CONSTRAINT enforcement_mode_changes_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.model_routing_changes
+    ADD CONSTRAINT model_routing_changes_pkey PRIMARY KEY (version);
 
 ALTER TABLE ONLY public.outage_fallback_changes
     ADD CONSTRAINT outage_fallback_changes_pkey PRIMARY KEY (version);
