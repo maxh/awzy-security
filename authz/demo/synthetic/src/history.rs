@@ -44,6 +44,13 @@ pub fn event(date: NaiveDate, a: &Access) -> Value {
         + chrono::Duration::minutes(i64::from(a.minute));
     let principal_type = if a.on_behalf_of.is_some() || !a.human_present { "ServiceAccount" } else { "Human" };
     let system = server_of(a.tool);
+    // How much it touched (#288): a document read is one row, a folder listing a handful. An
+    // operation moves no rows, so it says no access kind.
+    let touched = match (system == ADMIN, a.tool == LIST) {
+        (true, _) => None,
+        (false, true) => Some(("listed", u64::from(5 + a.minute % 20))),
+        (false, false) => Some(("read", 1)),
+    };
     let mut e = json!({
         "at": at.to_rfc3339(),
         "system": system,
@@ -53,22 +60,11 @@ pub fn event(date: NaiveDate, a: &Access) -> Value {
         "outcome": "success",
         "attributes": { "tool": a.tool },
         "tool": a.tool,
+        "access": touched.map(|(kind, _)| kind),
+        "count": touched.map(|(_, rows)| rows),
     });
-    // How much it touched (#288): a document read is one row; a folder listing a handful.
-    if a.tool == LIST {
-        e["access"] = json!("listed");
-        e["count"] = json!(5 + a.minute % 20);
-    } else {
-        e["access"] = json!("read");
-        e["count"] = json!(1);
-    }
     // An operation is on the tool, as the gateway checks it; what it operated on is an attribute.
     if system == ADMIN {
-        // An operation moves no rows, so it says no access kind.
-        if let Value::Object(fields) = &mut e {
-            fields.remove("access");
-            fields.remove("count");
-        }
         e["action"] = json!(a.tool);
         e["resource"] = json!({ "type": "McpTool", "id": format!("{ADMIN}/{}", a.tool) });
         e["attributes"]["target"] = json!(a.resource);
@@ -190,7 +186,7 @@ mod tests {
         assert_eq!((e["system"].as_str(), e["action"].as_str()), (Some("larkspur-admin"), Some(op.tool)));
         assert_eq!(e["resource"], json!({ "type": "McpTool", "id": format!("larkspur-admin/{}", op.tool) }));
         assert_eq!(e["attributes"]["target"], json!(op.resource));
-        assert!(e.get("access").is_none(), "an operation moves no rows");
+        assert!(e["access"].is_null() && e["count"].is_null(), "an operation moves no rows");
         // Reads and listings say how much they touched (#288).
         assert!(matches!(p["access"].as_str(), Some("read" | "listed")) && p["count"].as_u64() >= Some(1), "{p}");
         let exported = exfiltration_event(Utc::now(), &crate::scenarios::exfiltration()[0]);
