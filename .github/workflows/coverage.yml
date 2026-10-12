@@ -1,0 +1,46 @@
+name: coverage
+
+# How much of awzy's Rust the unit tests cover (#226), weekly and on demand, on the run's summary
+# page. A report, not a gate: it runs apart from CI so a slow or failing coverage build never
+# holds up a pull request. The frontends' coverage is on every CI run (lint-ts).
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/coverage.yml"
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-bazel
+        with:
+          buildbuddy-api-key: ${{ secrets.AWZY_CORP_BUILDBUDDY_API_KEY }}
+      # The shared and client-side libraries: unit tests only, without the local stack, so the
+      # numbers are what runs everywhere.
+      - name: Coverage
+        run: |
+          bazel coverage --config=ci --combined_report=lcov --test_output=errors \
+            --instrumentation_filter='^//(libs|authz/libs)[/:]' //libs/... //authz/libs/...
+      - name: Summary
+        if: always()
+        run: |
+          report="$(bazel info --config=ci output_path)/_coverage/_coverage_report.dat"
+          {
+            echo '### Rust test coverage (libs/, authz/libs/)'
+            if [ -s "$report" ]; then
+              # lcov: LF lines found, LH lines hit, per file.
+              awk -F: '/^SF:/{f=$2} /^LF:/{lf[f]=$2; tlf+=$2} /^LH:/{lh[f]=$2; tlh+=$2}
+                END {
+                  printf "Lines: %d of %d (%.1f%%)\n\n| File | Lines |\n|---|---|\n", tlh, tlf, tlf ? 100*tlh/tlf : 0
+                  for (f in lf) if (lf[f] > 0) printf "| %s | %.0f%% |\n", f, 100*lh[f]/lf[f]
+                }' "$report"
+            else
+              echo "No coverage report was written."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
