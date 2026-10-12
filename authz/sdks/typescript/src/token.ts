@@ -93,13 +93,13 @@ export class TokenVerifier {
     if (claims.act?.sub) {
       return this.#withPresence(claims, {
         principal: { type: "ServiceAccount", id: claims.act.sub },
-        onBehalfOf: { type: "Human", id: this.#person(claims) },
+        onBehalfOf: { type: "Human", id: this.#human(claims) },
       });
     }
     if (isClientCredentials(claims) || this.#options.serviceAccounts?.includes(sub)) {
       return this.#withPresence(claims, { principal: { type: "ServiceAccount", id: sub } });
     }
-    return this.#withPresence(claims, { principal: { type: "Human", id: this.#person(claims) } });
+    return this.#withPresence(claims, { principal: { type: "Human", id: this.#human(claims) } });
   }
 
   async #verify(token: string, keys: JWTVerifyGetKey, issuer: string, audience: string): Promise<Claims> {
@@ -116,7 +116,7 @@ export class TokenVerifier {
     }
   }
 
-  #person(claims: Claims): string {
+  #human(claims: Claims): string {
     const claim = this.#options.subjectClaim;
     if (!claim || claim === "sub") return claims.sub!;
     const id = text(claims, claim);
