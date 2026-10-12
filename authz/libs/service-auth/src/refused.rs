@@ -84,6 +84,9 @@ mod tests {
         let mut out = String::new();
         Refused.render(&mut out);
         assert!(out.contains("awzy_service_calls_refused_total{route=\"/awzy.test.v1.T/Unlisted\",reason=\"unlisted\",caller=\"\"} 2"), "{out}");
-        assert!(out.contains("{route=\"/v1/things/{id}\",reason=\"not_allowed\",caller=\"awzy-portal/awzy\"} 1"), "{out}");
+        assert!(
+            out.contains("{route=\"/v1/things/{id}\",reason=\"not_allowed\",caller=\"awzy-portal/awzy\"} 1"),
+            "{out}"
+        );
     }
 }
