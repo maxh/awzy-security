@@ -137,6 +137,11 @@ async fn serve_connections(
             Some(_) = connections.join_next(), if !connections.is_empty() => continue,
             () = &mut drained => break,
         };
+        // Answers are small and written in pieces (HTTP/2 headers, data, trailers): without this,
+        // Nagle's algorithm holds the later pieces for the client's delayed ACK.
+        if let Err(error) = stream.set_nodelay(true) {
+            tracing::debug!(%error, "couldn't set TCP_NODELAY");
+        }
         let service = TowerToHyperService::new(app.clone());
         let mut stopping = stopping.clone();
         let age = max_age.map(jittered);
