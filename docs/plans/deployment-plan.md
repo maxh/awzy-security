@@ -56,7 +56,7 @@ Everything that crosses between the two organizations is listed here. Anything n
 | Health metrics | Client pushes to awzy | The install's OpenTelemetry collector sends the fixed health schema over HTTPS to the corp portal's intake, with a per-install credential issued at registration. Outbound only |
 | Support sessions | awzy staff into the client portal | Staff request a session in the corp portal. A client admin approves it in the client portal, which then accepts that staff member's vendor-IdP login for a time-boxed, read-only role. No IAM role in the client account trusts awzy |
 | Terraform state | Never crosses | Each organization keeps its own state bucket. awzy never holds a client's state |
-| CI | Never crosses | GitHub Actions assumes a role in `awzy-build` only. Nothing in CI can reach the example client |
+| CI | Granted per account | GitHub Actions publishes and deploys from `awzy-build`. Terraform is planned on pull requests and applied on merge (ADR 0115): corp's as a role in `awzy-build`, and the example client's as roles it creates in its own install account, each assumable only from a GitHub environment that waits for approval |
 
 ## Terraform layout
 
