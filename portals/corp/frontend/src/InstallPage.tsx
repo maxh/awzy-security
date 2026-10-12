@@ -11,7 +11,7 @@ import type { InstallPageRetireMutation } from "./__generated__/InstallPageRetir
 import { ago, CHANNEL_NAMES, channelLabel, CHANNELS, formatTime, healthOf, shortDigest } from "./format";
 import { InstallCharts } from "./InstallCharts";
 import { LicenseSection } from "./LicenseSection";
-import { SupportSection } from "./SupportSection";
+import { AskForSupportButton, SupportSection } from "./SupportSection";
 
 /** One install: the deployed units inside it, its numbers, and its upgrade history. */
 const route = getRouteApi("/installs/$installId");
@@ -126,6 +126,7 @@ function Install({ id, queryRef }: { id: string; queryRef: PreloadedQuery<Instal
         actions={
           i.retiredAt ? undefined : (
             <Group gap="xs">
+              <AskForSupportButton installId={id} />
               <ReleaseButton id={id} channel={i.channel ?? "FAST"} pinnedVersion={i.pinnedVersion ?? null} />
               <RetireButton id={id} name={`${i.client} / ${i.environment}`} />
             </Group>
