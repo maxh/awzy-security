@@ -4,7 +4,7 @@
 
 import { AuthLayout, isRecord, ShellAccount } from "@awzy/ui";
 import { Alert, Button, PasswordInput, Stack, TextInput } from "@mantine/core";
-import { createContext, useContext, useState, type FormEvent } from "react";
+import { createContext, useContext, useState, type SyntheticEvent } from "react";
 
 export type Staff = { username: string; name: string };
 
@@ -40,7 +40,7 @@ export function SignInPage({ onSignedIn }: { onSignedIn: (staff: Staff) => void 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const submit = async (e: FormEvent) => {
+  const submit = async (e: SyntheticEvent) => {
     e.preventDefault();
     setBusy(true);
     const res = await fetch("/auth/login", {
@@ -64,7 +64,7 @@ export function SignInPage({ onSignedIn }: { onSignedIn: (staff: Staff) => void 
       title="Sign in"
       description="For awzy staff. Demo and testing accounts are set up by an admin."
     >
-      <form onSubmit={submit}>
+      <form onSubmit={(e) => void submit(e)}>
         <Stack>
           {error && (
             <Alert color="red" variant="light">

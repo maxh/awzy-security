@@ -15,7 +15,7 @@ import {
   TextInput,
 } from "@mantine/core";
 import { getRouteApi } from "@tanstack/react-router";
-import { type FormEvent, Suspense, useState } from "react";
+import { type SyntheticEvent, Suspense, useState } from "react";
 import { graphql, type PreloadedQuery, useLazyLoadQuery, useMutation, usePreloadedQuery } from "react-relay";
 
 import type { DirectoryPageGroupsQuery } from "./__generated__/DirectoryPageGroupsQuery.graphql";
@@ -102,7 +102,7 @@ function Summary({ queryRef }: { queryRef: PreloadedQuery<DirectoryPageSummaryQu
 function Humans() {
   const [search, setSearch] = useState("");
   const [applied, setApplied] = useState("");
-  const submit = (e: FormEvent) => {
+  const submit = (e: SyntheticEvent) => {
     e.preventDefault();
     setApplied(search.trim());
   };
@@ -353,7 +353,7 @@ function RegisterServiceAccount({
       }
     }
   `);
-  const submit = (e: FormEvent) => {
+  const submit = (e: SyntheticEvent) => {
     e.preventDefault();
     commit({
       variables: {

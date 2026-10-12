@@ -18,7 +18,7 @@ import {
 } from "@mantine/core";
 import { IconCheck, IconCopy, IconPlus, IconRefresh, IconServer2 } from "@tabler/icons-react";
 import { getRouteApi, Link, useRouter } from "@tanstack/react-router";
-import { type FormEvent, Suspense, useState } from "react";
+import { type SyntheticEvent, Suspense, useState } from "react";
 import { graphql, type PreloadedQuery, useMutation, usePreloadedQuery } from "react-relay";
 
 import type { FleetPageQuery } from "./__generated__/FleetPageQuery.graphql";
@@ -236,7 +236,7 @@ function RegisterInstall({
     onClose();
   };
 
-  const submit = (e: FormEvent) => {
+  const submit = (e: SyntheticEvent) => {
     e.preventDefault();
     commit({
       variables: {

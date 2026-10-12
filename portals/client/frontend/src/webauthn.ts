@@ -1,8 +1,10 @@
 /**
- * The browser side of WebAuthn (ADR 0059). awzy-challenge sends options as JSON with binary
- * fields base64url-encoded; these turn them into what `navigator.credentials` takes, and its
- * responses back into base64url for the portal's GraphQL API.
+ * The browser side of WebAuthn (ADR 0059). awzy-challenge sends options in WebAuthn's JSON form
+ * (binary fields base64url-encoded), which the browser parses into what `navigator.credentials`
+ * takes; its responses go back as base64url for the portal's GraphQL API.
  */
+
+import { isRecord } from "@awzy/ui";
 
 function toBase64url(buffer: ArrayBuffer): string {
   let binary = "";
@@ -10,18 +12,27 @@ function toBase64url(buffer: ArrayBuffer): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function fromBase64url(text: string): ArrayBuffer {
-  const base64 = text.replace(/-/g, "+").replace(/_/g, "/");
-  const binary = atob(base64 + "=".repeat((4 - (base64.length % 4)) % 4));
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
+/** Registration options in WebAuthn's JSON form, as awzy-challenge sends them. */
+function creationJson(json: string): PublicKeyCredentialCreationOptionsJSON {
+  const o: unknown = JSON.parse(json);
+  if (!isCreationJson(o)) throw new Error("awzy sent security key options this browser can't read.");
+  return o;
 }
 
-type Descriptor = { type: "public-key"; id: string };
+/** Sign-in options in WebAuthn's JSON form, as awzy-challenge sends them. */
+function requestJson(json: string): PublicKeyCredentialRequestOptionsJSON {
+  const o: unknown = JSON.parse(json);
+  if (!isRequestJson(o)) throw new Error("awzy sent security key options this browser can't read.");
+  return o;
+}
 
-function descriptors(list: ReadonlyArray<Descriptor> | undefined): PublicKeyCredentialDescriptor[] {
-  return (list ?? []).map((d) => ({ type: d.type, id: fromBase64url(d.id) }));
+// The browser checks every field as it parses; these check what it needs to start.
+function isCreationJson(o: unknown): o is PublicKeyCredentialCreationOptionsJSON {
+  return isRecord(o) && typeof o.challenge === "string" && isRecord(o.rp) && isRecord(o.user);
+}
+
+function isRequestJson(o: unknown): o is PublicKeyCredentialRequestOptionsJSON {
+  return isRecord(o) && typeof o.challenge === "string";
 }
 
 /** Whether this browser can use security keys at all. */
@@ -33,15 +44,8 @@ export function webAuthnAvailable(): boolean {
 export async function createCredential(
   optionsJson: string,
 ): Promise<{ clientDataJson: string; attestationObject: string }> {
-  const o = JSON.parse(optionsJson);
-  const credential = await navigator.credentials.create({
-    publicKey: {
-      ...o,
-      challenge: fromBase64url(o.challenge),
-      user: { ...o.user, id: fromBase64url(o.user.id) },
-      excludeCredentials: descriptors(o.excludeCredentials),
-    },
-  });
+  const publicKey = PublicKeyCredential.parseCreationOptionsFromJSON(creationJson(optionsJson));
+  const credential = await navigator.credentials.create({ publicKey });
   if (!(credential instanceof PublicKeyCredential)) throw new Error("No security key was registered.");
   const response = credential.response;
   if (!(response instanceof AuthenticatorAttestationResponse)) throw new Error("The key didn't register.");
@@ -62,10 +66,8 @@ export async function getAssertion(
   authenticatorData: string;
   signature: string;
 }> {
-  const o = JSON.parse(optionsJson);
-  const credential = await navigator.credentials.get({
-    publicKey: { ...o, challenge: fromBase64url(o.challenge), allowCredentials: descriptors(o.allowCredentials) },
-  });
+  const publicKey = PublicKeyCredential.parseRequestOptionsFromJSON(requestJson(optionsJson));
+  const credential = await navigator.credentials.get({ publicKey });
   if (!(credential instanceof PublicKeyCredential)) throw new Error("No security key answered.");
   const response = credential.response;
   if (!(response instanceof AuthenticatorAssertionResponse)) throw new Error("The key didn't sign.");

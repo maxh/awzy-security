@@ -490,7 +490,7 @@ function PendingChallenge({
             </Text>
           ) : hasKeys ? (
             <Group>
-              <Button loading={verifying} onClick={verify}>
+              <Button loading={verifying} onClick={() => void verify()}>
                 Use security key
               </Button>
               <Text size="sm" c="dimmed">
