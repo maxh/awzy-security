@@ -58,11 +58,10 @@ async fn serve(addr: &str) -> anyhow::Result<()> {
 
 fn token(secret: &str, sub: &str, act: Option<&str>, group: &str) -> anyhow::Result<String> {
     let exp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs() + 3600;
-    let mut claims =
-        json!({ "iss": "https://idp.bench", "aud": "awzy-gateway", "sub": sub, "groups": [group], "exp": exp });
-    if let Some(account) = act {
-        claims["act"] = json!({ "sub": account });
-    }
+    // The person, and the service account acting for them when there is one.
+    let actor = act.map(|account| json!({ "sub": account }));
+    let claims = json!({ "iss": "https://idp.bench", "aud": "awzy-gateway", "sub": sub, "groups": [group], "exp": exp,
+        "act": actor });
     let key = jsonwebtoken::EncodingKey::from_secret(secret.as_bytes());
     Ok(jsonwebtoken::encode(&jsonwebtoken::Header::default(), &claims, &key)?)
 }
