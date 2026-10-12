@@ -5,7 +5,68 @@
 Beyond Zero authorization for the AI era: per-action, per-resource decisions for humans and
 agents, deployed single-tenant inside each client's cloud (AWS, Google Cloud, or Azure).
 
-Read more:
+**Try it:** [aws.demo.awzysecurity.com](https://aws.demo.awzysecurity.com), a live install with a
+synthetic 200-person company. Sign in as any sample person (no password) and look around. Or run it
+on your machine: `tools/demo up` ([below](#run-it-locally)).
+
+## What it does
+
+Zero Trust checks who you are when you connect. Google's [Beyond Zero](docs/beyond-zero.pdf)
+paper argues that isn't enough once AI agents act for people: every action on every resource
+should be decided on its own, with what's known right then about the person, the agent, the
+resource, and the moment. awzy implements it.
+
+- **Every action is a decision.** An agent reading a document, a person exporting a report, an
+  admin changing a role: each is checked against Cedar policies by a policy decision point, and
+  logged with the policies and attributes that decided it. The decision itself averages 0.4 ms;
+  the [measurements](docs/plans/platform-plan.md) hold p99 under 10 ms in a real install.
+- **Agents never exceed the person they act for.** An agent acting for someone is checked as
+  itself and as them, and the stricter verdict wins.
+- **More than allow and deny.** A risky request can be *challenged* instead: a justification, a
+  touch of a security key, or a named approver, after which the request goes through.
+- **awzy brings the context.** People and groups arrive from your IdP over SCIM. Documents,
+  sharing, and work come from connectors (Google Drive, Jira), classified by sensitivity, with
+  the reasons. Risk scores and model-written investigations come from what people and agents
+  actually do.
+- **Monitor before you enforce.** A new install decides everything but blocks nothing, and shows
+  what it would have denied or challenged, until you switch it on.
+- **It runs in your cloud, not ours.** Each client gets their own install in their own account.
+  awzy's staff have no access to it. Support sessions are approved by the client each time,
+  read-only, and expire.
+
+The first enforcement point is a gateway in front of MCP servers, so agents' tool calls are
+decided before they run.
+
+## How it compares
+
+Policy engines such as OPA, Cedar, and Cerbos answer "may this principal do this?" from the
+attributes you give them, with allow or deny. awzy uses Cedar as its policy language, and adds
+what a policy engine leaves to you:
+
+- the attributes: who someone is, what a resource is and how sensitive, and current risk
+- outcomes between allow and deny: challenges, approvals, and automated containment
+- delegation, so an agent acting for a person is held to both
+- an enforcement point for AI agents' tool calls, and a portal to run it all
+
+## Run it locally
+
+```sh
+tools/demo up       # Docker and Bazel (bazelisk); the first build takes a while
+```
+
+It starts Postgres, Kafka, and ClickHouse in Docker and awzy's services from source, and
+provisions Larkspur Capital, the synthetic company. Then it replays a day of the company's work
+through the MCP gateway. Open http://127.0.0.1:8080 and sign in as `alice` (the security team).
+`tools/demo check` says whether everything's answering, and `tools/demo down` stops it.
+
+## Status
+
+awzy is pre-release. The AWS example install (the demo above) runs end to end, and a Google
+Cloud one is being built. It hasn't yet been run against a client's own IdP. See the
+[platform plan](docs/plans/platform-plan.md) for what's built and what's next. To report a
+vulnerability, see [SECURITY.md](SECURITY.md).
+
+## Read more
 
 - [docs.awzysecurity.com](https://docs.awzysecurity.com): the public documentation, built from [`docs/site`](docs/site)
 - [Principles](PRINCIPLES.md): the rules the design follows, and the decisions behind them

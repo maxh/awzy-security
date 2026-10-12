@@ -25,3 +25,6 @@ jira-token
 # Relay's output: `pnpm relay` and the frontends' Bazel `relay` targets generate it (ADR 0090).
 __generated__/
 portals/*/frontend/persisted_queries.json
+
+# tools/demo: its logs, pids, and the dev IdP's certificate.
+/.demo/
