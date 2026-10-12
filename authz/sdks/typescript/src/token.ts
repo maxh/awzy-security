@@ -47,6 +47,7 @@ function keySet(keys: Keys): JWTVerifyGetKey {
 interface Claims extends JWTPayload {
   act?: { sub?: string };
   awzy_human_present?: boolean;
+  awzy_work_item_id?: string;
 }
 
 const text = (claims: Claims, key: string): string | undefined => {
@@ -91,15 +92,15 @@ export class TokenVerifier {
     const claims = await this.#verify(token, this.#keys, this.#options.issuer, this.#options.audience);
     const sub = claims.sub!;
     if (claims.act?.sub) {
-      return this.#withPresence(claims, {
+      return this.#withAwzyClaims(claims, {
         principal: { type: "ServiceAccount", id: claims.act.sub },
         onBehalfOf: { type: "Human", id: this.#human(claims) },
       });
     }
     if (isClientCredentials(claims) || this.#options.serviceAccounts?.includes(sub)) {
-      return this.#withPresence(claims, { principal: { type: "ServiceAccount", id: sub } });
+      return this.#withAwzyClaims(claims, { principal: { type: "ServiceAccount", id: sub } });
     }
-    return this.#withPresence(claims, { principal: { type: "Human", id: this.#human(claims) } });
+    return this.#withAwzyClaims(claims, { principal: { type: "Human", id: this.#human(claims) } });
   }
 
   async #verify(token: string, keys: JWTVerifyGetKey, issuer: string, audience: string): Promise<Claims> {
@@ -132,13 +133,19 @@ export class TokenVerifier {
     if (!agent.startsWith(prefix) || agent.length === prefix.length) {
       throw new TokenError(`${app.name} signs tokens only for service accounts under "${prefix}", not "${agent}"`);
     }
-    return this.#withPresence(claims, {
+    return this.#withAwzyClaims(claims, {
       principal: { type: "ServiceAccount", id: agent },
       ...(claims.act?.sub ? { onBehalfOf: { type: "Human", id: claims.sub! } } : {}),
     });
   }
 
-  #withPresence(claims: Claims, p: Principal): Principal {
-    return typeof claims.awzy_human_present === "boolean" ? { ...p, humanPresent: claims.awzy_human_present } : p;
+  /** The principal with what awzy's own claims add: whether a person is present, and the work item. */
+  #withAwzyClaims(claims: Claims, p: Principal): Principal {
+    const workItemId = typeof claims.awzy_work_item_id === "string" ? claims.awzy_work_item_id.trim() : "";
+    return {
+      ...p,
+      ...(typeof claims.awzy_human_present === "boolean" ? { humanPresent: claims.awzy_human_present } : {}),
+      ...(workItemId ? { workItemId } : {}),
+    };
   }
 }

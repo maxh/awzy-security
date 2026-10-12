@@ -19,6 +19,9 @@ type Principal struct {
 	OnBehalfOf *EntityRef
 	// HumanPresent says whether a person is there to answer a challenge; nil leaves it to the PDP.
 	HumanPresent *bool
+	// WorkItemID is the work item (a ticket or task, in your own systems' IDs) the principal says
+	// it's doing, from the token's awzy_work_item_id. The PDP then decides assignment by it alone.
+	WorkItemID string
 }
 
 // Resource is what a call touches, with its tier when the app knows it: only a known tier can

@@ -17,8 +17,8 @@ tracker, the agent's own check is almost never assigned at all (#361).
 
 - **A check can name its work item**: `work_item_id` on `awzy_model::Check` and on the protobuf
   `CheckRequest`, in the client's own IDs as connectors write them (`jira:SALES-12`). It comes
-  from a validated token's claim, set by the enforcement point; a later change reads it from
-  tokens in awzy-gateway and the client libraries.
+  from a validated token's `awzy_work_item_id` claim, which awzy-gateway and the client libraries
+  read beside `awzy_human_present`.
 - **awzy-context says which open work items link a resource**, each with its assignees, beside
   the assignees it already returns.
 - **With a work item named, assignment is that item's alone.** Nobody is assigned unless the item

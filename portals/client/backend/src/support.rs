@@ -166,6 +166,7 @@ fn viewer_for(grant: SupportGrant) -> Viewer {
         subject,
         on_behalf_of: None,
         human_present: Some(true),
+        work_item_id: None,
         name: Some(format!("{} (awzy support)", grant.staff)),
         expires_at: Some(
             std::time::UNIX_EPOCH + std::time::Duration::from_secs(grant.expires_at.timestamp().max(0) as u64),

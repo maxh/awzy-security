@@ -64,6 +64,7 @@ function DecisionView({ decision }: { decision: DecisionDetail_decision$key }) {
         challenges
         policyVersion
         resourceAttributesFrom
+        workItemId
         context
         determiningPolicies {
           id
@@ -97,6 +98,7 @@ function DecisionView({ decision }: { decision: DecisionDetail_decision$key }) {
             }
           />
         )}
+        {d.workItemId && <Field label="For work item" value={d.workItemId} />}
         <Field
           label="Policy bundle"
           value={d.policyVersion === 0 ? "built-in defaults" : `version ${d.policyVersion}`}

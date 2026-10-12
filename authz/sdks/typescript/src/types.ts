@@ -12,6 +12,11 @@ export interface Principal {
   onBehalfOf?: EntityRef;
   /** Whether a person is there to answer a challenge; unset leaves it to the PDP. */
   humanPresent?: boolean;
+  /**
+   * The work item (a ticket or task, in your own systems' IDs) the principal says it's doing,
+   * from the token's `awzy_work_item_id`. The PDP then decides assignment by that item alone.
+   */
+  workItemId?: string;
 }
 
 /** A resource, with its tier when the app knows it: only a known tier can fail open. */

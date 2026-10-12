@@ -126,16 +126,16 @@ func (v *TokenVerifier) Principal(authorization string) (Principal, error) {
 		if err != nil {
 			return Principal{}, err
 		}
-		return withPresence(claims, Principal{Principal: EntityRef{"ServiceAccount", act}, OnBehalfOf: &EntityRef{"Human", human}}), nil
+		return withAwzyClaims(claims, Principal{Principal: EntityRef{"ServiceAccount", act}, OnBehalfOf: &EntityRef{"Human", human}}), nil
 	}
 	if isClientCredentials(claims) || v.serviceAccounts[sub] {
-		return withPresence(claims, Principal{Principal: EntityRef{"ServiceAccount", sub}}), nil
+		return withAwzyClaims(claims, Principal{Principal: EntityRef{"ServiceAccount", sub}}), nil
 	}
 	human, err := v.human(claims)
 	if err != nil {
 		return Principal{}, err
 	}
-	return withPresence(claims, Principal{Principal: EntityRef{"Human", human}}), nil
+	return withAwzyClaims(claims, Principal{Principal: EntityRef{"Human", human}}), nil
 }
 
 func verify(token string, keys jwt.Keyfunc, issuer, audience string) (jwt.MapClaims, error) {
@@ -201,12 +201,16 @@ func appPrincipal(claims jwt.MapClaims, app TrustedApp) (Principal, error) {
 	if act != "" {
 		p.OnBehalfOf = &EntityRef{"Human", sub}
 	}
-	return withPresence(claims, p), nil
+	return withAwzyClaims(claims, p), nil
 }
 
-func withPresence(claims jwt.MapClaims, p Principal) Principal {
+// withAwzyClaims adds what awzy's own claims say: whether a person is present, and the work item.
+func withAwzyClaims(claims jwt.MapClaims, p Principal) Principal {
 	if present, ok := claims["awzy_human_present"].(bool); ok {
 		p.HumanPresent = &present
+	}
+	if item, ok := claims["awzy_work_item_id"].(string); ok {
+		p.WorkItemID = strings.TrimSpace(item)
 	}
 	return p
 }

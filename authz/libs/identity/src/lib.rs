@@ -131,6 +131,10 @@ struct Claims {
     /// Whether a person is at the keyboard to answer a challenge. Unset: the PDP's default.
     #[serde(default)]
     awzy_human_present: Option<bool>,
+    /// The work item (a ticket or task, in the client's own IDs) the caller says it's doing
+    /// (ADR 0118). Any other type, or blank, is ignored.
+    #[serde(default)]
+    awzy_work_item_id: Option<Value>,
     /// Everything else, for a configured subject claim.
     #[serde(flatten)]
     other: std::collections::HashMap<String, Value>,
@@ -147,6 +151,8 @@ pub struct Principal {
     pub subject: EntityRef,
     pub on_behalf_of: Option<EntityRef>,
     pub human_present: Option<bool>,
+    /// The work item the token says the caller is doing (ADR 0118).
+    pub work_item_id: Option<String>,
     /// The person's display name, when the token has one.
     pub name: Option<String>,
     /// Cedar entities for the subject and the person, with their groups and attributes.
@@ -163,6 +169,7 @@ impl Principal {
             subject: EntityRef::new(entity_type::HUMAN, id),
             on_behalf_of: None,
             human_present: None,
+            work_item_id: None,
             name,
             entities: vec![entity(entity_type::HUMAN, id, json!({}), groups)],
             expires_at: None,
@@ -436,11 +443,19 @@ fn principal_from_claims<R: ServiceAccounts + ?Sized>(
         Ok::<_, IdentityError>(entity(entity_type::SERVICE_ACCOUNT, &sa.id, attrs, &sa.groups))
     };
 
+    let work_item_id = claims
+        .awzy_work_item_id
+        .as_ref()
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|w| !w.is_empty())
+        .map(str::to_string);
     Ok(match claims.act {
         Some(actor) => Principal {
             subject: EntityRef::new(entity_type::SERVICE_ACCOUNT, &actor.sub),
             on_behalf_of: Some(EntityRef::new(entity_type::HUMAN, &claims.sub)),
             human_present: claims.awzy_human_present,
+            work_item_id,
             name: claims.name,
             entities: vec![service_account(&actor.sub)?, human(&claims.sub, &claims.groups)],
             expires_at,
@@ -449,6 +464,7 @@ fn principal_from_claims<R: ServiceAccounts + ?Sized>(
             subject: EntityRef::new(entity_type::SERVICE_ACCOUNT, &claims.sub),
             on_behalf_of: None,
             human_present: claims.awzy_human_present,
+            work_item_id,
             name: claims.name,
             entities: vec![service_account(&claims.sub)?],
             expires_at,
@@ -457,6 +473,7 @@ fn principal_from_claims<R: ServiceAccounts + ?Sized>(
             subject: EntityRef::new(entity_type::HUMAN, &claims.sub),
             on_behalf_of: None,
             human_present: claims.awzy_human_present,
+            work_item_id,
             name: claims.name,
             entities: vec![human(&claims.sub, &claims.groups)],
             expires_at,
@@ -552,6 +569,16 @@ mod tests {
         let d = verifier.principal(Some(&bearer(delegated)), &registry).await.unwrap();
         assert_eq!(d.subject, EntityRef::new("ServiceAccount", "sales-genie"));
         assert_eq!(d.actor().to_string(), "ServiceAccount::sales-genie for Human::alice");
+        assert_eq!(d.work_item_id, None);
+
+        // The task an agent says it's doing comes along (ADR 0118); anything but text is ignored.
+        let tasked = |item: Value| {
+            token(&key, "k1", claims("alice", json!({ "act": { "sub": "sales-genie" }, "awzy_work_item_id": item })))
+        };
+        let t = verifier.principal(Some(&bearer(tasked(json!(" jira:SALES-12 ")))), &registry).await.unwrap();
+        assert_eq!(t.work_item_id.as_deref(), Some("jira:SALES-12"));
+        let odd = verifier.principal(Some(&bearer(tasked(json!(12)))), &registry).await.unwrap();
+        assert_eq!(odd.work_item_id, None);
 
         let wrong_kid = token(&key, "k2", claims("alice", json!({})));
         assert!(matches!(

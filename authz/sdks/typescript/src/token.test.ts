@@ -47,6 +47,19 @@ describe("TokenVerifier", () => {
     });
   });
 
+  it("carries the work item an agent's token names", async () => {
+    const v = verifier();
+    expect(
+      await v.principal(await token({ sub: "alice", act: { sub: "sales-genie" }, awzy_work_item_id: "jira:SALES-12" })),
+    ).toEqual({
+      principal: { type: "ServiceAccount", id: "sales-genie" },
+      onBehalfOf: { type: "Human", id: "alice" },
+      workItemId: "jira:SALES-12",
+    });
+    const blank = await v.principal(await token({ sub: "alice", awzy_work_item_id: "  " }));
+    expect(blank).toEqual({ principal: { type: "Human", id: "alice" } });
+  });
+
   it("knows an application's own token by its client-credentials claims", async () => {
     const v = verifier({ subjectClaim: "email" });
     const apps = [

@@ -89,7 +89,8 @@ The token says who the request is for:
   account.
 
 A boolean `awzy_human_present` claim tells the PDP whether a person is there to answer a
-challenge.
+challenge, and an `awzy_work_item_id` claim names the task an agent is doing, so assignment is
+decided by that task alone. See [work items](/concepts/domain-model/#work-items).
 
 ## When the PDP can't be reached
 

@@ -33,6 +33,9 @@ class Principal:
     on_behalf_of: EntityRef | None = None
     #: Whether a person is there to answer a challenge; None leaves it to the PDP.
     human_present: bool | None = None
+    #: The work item (a ticket or task, in your own systems' IDs) the principal says it's doing,
+    #: from the token's ``awzy_work_item_id``. The PDP then decides assignment by it alone.
+    work_item_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -62,6 +62,11 @@ challenges go to its owner. See [People, agents, and delegation](/concepts/princ
 Set the token's `awzy_human_present` claim to `false` when nobody is there to answer a challenge.
 Some policies ask for more when nobody is present.
 
+Set its `awzy_work_item_id` claim to the task the agent was given, in the ID your tracker's
+connector uses (`jira:SALES-12`). awzy then counts the agent as assigned only to what that task
+links, not to everything its person is working on, and every decision records the task. A task
+awzy doesn't know, or one that's closed, assigns nothing.
+
 ### Not with the person's own token
 
 The easy path, signing your agent in with its person's own token, makes it that person to awzy.

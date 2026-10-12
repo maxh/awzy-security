@@ -49,6 +49,10 @@ func TestAPlainTokenIsAPersonAndActIsAnAgentActingForThem(t *testing.T) {
 	if err != nil || p.Principal != (EntityRef{"ServiceAccount", "sales-genie"}) || *p.OnBehalfOf != (EntityRef{"Human", "alice"}) || *p.HumanPresent {
 		t.Fatalf("%+v %v", p, err)
 	}
+	p, err = v.Principal(sign(t, idp, "https://idp.test", "awzy", jwt.MapClaims{"sub": "alice", "act": map[string]any{"sub": "sales-genie"}, "awzy_work_item_id": "jira:SALES-12"}))
+	if err != nil || p.WorkItemID != "jira:SALES-12" {
+		t.Fatalf("the work item: %+v %v", p, err)
+	}
 }
 
 func TestAnApplicationsOwnTokenIsKnownByItsClientCredentialsClaims(t *testing.T) {

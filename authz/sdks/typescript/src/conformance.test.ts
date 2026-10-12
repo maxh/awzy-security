@@ -92,7 +92,7 @@ describe("conformance", () => {
         // Steps run in order: each one's answer depends on what the client saw before.
         // oxlint-disable-next-line no-await-in-loop
         const result = await awzy.check({
-          principal,
+          principal: typeof scenario["work_item_id"] === "string" ? { ...principal, workItemId: scenario["work_item_id"] } : principal,
           action: String(request["action"]),
           resource: {
             ...entity(resource),

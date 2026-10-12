@@ -267,7 +267,7 @@ func (c *Client) check(ctx context.Context, req CheckRequest) Result {
 		return Result{Kind: KindUnauthenticated, Reason: err.Error()}
 	}
 	resource := EntityRef{req.Resource.Type, req.Resource.ID}
-	keyJSON, _ := json.Marshal([]any{p.Principal, p.OnBehalfOf, req.Action, resource})
+	keyJSON, _ := json.Marshal([]any{p.Principal, p.OnBehalfOf, p.WorkItemID, req.Action, resource})
 	key := string(keyJSON)
 	reqContext := req.Context
 	if reqContext == nil {
@@ -285,6 +285,9 @@ func (c *Client) check(ctx context.Context, req CheckRequest) Result {
 	}
 	if p.HumanPresent != nil {
 		body["human_present"] = *p.HumanPresent
+	}
+	if p.WorkItemID != "" {
+		body["work_item_id"] = p.WorkItemID
 	}
 
 	status, d, err := c.post(ctx, "/v1/access/evaluation", body)
