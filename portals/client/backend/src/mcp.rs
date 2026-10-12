@@ -258,7 +258,7 @@ impl ClientPortalMcp {
                 String::from_utf8_lossy(&body)
             )));
         }
-        let found: serde_json::Value = serde_json::from_slice(&body).map_err(|e| internal(e.into()))?;
+        let found: serde_json::Value = serde_json::from_slice(&body).map_err(internal)?;
         let strings = |v: &serde_json::Value| -> Vec<String> {
             v.as_array().into_iter().flatten().filter_map(|x| x.as_str().map(str::to_string)).collect()
         };
@@ -290,7 +290,7 @@ impl ClientPortalMcp {
         let a = decisions::principal_activity(self.clickhouse()?, &p.principal_type, &p.principal_id, since)
             .await
             .map_err(internal)?;
-        Ok(Json(PrincipalActivityOut { activity: serde_json::to_value(a).map_err(|e| internal(e.into()))? }))
+        Ok(Json(PrincipalActivityOut { activity: serde_json::to_value(a).map_err(internal)? }))
     }
 
     #[tool(
