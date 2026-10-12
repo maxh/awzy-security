@@ -18,9 +18,7 @@ const MOST: i32 = 200;
 
 // ---- What awzy-context sends: its types, from the one client for its API (#222)
 
-pub use awzy_context_api::model::{
-    Cited as WireCited, Investigation as WireInvestigation, InvestigationPrincipal as WireSubject,
-};
+pub use awzy_context_api::model::Investigation as WireInvestigation;
 use awzy_context_api::{ContextApi, ContextError};
 
 // ---- Operations, shared with the MCP tools
