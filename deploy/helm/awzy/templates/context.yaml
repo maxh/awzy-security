@@ -9,6 +9,11 @@ its AI service accounts, which is the directory's API. */ -}}
 {{- $writers = printf "%s,%s/awzy-demo-data" $backend $sys -}}
 {{- $directory = printf "%s,%s/awzy-demo-data" $directory $sys -}}
 {{- end }}
+{{- /* The synthetic company's teams (authz/demo/synthetic), unless the install names its own. */ -}}
+{{- $teams := .Values.context.teamGroups -}}
+{{- if and (not $teams) .Values.demoData.enabled }}
+{{- $teams = "contractors-*,engineering-*,executive,finance,hr,it-admin,legal,sales-*,security,strategy,support" -}}
+{{- end }}
 # awzy-context: people and groups from the client's IdP over SCIM (ADR 0031), served to the PDP
 # at /v1/principals. Only /scim/v2 is public, through the Gateway; the rest is in-cluster, and
 # needs a service token from a caller its group allows (ADR 0055): the install's backend
@@ -17,6 +22,7 @@ its AI service accounts, which is the directory's API. */ -}}
   "env" (list
     (dict "name" "AWZY_CONTEXT_DIRECTORY" "value" $directory)
     (dict "name" "AWZY_CONTEXT_READERS" "value" (printf "%s,%s" $backend $portal))
+    (dict "name" "AWZY_CONTEXT_TEAM_GROUPS" "value" $teams)
     (dict "name" "AWZY_CONTEXT_WRITERS" "value" $writers)
     (dict "name" "AWZY_POSTGRES_URL" "valueFrom" (dict "secretKeyRef" (dict "name" "awzy-postgres" "key" "context_url")))
     (dict "name" "AWZY_POSTGRES_MIGRATE" "value" "check")

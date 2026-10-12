@@ -50,6 +50,30 @@ async fn snapshot_carries_what_the_idp_says_about_a_person() {
 }
 
 #[tokio::test]
+async fn snapshot_names_a_persons_manager_and_team() {
+    let Some(store) = test_store().await else { return };
+    let store = store.with_team_groups(crate::org::TeamGroups::parse("sales-*"));
+    let ext = crate::human_attributes::ENTERPRISE_SCHEMA;
+    let pat = store.create_user(&user("pat@acme.com")).await.unwrap();
+    let mut nora = user("nora@acme.com");
+    nora.resource = json!({ "userName": "nora@acme.com", ext: { "manager": { "value": pat.scim_id.to_string() } } });
+    let nora = store.create_user(&nora).await.unwrap();
+    let mut lee = user("lee@acme.com");
+    lee.resource = json!({ "userName": "lee@acme.com", ext: { "manager": "someone-awzy-never-saw" } });
+    store.create_user(&lee).await.unwrap();
+    let group = |name: &str| GroupInput { display_name: name.into(), external_id: None };
+    store.create_group(&group("sales-emea"), &[nora.scim_id, pat.scim_id]).await.unwrap();
+    store.create_group(&group("everyone"), &[nora.scim_id]).await.unwrap();
+
+    let (_, entities) = store.snapshot().await.unwrap();
+    let attrs = |id: &str| entities.iter().find(|e| e["uid"]["id"] == id).unwrap()["attrs"].clone();
+    assert_eq!(attrs("nora@acme.com")["manager"], json!({ "__entity": { "type": "Human", "id": "pat@acme.com" } }));
+    assert_eq!(attrs("nora@acme.com")["team"], json!({ "__entity": { "type": "Group", "id": "sales-emea" } }));
+    assert!(attrs("lee@acme.com").get("manager").is_none(), "a manager awzy doesn't know is left out");
+    assert!(attrs("lee@acme.com").get("team").is_none(), "in no team group");
+}
+
+#[tokio::test]
 async fn snapshot_has_people_groups_and_nesting() {
     let Some(store) = test_store().await else { return };
     let alice = store.create_user(&user("alice@acme.com")).await.unwrap();

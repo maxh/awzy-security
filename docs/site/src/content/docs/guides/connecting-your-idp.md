@@ -102,6 +102,8 @@ with `has`.
 | `division` | enterprise extension `division` | |
 | `organization` | enterprise extension `organization` | |
 | `cost_center` | enterprise extension `costCenter` | |
+| `manager` | enterprise extension `manager`, as the `Human` it names | `Human::"pat@example.com"` |
+| `team` | the group, of those you say are teams, they're directly in | `Group::"sales-emea"` |
 
 Okta's SCIM attribute mappings and Entra's default ones send `title` and `department`. Map your
 IdP's employee type to `userType` if it doesn't already, so policies can tell contractors from
@@ -114,6 +116,27 @@ when {
   resource.sensitivity == "crown_jewels"
 };
 ```
+
+**Managers.** awzy finds the person a `manager` names by their SCIM ID, the external ID your
+IdP keeps for them, or their user name, so it works whether your IdP sends the manager's ID or
+their email. A manager who isn't provisioned to awzy is left out. awzy's base policies don't let
+managers approve requests on their own: a contractor's manager may work for the same vendor. To
+let a person's manager approve their challenged requests, add a policy like this:
+
+```cedar
+@id("managers-approve")
+permit (principal is Human, action == Action::"approve", resource)
+when {
+  context has approving_for && context.approving_for has manager &&
+  context.approving_for.manager == principal &&
+  resource.sensitivity != "crown_jewels"
+};
+```
+
+**Teams.** Your IdP has groups of every kind, so you say which are teams with the install's
+`team_groups` setting: group names, each of which may use `*` (`["sales-*", "security"]`).
+Someone in more than one team group is on the smallest. Without the setting nobody has a
+`team`, and risk scores compare each person with their smallest group instead.
 
 ## Checking it works
 

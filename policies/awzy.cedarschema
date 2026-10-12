@@ -17,6 +17,10 @@ entity Human in [Group] {
   organization?: String,
   cost_center?: String,
   employee_type?: String,
+  // Where they sit in the organization: their manager, as the IdP names them, and their team,
+  // the group the client says is theirs. Absent when unknown.
+  manager?: Human,
+  team?: Group,
 };
 
 // Any non-human identity with its own credentials: a backend service, a scheduled job, an

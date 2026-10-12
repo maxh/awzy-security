@@ -110,7 +110,8 @@ pub fn memberships(snapshot: &PrincipalsSnapshot) -> HashMap<Principal, BTreeSet
     out
 }
 
-/// A principal's team is the smallest group it's directly in (ties by name), so a team is
+/// A principal's team: the one awzy-context names, from the groups the client says are teams
+/// (ADR 0117). Without one, the smallest group it's directly in (ties by name), so a team is
 /// "analysts" rather than "all-staff".
 fn teams(snapshot: &PrincipalsSnapshot) -> HashMap<Principal, String> {
     let mut size: HashMap<String, usize> = HashMap::new();
@@ -122,7 +123,8 @@ fn teams(snapshot: &PrincipalsSnapshot) -> HashMap<Principal, String> {
     let mut teams = HashMap::new();
     for e in &snapshot.entities {
         let Some(principal) = principal_of(e) else { continue };
-        if let Some(team) = groups_of(e).into_iter().min_by_key(|g| (size[g], g.clone())) {
+        let declared = e.attrs.pointer("/team/__entity/id").and_then(|t| t.as_str()).map(str::to_string);
+        if let Some(team) = declared.or_else(|| groups_of(e).into_iter().min_by_key(|g| (size[g], g.clone()))) {
             teams.insert(principal, team);
         }
     }
@@ -174,5 +176,19 @@ mod tests {
             (Some("analysts"), Some("analysts"), Some("sales"), Some("all-staff"))
         );
         assert_eq!(teams.len(), 4, "groups and principals in no group have no team");
+    }
+
+    #[test]
+    fn a_team_awzy_context_names_wins_over_the_smallest_group() {
+        let snapshot_json = json!({ "version": 1, "entities": [
+            { "uid": { "type": "Human", "id": "lead" },
+              "attrs": { "team": { "__entity": { "type": "Group", "id": "sales-emea" } } },
+              "parents": [{ "type": "Group", "id": "sales-emea" }, { "type": "Group", "id": "managers" }] },
+            { "uid": { "type": "Human", "id": "rep" }, "attrs": {}, "parents": [{ "type": "Group", "id": "sales-emea" }] },
+            { "uid": { "type": "Human", "id": "rep2" }, "attrs": {}, "parents": [{ "type": "Group", "id": "sales-emea" }] },
+        ]});
+        let teams = teams(&snapshot(snapshot_json));
+        let lead = teams.get(&("Human".to_string(), "lead".to_string())).map(String::as_str);
+        assert_eq!(lead, Some("sales-emea"), "not \"managers\", the smaller group");
     }
 }

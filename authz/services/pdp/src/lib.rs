@@ -70,8 +70,8 @@ static OPTIONAL_ATTRS: std::sync::LazyLock<Vec<(&'static str, &'static str, serd
             (RESOURCE, "owner", human.clone()),
             (RESOURCE, "shared_humans", serde_json::json!([human.clone()])),
             (RESOURCE, "shared_groups", serde_json::json!([group.clone()])),
-            (RESOURCE, "writer_humans", serde_json::json!([human])),
-            (RESOURCE, "writer_groups", serde_json::json!([group])),
+            (RESOURCE, "writer_humans", serde_json::json!([human.clone()])),
+            (RESOURCE, "writer_groups", serde_json::json!([group.clone()])),
             (RESOURCE, "shared_with_everyone", serde_json::json!(true)),
             // What the IdP says about a person (ADR 0116).
             (HUMAN, "title", text.clone()),
@@ -80,6 +80,9 @@ static OPTIONAL_ATTRS: std::sync::LazyLock<Vec<(&'static str, &'static str, serd
             (HUMAN, "organization", text.clone()),
             (HUMAN, "cost_center", text.clone()),
             (HUMAN, "employee_type", text),
+            // Their manager and team (ADR 0117).
+            (HUMAN, "manager", human),
+            (HUMAN, "team", group),
         ]
     });
 
