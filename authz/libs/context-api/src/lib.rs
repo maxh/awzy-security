@@ -2,8 +2,8 @@
 //! and typed errors, and a field awzy-context renames fails to deserialize instead of reading as
 //! empty. The server uses these types too, where it can, and contract tests hold it to the rest.
 //!
-//! Covered so far: connector settings (ADR 0104), reading resources, and investigations (ADR
-//! 0071). The rest of the API moves here area by area.
+//! Covered so far: connector settings (ADR 0104), reading resources, investigations (ADR 0071),
+//! the principals snapshot, and risk scores. The rest of the API moves here area by area.
 
 pub mod model;
 
@@ -14,7 +14,8 @@ use serde::de::DeserializeOwned;
 
 use crate::model::{
     CloseInvestigation, ConnectorSettings, ConnectorSettingsList, ConnectorSettingsOne, Investigation,
-    InvestigationList, InvestigationOne, PutConnectorSettings, Resource, ResourceEntities, ResourceList, ResourceOne,
+    InvestigationList, InvestigationOne, InvestigationUsage, InvestigationUsageOne, PrincipalsSnapshot,
+    PutConnectorSettings, Resource, ResourceEntities, ResourceList, ResourceOne, RiskBatch, RiskScore,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -123,6 +124,48 @@ impl ContextApi {
         let status = status.map(|s| format!("&status={}", encode(s))).unwrap_or_default();
         let path = format!("/v1/investigations?limit={limit}{status}");
         Ok(self.read::<InvestigationList>(&path).await?.map(|l| l.investigations).unwrap_or_default())
+    }
+
+    /// Investigations finished since `since`, newest first: at most `limit`.
+    pub async fn investigations_since(
+        &self,
+        since: chrono::DateTime<chrono::Utc>,
+        limit: u32,
+    ) -> Result<Vec<Investigation>, ContextError> {
+        let path = format!("/v1/investigations?limit={limit}&since={}", encode(&since.to_rfc3339()));
+        Ok(self.read::<InvestigationList>(&path).await?.map(|l| l.investigations).unwrap_or_default())
+    }
+
+    /// Tokens spent on investigations finished since `since`.
+    pub async fn investigation_usage(
+        &self,
+        since: chrono::DateTime<chrono::Utc>,
+    ) -> Result<InvestigationUsage, ContextError> {
+        let path = format!("/v1/investigations/usage?since={}", encode(&since.to_rfc3339()));
+        Ok(self.read::<InvestigationUsageOne>(&path).await?.map(|u| u.usage).unwrap_or_default())
+    }
+
+    /// Records an investigation awzy-reasoner ran and returns it as stored, with its QID.
+    pub async fn put_investigation(&self, record: &serde_json::Value) -> Result<Investigation, ContextError> {
+        let path = "/v1/investigations";
+        let res = self.call(Method::POST, path, None, Some(record.clone())).await?;
+        Ok(decode::<InvestigationOne>(path, res)?.investigation)
+    }
+
+    /// The principals snapshot the PDPs load.
+    pub async fn principals(&self) -> Result<PrincipalsSnapshot, ContextError> {
+        let path = "/v1/principals";
+        let res = self.call(Method::GET, path, None, None).await?;
+        decode(path, res)
+    }
+
+    /// Replaces these principals' risk scores.
+    pub async fn put_risk(&self, scores: Vec<RiskScore>) -> Result<(), ContextError> {
+        let path = "/v1/risk";
+        let body = serde_json::to_value(RiskBatch { scores })
+            .map_err(|source| ContextError::Unexpected { path: path.to_string(), source })?;
+        let res = self.call(Method::POST, path, None, Some(body)).await?;
+        decode::<serde_json::Value>(path, res).map(|_| ())
     }
 
     /// One investigation; `None` when there's no such one.
