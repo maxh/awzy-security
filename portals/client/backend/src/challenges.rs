@@ -11,6 +11,7 @@
 use std::time::{Duration, SystemTime};
 
 use async_graphql::{
+    connection::Connection,
     futures_util::{Stream, StreamExt},
     Context, Enum, InputObject, Object, Result, SimpleObject, Subscription, ID,
 };
@@ -24,7 +25,7 @@ use awzy_authz_proto::{
     prost_types::Timestamp,
 };
 use awzy_model::{entity_type, ChallengeId, ContainmentId, DecisionId};
-use awzy_portal::{Actor, Qid, UtcTimestamp};
+use awzy_portal::{connection::page, Actor, Qid, UtcTimestamp};
 use chrono::{DateTime, Utc};
 
 use crate::{
@@ -65,9 +66,8 @@ fn entity(r: &Option<awzy_authz_proto::authz::v1::EntityRef>) -> Option<EntityRe
     r.as_ref().map(|r| EntityRef { kind: r.r#type.clone(), id: r.id.clone() })
 }
 
-fn first(n: Option<i32>) -> i32 {
-    n.unwrap_or(50).clamp(1, 500)
-}
+/// How many challenges or containments a list reads from awzy-challenge; the portal pages within them.
+const LISTED: i32 = 500;
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq)]
 pub enum ChallengeKind {
@@ -327,26 +327,33 @@ impl ChallengeQuery {
         &self,
         ctx: &Context<'_>,
         status: Option<ChallengeStatus>,
+        after: Option<String>,
         first: Option<i32>,
-    ) -> Result<Vec<Challenge>> {
+    ) -> Result<Connection<String, Challenge>> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let me = answering_human(&viewer)?;
-        list(ctx, me, status, first).await
+        page(list(ctx, me, status, LISTED).await?, |c| c.0.qid.clone(), after, first)
     }
 
     /// Requests waiting for an approval the signed-in principal may give, newest first: a
     /// resource's owner, say, or an overseer agent policy names.
-    async fn challenges_to_approve(&self, ctx: &Context<'_>, first: Option<i32>) -> Result<Vec<Challenge>> {
+    async fn challenges_to_approve(
+        &self,
+        ctx: &Context<'_>,
+        after: Option<String>,
+        first: Option<i32>,
+    ) -> Result<Connection<String, Challenge>> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let services = ctx.data::<Services>()?;
+        let key = |c: &Challenge| c.0.qid.clone();
         if viewer.on_behalf_of.is_some() {
-            return Ok(vec![]);
+            return page(vec![], key, after, first);
         }
-        let pending = list(ctx, String::new(), Some(ChallengeStatus::Pending), Some(500)).await?;
+        let pending = list(ctx, String::new(), Some(ChallengeStatus::Pending), LISTED).await?;
         let checks = pending.iter().map(|c| may_approve(services, &viewer, &c.0));
         let allowed = async_graphql::futures_util::future::join_all(checks).await;
-        let n = self::first(first) as usize;
-        Ok(pending.into_iter().zip(allowed).filter(|(_, ok)| *ok).map(|(c, _)| c).take(n).collect())
+        let mine = pending.into_iter().zip(allowed).filter(|(_, ok)| *ok).map(|(c, _)| c).collect();
+        page(mine, key, after, first)
     }
 
     /// Every challenge, newest first. For those who administer challenges.
@@ -354,10 +361,11 @@ impl ChallengeQuery {
         &self,
         ctx: &Context<'_>,
         status: Option<ChallengeStatus>,
+        after: Option<String>,
         first: Option<i32>,
-    ) -> Result<Vec<Challenge>> {
+    ) -> Result<Connection<String, Challenge>> {
         require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
-        list(ctx, String::new(), status, first).await
+        page(list(ctx, String::new(), status, LISTED).await?, |c| c.0.qid.clone(), after, first)
     }
 
     /// How awzy-reasoner's containments held up on review over the last `days` (default 30): for
@@ -388,13 +396,13 @@ impl ChallengeQuery {
         &self,
         ctx: &Context<'_>,
         #[graphql(default = true)] active_only: bool,
+        after: Option<String>,
         first: Option<i32>,
-    ) -> Result<Vec<Containment>> {
+    ) -> Result<Connection<String, Containment>> {
         require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
-        let req =
-            ListContainmentsRequest { active_only, principal: None, limit: self::first(first), include_monitor: true };
+        let req = ListContainmentsRequest { active_only, principal: None, limit: LISTED, include_monitor: true };
         let list = client(ctx)?.list_containments(req).await.map_err(grpc)?.into_inner().containments;
-        Ok(list.into_iter().map(Containment).collect())
+        page(list.into_iter().map(Containment).collect(), |c| c.0.qid.clone(), after, first)
     }
 }
 
@@ -402,13 +410,10 @@ async fn list(
     ctx: &Context<'_>,
     answerer_id: String,
     status: Option<ChallengeStatus>,
-    n: Option<i32>,
+    limit: i32,
 ) -> Result<Vec<Challenge>> {
-    let req = ListChallengesRequest {
-        answerer_id,
-        status: status.map_or(WireStatus::Unspecified, Into::into).into(),
-        limit: first(n),
-    };
+    let req =
+        ListChallengesRequest { answerer_id, status: status.map_or(WireStatus::Unspecified, Into::into).into(), limit };
     let list = client(ctx)?.list_challenges(req).await.map_err(grpc)?.into_inner().challenges;
     Ok(list.into_iter().map(Challenge).collect())
 }
@@ -603,10 +608,13 @@ mod tests {
         let (bob, carol, alice) =
             (human("bob", "engineering"), human("carol", "engineering"), human("alice", "security"));
 
-        let mine = run(&schema, &bob, "{ myChallenges(status: PENDING) { id kinds status } }").await;
-        assert_eq!(mine["myChallenges"], json!([{ "id": id, "kinds": ["JUSTIFICATION"], "status": "PENDING" }]));
-        let theirs = run(&schema, &carol, "{ myChallenges { id } }").await;
-        assert_eq!(theirs["myChallenges"], json!([]));
+        let mine = run(&schema, &bob, "{ myChallenges(status: PENDING) { nodes { id kinds status } } }").await;
+        assert_eq!(
+            mine["myChallenges"]["nodes"],
+            json!([{ "id": id, "kinds": ["JUSTIFICATION"], "status": "PENDING" }])
+        );
+        let theirs = run(&schema, &carol, "{ myChallenges { nodes { id } } }").await;
+        assert_eq!(theirs["myChallenges"]["nodes"], json!([]));
         let node = format!(r#"{{ node(id: "{id}") {{ id }} }}"#);
         assert!(run_err(&schema, &carol, node.as_str()).await.contains("may not administer challenges"));
         assert_eq!(run(&schema, &alice, node.as_str()).await["node"]["id"], json!(id), "an admin sees any");
@@ -630,17 +638,22 @@ mod tests {
         let (bob, carol, alice) =
             (human("bob", "engineering"), human("carol", "engineering"), human("alice", "security"));
 
-        assert!(run_err(&schema, &bob, "{ challenges { id } }").await.contains("may not administer challenges"));
+        assert!(run_err(&schema, &bob, "{ challenges { nodes { id } } }")
+            .await
+            .contains("may not administer challenges"));
         // Each approver sees what policy lets them approve, and nobody their own request.
         let to_approve = |v: &Viewer| {
             let (schema, v) = (schema.clone(), v.clone());
-            async move { run(&schema, &v, "{ challengesToApprove { id } }").await["challengesToApprove"].clone() }
+            async move {
+                run(&schema, &v, "{ challengesToApprove { nodes { id } } }").await["challengesToApprove"]["nodes"]
+                    .clone()
+            }
         };
         assert_eq!(to_approve(&alice).await, json!([{ "id": id }]));
         assert_eq!(to_approve(&bob).await, json!([]), "bob asked");
         assert_eq!(to_approve(&carol).await, json!([]), "policy doesn't let carol approve the board deck");
-        let pending = run(&schema, &alice, "{ challenges(status: PENDING) { id principal { id } } }").await;
-        assert_eq!(pending["challenges"], json!([{ "id": id, "principal": { "id": "bob" } }]));
+        let pending = run(&schema, &alice, "{ challenges(status: PENDING) { nodes { id principal { id } } } }").await;
+        assert_eq!(pending["challenges"]["nodes"], json!([{ "id": id, "principal": { "id": "bob" } }]));
 
         let decide = format!(
             r#"mutation {{ decideChallenge(input: {{ challengeQid: "{id}", approve: true, note: "ok" }}) {{ challenge {{ status decidedBy {{ id }} }} }} }}"#
@@ -658,9 +671,9 @@ mod tests {
         assert!(run_err(&schema, &bob, contain).await.contains("may not administer challenges"));
         let c = run(&schema, &alice, contain).await["containPrincipal"]["containment"].clone();
         assert_eq!((&c["createdBy"], &c["liftedAt"]), (&json!({ "type": "Human", "id": "alice" }), &json!(null)));
-        let active = run(&schema, &alice, "{ containments { id principal { type id } } }").await;
+        let active = run(&schema, &alice, "{ containments { nodes { id principal { type id } } } }").await;
         assert_eq!(
-            active["containments"],
+            active["containments"]["nodes"],
             json!([{ "id": c["id"], "principal": { "type": "ServiceAccount", "id": "sales-genie" } }])
         );
 
@@ -672,7 +685,7 @@ mod tests {
             run(&schema, &alice, lift).await["liftContainment"]["containment"]["liftedBy"]["id"],
             json!("alice")
         );
-        assert_eq!(run(&schema, &alice, "{ containments { id } }").await["containments"], json!([]));
+        assert_eq!(run(&schema, &alice, "{ containments { nodes { id } } }").await["containments"]["nodes"], json!([]));
     }
 
     #[tokio::test]

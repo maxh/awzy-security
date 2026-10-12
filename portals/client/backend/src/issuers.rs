@@ -1,7 +1,7 @@
 //! Apps an admin trusts to sign tokens for their own agents (ADR 0110), on the Directory page.
 
-use async_graphql::{Context, InputObject, Object, Result, SimpleObject};
-use awzy_portal::{Actor, UtcTimestamp};
+use async_graphql::{connection::Connection, Context, InputObject, Object, Result, SimpleObject};
+use awzy_portal::{connection::page, Actor, UtcTimestamp};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -64,14 +64,19 @@ pub struct TokenIssuerQuery;
 #[Object]
 impl TokenIssuerQuery {
     /// Apps trusted to sign tokens for their own agents, besides the IdP.
-    async fn token_issuers(&self, ctx: &Context<'_>) -> Result<Vec<TokenIssuer>> {
+    async fn token_issuers(
+        &self,
+        ctx: &Context<'_>,
+        after: Option<String>,
+        first: Option<i32>,
+    ) -> Result<Connection<String, TokenIssuer>> {
         require(ctx, PortalAction::View, PortalArea::Directory).await?;
         #[derive(Deserialize)]
         struct Wire {
             token_issuers: Vec<WireIssuer>,
         }
         let w: Wire = context(ctx)?.get("/v1/token-issuers").await?;
-        Ok(w.token_issuers.into_iter().map(Into::into).collect())
+        page(w.token_issuers.into_iter().map(Into::into).collect(), |i: &TokenIssuer| i.name.clone(), after, first)
     }
 }
 

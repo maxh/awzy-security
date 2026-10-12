@@ -1,12 +1,21 @@
-import { PageHeader, PageLoader, Section, StatusBadge, type Tone } from "@awzy/ui";
+import { PageHeader, PageLoader, Section, ShowMore, StatusBadge, type Tone } from "@awzy/ui";
 import { Alert, Button, Drawer, Group, Modal, Stack, Table, Text, Textarea } from "@mantine/core";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { IconSparkles } from "@tabler/icons-react";
 import { Suspense, useState } from "react";
-import { graphql, type PreloadedQuery, useLazyLoadQuery, useMutation, usePreloadedQuery } from "react-relay";
+import {
+  graphql,
+  type PreloadedQuery,
+  useLazyLoadQuery,
+  useMutation,
+  usePaginationFragment,
+  usePreloadedQuery,
+} from "react-relay";
 
 import { AwzyBotPanel } from "./AwzyBotPanel";
 import { DryRunReport } from "./DryRunReport";
+import type { PoliciesPageBundlesPaginationQuery } from "./__generated__/PoliciesPageBundlesPaginationQuery.graphql";
+import type { PoliciesPage_bundles$key } from "./__generated__/PoliciesPage_bundles.graphql";
 import type { PoliciesPageCreateDraftMutation } from "./__generated__/PoliciesPageCreateDraftMutation.graphql";
 import type { PoliciesPagePublishMutation } from "./__generated__/PoliciesPagePublishMutation.graphql";
 import type { PoliciesPageAwzyBotQuery } from "./__generated__/PoliciesPageAwzyBotQuery.graphql";
@@ -88,19 +97,38 @@ function Policies({ queryRef, onChanged }: { queryRef: PreloadedQuery<PoliciesPa
             label
           }
         }
-        policyBundles(first: 20) {
-          id
-          version
-          status
-          createdAt
-          createdBy {
-            label
-          }
-          publishedAt
-        }
+        ...PoliciesPage_bundles
       }
     `,
     queryRef,
+  );
+  const {
+    data: { policyBundles },
+    loadNext,
+    hasNext,
+    isLoadingNext,
+  } = usePaginationFragment<PoliciesPageBundlesPaginationQuery, PoliciesPage_bundles$key>(
+    graphql`
+      fragment PoliciesPage_bundles on Query
+      @argumentDefinitions(first: { type: "Int", defaultValue: 10 }, after: { type: "String" })
+      @refetchable(queryName: "PoliciesPageBundlesPaginationQuery") {
+        policyBundles(first: $first, after: $after) @connection(key: "PoliciesPage_policyBundles") {
+          edges {
+            node {
+              id
+              version
+              status
+              createdAt
+              createdBy {
+                label
+              }
+              publishedAt
+            }
+          }
+        }
+      }
+    `,
+    data,
   );
   const [commitPublish, isPublishing] = useMutation<PoliciesPagePublishMutation>(graphql`
     mutation PoliciesPagePublishMutation($input: PublishPolicyBundleInput!) {
@@ -188,7 +216,7 @@ function Policies({ queryRef, onChanged }: { queryRef: PreloadedQuery<PoliciesPa
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {data.policyBundles.map((b) => {
+              {policyBundles.edges.map(({ node: b }) => {
                 const status = STATUS[b.status] ?? { label: b.status.toLowerCase(), tone: "neutral" as Tone };
                 return (
                   <Table.Tr key={b.id}>
@@ -228,6 +256,7 @@ function Policies({ queryRef, onChanged }: { queryRef: PreloadedQuery<PoliciesPa
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>
+        <ShowMore hasMore={hasNext} loading={isLoadingNext} onMore={() => loadNext(20)} />
       </Section>
 
       {data.canPublish ? (

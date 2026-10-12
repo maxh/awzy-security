@@ -4,8 +4,8 @@
 //! chart didn't define.
 
 use anyhow::Context as _;
-use async_graphql::{Context, Enum, Object, Result, SimpleObject};
-use awzy_portal::UtcTimestamp;
+use async_graphql::{connection::Connection, Context, Enum, Object, Result, SimpleObject};
+use awzy_portal::{connection::page, UtcTimestamp};
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 
@@ -147,10 +147,18 @@ impl RepairQuery {
 
     /// Recent repair runs, newest first; a finished one is kept for a week. For those who may
     /// administer the enforcement area.
-    async fn repair_runs(&self, ctx: &Context<'_>) -> Result<Vec<RepairRun>> {
+    async fn repair_runs(
+        &self,
+        ctx: &Context<'_>,
+        after: Option<String>,
+        first: Option<i32>,
+    ) -> Result<Connection<String, RepairRun>> {
         require(ctx, PortalAction::Administer, PortalArea::Enforcement).await?;
-        let Some(ns) = namespace() else { return Ok(vec![]) };
-        Ok(KubeApi::in_cluster()?.runs(&ns).await?)
+        let runs = match namespace() {
+            Some(ns) => KubeApi::in_cluster()?.runs(&ns).await?,
+            None => vec![],
+        };
+        page(runs, |r| r.name.clone(), after, first)
     }
 }
 

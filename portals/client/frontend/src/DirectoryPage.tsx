@@ -1,4 +1,4 @@
-import { PageHeader, PageLoader, Stat, StatusBadge } from "@awzy/ui";
+import { PageHeader, PageLoader, ShowMore, Stat, StatusBadge } from "@awzy/ui";
 import {
   Alert,
   Badge,
@@ -16,8 +16,21 @@ import {
 } from "@mantine/core";
 import { getRouteApi } from "@tanstack/react-router";
 import { type SyntheticEvent, Suspense, useState } from "react";
-import { graphql, type PreloadedQuery, useLazyLoadQuery, useMutation, usePreloadedQuery } from "react-relay";
+import {
+  graphql,
+  type PreloadedQuery,
+  useLazyLoadQuery,
+  useMutation,
+  usePaginationFragment,
+  usePreloadedQuery,
+} from "react-relay";
 
+import type { DirectoryPageServiceAccountsPaginationQuery } from "./__generated__/DirectoryPageServiceAccountsPaginationQuery.graphql";
+import type { DirectoryPage_serviceAccounts$key } from "./__generated__/DirectoryPage_serviceAccounts.graphql";
+import type { DirectoryPageGroupsPaginationQuery } from "./__generated__/DirectoryPageGroupsPaginationQuery.graphql";
+import type { DirectoryPage_groups$key } from "./__generated__/DirectoryPage_groups.graphql";
+import type { DirectoryPageHumansPaginationQuery } from "./__generated__/DirectoryPageHumansPaginationQuery.graphql";
+import type { DirectoryPage_humans$key } from "./__generated__/DirectoryPage_humans.graphql";
 import type { DirectoryPageGroupsQuery } from "./__generated__/DirectoryPageGroupsQuery.graphql";
 import type { DirectoryPageHumansQuery } from "./__generated__/DirectoryPageHumansQuery.graphql";
 import type { DirectoryPageRegisterMutation } from "./__generated__/DirectoryPageRegisterMutation.graphql";
@@ -134,21 +147,43 @@ function Humans() {
 }
 
 function HumansTable({ search }: { search: string }) {
-  const { humans } = useLazyLoadQuery<DirectoryPageHumansQuery>(
+  const query = useLazyLoadQuery<DirectoryPageHumansQuery>(
     graphql`
       query DirectoryPageHumansQuery($search: String) {
-        humans(search: $search, first: 200) {
-          userName
-          displayName
-          active
-          groups
-          updatedAt
-        }
+        ...DirectoryPage_humans @arguments(search: $search)
       }
     `,
     { search: search || null },
     { fetchPolicy: "store-and-network" },
   );
+  const { data, loadNext, hasNext, isLoadingNext } = usePaginationFragment<
+    DirectoryPageHumansPaginationQuery,
+    DirectoryPage_humans$key
+  >(
+    graphql`
+      fragment DirectoryPage_humans on Query
+      @argumentDefinitions(
+        search: { type: "String" }
+        first: { type: "Int", defaultValue: 25 }
+        after: { type: "String" }
+      )
+      @refetchable(queryName: "DirectoryPageHumansPaginationQuery") {
+        humans(search: $search, first: $first, after: $after) @connection(key: "DirectoryPage_humans") {
+          edges {
+            node {
+              userName
+              displayName
+              active
+              groups
+              updatedAt
+            }
+          }
+        }
+      }
+    `,
+    query,
+  );
+  const humans = data.humans.edges.map((e) => e.node);
   if (humans.length === 0)
     return (
       <Text c="dimmed">
@@ -156,81 +191,105 @@ function HumansTable({ search }: { search: string }) {
       </Text>
     );
   return (
-    <Table>
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th>User name</Table.Th>
-          <Table.Th>Name</Table.Th>
-          <Table.Th>Groups</Table.Th>
-          <Table.Th>Status</Table.Th>
-          <Table.Th>Changed</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
-        {humans.map((p) => (
-          <Table.Tr key={p.userName}>
-            <Table.Td ff="monospace">{p.userName}</Table.Td>
-            <Table.Td>{p.displayName ?? ""}</Table.Td>
-            <Table.Td>
-              <Group gap={4}>
-                {p.groups.map((g) => (
-                  <Badge key={g} variant="default">
-                    {g}
-                  </Badge>
-                ))}
-              </Group>
-            </Table.Td>
-            <Table.Td>
-              <StatusBadge tone={p.active ? "success" : "danger"}>{p.active ? "Active" : "Deactivated"}</StatusBadge>
-            </Table.Td>
-            <Table.Td>{formatTime(p.updatedAt)}</Table.Td>
+    <>
+      <Table>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>User name</Table.Th>
+            <Table.Th>Name</Table.Th>
+            <Table.Th>Groups</Table.Th>
+            <Table.Th>Status</Table.Th>
+            <Table.Th>Changed</Table.Th>
           </Table.Tr>
-        ))}
-      </Table.Tbody>
-    </Table>
+        </Table.Thead>
+        <Table.Tbody>
+          {humans.map((p) => (
+            <Table.Tr key={p.userName}>
+              <Table.Td ff="monospace">{p.userName}</Table.Td>
+              <Table.Td>{p.displayName ?? ""}</Table.Td>
+              <Table.Td>
+                <Group gap={4}>
+                  {p.groups.map((g) => (
+                    <Badge key={g} variant="default">
+                      {g}
+                    </Badge>
+                  ))}
+                </Group>
+              </Table.Td>
+              <Table.Td>
+                <StatusBadge tone={p.active ? "success" : "danger"}>{p.active ? "Active" : "Deactivated"}</StatusBadge>
+              </Table.Td>
+              <Table.Td>{formatTime(p.updatedAt)}</Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+      <ShowMore hasMore={hasNext} loading={isLoadingNext} onMore={() => loadNext(50)} />
+    </>
   );
 }
 
 function Groups() {
-  const { groups } = useLazyLoadQuery<DirectoryPageGroupsQuery>(
+  const query = useLazyLoadQuery<DirectoryPageGroupsQuery>(
     graphql`
       query DirectoryPageGroupsQuery {
-        groups {
-          name
-          humans
-          groups
-          parents
-          updatedAt
-        }
+        ...DirectoryPage_groups
       }
     `,
     {},
     { fetchPolicy: "store-and-network" },
   );
+  const { data, loadNext, hasNext, isLoadingNext } = usePaginationFragment<
+    DirectoryPageGroupsPaginationQuery,
+    DirectoryPage_groups$key
+  >(
+    graphql`
+      fragment DirectoryPage_groups on Query
+      @argumentDefinitions(first: { type: "Int", defaultValue: 25 }, after: { type: "String" })
+      @refetchable(queryName: "DirectoryPageGroupsPaginationQuery") {
+        groups(first: $first, after: $after) @connection(key: "DirectoryPage_groups") {
+          edges {
+            node {
+              name
+              humans
+              groups
+              parents
+              updatedAt
+            }
+          }
+        }
+      }
+    `,
+    query,
+  );
+  const groups = data.groups.edges.map((e) => e.node);
   if (groups.length === 0) return <Text c="dimmed">No groups yet.</Text>;
   return (
-    <Table>
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th>Group (as policies name it)</Table.Th>
-          <Table.Th>People</Table.Th>
-          <Table.Th>Nested groups</Table.Th>
-          <Table.Th>Inside</Table.Th>
-          <Table.Th>Changed</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
-        {groups.map((g) => (
-          <Table.Tr key={g.name}>
-            <Table.Td ff="monospace">Group::"{g.name}"</Table.Td>
-            <Table.Td>{g.humans}</Table.Td>
-            <Table.Td>{g.groups}</Table.Td>
-            <Table.Td>{g.parents.join(", ")}</Table.Td>
-            <Table.Td>{formatTime(g.updatedAt)}</Table.Td>
+    <>
+      <Table>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Group (as policies name it)</Table.Th>
+            <Table.Th>People</Table.Th>
+            <Table.Th>Nested groups</Table.Th>
+            <Table.Th>Inside</Table.Th>
+            <Table.Th>Changed</Table.Th>
           </Table.Tr>
-        ))}
-      </Table.Tbody>
-    </Table>
+        </Table.Thead>
+        <Table.Tbody>
+          {groups.map((g) => (
+            <Table.Tr key={g.name}>
+              <Table.Td ff="monospace">Group::"{g.name}"</Table.Td>
+              <Table.Td>{g.humans}</Table.Td>
+              <Table.Td>{g.groups}</Table.Td>
+              <Table.Td>{g.parents.join(", ")}</Table.Td>
+              <Table.Td>{formatTime(g.updatedAt)}</Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+      <ShowMore hasMore={hasNext} loading={isLoadingNext} onMore={() => loadNext(50)} />
+    </>
   );
 }
 
@@ -248,22 +307,42 @@ function ServiceAccountsTable({ fetchKey, onChanged }: { fetchKey: number; onCha
     graphql`
       query DirectoryPageServiceAccountsQuery {
         canAdminister: viewerCan(action: ADMINISTER, area: DIRECTORY)
-        serviceAccounts {
-          id
-          owner
-          ai
-          groups
-          description
-          updatedBy {
-            label
-          }
-          updatedAt
-        }
+        ...DirectoryPage_serviceAccounts
       }
     `,
     {},
     { fetchKey, fetchPolicy: "store-and-network" },
   );
+  const {
+    data: { serviceAccounts },
+    loadNext,
+    hasNext,
+    isLoadingNext,
+  } = usePaginationFragment<DirectoryPageServiceAccountsPaginationQuery, DirectoryPage_serviceAccounts$key>(
+    graphql`
+      fragment DirectoryPage_serviceAccounts on Query
+      @argumentDefinitions(first: { type: "Int", defaultValue: 25 }, after: { type: "String" })
+      @refetchable(queryName: "DirectoryPageServiceAccountsPaginationQuery") {
+        serviceAccounts(first: $first, after: $after) @connection(key: "DirectoryPage_serviceAccounts") {
+          edges {
+            node {
+              id
+              owner
+              ai
+              groups
+              description
+              updatedBy {
+                label
+              }
+              updatedAt
+            }
+          }
+        }
+      }
+    `,
+    data,
+  );
+  const accounts = serviceAccounts.edges.map((e) => e.node);
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [commitRemove, isRemoving] = useMutation<DirectoryPageRemoveMutation>(graphql`
@@ -287,7 +366,7 @@ function ServiceAccountsTable({ fetchKey, onChanged }: { fetchKey: number; onCha
         {data.canAdminister && <Button onClick={() => setRegistering(true)}>Register service account</Button>}
       </Group>
       {error && <Alert color="red">{error}</Alert>}
-      {data.serviceAccounts.length === 0 ? (
+      {accounts.length === 0 ? (
         <Text c="dimmed">No service accounts registered.</Text>
       ) : (
         <Table>
@@ -303,7 +382,7 @@ function ServiceAccountsTable({ fetchKey, onChanged }: { fetchKey: number; onCha
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {data.serviceAccounts.map((sa) => (
+            {accounts.map((sa) => (
               <Table.Tr key={sa.id}>
                 <Table.Td ff="monospace">{sa.id}</Table.Td>
                 <Table.Td>{sa.owner}</Table.Td>
@@ -329,6 +408,7 @@ function ServiceAccountsTable({ fetchKey, onChanged }: { fetchKey: number; onCha
           </Table.Tbody>
         </Table>
       )}
+      <ShowMore hasMore={hasNext} loading={isLoadingNext} onMore={() => loadNext(50)} />
       <RegisterServiceAccount opened={registering} onClose={() => setRegistering(false)} onRegistered={onChanged} />
     </Stack>
   );

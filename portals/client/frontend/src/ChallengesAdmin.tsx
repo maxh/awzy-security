@@ -16,46 +16,50 @@ export function Admin({ fetchKey, onChanged }: { fetchKey: number; onChanged: ()
   const data = useLazyLoadQuery<ChallengesAdminQuery>(
     graphql`
       query ChallengesAdminQuery {
-        pending: challenges(status: PENDING) {
-          id
-          principal {
-            type
+        pending: challenges(status: PENDING, first: 100) {
+          nodes {
             id
+            principal {
+              type
+              id
+            }
+            onBehalfOf {
+              type
+              id
+            }
+            action
+            resource {
+              type
+              id
+            }
+            kinds
+            passed
+            answererId
+            justification
+            createdAt
           }
-          onBehalfOf {
-            type
-            id
-          }
-          action
-          resource {
-            type
-            id
-          }
-          kinds
-          passed
-          answererId
-          justification
-          createdAt
         }
-        containments {
-          id
-          principal {
-            type
+        containments(first: 100) {
+          nodes {
             id
+            principal {
+              type
+              id
+            }
+            reason
+            createdBy {
+              label
+            }
+            createdAt
+            monitor
           }
-          reason
-          createdBy {
-            label
-          }
-          createdAt
-          monitor
         }
       }
     `,
     {},
     { fetchKey, fetchPolicy: "store-and-network" },
   );
-  const approvals = data.pending.filter((c) => c.kinds.includes("APPROVAL") && !c.passed.includes("APPROVAL"));
+  const approvals = data.pending.nodes.filter((c) => c.kinds.includes("APPROVAL") && !c.passed.includes("APPROVAL"));
 
   return (
     <Stack gap="lg">
@@ -71,14 +75,14 @@ export function Admin({ fetchKey, onChanged }: { fetchKey: number; onChanged: ()
           </Stack>
         )}
       </Stack>
-      <Containments containments={data.containments} onChanged={onChanged} />
+      <Containments containments={data.containments.nodes} onChanged={onChanged} />
       <ResetKeys />
     </Stack>
   );
 }
 
-type AdminPending = ChallengesAdminQuery["response"]["pending"][number];
-type ToApprove = ChallengesPageQuery["response"]["toApprove"][number];
+type AdminPending = ChallengesAdminQuery["response"]["pending"]["nodes"][number];
+type ToApprove = ChallengesPageQuery["response"]["toApprove"]["nodes"][number];
 
 export function Approval({ challenge: c, onChanged }: { challenge: AdminPending | ToApprove; onChanged: () => void }) {
   const [commit, isSaving] = useMutation<ChallengesAdminDecideMutation>(graphql`
@@ -144,7 +148,7 @@ export function Approval({ challenge: c, onChanged }: { challenge: AdminPending 
   );
 }
 
-type ContainmentRow = ChallengesAdminQuery["response"]["containments"][number];
+type ContainmentRow = ChallengesAdminQuery["response"]["containments"]["nodes"][number];
 
 function Containments({
   containments,

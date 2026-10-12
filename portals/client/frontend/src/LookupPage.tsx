@@ -165,20 +165,22 @@ function Results({ query, onSelect }: { query: string; onSelect: (id: string) =>
   const { searchResources } = useLazyLoadQuery<LookupPageSearchQuery>(
     graphql`
       query LookupPageSearchQuery($query: String!) {
-        searchResources(query: $query) {
-          id
-          name
-          kind
-          source
-          owner
-          sensitivity
+        searchResources(query: $query, first: 50) {
+          nodes {
+            id
+            name
+            kind
+            source
+            owner
+            sensitivity
+          }
         }
       }
     `,
     { query },
     { fetchPolicy: "network-only" },
   );
-  if (searchResources.length === 0) {
+  if (searchResources.nodes.length === 0) {
     return <EmptyState icon={<IconSearch size={22} />} title="Nothing matches" />;
   }
   return (
@@ -193,7 +195,7 @@ function Results({ query, onSelect }: { query: string; onSelect: (id: string) =>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {searchResources.map((r) => (
+          {searchResources.nodes.map((r) => (
             <Table.Tr key={r.id} style={{ cursor: "pointer" }} onClick={() => onSelect(r.id)}>
               <Table.Td>
                 <Text size="sm">{r.name}</Text>
