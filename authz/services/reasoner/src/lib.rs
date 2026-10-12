@@ -11,6 +11,7 @@ pub mod context;
 pub mod investigate;
 pub mod runs;
 pub mod score;
+pub mod steps;
 
 use std::{collections::HashMap, time::Duration};
 
@@ -122,13 +123,21 @@ impl Reasoner {
         let mut rejected = std::collections::BTreeMap::new();
         if let Some(c) = &self.containments {
             match self.contain(c, &scores, as_of).await {
-                Ok(evidence) => rejected = evidence.rejected,
-                Err(e) => tracing::warn!(error = %e, "automated containments skipped this run"),
+                Ok(evidence) => {
+                    steps::count("containments", true);
+                    rejected = evidence.rejected
+                }
+                Err(e) => {
+                    steps::count("containments", false);
+                    tracing::warn!(error = %e, "automated containments skipped this run")
+                }
             }
         }
         if let Some(inv) = &self.investigations {
             let containments = self.containments.as_ref();
-            match inv.run(&self.clickhouse, &self.context, containments, &scores, &rejected, as_of).await {
+            let ran = inv.run(&self.clickhouse, &self.context, containments, &scores, &rejected, as_of).await;
+            steps::count("investigations", ran.is_ok());
+            match ran {
                 Ok(0) => {}
                 Ok(n) => tracing::info!(investigations = n, "investigations ran"),
                 Err(e) => tracing::warn!(error = %e, "investigations stopped this run"),
@@ -163,7 +172,9 @@ impl Reasoner {
         let mut ticks = tokio::time::interval(interval);
         loop {
             ticks.tick().await;
-            match self.run_once(Utc::now()).await {
+            let run = self.run_once(Utc::now()).await;
+            steps::count("scoring", run.is_ok());
+            match run {
                 Ok(n) => tracing::info!(scored = n, "risk scores written"),
                 Err(e) => tracing::warn!(error = %e, "scoring failed; trying again next interval"),
             }
