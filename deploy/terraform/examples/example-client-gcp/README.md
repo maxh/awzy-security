@@ -36,3 +36,36 @@ cd ../bootstrap && tofu init && tofu apply # Argo CD and the rest, then the awzy
 
 Then point the demo hostname (a DNS-only CNAME) at the Gateway's address:
 `kubectl -n awzy-ops get gateway awzy`.
+
+## Applied by CI
+
+After the first apply, CI plans and applies `install/` and `bootstrap/` (ADR 0115,
+`.github/workflows/terraform.yml`): a pull request that changes them gets a comment listing what
+merging would change, and after merge the apply waits in the `example-gcp` GitHub environment for
+a person's approval.
+
+The example client grants CI that in its own project, as a client letting a vendor's pipeline
+manage a project would: `install/ci.tf` trusts GitHub's OIDC tokens through workload identity
+federation, for two service accounts. The plan identity, for pull requests and main, reads the
+project, the state, and the install's credentials. The apply identity, an owner, is only for the
+`example-gcp` environment.
+
+### Setting it up (once)
+
+The identities are applied by hand, since a pipeline can't create the identity it runs as:
+
+1. Add `TF_VAR_github_oidc_subject_repo` to `deployment.env` (see `deployment.env.example`).
+2. Apply `install/` by hand as before.
+3. Create the environment with a required reviewer, and set the identities and inputs:
+
+```sh
+gh api -X PUT repos/{owner}/{repo}/environments/example-gcp \
+  -F 'reviewers[][type]=User' -F "reviewers[][id]=$(gh api user --jq .id)" \
+  -F 'deployment_branch_policy[protected_branches]=true' -F 'deployment_branch_policy[custom_branch_policies]=false'
+gh variable set AWZY_CORP_EXAMPLE_GCP_WIF_PROVIDER --body "$(cd install && tofu output -json ci | jq -r .provider)"
+gh variable set AWZY_CORP_EXAMPLE_GCP_PLAN_SERVICE_ACCOUNT --body "$(cd install && tofu output -json ci | jq -r .service_accounts.plan)"
+gh variable set AWZY_CORP_EXAMPLE_GCP_TERRAFORM_SERVICE_ACCOUNT --body "$(cd install && tofu output -json ci | jq -r .service_accounts.terraform)"
+gh secret set AWZY_CORP_EXAMPLE_GCP_DEPLOYMENT_ENV < deployment.env
+```
+
+After that, change `deployment.env` by updating the secret too; CI reads only the secret.
