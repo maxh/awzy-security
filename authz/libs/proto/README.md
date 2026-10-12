@@ -1,7 +1,7 @@
 # proto
 
 Protobuf definitions and generated Rust types for awzy-authz's gRPC APIs, with conversions to
-and from `libs/model`. Part of [awzy-authz](../../README.md).
+and from `libs/model`. Part of [awzy-authz](../../).
 
 - `awzy.authz.v1` (`awzy/authz/v1/authz.proto`): `Authorizer/Check`, the decision API
   enforcement points call.

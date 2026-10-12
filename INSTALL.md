@@ -7,7 +7,7 @@ Developing awzy is in [DEVELOPMENT.md](DEVELOPMENT.md); why an install looks the
 <!-- /repo-only -->
 
 > **Tested on 2026-10-11** by the example client's install
-> ([deploy/terraform/examples/example-client](deploy/terraform/examples/example-client/README.md)),
+> ([deploy/terraform/examples/example-client](deploy/terraform/examples/example-client/)),
 > the worked example throughout: every step below was run end to end on AWS with the demo IdP,
 > and step 7's checks pass. A real IdP's sign-in and SCIM (step 6) haven't been run yet.
 
@@ -79,7 +79,7 @@ Back the file up, since it's the only record of what the deployment targets:
 ## 4. Apply the cloud layer
 
 This step is per cloud; AWS's is below, and Google Cloud's is in
-[`examples/example-client-gcp`](deploy/terraform/examples/example-client-gcp/README.md). On a
+[`examples/example-client-gcp`](deploy/terraform/examples/example-client-gcp/). On a
 cluster you already have, skip to step 5.
 
 ```sh

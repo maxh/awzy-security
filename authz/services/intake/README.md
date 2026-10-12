@@ -2,7 +2,7 @@
 
 Receives access logs, cloud audit logs (CloudTrail, Cloud Audit Logs, Azure Activity Log), proxy
 logs, DLP and endpoint signals, and agent traces (OpenTelemetry). Part of
-[awzy-authz](../../README.md).
+[awzy-authz](../../).
 
 Normalizes them into one event schema, enriches them with entity IDs, and writes them to Kafka.
 
@@ -18,7 +18,7 @@ Normalizes them into one event schema, enriches them with entity IDs, and writes
 
 Each event becomes an `EventRecord` (`libs/model`) with an `event_` QID and UTC times, goes to
 Kafka (`awzy.events.v1`, partitioned by principal), and lands in ClickHouse's `events` table next
-to `decisions` (migration 5 in [awzy-clickhouse-migrate](../../jobs/clickhouse-migrate/README.md)).
+to `decisions` (migration 5 in [awzy-clickhouse-migrate](../../jobs/clickhouse-migrate/)).
 
 - **Acknowledged, not fire-and-forget.** A request gets `202` only once Kafka has every event,
   and `503` if it can't, so a log shipper retries and nothing is lost. Retries can duplicate;

@@ -2,7 +2,7 @@
 
 The policy decision point: every enforcement point asks it whether one principal may take one
 action on one resource, and it answers allow, deny, or challenge. Part of
-[awzy-authz](../../README.md).
+[awzy-authz](../../).
 
 Embeds `cedar-policy` for static policy. Before evaluating policy it checks the active
 containment list, which it holds in memory and keeps current from a push feed. Principal

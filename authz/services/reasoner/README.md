@@ -1,7 +1,7 @@
 # awzy-reasoner · slow path
 
 Consumes decisions and events, scores risk, and opens investigations. Part of
-[awzy-authz](../../README.md).
+[awzy-authz](../../).
 
 Queries ClickHouse for activity windows and peer baselines, scores risk, and opens
 investigations that an LLM agent works through using read-only tools over ClickHouse and the

@@ -1,7 +1,7 @@
 # awzy-gateway · enforcement
 
 A policy enforcement point for traffic the client doesn't want to instrument by hand. Part
-of [awzy-authz](../../README.md).
+of [awzy-authz](../../).
 
 A reverse proxy for HTTP APIs and an MCP proxy that sees agent tool calls and carries service
 account, on-behalf-of person, and task annotations. The MCP proxy is the first enforcement point

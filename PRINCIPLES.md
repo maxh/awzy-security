@@ -4,7 +4,7 @@ The rules awzy's design follows, each with the decision records that settled it.
 would break one, it needs a new ADR, not an exception in code. The client-facing ones are on the
 docs site's [Principles](docs/site/src/content/docs/principles.md) page, without the ADRs. The
 plans are in
-[docs/plans/](docs/plans/), and the decisions in [docs/adr/](docs/adr/README.md).
+[docs/plans/](docs/plans/), and the decisions in [docs/adr/](docs/adr/).
 
 ## How awzy decides
 

@@ -7,9 +7,9 @@ share data.
 
 | Folder | Who uses it | Runs in |
 | --- | --- | --- |
-| [client/](client/README.md) | The client's security team: decisions, policies, enforcement modes, the directory | Each client's cluster, next to awzy-authz |
-| [corp/](corp/README.md) | awzy staff: the fleet of installs, their health, and releases; plus the release registry | awzy's own AWS account |
-| [common/](common/README.md) | TypeScript packages both frontends use | — |
+| [client/](client/) | The client's security team: decisions, policies, enforcement modes, the directory | Each client's cluster, next to awzy-authz |
+| [corp/](corp/) | awzy staff: the fleet of installs, their health, and releases; plus the release registry | awzy's own AWS account |
+| [common/](common/) | TypeScript packages both frontends use | — |
 
 The corp portal may never see client data
 ([ADR 0009](../docs/adr/0009-no-vendor-access-to-client-data.md)): what it knows about an

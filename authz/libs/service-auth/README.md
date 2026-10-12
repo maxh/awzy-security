@@ -2,7 +2,7 @@
 
 How awzy's services inside an install prove who is calling, with Kubernetes service-account
 tokens ([ADR 0055](../../../docs/adr/0055-services-authenticate-with-kubernetes-service-account-tokens.md)).
-Part of [awzy-authz](../../README.md).
+Part of [awzy-authz](../../).
 
 - **Receiving:** `Verifier::from_env("awzy-context")` checks a caller's token against the
   cluster's signing keys, and `require` (axum middleware) lets through only the callers

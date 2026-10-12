@@ -2,7 +2,7 @@
 
 Library: who is calling, validated from a bearer token, never from headers or tool arguments
 ([ADR 0008](../../../docs/adr/0008-agent-identity-through-token-exchange.md)). Shared by
-awzy-gateway and the client portal. Part of [awzy-authz](../../README.md).
+awzy-gateway and the client portal. Part of [awzy-authz](../../).
 
 - No `act` claim, `sub` not a registered service account: a person (`Human`), with groups
   from the `groups` claim.

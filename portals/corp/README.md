@@ -3,7 +3,7 @@
 awzy staff's view of the fleet, at https://corp.awzysecurity.com. It runs in awzy's own AWS
 account ([ADR 0035](../../docs/adr/0035-vendor-services-on-ecs-deployed-by-ci.md)) and never
 holds client data ([ADR 0009](../../docs/adr/0009-no-vendor-access-to-client-data.md)). Part of
-the [portals](../README.md).
+the [portals](../).
 
 | Page | Shows |
 | --- | --- |
@@ -17,7 +17,7 @@ the [portals](../README.md).
   heartbeat history are in Postgres ([ADR 0041](../../docs/adr/0041-fleet-health-history-in-the-corp-portal-postgres.md)).
   `awzy-corp-user` makes a staff account.
 - **`frontend/`** (`@awzy/corp-portal`): the React app.
-- **[`registry/`](registry/README.md)** (`awzy-registry`): the pull-only proxy installs pull
+- **[`registry/`](registry/)** (`awzy-registry`): the pull-only proxy installs pull
   images and the chart from.
 
 Staff sign in with a username and password, a stopgap for demos and testing until awzy has its

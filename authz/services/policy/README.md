@@ -1,7 +1,7 @@
 # awzy-policy · management
 
 Stores policy bundles with versions and distributes them, signed, to the PDPs. Part of
-[awzy-authz](../../README.md).
+[awzy-authz](../../).
 
 Runs validation and Cedar schema checks, supports dry-run by replaying past decisions from
 ClickHouse, and holds each scope's enforcement mode
