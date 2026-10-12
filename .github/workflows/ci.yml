@@ -85,7 +85,10 @@ jobs:
       - name: Frontend test coverage
         run: |
           pnpm -r --if-present coverage | tee coverage.txt
-          { echo '### Frontend test coverage'; echo '```'; grep -E '^(Statements|Branches|Functions|Lines)|> @awzy' coverage.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          # pnpm prefixes each line with its package: keep that, drop the rest.
+          { echo '### Frontend test coverage'; echo '```'
+            grep -E ' coverage: (Statements|Branches|Functions|Lines) ' coverage.txt || echo "no coverage summary"
+            echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   # Clippy and rustfmt over every Rust target; any warning fails.
   lint-rust:
