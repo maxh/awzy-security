@@ -591,7 +591,7 @@ mod tests {
         }
         let base = serve(fake.clone()).await;
         let http = Http::default();
-        let context = ContextClient::new(&base, http.clone(), awzy_service_auth::TokenSource::off());
+        let context = ContextClient::new(&base, awzy_service_auth::TokenSource::off());
         let cfg = JiraConfig {
             base_url: base.clone(),
             user: "awzy@larkspur.example".into(),

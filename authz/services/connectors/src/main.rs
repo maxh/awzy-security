@@ -14,7 +14,7 @@ async fn main() -> anyhow::Result<()> {
     awzy_telemetry::init("awzy-connectors");
     let context_url = std::env::var("AWZY_CONTEXT_URL").context("AWZY_CONTEXT_URL is not set")?;
     let http = Http::default();
-    let context = ContextClient::new(&context_url, http.clone(), awzy_service_auth::TokenSource::from_env());
+    let context = ContextClient::new(&context_url, awzy_service_auth::TokenSource::from_env());
     // Where External Secrets keeps each credential current (ADR 0104).
     let file = |k: &str, default: &str| std::env::var(k).unwrap_or_else(|_| default.to_string());
     let files = CredentialFiles {

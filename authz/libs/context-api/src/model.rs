@@ -234,3 +234,17 @@ pub struct RiskScore {
 pub struct RiskBatch {
     pub scores: Vec<RiskScore>,
 }
+
+/// Just the ID of a resource or work item, for listing what a source has written.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Id {
+    pub id: String,
+}
+
+/// A page of a source's resources or work items, read for their IDs only.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct IdPage {
+    pub resources: Vec<Id>,
+    pub work_items: Vec<Id>,
+}
