@@ -1,5 +1,5 @@
 {
-  "checksum": "c3967e2c3666c4ac9faa02ad2ce380749e3a615ccc8fd46ae085fcb73781a44b",
+  "checksum": "0024e214889f9d0c053f21406ccae7d7f09a3cca8151a641087e536ba5725a2e",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -3277,7 +3277,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_activity",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-activity",
       "repository": null,
       "targets": [
@@ -3342,7 +3345,10 @@
         ]
       },
       "library_target_name": "awzy_authz_proto",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-authz-proto",
       "repository": null,
       "targets": [
@@ -3452,7 +3458,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_challenge",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-challenge",
       "repository": null,
       "targets": [
@@ -3470,7 +3479,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_classify",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-classify",
       "repository": null,
       "targets": [
@@ -3528,7 +3540,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_clickhouse",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-clickhouse",
       "repository": null,
       "targets": [
@@ -3632,7 +3647,10 @@
         ]
       },
       "library_target_name": "awzy_client_portal",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-client-portal",
       "repository": null,
       "targets": [
@@ -3656,7 +3674,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_cloud",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-cloud",
       "repository": null,
       "targets": [
@@ -3716,7 +3737,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_connectors",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-connectors",
       "repository": null,
       "targets": [
@@ -3750,7 +3774,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_connectors_api",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-connectors-api",
       "repository": null,
       "targets": [
@@ -3824,7 +3851,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_context",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-context",
       "repository": null,
       "targets": [
@@ -3870,7 +3900,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_context_api",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-context-api",
       "repository": null,
       "targets": [
@@ -3992,7 +4025,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_corp_portal",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-corp-portal",
       "repository": null,
       "targets": [
@@ -4090,7 +4126,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_dev_idp",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-dev-idp",
       "repository": null,
       "targets": [
@@ -4122,7 +4161,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_evals",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-evals",
       "repository": null,
       "targets": [
@@ -4212,7 +4254,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_gateway",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-gateway",
       "repository": null,
       "targets": [
@@ -4254,7 +4299,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_heartbeat",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-heartbeat",
       "repository": null,
       "targets": [
@@ -4312,7 +4360,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_http",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-http",
       "repository": null,
       "targets": [
@@ -4414,7 +4465,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_identity",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-identity",
       "repository": null,
       "targets": [
@@ -4484,7 +4538,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_intake",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-intake",
       "repository": null,
       "targets": [
@@ -4530,7 +4587,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_kafka",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-kafka",
       "repository": null,
       "targets": [
@@ -4576,7 +4636,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_kube",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-kube",
       "repository": null,
       "targets": [
@@ -4634,7 +4697,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_llm",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-llm",
       "repository": null,
       "targets": [
@@ -4668,7 +4734,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_migrations",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-migrations",
       "repository": null,
       "targets": [
@@ -4714,7 +4783,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_model",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-model",
       "repository": null,
       "targets": [
@@ -4808,7 +4880,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_pdp",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-pdp",
       "repository": null,
       "targets": [
@@ -4870,7 +4945,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_policy",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-policy",
       "repository": null,
       "targets": [
@@ -4938,7 +5016,10 @@
         ]
       },
       "library_target_name": "awzy_portal",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-portal",
       "repository": null,
       "targets": [
@@ -5012,7 +5093,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_reasoner",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-reasoner",
       "repository": null,
       "targets": [
@@ -5110,7 +5194,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_registry",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-registry",
       "repository": null,
       "targets": [
@@ -5178,7 +5265,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_reporter",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-reporter",
       "repository": null,
       "targets": [
@@ -5210,7 +5300,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_secrets_aws",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-secrets-aws",
       "repository": null,
       "targets": [
@@ -5268,7 +5361,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_server",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-server",
       "repository": null,
       "targets": [
@@ -5338,7 +5434,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_service_auth",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-service-auth",
       "repository": null,
       "targets": [
@@ -5376,7 +5475,10 @@
         ]
       },
       "library_target_name": "awzy_signing",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-signing",
       "repository": null,
       "targets": [
@@ -5424,7 +5526,10 @@
         ]
       },
       "library_target_name": "awzy_signing_aws",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-signing-aws",
       "repository": null,
       "targets": [
@@ -5484,7 +5589,10 @@
         ]
       },
       "library_target_name": "awzy_signing_gcp",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-signing-gcp",
       "repository": null,
       "targets": [
@@ -5520,7 +5628,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_store",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-store",
       "repository": null,
       "targets": [
@@ -5606,7 +5717,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_synthetic",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-synthetic",
       "repository": null,
       "targets": [
@@ -5654,7 +5768,10 @@
         "edition": "2021"
       },
       "library_target_name": "awzy_telemetry",
-      "license": "UNLICENSED",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "name": "awzy-telemetry",
       "repository": null,
       "targets": [
