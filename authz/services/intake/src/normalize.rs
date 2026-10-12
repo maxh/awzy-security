@@ -120,7 +120,7 @@ pub fn app(batch: AppBatch, now: DateTime<Utc>) -> Result<Vec<EventRecord>, Norm
             if e.count.is_some() && access.is_empty() {
                 return Err(invalid(
                     i,
-                    "`count` needs `access`: say whether the rows were listed, read, written, or exported".into(),
+                    "`count` needs `access`: say whether the rows were listed, read, written, or exported",
                 ));
             }
             let on_behalf_of = e.on_behalf_of.unwrap_or_else(|| EntityRef::new("", ""));
