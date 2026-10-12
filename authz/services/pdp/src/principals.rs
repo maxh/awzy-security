@@ -47,6 +47,9 @@ struct Snapshot {
 
 pub struct Principals {
     snapshot: ArcSwap<Snapshot>,
+    /// Apps trusted to sign tokens for their own agents (ADR 0110), which enforcement points ask
+    /// the PDP for. Not used in checks.
+    issuers: ArcSwap<Vec<awzy_model::TrustedIssuer>>,
     /// False when the PDP runs without awzy-context: then it's always ready and adds nothing.
     configured: bool,
     loaded: AtomicBool,
@@ -55,12 +58,22 @@ pub struct Principals {
 impl Principals {
     /// No awzy-context: the enforcement points' entities are used as they are.
     pub fn none() -> Self {
-        Self { snapshot: ArcSwap::from_pointee(Snapshot::default()), configured: false, loaded: AtomicBool::new(true) }
+        Self {
+            snapshot: ArcSwap::from_pointee(Snapshot::default()),
+            issuers: ArcSwap::default(),
+            configured: false,
+            loaded: AtomicBool::new(true),
+        }
     }
 
     /// Waits for the first snapshot from awzy-context before the PDP is ready.
     pub fn awaiting_sync() -> Self {
-        Self { snapshot: ArcSwap::from_pointee(Snapshot::default()), configured: true, loaded: AtomicBool::new(false) }
+        Self {
+            snapshot: ArcSwap::from_pointee(Snapshot::default()),
+            issuers: ArcSwap::default(),
+            configured: true,
+            loaded: AtomicBool::new(false),
+        }
     }
 
     pub fn is_ready(&self) -> bool {
@@ -72,6 +85,15 @@ impl Principals {
         self.configured
             && principal.kind == awzy_model::entity_type::SERVICE_ACCOUNT
             && !self.snapshot.load().entities.contains_key(&key(&principal.kind, &principal.id))
+    }
+
+    /// The apps trusted to sign tokens for their own agents, as of the last snapshot.
+    pub fn trusted_issuers(&self) -> Arc<Vec<awzy_model::TrustedIssuer>> {
+        self.issuers.load_full()
+    }
+
+    pub fn set_trusted_issuers(&self, issuers: Vec<awzy_model::TrustedIssuer>) {
+        self.issuers.store(Arc::new(issuers));
     }
 
     pub fn version(&self) -> i64 {
@@ -236,6 +258,12 @@ pub async fn sync_waiting(
     };
     // Either is absent from an awzy-context older than it: no scores.
     principals.load_with_scores(version, entities, scores("risk"), scores("automation"));
+    // Absent from an awzy-context older than ADR 0110: none.
+    let issuers = match body.get("token_issuers") {
+        Some(list) => serde_json::from_value(list.clone())?,
+        None => vec![],
+    };
+    principals.set_trusted_issuers(issuers);
     tracing::info!(version, entities = count, "loaded principals from awzy-context");
     Ok(true)
 }

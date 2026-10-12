@@ -21,6 +21,11 @@ async fn main() -> anyhow::Result<()> {
     let support = awzy_client_portal::support::SupportSignIn::from_env(services.challenge.clone())?;
     let auth = awzy_client_portal::access::Auth::from_env()?.with_support(support);
     let mcp_auth = awzy_client_portal::access::Auth::from_env_for_mcp()?;
+    // Apps trusted to sign tokens for their own agents (ADR 0110), from the PDP.
+    if let Some(pdp) = services.pdp.clone() {
+        let (a, m) = (auth.clone(), mcp_auth.clone());
+        tokio::spawn(async move { awzy_client_portal::agents::follow_trusted_issuers(pdp, &[&a, &m]).await });
+    }
     // The built frontend carries the queries it sends by ID (ADR 0090).
     let frontend = awzy_portal::frontend_dir_from_env();
     let persisted = awzy_portal::PersistedQueries::from_frontend(frontend.as_deref(), persisted_only)?;

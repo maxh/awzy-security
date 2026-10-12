@@ -8,6 +8,7 @@
 //! Both need a signed-in viewer, and every operation is checked with awzy-pdp (see [`access`]).
 
 pub mod access;
+pub mod agents;
 mod audit;
 pub mod awzy_bot;
 mod challenges;
@@ -21,6 +22,7 @@ mod dry_run;
 mod enforcement;
 mod fields;
 mod investigations;
+mod issuers;
 mod lookup;
 mod mcp;
 mod node;
@@ -194,6 +196,7 @@ pub struct ClientPortalQuery(
     decisions::DecisionQuery,
     enforcement::EnforcementQuery,
     directory::DirectoryQuery,
+    issuers::TokenIssuerQuery,
     dry_run::DryRunQuery,
     awzy_bot::AwzyBotQuery,
     challenges::ChallengeQuery,
@@ -217,6 +220,7 @@ pub struct ClientPortalMutation(
     outage::OutageMutation,
     support::SupportMutation,
     directory::DirectoryMutation,
+    issuers::TokenIssuerMutation,
     awzy_bot::AwzyBotMutation,
     challenges::ChallengeMutation,
     security_keys::SecurityKeyMutation,
@@ -255,7 +259,8 @@ fn schema_builder(
 }
 
 /// GraphQL at `/graphql` and MCP at `/mcp`, each behind sign-in with its own tokens (`auth` and
-/// `mcp_auth`, ADR 0081), plus the unauthenticated sign-in discovery routes. `mcp_allowed_hosts`
+/// `mcp_auth`, ADR 0081), apps' agent registration at `/api/v1/agents` (ADR 0110), plus the
+/// unauthenticated sign-in discovery routes. `mcp_allowed_hosts`
 /// are the Host headers the MCP endpoint accepts; empty means loopback only (see
 /// AWZY_MCP_ALLOWED_HOSTS in main). GraphQL resolves the frontend's queries by ID from
 /// `persisted`, and with its `only`, runs nothing else (ADR 0088, 0090).
@@ -275,6 +280,8 @@ pub fn router(
         .merge(post(graphql).layer(signed_in).with_state(schema));
     Router::new()
         .route("/graphql", graphql)
+        // Apps register their own agents with tokens they sign (ADR 0110).
+        .merge(agents::router(auth.clone(), services.context.clone()))
         .merge(mcp::router(services, mcp_allowed_hosts).layer(mcp_signed_in))
         .merge(access::routes(auth, mcp_auth))
 }

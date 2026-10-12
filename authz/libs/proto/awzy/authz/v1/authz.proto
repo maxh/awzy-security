@@ -15,6 +15,9 @@ service Authorizer {
   // challenge was opened for, with the same person, gets an answer; for anyone else it isn't
   // found. The grant stays in awzy, so the caller never holds anything it could replay.
   rpc WaitForChallenge(WaitForChallengeRequest) returns (WaitForChallengeResponse);
+  // The apps an admin trusts to sign tokens for their own agents (ADR 0110), besides the client's
+  // IdP. Enforcement points accept their tokens only for service accounts under each one's prefix.
+  rpc ListTrustedIssuers(ListTrustedIssuersRequest) returns (ListTrustedIssuersResponse);
 }
 
 // A typed reference to a world-model entity, e.g. type "Human", id "alice".
@@ -25,8 +28,8 @@ message EntityRef {
 
 // Who did something (ADR 0060): a person (type "Human", the IdP's ID), a service account or one of
 // awzy's services ("AwzyService", e.g. "awzy-reasoner"), a break-glass key ("BreakGlassKey", its
-// fingerprint), or awzy staff in the corp portal ("AwzyStaff"); and the person it acted for, when it
-// acted for one.
+// fingerprint), awzy staff in the corp portal ("AwzyStaff"), or an app that signs tokens for its own
+// agents ("App", by name); and the person it acted for, when it acted for one.
 message Actor {
   EntityRef subject = 1;
   EntityRef on_behalf_of = 2;
@@ -143,4 +146,24 @@ message WaitForChallengeResponse {
   google.protobuf.Timestamp grant_expires_at = 3;
   // Pending: the kinds still to be passed.
   repeated ChallengeKind pending = 4;
+}
+
+message ListTrustedIssuersRequest {}
+
+message ListTrustedIssuersResponse {
+  repeated TrustedIssuer issuers = 1;
+}
+
+// An app that signs tokens for its own agents.
+message TrustedIssuer {
+  // The app's name, the `sub` of the tokens it signs for itself, e.g. "acme-crm".
+  string name = 1;
+  // The `iss` its tokens carry.
+  string issuer = 2;
+  // Where its signing keys are published (RS256 or ES256).
+  string jwks_url = 3;
+  // The `aud` its tokens must carry.
+  string audience = 4;
+  // It signs tokens only for service accounts whose ID starts with this, e.g. "acme-crm.".
+  string agent_prefix = 5;
 }

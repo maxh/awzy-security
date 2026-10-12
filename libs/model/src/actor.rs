@@ -16,14 +16,18 @@ pub mod actor_type {
     pub const BREAK_GLASS_KEY: &str = "BreakGlassKey";
     /// An awzy staff member in the corp portal, by user name. Never in a client's install.
     pub const AWZY_STAFF: &str = "AwzyStaff";
+    /// An app trusted to sign tokens for its own agents (ADR 0110), by name, registering or
+    /// retiring them.
+    pub const APP: &str = "App";
 }
 
-const KINDS: [&str; 5] = [
+const KINDS: [&str; 6] = [
     entity_type::HUMAN,
     entity_type::SERVICE_ACCOUNT,
     actor_type::AWZY_SERVICE,
     actor_type::BREAK_GLASS_KEY,
     actor_type::AWZY_STAFF,
+    actor_type::APP,
 ];
 
 /// Who acted, and for whom: a person (`Human`), a service account or awzy service acting on its
@@ -52,6 +56,11 @@ impl Actor {
 
     pub fn awzy_staff(user_name: impl Into<String>) -> Self {
         Self::new(EntityRef::new(actor_type::AWZY_STAFF, user_name), None)
+    }
+
+    /// An app that signs tokens for its own agents, by name.
+    pub fn app(name: impl Into<String>) -> Self {
+        Self::new(EntityRef::new(actor_type::APP, name), None)
     }
 
     /// The same actor acting for `person`.
@@ -127,6 +136,7 @@ mod tests {
             Actor::new(EntityRef::new(entity_type::SERVICE_ACCOUNT, "sales-genie"), None).for_human("bob"),
             Actor::new(EntityRef::new(actor_type::BREAK_GLASS_KEY, "sha256:ab12"), None),
             Actor::awzy_staff("max"),
+            Actor::app("acme-crm"),
         ] {
             assert_eq!(Actor::parse(&actor.to_string()), actor, "{actor}");
         }

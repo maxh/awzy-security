@@ -25,6 +25,7 @@ import type { DirectoryPageRemoveMutation } from "./__generated__/DirectoryPageR
 import type { DirectoryPageServiceAccountsQuery } from "./__generated__/DirectoryPageServiceAccountsQuery.graphql";
 import type { DirectoryPageSummaryQuery } from "./__generated__/DirectoryPageSummaryQuery.graphql";
 import { formatTime } from "./format";
+import { TokenIssuersPanel } from "./TokenIssuersPanel";
 
 const loading = <PageLoader />;
 
@@ -48,6 +49,7 @@ export function DirectoryPage() {
             <Tabs.Tab value="humans">People</Tabs.Tab>
             <Tabs.Tab value="groups">Groups</Tabs.Tab>
             <Tabs.Tab value="service-accounts">Service accounts</Tabs.Tab>
+            <Tabs.Tab value="apps">Apps</Tabs.Tab>
           </Tabs.List>
           <Tabs.Panel value="humans" pt="md">
             <Humans />
@@ -59,6 +61,9 @@ export function DirectoryPage() {
           </Tabs.Panel>
           <Tabs.Panel value="service-accounts" pt="md">
             <ServiceAccounts />
+          </Tabs.Panel>
+          <Tabs.Panel value="apps" pt="md">
+            <TokenIssuersPanel />
           </Tabs.Panel>
         </Tabs>
       </Card>
