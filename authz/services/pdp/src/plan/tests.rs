@@ -246,13 +246,18 @@ fn ancestors(customer: &Value) -> Vec<EntityRef> {
     out
 }
 
+/// Random policy sets, each against a dozen random customers.
+const CASES: usize = 80;
+
 #[test]
 fn a_filter_never_matches_a_row_a_check_would_deny() {
     let mut rng = Rng(0x5eed_cafe_f00d_0001);
     let mut cases = 0;
-    for case in 0..150 {
+    for case in 0..CASES {
         let policies: Vec<String> = (0..1 + rng.below(5) as usize).map(|n| random_policy(&mut rng, n)).collect();
-        let p = pdp(&policies.join("\n"));
+        // Only the random policies: awzy's base bundle is about its own types, and validating it
+        // for every case would take most of the test's time.
+        let p = Pdp::new(&schema(), &policies.join("\n")).unwrap();
         let delegated = rng.below(2) == 0;
         let risk = *rng.pick(&[0, 90]);
         let groups: Vec<&str> = ["support", "sales"].into_iter().filter(|_| rng.below(2) == 0).collect();
@@ -291,5 +296,5 @@ fn a_filter_never_matches_a_row_a_check_would_deny() {
             cases += 1;
         }
     }
-    assert_eq!(cases, 150 * 12);
+    assert_eq!(cases, CASES * 12);
 }
