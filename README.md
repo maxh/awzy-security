@@ -54,6 +54,10 @@ what a policy engine leaves to you:
 - delegation, so an agent acting for a person is held to both
 - an enforcement point for AI agents' tool calls, and a portal to run it all
 
+It sits beside your IdP, cloud IAM, and apps' own permissions rather than replacing them; the
+docs' [awzy and your existing authorization](https://docs.awzysecurity.com/concepts/existing-authorization/)
+covers what it adds and a step-by-step adoption path.
+
 ## Run it locally
 
 ```sh

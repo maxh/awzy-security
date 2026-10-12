@@ -14,6 +14,10 @@ today; the [platform plan](https://github.com/maxh/awzy-security/blob/main/docs/
 says what's coming.
 :::
 
+awzy works alongside the authorization you already have: your IdP, your cloud's IAM, and your
+apps' own permissions. See [awzy and your existing authorization](/concepts/existing-authorization/)
+for what it adds and how to adopt it a step at a time.
+
 ## The pieces
 
 | Service | What it does |
