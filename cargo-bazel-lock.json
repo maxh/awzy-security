@@ -1,5 +1,5 @@
 {
-  "checksum": "12e2f34f5033a0964cc7dc44a518a89407d870e9d9d9033dd5885f538376410f",
+  "checksum": "bcb6d32744f5e8b7d3c8821d2522aea55ed4938965cce436bf45df06dcccaa96",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -4239,6 +4239,12 @@
           {
             "id": "thiserror 2.0.21",
             "target": "thiserror"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "proptest 1.12.0",
+            "target": "proptest"
           }
         ],
         "edition": "2021"
