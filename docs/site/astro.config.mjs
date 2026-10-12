@@ -54,7 +54,7 @@ export default defineConfig({
         {
           // Checking calls from your own code, one library per language.
           label: "Client libraries",
-          items: ["client-libraries", "client-libraries/typescript"],
+          items: ["client-libraries", "client-libraries/typescript", "client-libraries/python"],
         },
         {
           // Installing and operating it.

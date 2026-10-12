@@ -1,0 +1,34 @@
+name: sdks
+
+# The client libraries in languages Bazel doesn't build (ADR 0114), each with its own toolchain:
+# lint, types, and its tests, which include the shared conformance spec.
+on:
+  pull_request:
+    paths:
+      - "authz/sdks/**"
+      - ".github/workflows/sdks.yml"
+  push:
+    branches: [main]
+    paths:
+      - "authz/sdks/**"
+      - ".github/workflows/sdks.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: authz/sdks/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[test]'
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy src
+      - run: pytest -q

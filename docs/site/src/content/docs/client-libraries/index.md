@@ -10,6 +10,7 @@ any code; a client library does it for everything else your code does.
 | Language          | Package           |                                             |
 | ----------------- | ----------------- | ------------------------------------------- |
 | TypeScript (Node) | `@awzy/authz-sdk` | [TypeScript](/client-libraries/typescript/) |
+| Python            | `awzy-authz-sdk`  | [Python](/client-libraries/python/)         |
 
 ## What every library does
 
