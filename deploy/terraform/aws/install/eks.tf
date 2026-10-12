@@ -14,6 +14,8 @@ module "eks" {
   # Whoever runs this gets cluster admin, so bootstrap can install Argo CD next, unless a
   # pipeline applies it: then the admins are listed, so access doesn't follow the last runner.
   enable_cluster_creator_admin_permissions = var.cluster_creator_admin
+  # The secrets key's administrators: likewise whoever runs this, or the listed admins.
+  kms_key_administrators = var.cluster_creator_admin ? [] : values(var.cluster_admins)
   access_entries = merge(
     { for name, arn in var.cluster_admins : name => {
       principal_arn = arn
