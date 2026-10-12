@@ -5,9 +5,10 @@
 Beyond Zero authorization for the AI era: per-action, per-resource decisions for humans and
 agents, deployed single-tenant inside each client's cloud (AWS or Google Cloud; Azure is planned).
 
-**Try it:** [aws.demo.awzysecurity.com](https://aws.demo.awzysecurity.com), a live install with a
-synthetic 200-person company. Sign in as any sample person (no password) and look around; it's
-read-only, so changes are turned off. Or run it on your machine: `tools/demo up`
+**Try it:** [aws.demo.awzysecurity.com](https://aws.demo.awzysecurity.com) on AWS, or
+[gcp.demo.awzysecurity.com](https://gcp.demo.awzysecurity.com) on Google Cloud: live installs with
+a synthetic 200-person company. Sign in as any sample person (no password) and look around;
+they're read-only, so changes are turned off. Or run it on your machine: `tools/demo up`
 ([below](#run-it-locally)).
 
 **Read about it:** [docs.awzysecurity.com](https://docs.awzysecurity.com), from the concepts to
@@ -71,8 +72,8 @@ through the MCP gateway. Open http://127.0.0.1:8080 and sign in as `alice` (the 
 
 ## Status
 
-awzy is pre-release. The AWS example install (the demo above) runs end to end, and a Google
-Cloud one is being built. It hasn't yet been run against a client's own IdP. See the
+awzy is pre-release. The AWS and Google Cloud example installs (the demos above) run end to end.
+It hasn't yet been run against a client's own IdP. See the
 [platform plan](docs/plans/platform-plan.md) for what's built and what's next. To report a
 vulnerability, see [SECURITY.md](SECURITY.md).
 

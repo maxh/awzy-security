@@ -24,14 +24,14 @@ reasonable time to fix it before you disclose it.
 In scope: the code in this repository, the images and Helm chart built from it, and the
 Terraform that installs it.
 
-The hosted demo (`aws.demo.awzysecurity.com`) runs the same code with sample data. Findings there
-are welcome, with two exceptions that are deliberate:
+The hosted demos (`aws.demo.awzysecurity.com` and `gcp.demo.awzysecurity.com`) run the same code
+with sample data. Findings there are welcome, with two exceptions that are deliberate:
 
-- **Anyone can sign in to the demo, with no password.** It runs the development IdP
+- **Anyone can sign in to the demos, with no password.** They run the development IdP
   (`tools/dev-idp`, ADR 0032), whose signing key is fixed and derivable from this source, so
   minting a token it accepts is expected. A real install never runs the development IdP or
   trusts its issuer; a way to make one do so is in scope.
-- **The demo's data is synthetic.** Larkspur Capital and its people don't exist.
+- **The demos' data is synthetic.** Larkspur Capital and its people don't exist.
 
 Out of scope: denial of service against the demo, social engineering, and findings that need a
 compromised cluster admin or cloud account, which by design can change anything in an install.
