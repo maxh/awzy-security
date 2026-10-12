@@ -2,6 +2,7 @@
 //! shutdown.
 
 pub mod metrics;
+pub mod profile;
 
 use std::{
     net::SocketAddr,
@@ -87,6 +88,12 @@ pub async fn serve_with_readiness(service: &'static str, app: Router, ready: Rea
     let stopping = Arc::new(AtomicBool::new(false));
     let ready = draining(ready, stopping.clone());
     metrics::register(Arc::new(metrics::Readiness(ready.clone())));
+    let app = if profile::enabled() {
+        tracing::warn!("AWZY_PROFILING is on: /debug/profile serves CPU profiles");
+        app.merge(profile::routes())
+    } else {
+        app
+    };
     let app = metrics::with_metrics(with_readiness(app, ready)).layer(axum::middleware::from_fn(traced));
     let drained = async move {
         shutdown_signal().await;
