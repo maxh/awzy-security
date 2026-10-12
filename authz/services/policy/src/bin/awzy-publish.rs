@@ -34,7 +34,9 @@ async fn main() -> anyhow::Result<()> {
     let actor = || -> Option<awzy_authz_proto::authz::v1::Actor> {
         Some(awzy_model::Actor::awzy("awzy-publish").for_human(by.clone()).into())
     };
-    let mut client = PolicyServiceClient::connect(endpoint).await?;
+    // With this workload's service token for awzy-policy, when service auth is on (ADR 0055).
+    let channel = tonic::transport::Channel::from_shared(endpoint.to_string())?.connect().await?;
+    let mut client = PolicyServiceClient::new(awzy_service_auth::grpc_channel(channel, "awzy-policy"));
     let draft = client
         .create_draft(CreateDraftRequest { schema, policies, created_by_actor: actor(), ..Default::default() })
         .await

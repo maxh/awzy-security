@@ -10,6 +10,8 @@
 //! - Tokens are ES256 JWTs with `groups` and `name`, signed by a fixed key so they survive
 //!   restarts. Their audience is `awzy`, or the `audience` asked for at `/token`: `awzy-mcp` for
 //!   the portal's MCP endpoint, `awzy-gateway` for awzy-gateway (ADR 0081). Keys at `/jwks`, discovery at `/.well-known/openid-configuration`.
+//! - Service-account tokens like Kubernetes's at `/service-token`, for running awzy's services
+//!   with service auth on outside Kubernetes (ADR 0055), as tools/demo does.
 //! - Apps that mint their own agents' tokens (ADR 0110): `/apps/<name>/token` signs for
 //!   `<issuer>/apps/<name>`, with keys at `/apps/<name>/jwks`, so the demo can trust one.
 
@@ -137,6 +139,7 @@ pub fn router(idp: DevIdp) -> Router {
         .route("/token", post(token))
         .route("/apps/{name}/jwks", get(jwks))
         .route("/apps/{name}/token", post(app_token))
+        .route("/service-token", post(service_token))
         .layer(CorsLayer::permissive())
         .with_state(idp)
 }
@@ -190,6 +193,31 @@ async fn app_token(
     header.kid = Some(KID.into());
     let token = encode(&header, &claims, &idp.0.encoding).expect("signing with a valid key");
     Json(json!({ "access_token": token, "token_type": "Bearer" }))
+}
+
+#[derive(Deserialize)]
+struct ServiceTokenRequest {
+    namespace: String,
+    service_account: String,
+    /// The awzy service it's for, e.g. `awzy-context`.
+    audience: String,
+}
+
+/// A Kubernetes-style service-account token, as `<issuer>/service-accounts` signs it, for running
+/// awzy's services with service auth on outside Kubernetes (tools/demo). A day long, since nothing
+/// renews it. Development only.
+async fn service_token(State(idp): State<DevIdp>, Json(req): Json<ServiceTokenRequest>) -> Json<Value> {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    let claims = json!({
+        "iss": format!("{}/service-accounts", idp.0.issuer),
+        "aud": req.audience,
+        "sub": format!("system:serviceaccount:{}:{}", req.namespace, req.service_account),
+        "iat": now, "exp": now + 24 * 3600,
+    });
+    let mut header = Header::new(Algorithm::ES256);
+    header.kid = Some(KID.into());
+    let token = encode(&header, &claims, &idp.0.encoding).expect("signing with a valid key");
+    Json(json!({ "token": token }))
 }
 
 #[derive(Deserialize)]
