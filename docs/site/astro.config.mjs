@@ -49,13 +49,12 @@ export default defineConfig({
         {
           // Putting awzy in front of your agents and apps.
           label: "Building on awzy",
-          items: [
-            "guides/writing-policies",
-            "guides/mcp-gateway",
-            "guides/typescript-sdk",
-            "guides/sending-events",
-            "guides/connectors",
-          ],
+          items: ["guides/writing-policies", "guides/mcp-gateway", "guides/sending-events", "guides/connectors"],
+        },
+        {
+          // Checking calls from your own code, one library per language.
+          label: "Client libraries",
+          items: ["client-libraries", "client-libraries/typescript"],
         },
         {
           // Installing and operating it.

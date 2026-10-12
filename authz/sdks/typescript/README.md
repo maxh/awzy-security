@@ -1,4 +1,4 @@
-# @awzy/sdk
+# @awzy/authz-sdk
 
 awzy's TypeScript SDK: an enforcement point in a client's own app (ADR 0045, 0112). It validates
 callers' tokens, asks awzy-pdp within a budget, applies the mode, surfaces challenges as a typed
