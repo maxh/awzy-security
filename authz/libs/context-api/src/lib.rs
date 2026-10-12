@@ -3,17 +3,18 @@
 //! empty. The server uses these types too, where it can, and contract tests hold it to the rest.
 //!
 //! Covered so far: connector settings (ADR 0104), reading resources, investigations (ADR 0071),
-//! the principals snapshot, and risk scores. The rest of the API moves here area by area.
+//! the principals snapshot, risk scores, and the connectors' resource and work item writes. The
+//! rest of the API moves here area by area.
 
 pub mod model;
 
-use std::time::Duration;
+use std::{collections::BTreeSet, time::Duration};
 
 use awzy_http::{encode, Body, Method, Request, StatusCode};
 use serde::de::DeserializeOwned;
 
 use crate::model::{
-    CloseInvestigation, ConnectorSettings, ConnectorSettingsList, ConnectorSettingsOne, Investigation,
+    CloseInvestigation, ConnectorSettings, ConnectorSettingsList, ConnectorSettingsOne, IdPage, Investigation,
     InvestigationList, InvestigationOne, InvestigationUsage, InvestigationUsageOne, PrincipalsSnapshot,
     PutConnectorSettings, Resource, ResourceEntities, ResourceList, ResourceOne, RiskBatch, RiskScore,
 };
@@ -164,8 +165,7 @@ impl ContextApi {
         let path = "/v1/risk";
         let body = serde_json::to_value(RiskBatch { scores })
             .map_err(|source| ContextError::Unexpected { path: path.to_string(), source })?;
-        let res = self.call(Method::POST, path, None, Some(body)).await?;
-        decode::<serde_json::Value>(path, res).map(|_| ())
+        ok(self.call(Method::POST, path, None, Some(body)).await?)
     }
 
     /// One investigation; `None` when there's no such one.
@@ -191,10 +191,103 @@ impl ContextApi {
         Ok(decode::<InvestigationOne>(&path, res)?.investigation)
     }
 
+    /// Writes `resources` (awzy-context's resource bodies), replacing any with the same IDs, as
+    /// `actor`, in batches of `batch`.
+    pub async fn put_resources(
+        &self,
+        resources: &[serde_json::Value],
+        actor: &str,
+        batch: usize,
+    ) -> Result<(), ContextError> {
+        self.put_batches("/v1/resources/batch", "resources", resources, actor, batch).await
+    }
+
+    /// Writes work items, replacing any with the same IDs, as `actor`, in batches of `batch`.
+    pub async fn put_work_items(
+        &self,
+        items: &[serde_json::Value],
+        actor: &str,
+        batch: usize,
+    ) -> Result<(), ContextError> {
+        self.put_batches("/v1/work-items/batch", "work_items", items, actor, batch).await
+    }
+
+    async fn put_batches(
+        &self,
+        path: &str,
+        field: &str,
+        items: &[serde_json::Value],
+        actor: &str,
+        batch: usize,
+    ) -> Result<(), ContextError> {
+        for chunk in items.chunks(batch.max(1)) {
+            let body = serde_json::json!({ field: chunk });
+            ok(self.call(Method::POST, path, Some(actor), Some(body)).await?)?;
+        }
+        Ok(())
+    }
+
+    /// Deletes one resource as `actor`. Already gone counts as done.
+    pub async fn delete_resource(&self, id: &str, actor: &str) -> Result<(), ContextError> {
+        self.delete(&format!("/v1/resources/{}", encode(id)), actor).await
+    }
+
+    /// Deletes one work item as `actor`. Already gone counts as done.
+    pub async fn delete_work_item(&self, id: &str, actor: &str) -> Result<(), ContextError> {
+        self.delete(&format!("/v1/work-items/{}", encode(id)), actor).await
+    }
+
+    async fn delete(&self, path: &str, actor: &str) -> Result<(), ContextError> {
+        let res = self.call(Method::DELETE, path, Some(actor), None).await?;
+        if res.status == StatusCode::NOT_FOUND {
+            return Ok(());
+        }
+        ok(res)
+    }
+
+    /// The IDs of every resource from `source`, page by page.
+    pub async fn resource_ids(&self, source: &str) -> Result<BTreeSet<String>, ContextError> {
+        self.ids("resources", source, |p| p.resources).await
+    }
+
+    /// The IDs of every work item from `source`, page by page.
+    pub async fn work_item_ids(&self, source: &str) -> Result<BTreeSet<String>, ContextError> {
+        self.ids("work-items", source, |p| p.work_items).await
+    }
+
+    async fn ids(
+        &self,
+        what: &str,
+        source: &str,
+        take: fn(IdPage) -> Vec<crate::model::Id>,
+    ) -> Result<BTreeSet<String>, ContextError> {
+        let mut ids = BTreeSet::new();
+        let mut after: Option<String> = None;
+        loop {
+            let mut path = format!("/v1/{what}?source={}&limit=500", encode(source));
+            if let Some(a) = &after {
+                path.push_str(&format!("&after={}", encode(a)));
+            }
+            let page = take(self.read::<IdPage>(&path).await?.unwrap_or_default());
+            let Some(last) = page.last().map(|i| i.id.clone()) else { return Ok(ids) };
+            ids.extend(page.into_iter().map(|i| i.id));
+            after = Some(last);
+        }
+    }
+
     /// Resources whose ID or name contains `query`, ignoring case: at most `limit`.
     pub async fn search_resources(&self, query: &str, limit: u32) -> Result<Vec<Resource>, ContextError> {
         let path = format!("/v1/resources?limit={limit}&q={}", encode(query));
         Ok(self.read::<ResourceList>(&path).await?.map(|l| l.resources).unwrap_or_default())
+    }
+}
+
+/// A 2xx answer, whatever its body; anything else as the error it is.
+fn ok(res: awzy_http::Response) -> Result<(), ContextError> {
+    match res.status.as_u16() {
+        200..=299 => Ok(()),
+        400 => Err(ContextError::Invalid(res.text())),
+        status => Err(ContextError::Refused { status, body: res.text() }),
     }
 }
 

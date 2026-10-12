@@ -688,7 +688,7 @@ mod tests {
         }
         let base = serve(fake.clone()).await;
         let http = Http::default();
-        let context = ContextClient::new(&base, http.clone(), awzy_service_auth::TokenSource::off());
+        let context = ContextClient::new(&base, awzy_service_auth::TokenSource::off());
         let mut sync = DriveSync::new(cfg(&base), Arc::new(Credentials::Fixed("t".into())), http, context);
 
         let s = sync.full_crawl().await.unwrap();
