@@ -27,14 +27,16 @@ locals {
   c = var.install_contract
   # What the install's models can reach, and the routing to start with (ADR 0114): llm_routing,
   # or llm_model on the cloud's own service for both features.
-  llm_connections = merge(local.c.model_connection == null ? {} : { cloud = local.c.model_connection }, var.llm_connections)
-  llm_routing = var.llm_routing != null ? var.llm_routing : (var.llm_model == null ? null : {
+  # Without conditionals between differently shaped values, which OpenTofu refuses: the routing
+  # travels as JSON ("" for none), and the connections are filtered rather than chosen.
+  llm_connections = merge({ for k, v in { cloud = local.c.model_connection } : k => v if v != null }, var.llm_connections)
+  llm_routing_json = var.llm_routing != null ? jsonencode(var.llm_routing) : (var.llm_model == null ? "" : jsonencode({
     models = [{ name = "default", connection = "cloud", spec = var.llm_model }]
     routes = {
       awzy_bot       = { targets = [{ model = "default", weight = 1 }] }
       investigations = { targets = [{ model = "default", weight = 1 }] }
     }
-  })
+  }))
 
   # What this bootstrap (and the install contract it reads) provides, as one number the chart checks
   # before it installs (ADR 0098). Raise it when a chart starts needing something new from here or
