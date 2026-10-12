@@ -9,6 +9,7 @@ import type { EnforcementPageQuery } from "./__generated__/EnforcementPageQuery.
 import type { EnforcementPageSetModeMutation } from "./__generated__/EnforcementPageSetModeMutation.graphql";
 import { Entity, formatTime, Time } from "./format";
 import { OutageFallbackSection } from "./OutageFallbackSection";
+import { ScopedEnforcementSection } from "./ScopedEnforcementSection";
 import { mutate, passChallenge } from "./securityKeyChallenge";
 import { webAuthnMessage } from "./webauthn";
 
@@ -30,8 +31,9 @@ const setMode = graphql`
 const route = getRouteApi("/enforcement");
 
 /**
- * Monitor or enforce for the whole install (ADR 0007), and what enforcing would change; and the
- * same switch for awzy-reasoner's automated containments (ADR 0066).
+ * Monitor or enforce for the whole install (ADR 0007), and what enforcing would change; the same
+ * switch for awzy-reasoner's automated containments (ADR 0066); and modes for one action or tool
+ * (ADR 0109).
  */
 export function EnforcementPage() {
   const queryRef = route.useLoaderData();
@@ -222,6 +224,10 @@ function Enforcement({
           )}
         </Stack>
       </Section>
+
+      <Suspense fallback={<PageLoader />}>
+        <ScopedEnforcementSection canSwitch={data.canSwitch} onChanged={onChanged} />
+      </Suspense>
 
       <OutageFallbackSection canEdit={data.canSwitch} />
 

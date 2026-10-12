@@ -66,6 +66,11 @@ Whether awzy enforces its verdicts or only records them. See
   listed, so you can check them before you switch.
 - **Automated containments:** a separate switch for the containments awzy-reasoner makes on its
   own. It starts in monitor, where they're only recorded, as "would contain".
+- **By action or tool:** a mode for one action (such as `write`, or an action of your own app) or
+  one MCP tool, which its checks take over the install's: the tool's first, then the action's.
+  So agents' writes can be enforced while their reads stay in monitor, or one new tool tried in
+  monitor while the rest is enforced. Each lists what enforcing it would have changed in the last
+  24 hours. Every enforcement point applies the same mode, since it comes with each decision.
 - **During a PDP outage:** each MCP tool's sensitivity tier, which every check by awzy-gateway
   uses, and which tiers may replay a recent allow if the PDP can't be reached. Saving takes a
   touch of your security key. See [awzy-gateway](/guides/mcp-gateway/#classifying-tools).

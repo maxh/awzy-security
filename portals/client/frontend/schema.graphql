@@ -588,6 +588,17 @@ type EnforcementSummary {
 	enforcedChallenge: Int!
 }
 
+"""
+An action or a tool, to give a mode of its own.
+"""
+input EnforcementTarget {
+	kind: ScopeKind!
+	"""
+	The action's name, or the tool's `<server>/<tool>`.
+	"""
+	name: String!
+}
+
 type EntityRef {
 	type: String!
 	id: String!
@@ -780,6 +791,12 @@ type Mutation {
 	payload names the challenge to pass before switching again.
 	"""
 	setEnforcementMode(input: SetEnforcementModeInput!): SetEnforcementModePayload!
+	"""
+	Gives an action or a tool a mode of its own (ADR 0109), so, for example, agents' writes
+	are enforced while their reads stay in MONITOR. Policy can ask for a security key first, as
+	for the install's (`switch_enforcement`).
+	"""
+	setScopedEnforcementMode(input: SetScopedEnforcementModeInput!): SetEnforcementModePayload!
 	"""
 	Replaces the outage fallback setting. Like switching enforcement, policy can ask for a
 	security key first: then nothing changes, and the payload names the challenge to pass.
@@ -1168,6 +1185,11 @@ type Query {
 	"""
 	enforcementHistory(scope: EnforcementScope! = INSTALL, first: Int! = 20): [EnforcementSetting!]!
 	"""
+	Actions and tools with a mode of their own (ADR 0109), which a check takes over the
+	install's: its tool's first, then its action's.
+	"""
+	enforcementScopes: [ScopedEnforcement!]!
+	"""
 	Would-deny and would-challenge counts since `since` (default 24 hours, at most 30 days).
 	"""
 	enforcementSummary(since: UtcTimestamp): EnforcementSummary!
@@ -1426,6 +1448,41 @@ type ResourceSummary {
 	sensitivity: String
 }
 
+"""
+What a scope below the install covers (ADR 0109).
+"""
+enum ScopeKind {
+	"""
+	One Cedar action, such as `write` or an app's `view_customer`.
+	"""
+	ACTION
+	"""
+	One MCP tool behind awzy-gateway, `<server>/<tool>`.
+	"""
+	TOOL
+}
+
+type ScopedEnforcement {
+	kind: ScopeKind!
+	"""
+	The action's name, or the tool's `<server>/<tool>`.
+	"""
+	name: String!
+	setting: EnforcementSetting!
+	"""
+	Its checks in the last 24 hours.
+	"""
+	total: Int!
+	"""
+	Of those in MONITOR, the ones that would have been denied.
+	"""
+	wouldDeny: Int!
+	"""
+	Of those in MONITOR, the ones that would have been challenged.
+	"""
+	wouldChallenge: Int!
+}
+
 type SecurityKey implements Node {
 	"""
 	QID: security_key_<uuid>.
@@ -1533,6 +1590,11 @@ type SetOutageFallbackPayload {
 	The challenge to pass, then save again.
 	"""
 	challengeQid: Qid
+}
+
+input SetScopedEnforcementModeInput {
+	target: EnforcementTarget!
+	mode: EnforcementMode!
 }
 
 type SupportSession implements Node {

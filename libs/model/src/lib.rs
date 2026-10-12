@@ -202,6 +202,42 @@ pub enum EnforcementMode {
 pub const INSTALL_SCOPE: &str = "install";
 pub const AUTOMATED_CONTAINMENTS_SCOPE: &str = "automated-containments";
 
+/// Scopes below the install (ADR 0109): one Cedar action, `action:write`, or one MCP tool,
+/// `tool:larkspur-drive/read_document`. A check takes the mode of the most specific one switched.
+pub const ACTION_SCOPE_PREFIX: &str = "action:";
+pub const TOOL_SCOPE_PREFIX: &str = "tool:";
+
+/// Whether `scope` is one awzy-policy keeps a mode for.
+pub fn is_valid_scope(scope: &str) -> bool {
+    if scope == INSTALL_SCOPE || scope == AUTOMATED_CONTAINMENTS_SCOPE {
+        return true;
+    }
+    if let Some(action) = scope.strip_prefix(ACTION_SCOPE_PREFIX) {
+        // A Cedar identifier, as actions are named.
+        let mut chars = action.chars();
+        return action.len() <= 64
+            && chars.next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
+    }
+    if let Some(tool) = scope.strip_prefix(TOOL_SCOPE_PREFIX) {
+        return tool.len() <= 200
+            && tool.split_once('/').is_some_and(|(server, name)| !server.is_empty() && !name.is_empty())
+            && !tool.chars().any(|c| c.is_whitespace() || c.is_control());
+    }
+    false
+}
+
+/// The scopes that could set a check's mode, most specific first (ADR 0109): the tool's, for a
+/// call on an MCP tool, then the action's. The install's applies when none of them is switched.
+pub fn mode_scopes(action: &str, resource: &EntityRef) -> Vec<String> {
+    let mut scopes = Vec::with_capacity(2);
+    if resource.kind == entity_type::MCP_TOOL {
+        scopes.push(format!("{TOOL_SCOPE_PREFIX}{}", resource.id));
+    }
+    scopes.push(format!("{ACTION_SCOPE_PREFIX}{action}"));
+    scopes
+}
+
 impl EnforcementMode {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -472,5 +508,26 @@ mod tests {
         assert_eq!(required.intersection(passed), Challenges::of(ChallengeKind::Approval));
         assert!(required.contains(ChallengeKind::Approval) && !required.contains(ChallengeKind::Biometric));
         assert!(required.without(required).is_empty());
+    }
+
+    #[test]
+    fn scopes_below_the_install_name_one_action_or_one_tool() {
+        for ok in
+            ["install", "automated-containments", "action:write", "action:view_customer", "tool:drive/read_document"]
+        {
+            assert!(is_valid_scope(ok), "{ok}");
+        }
+        for bad in
+            ["", "policy-set", "action:", "action:9lives", "action:has space", "tool:drive", "tool:/x", "tool:a/ b"]
+        {
+            assert!(!is_valid_scope(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_tool_call_looks_at_the_tool_then_the_action() {
+        let tool = EntityRef::new(entity_type::MCP_TOOL, "drive/read_document");
+        assert_eq!(mode_scopes("call", &tool), ["tool:drive/read_document", "action:call"]);
+        assert_eq!(mode_scopes("write", &EntityRef::new(entity_type::RESOURCE, "doc")), ["action:write"]);
     }
 }
