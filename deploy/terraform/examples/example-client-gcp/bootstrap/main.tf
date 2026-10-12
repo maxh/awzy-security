@@ -112,9 +112,20 @@ module "bootstrap" {
   demo_data     = true
   demo_activity = true
   mcp_gateway   = { upstreams = [] }
-  # Investigations, with Gemini on Vertex AI (ADR 0071, 0114).
+  # Investigations and Awzy Bot, with Gemini on Vertex AI (ADR 0071, 0048, 0114): Pro to
+  # investigate, Flash to chat, which answers in seconds. The read-only demo limits the bot's turns.
   investigations = true
-  llm_model      = { api = "gemini", model = "gemini-2.5-pro" }
+  awzy_bot       = true
+  llm_routing = {
+    models = [
+      { name = "gemini-pro", connection = "cloud", spec = { api = "gemini", model = "gemini-2.5-pro" } },
+      { name = "gemini-flash", connection = "cloud", spec = { api = "gemini", model = "gemini-2.5-flash" } },
+    ]
+    routes = {
+      investigations = { targets = [{ model = "gemini-pro" }] }
+      awzy_bot       = { targets = [{ model = "gemini-flash" }] }
+    }
+  }
 }
 
 output "scim" {

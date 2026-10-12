@@ -1,14 +1,18 @@
 //! A portal that changes nothing (AWZY_PORTAL_READ_ONLY): a public demo, where anyone can sign
 //! in as a sample person, so one visitor's changes never reach the next. Every GraphQL mutation
-//! is refused before it runs, as are the MCP tools that change something.
+//! is refused before it runs, as are the MCP tools that change something. The exception is
+//! asking Awzy Bot, which changes nothing there: it can't save a draft, and it's rate limited.
 
 use std::sync::Arc;
 
 use async_graphql::{
     extensions::{Extension, ExtensionContext, ExtensionFactory, NextParseQuery},
-    parser::types::{ExecutableDocument, OperationType},
+    parser::types::{ExecutableDocument, OperationType, Selection},
     Pos, ServerResult, Variables,
 };
+
+/// The mutations a read-only portal still runs, because they change nothing there.
+const ALLOWED: &[&str] = &["askAwzyBot"];
 
 /// What a refused change says.
 pub const REFUSED: &str =
@@ -32,7 +36,18 @@ impl Extension for ReadOnly {
         next: NextParseQuery<'_>,
     ) -> ServerResult<ExecutableDocument> {
         let doc = next.run(ctx, query, variables).await?;
-        if doc.operations.iter().any(|(_, op)| op.node.ty == OperationType::Mutation) {
+        let changes = |items: &[async_graphql::Positioned<Selection>]| {
+            items.iter().any(|item| match &item.node {
+                Selection::Field(f) => !ALLOWED.contains(&f.node.name.node.as_str()),
+                // A fragment could hide any field; nothing the portal's pages send uses one here.
+                _ => true,
+            })
+        };
+        if doc
+            .operations
+            .iter()
+            .any(|(_, op)| op.node.ty == OperationType::Mutation && changes(&op.node.selection_set.node.items))
+        {
             return Err(awzy_portal::ErrorCode::Forbidden.error(REFUSED).into_server_error(Pos::default()));
         }
         Ok(doc)
@@ -54,6 +69,15 @@ mod tests {
 
         let res = schema.execute("{ apiVersion }").await;
         assert!(res.errors.is_empty(), "{res:?}");
+
+        // Asking Awzy Bot gets past it (and fails here only because no bot is set up), but not
+        // alongside a change.
+        let ask = schema.execute("mutation { askAwzyBot(input: { message: \"hi\" }) { reply } }").await;
+        assert!(ask.errors.iter().all(|e| !e.message.contains("changes are turned off")), "{ask:?}");
+        let both = schema
+            .execute("mutation { askAwzyBot(input: { message: \"hi\" }) { reply } setEnforcementMode(mode: ENFORCE) { __typename } }")
+            .await;
+        assert!(both.errors[0].message.contains("changes are turned off"), "{both:?}");
     }
 
     #[tokio::test]
