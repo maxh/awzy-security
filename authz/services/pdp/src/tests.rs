@@ -198,7 +198,7 @@ fn a_person_scored_as_software_touches_their_key_for_sensitive_data() {
 }
 
 /// The base policy that reads `automation_score`, for a bundle whose schema predates it.
-const AUTOMATED_POLICY: &str = "@id(\"automated-people-verify\")\n@challenge(\"verification\")\nforbid (\n  principal is Human,\n  action in [Action::\"read\", Action::\"write\", Action::\"call\"],\n  resource\n)\nwhen {\n  context has automation_score && context.automation_score > 80 &&\n  (resource.sensitivity == \"confidential\" || resource.sensitivity == \"crown_jewels\")\n};\n";
+const AUTOMATED_POLICY: &str = "@id(\"automated-people-verify\")\n@challenge(\"verification\")\nforbid (\n  principal is Human,\n  action in [Action::\"read\", Action::\"write\", Action::\"call\"],\n  resource\n)\nwhen {\n  context has automation_score && context.automation_score > 80 && resource has sensitivity &&\n  (resource.sensitivity == \"confidential\" || resource.sensitivity == \"crown_jewels\")\n};\n";
 
 #[test]
 fn switching_enforcement_takes_the_security_teams_key_and_never_an_agent() {
