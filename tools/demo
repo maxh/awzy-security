@@ -21,7 +21,8 @@ POLICY=8081 PDP=8082 CHALLENGE=8083 CONTEXT=8084 GATEWAY=8086 PORTAL=8080 IDP=55
 pg=postgres://awzy:awzy@localhost:5432
 clickhouse=(AWZY_CLICKHOUSE_URL=http://localhost:8123 AWZY_CLICKHOUSE_USER=awzy AWZY_CLICKHOUSE_PASSWORD=awzy
   AWZY_CLICKHOUSE_DATABASE=awzy)
-scim_token=demo-scim-token
+# awzy-context wants at least 32 characters.
+scim_token=demo-scim-token-for-the-local-demo-only
 gateway_secret=demo-gateway-secret
 
 targets=(
@@ -181,6 +182,14 @@ check() {
     "entities": [{"uid": {"type": "Resource", "id": "demo-check"}, "attrs": {"sensitivity": "internal"}, "parents": []}]}' |
     sed -nE 's/.*"verdict": ?"([a-z]+)".*/\1/p')
   if [ -n "$verdict" ]; then echo "ok   the PDP decides ($verdict)"; else echo "FAIL the PDP decides"; failed=1; fi
+  # Larkspur's activity reaches the decision log, through Kafka into ClickHouse: the Decisions page.
+  decisions=0
+  for _ in $(seq 1 90); do
+    decisions=$(curl -sf "http://localhost:8123/?user=awzy&password=awzy" --data "SELECT count() FROM awzy.decisions" || echo 0)
+    [ "${decisions:-0}" -gt 0 ] && break
+    sleep 2
+  done
+  if [ "${decisions:-0}" -gt 0 ]; then echo "ok   $decisions decisions logged"; else echo "FAIL no decisions logged"; failed=1; fi
   return $failed
 }
 
