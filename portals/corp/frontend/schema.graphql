@@ -296,6 +296,11 @@ type Mutation {
 	"""
 	setInstallRelease(input: SetInstallReleaseInput!): SetInstallReleasePayload!
 	"""
+	Renames a client. Its installs keep their tokens, so nothing changes on the installs'
+	side, and its license moves with it.
+	"""
+	renameClient(input: RenameClientInput!): RenameClientPayload!
+	"""
 	Retires an install: its reporting and pull tokens stop working at once, it leaves the
 	fleet views, and its client and environment can be registered again.
 	"""
@@ -436,6 +441,21 @@ enum ReleaseChannel {
 	STABLE
 	FAST
 	PINNED
+}
+
+input RenameClientInput {
+	client: String!
+	"""
+	Lowercase slug, e.g. acme.
+	"""
+	newName: String!
+}
+
+type RenameClientPayload {
+	"""
+	The client's active installs, under the new name.
+	"""
+	installs: [Install!]!
 }
 
 input RequestSupportSessionInput {
