@@ -1,9 +1,9 @@
-//! Shared by both portal backends: GraphQL routing, serving the built frontend, and later
-//! auth and pagination.
+//! Shared by both portal backends: GraphQL routing, serving the built frontend, and pagination.
 
 use std::path::{Path, PathBuf};
 
 mod actor;
+pub mod connection;
 mod errors;
 mod persisted;
 mod qid;

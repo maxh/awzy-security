@@ -1,7 +1,7 @@
 export { AwzyProvider, awzyTheme } from "./theme";
 export { AwzyWordmark, KangarooLogo } from "./KangarooLogo";
 export { PortalShell, ShellAccount, ShellNavLink } from "./PortalShell";
-export { EmptyState, PageHeader, PageLoader, Section, Stat, StatusBadge, type Tone } from "./Page";
+export { EmptyState, PageHeader, PageLoader, Section, ShowMore, Stat, StatusBadge, type Tone } from "./Page";
 export { AuthLayout } from "./AuthLayout";
 export { PageErrorBoundary } from "./PageErrorBoundary";
 export { ERROR_CODES, errorCode, type ErrorCode } from "./errors";

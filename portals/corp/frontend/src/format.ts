@@ -2,7 +2,7 @@
 
 import type { Tone } from "@awzy/ui";
 
-import type { SupportSessionStatus } from "./__generated__/SupportSectionQuery.graphql";
+import type { SupportSessionStatus } from "./__generated__/SupportSection_install.graphql";
 
 // An install that has never reported is a warning, not a neutral state: it was registered and
 // something is keeping its heartbeat from arriving.

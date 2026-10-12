@@ -1,4 +1,4 @@
-import { Anchor, Badge, Card, Center, Group, Loader, Stack, Text, ThemeIcon, Title } from "@mantine/core";
+import { Anchor, Badge, Button, Card, Center, Group, Loader, Stack, Text, ThemeIcon, Title } from "@mantine/core";
 import { IconArrowLeft } from "@tabler/icons-react";
 import type { ReactElement, ReactNode } from "react";
 
@@ -186,5 +186,20 @@ export function Stat({ label, value, hint }: { label: string; value: ReactNode; 
         </Text>
       )}
     </Card>
+  );
+}
+
+/**
+ * The foot of a list that starts short: loads the next page of its connection while there is one.
+ * `onMore` is usually `() => loadNext(n)` from Relay's `usePaginationFragment`.
+ */
+export function ShowMore({ hasMore, loading, onMore }: { hasMore: boolean; loading: boolean; onMore: () => void }) {
+  if (!hasMore) return null;
+  return (
+    <Center py="sm">
+      <Button variant="subtle" size="xs" loading={loading} onClick={onMore}>
+        Show more
+      </Button>
+    </Center>
   );
 }

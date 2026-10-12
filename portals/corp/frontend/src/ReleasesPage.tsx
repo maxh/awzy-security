@@ -1,10 +1,12 @@
-import { EmptyState, PageHeader, PageLoader, Section, StatusBadge, type Tone } from "@awzy/ui";
+import { EmptyState, PageHeader, PageLoader, Section, ShowMore, StatusBadge, type Tone } from "@awzy/ui";
 import { Anchor, Group, Table, Text } from "@mantine/core";
 import { IconPackage } from "@tabler/icons-react";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { Suspense } from "react";
-import { graphql, type PreloadedQuery, usePreloadedQuery } from "react-relay";
+import { graphql, type PreloadedQuery, usePaginationFragment, usePreloadedQuery } from "react-relay";
 
+import type { ReleasesPage_running$key } from "./__generated__/ReleasesPage_running.graphql";
+import type { ReleasesPagePaginationQuery } from "./__generated__/ReleasesPagePaginationQuery.graphql";
 import type { ReleasesPageQuery } from "./__generated__/ReleasesPageQuery.graphql";
 import { channelLabel, formatTime, healthOf } from "./format";
 
@@ -36,18 +38,7 @@ function Releases({ queryRef }: { queryRef: PreloadedQuery<ReleasesPageQuery> })
           changedBy
           changedAt
         }
-        releases {
-          version
-          installCount
-          installs {
-            id
-            client
-            environment
-            channel
-            pinnedVersion
-            health
-          }
-        }
+        ...ReleasesPage_running
         installs(first: 200) {
           edges {
             node {
@@ -102,13 +93,49 @@ function Releases({ queryRef }: { queryRef: PreloadedQuery<ReleasesPageQuery> })
         <Rollout channels={data.channels} installs={data.installs.edges.map((e) => e.node)} />
       </Section>
       <Section title="Running" flush>
-        <Running releases={data.releases} />
+        <Running query={data} />
       </Section>
     </>
   );
 }
 
-function Running({ releases }: { releases: ReleasesPageQuery["response"]["releases"] }) {
+/** How many of a release's installs it names; the count says how many more there are. */
+const INSTALLS_NAMED = 10;
+
+function Running({ query }: { query: ReleasesPage_running$key }) {
+  const { data, loadNext, hasNext, isLoadingNext } = usePaginationFragment<
+    ReleasesPagePaginationQuery,
+    ReleasesPage_running$key
+  >(
+    graphql`
+      fragment ReleasesPage_running on Query
+      @argumentDefinitions(first: { type: "Int", defaultValue: 10 }, after: { type: "String" })
+      @refetchable(queryName: "ReleasesPagePaginationQuery") {
+        releases(first: $first, after: $after) @connection(key: "ReleasesPage_releases") {
+          edges {
+            node {
+              version
+              installCount
+              installs(first: 10) {
+                edges {
+                  node {
+                    id
+                    client
+                    environment
+                    channel
+                    pinnedVersion
+                    health
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+    query,
+  );
+  const releases = data.releases.edges.map((e) => e.node);
   if (releases.length === 0) {
     return (
       <EmptyState
@@ -119,46 +146,56 @@ function Running({ releases }: { releases: ReleasesPageQuery["response"]["releas
     );
   }
   return (
-    <Table>
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th w={220}>Version</Table.Th>
-          <Table.Th ta="right" w={100}>
-            Installs
-          </Table.Th>
-          <Table.Th>Running it</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
-        {releases.map((r) => (
-          <Table.Tr key={r.version}>
-            <Table.Td ff="monospace" fz="sm">
-              {r.version}
-            </Table.Td>
-            <Table.Td ta="right">{r.installCount}</Table.Td>
-            <Table.Td>
-              <Group gap="md">
-                {r.installs.map((i) => (
-                  <Group key={i.id} gap={6}>
-                    <StatusBadge tone={healthOf(i.health).tone}>{healthOf(i.health).label}</StatusBadge>
-                    <Anchor
-                      size="sm"
-                      underline="hover"
-                      renderRoot={(props) => <Link to="/installs/$installId" params={{ installId: i.id }} {...props} />}
-                    >
-                      {i.client}/{i.environment}
-                    </Anchor>
-                    <span style={{ color: "var(--mantine-color-dimmed)", fontSize: 12 }}>
-                      {channelLabel(i.channel, i.pinnedVersion)}
-                    </span>
-                  </Group>
-                ))}
-              </Group>
-            </Table.Td>
+    <>
+      <Table>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th w={220}>Version</Table.Th>
+            <Table.Th ta="right" w={100}>
+              Installs
+            </Table.Th>
+            <Table.Th>Running it</Table.Th>
           </Table.Tr>
-        ))}
-      </Table.Tbody>
-    </Table>
+        </Table.Thead>
+        <Table.Tbody>
+          {releases.map((r) => (
+            <Table.Tr key={r.version}>
+              <Table.Td ff="monospace" fz="sm">
+                {r.version}
+              </Table.Td>
+              <Table.Td ta="right">{r.installCount}</Table.Td>
+              <Table.Td>
+                <Group gap="md">
+                  {r.installs.edges.map(({ node: i }) => (
+                    <Group key={i.id} gap={6}>
+                      <StatusBadge tone={healthOf(i.health).tone}>{healthOf(i.health).label}</StatusBadge>
+                      <Anchor
+                        size="sm"
+                        underline="hover"
+                        renderRoot={(props) => (
+                          <Link to="/installs/$installId" params={{ installId: i.id }} {...props} />
+                        )}
+                      >
+                        {i.client}/{i.environment}
+                      </Anchor>
+                      <span style={{ color: "var(--mantine-color-dimmed)", fontSize: 12 }}>
+                        {channelLabel(i.channel, i.pinnedVersion)}
+                      </span>
+                    </Group>
+                  ))}
+                  {r.installCount > INSTALLS_NAMED && (
+                    <Text size="sm" c="dimmed">
+                      and {r.installCount - INSTALLS_NAMED} more
+                    </Text>
+                  )}
+                </Group>
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+      <ShowMore hasMore={hasNext} loading={isLoadingNext} onMore={() => loadNext(20)} />
+    </>
   );
 }
 
