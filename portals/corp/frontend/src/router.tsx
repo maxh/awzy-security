@@ -46,7 +46,13 @@ function Root() {
   // A page that fails to load shows its error inside the shell; navigating away starts fresh.
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
-    <PortalShell product="Corp portal" audience="corp" nav={<Nav />} account={<Account />}>
+    <PortalShell
+      product="Corp portal"
+      audience="corp"
+      renderHome={(props) => <Link to="/" {...props} />}
+      nav={<Nav />}
+      account={<Account />}
+    >
       <PageErrorBoundary key={pathname}>
         <Outlet />
       </PageErrorBoundary>
