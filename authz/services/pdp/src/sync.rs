@@ -203,9 +203,10 @@ mod tests {
     use awzy_authz_proto::policy::v1::{
         policy_service_server::{PolicyService, PolicyServiceServer},
         CreateDraftRequest, CreateDraftResponse, EnforcementSetting, GetActiveResponse, GetBundleRequest,
-        GetBundleResponse, GetEnforcementResponse, GetOutageFallbackRequest, GetOutageFallbackResponse,
-        ListBundlesRequest, ListBundlesResponse, ListEnforcementChangesRequest, ListEnforcementChangesResponse,
-        PolicyBundle, PublishRequest, PublishResponse, SetEnforcementRequest, SetEnforcementResponse,
+        GetBundleResponse, GetEnforcementResponse, GetModelRoutingRequest, GetModelRoutingResponse,
+        GetOutageFallbackRequest, GetOutageFallbackResponse, ListBundlesRequest, ListBundlesResponse,
+        ListEnforcementChangesRequest, ListEnforcementChangesResponse, PolicyBundle, PublishRequest, PublishResponse,
+        SetEnforcementRequest, SetEnforcementResponse, SetModelRoutingRequest, SetModelRoutingResponse,
         SetOutageFallbackRequest, SetOutageFallbackResponse,
     };
     use awzy_model::{Check, EntityRef, Verdict};
@@ -286,6 +287,18 @@ mod tests {
             &self,
             _: Request<SetOutageFallbackRequest>,
         ) -> Result<Response<SetOutageFallbackResponse>, Status> {
+            Err(Status::unimplemented("fake"))
+        }
+        async fn get_model_routing(
+            &self,
+            _: Request<GetModelRoutingRequest>,
+        ) -> Result<Response<GetModelRoutingResponse>, Status> {
+            Err(Status::unimplemented("fake"))
+        }
+        async fn set_model_routing(
+            &self,
+            _: Request<SetModelRoutingRequest>,
+        ) -> Result<Response<SetModelRoutingResponse>, Status> {
             Err(Status::unimplemented("fake"))
         }
         async fn list_enforcement_changes(

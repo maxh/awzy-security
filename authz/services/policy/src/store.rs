@@ -67,6 +67,9 @@ pub struct PolicyBundle {
 
 pub use awzy_model::{AUTOMATED_CONTAINMENTS_SCOPE, INSTALL_SCOPE};
 
+mod routing;
+pub use routing::ModelRoutingSetting;
+
 /// A scope's enforcement mode and the change that set it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnforcementSetting {

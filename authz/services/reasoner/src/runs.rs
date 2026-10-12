@@ -5,7 +5,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use awzy_authz_proto::challenge::v1::ListChallengesRequest;
-use awzy_llm::ModelProvider;
+use awzy_llm::Models;
 use chrono::{DateTime, Datelike, TimeZone, Utc};
 use serde_json::{json, Value};
 
@@ -25,9 +25,9 @@ const MOST_TEXT: usize = 2_000;
 
 /// How investigations run in this install.
 pub struct Investigations<M> {
-    pub model: M,
-    /// The model's ID, recorded with each investigation.
-    pub model_name: String,
+    /// Where each investigation gets its model: the install's router, by the `investigations`
+    /// route (ADR 0114).
+    pub models: M,
     /// The most tokens a calendar month may spend.
     pub monthly_tokens: u64,
     /// Groups whose members are only ever proposed for containment.
@@ -271,7 +271,10 @@ pub async fn build_case(
     })
 }
 
-impl<M: ModelProvider> Investigations<M> {
+/// Investigations' route in the install's model routing.
+pub const FEATURE: &str = "investigations";
+
+impl<M: Models> Investigations<M> {
     /// Investigates whoever this run flags, within the month's budget. Returns how many ran.
     pub async fn run(
         &self,
@@ -303,7 +306,8 @@ impl<M: ModelProvider> Investigations<M> {
                 groups.get(&f.principal).is_some_and(|g| self.privileged_groups.iter().any(|p| g.contains(p)));
             let started_at = Utc::now();
             let case = build_case(clickhouse, context, containments, &f, privileged, as_of).await?;
-            let run = investigate::investigate(&self.model, &case).await?;
+            let model = self.models.conversation(FEATURE)?;
+            let run = investigate::investigate(&model, &case).await?;
             let before = spent;
             spent += run.usage.input_tokens + run.usage.output_tokens;
             if before * 5 < self.monthly_tokens * 4 && spent * 5 >= self.monthly_tokens * 4 {
@@ -313,7 +317,7 @@ impl<M: ModelProvider> Investigations<M> {
                     "80 percent of this month's investigation budget is spent"
                 );
             }
-            let qid = context.put_investigation(record(&f, &self.model_name, started_at, &run)).await?;
+            let qid = context.put_investigation(record(&f, &run.model, started_at, &run)).await?;
             ran += 1;
             tracing::info!(investigation = %qid, principal = ?f.principal, verdict = ?run.outcome.verdict,
                 containment = ?run.outcome.containment, "investigation finished");
@@ -396,6 +400,7 @@ mod tests {
             }),
             tool_calls: vec![],
             usage: awzy_llm::Usage { input_tokens: 1200, output_tokens: 300 },
+            model: "m".into(),
         };
         let proposed = record(&f, "m", Utc::now(), &run(outcome(Containment::Propose, false)));
         assert_eq!(

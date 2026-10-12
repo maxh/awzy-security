@@ -9,11 +9,13 @@ use awzy_authz_proto::{
         policy_service_server::{PolicyService, PolicyServiceServer},
         BreakGlassRollbackRequest, BreakGlassRollbackResponse, BundleStatus as WireStatus, CreateDraftRequest,
         CreateDraftResponse, EnforcementSetting as WireSetting, GetActiveRequest, GetActiveResponse, GetBundleRequest,
-        GetBundleResponse, GetEnforcementRequest, GetEnforcementResponse, GetOutageFallbackRequest,
-        GetOutageFallbackResponse, ListBundlesRequest, ListBundlesResponse, ListEnforcementChangesRequest,
-        ListEnforcementChangesResponse, ListEnforcementSettingsRequest, ListEnforcementSettingsResponse,
+        GetBundleResponse, GetEnforcementRequest, GetEnforcementResponse, GetModelRoutingRequest,
+        GetModelRoutingResponse, GetOutageFallbackRequest, GetOutageFallbackResponse, ListBundlesRequest,
+        ListBundlesResponse, ListEnforcementChangesRequest, ListEnforcementChangesResponse,
+        ListEnforcementSettingsRequest, ListEnforcementSettingsResponse, ModelRouting as WireRouting,
         OutageFallback as WireFallback, PolicyBundle as WireBundle, PublishRequest, PublishResponse,
-        SetEnforcementRequest, SetEnforcementResponse, SetOutageFallbackRequest, SetOutageFallbackResponse,
+        SetEnforcementRequest, SetEnforcementResponse, SetModelRoutingRequest, SetModelRoutingResponse,
+        SetOutageFallbackRequest, SetOutageFallbackResponse,
     },
     prost_types::Timestamp,
 };
@@ -25,18 +27,19 @@ use tonic::{Request, Response, Status};
 use awzy_signing::{break_glass_payload, BundleVerifier};
 
 use crate::{
-    BreakGlassRequest, BundleStatus, EnforcementSetting, OutageFallbackSetting, PolicyBundle, PolicyStore, StoreError,
-    INSTALL_SCOPE,
+    BreakGlassRequest, BundleStatus, EnforcementSetting, ModelRoutingSetting, OutageFallbackSetting, PolicyBundle,
+    PolicyStore, StoreError, INSTALL_SCOPE,
 };
 
 /// Who may call which methods (ADR 0055). Each group's callers come from the chart, as
 /// `namespace/service-account`; a method no group names is refused.
 pub struct Access {
     verifier: Arc<awzy_service_auth::Verifier>,
-    /// Reading bundles, the mode, and the outage fallback: the PDP, the client portal, and
-    /// awzy-gateway.
+    /// Reading bundles, the mode, the outage fallback, and the model routing: the PDP, the client
+    /// portal, awzy-gateway, and awzy-reasoner.
     readers: Allowed,
-    /// Drafting, publishing, switching the mode, and setting the outage fallback: the client portal.
+    /// Drafting, publishing, switching the mode, and setting the outage fallback and the model
+    /// routing: the client portal.
     writers: Allowed,
 }
 
@@ -61,13 +64,20 @@ impl Access {
 
     fn guard(&self) -> PathGuard {
         let method = |m: &str| format!("/awzy.policy.v1.PolicyService/{m}");
-        let mut rules: Vec<(String, Rule)> =
-            ["GetActive", "GetEnforcement", "ListBundles", "GetBundle", "ListEnforcementChanges", "GetOutageFallback"]
-                .into_iter()
-                .map(|m| (method(m), Rule::Allow(self.readers.clone())))
-                .collect();
+        let mut rules: Vec<(String, Rule)> = [
+            "GetActive",
+            "GetEnforcement",
+            "ListBundles",
+            "GetBundle",
+            "ListEnforcementChanges",
+            "GetOutageFallback",
+            "GetModelRouting",
+        ]
+        .into_iter()
+        .map(|m| (method(m), Rule::Allow(self.readers.clone())))
+        .collect();
         rules.extend(
-            ["CreateDraft", "Publish", "SetEnforcement", "SetOutageFallback"]
+            ["CreateDraft", "Publish", "SetEnforcement", "SetOutageFallback", "SetModelRouting"]
                 .into_iter()
                 .map(|m| (method(m), Rule::Allow(self.writers.clone()))),
         );
@@ -255,6 +265,29 @@ impl PolicyService for Service {
         Ok(Response::new(SetOutageFallbackResponse { fallback: Some(fallback_to_wire(setting)) }))
     }
 
+    async fn get_model_routing(
+        &self,
+        req: Request<GetModelRoutingRequest>,
+    ) -> Result<Response<GetModelRoutingResponse>, Status> {
+        let known = req.into_inner().known_version;
+        let setting = self.0.model_routing().await.map_err(status)?;
+        if setting.version == known {
+            return Ok(Response::new(GetModelRoutingResponse { routing: None, unchanged: true }));
+        }
+        Ok(Response::new(GetModelRoutingResponse { routing: Some(routing_to_wire(setting)), unchanged: false }))
+    }
+
+    async fn set_model_routing(
+        &self,
+        req: Request<SetModelRoutingRequest>,
+    ) -> Result<Response<SetModelRoutingResponse>, Status> {
+        let req = req.into_inner();
+        let by = actor(req.changed_by_actor.clone(), "", "changed_by_actor")?;
+        let setting = self.0.set_model_routing(&req.routing_json, &by).await.map_err(status)?;
+        tracing::info!(version = setting.version, changed_by = %by, "model routing changed");
+        Ok(Response::new(SetModelRoutingResponse { routing: Some(routing_to_wire(setting)) }))
+    }
+
     async fn break_glass_rollback(
         &self,
         req: Request<BreakGlassRollbackRequest>,
@@ -372,6 +405,20 @@ fn fallback_to_wire(s: OutageFallbackSetting) -> WireFallback {
         tools: s.fallback.tools.into_iter().collect(),
         servers: s.fallback.servers.into_iter().collect(),
         fail_open_tiers: s.fallback.fail_open_tiers.into_iter().collect(),
+        changed_by_actor,
+        changed_at: s
+            .changed_at
+            .map(|t| Timestamp { seconds: t.timestamp(), nanos: t.timestamp_subsec_nanos() as i32 }),
+        signature: s.signature.unwrap_or_default(),
+        signing_key_id: s.signing_key_id.unwrap_or_default(),
+    }
+}
+
+fn routing_to_wire(s: ModelRoutingSetting) -> WireRouting {
+    let (changed_by_actor, _) = awzy_authz_proto::actor_to_wire(s.changed_by.as_deref().unwrap_or(""));
+    WireRouting {
+        version: s.version,
+        routing_json: s.routing_json,
         changed_by_actor,
         changed_at: s
             .changed_at

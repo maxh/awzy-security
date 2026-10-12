@@ -186,3 +186,17 @@ spec:
 {{- define "awzy.demoIdpIssuer" -}}
 https://{{ required "clientPortal.hostname is required for demoIdp" .Values.clientPortal.hostname }}/idp
 {{- end -}}
+
+{{/*
+The model routing's environment (ADR 0114), for a service with a feature that uses models: the
+connections the install can reach, the routing to start with, and the API keys connections name.
+*/}}
+{{- define "awzy.modelsEnv" -}}
+{{- $m := .Values.models -}}
+- { name: AWZY_LLM_CONNECTIONS, value: {{ $m.connections | default dict | toJson | quote }} }
+- { name: AWZY_LLM_ROUTING, value: {{ $m.routing | default dict | toJson | quote }} }
+{{- range $env, $ref := $m.apiKeySecrets }}
+- name: {{ $env }}
+  valueFrom: { secretKeyRef: { name: {{ $ref.secret | quote }}, key: {{ $ref.key | default "api-key" | quote }} } }
+{{- end }}
+{{- end }}

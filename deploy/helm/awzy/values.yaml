@@ -10,7 +10,7 @@ bootstrap:
   # 2: metrics-server, which the autoscalers below read CPU from (#66)
   # 3: the connectors' credentials in the cloud's secrets manager, in place of bootstrap's Secrets
   #    (ADR 0104)
-  required: 3
+  required: 4
 
 image:
   # install_contract.registry_prefix, e.g. 123456789012.dkr.ecr.us-east-2.amazonaws.com/awzy
@@ -135,14 +135,10 @@ clientPortal:
   readOnly: ~
   # Public hostname; when set, the portal is served through the Gateway below.
   hostname: ""
-  # Awzy Bot (ADR 0048): the Policies page's assistant, with Claude on the install's own
-  # Bedrock. Off until the client enables Claude in Bedrock and the portal's workload role may
-  # invoke it (deploy/terraform/aws/install). Bootstrap sets region.
+  # Awzy Bot (ADR 0048): the Policies page's assistant, with the model its `awzy_bot` route in
+  # `models` names.
   awzyBot:
     enabled: false
-    region: ""
-    model: "" # default anthropic.claude-opus-5-5; some accounts need us.anthropic.claude-opus-5-5
-    effort: "" # low | medium | high | xhigh | max; default: the model's own
   resources:
     requests: { cpu: 100m, memory: 128Mi }
     limits: { memory: 256Mi }
@@ -165,19 +161,29 @@ reporter:
     requests: { cpu: 10m, memory: 32Mi }
     limits: { memory: 64Mi }
 
+# Models for Awzy Bot and investigations (ADR 0114). Bootstrap sets these.
+models:
+  # What the install can reach, by name: { kind: bedrock, region }, { kind: vertex, project,
+  # region }, { kind: openai, url, api_key_env }, or { kind: anthropic, api_key_env }. A route can
+  # only use these, so settings never send prompts anywhere the install wasn't set up for.
+  connections: {}
+  # The catalog and the routes to start with, until they're set in the client portal: { models:
+  # [{ name, connection, model, cache, params }], routes: { awzy_bot: { targets: [{ model, weight }],
+  # fallback: [] }, investigations: … } }.
+  routing: {}
+  # Environment variables the connections' api_key_env name, from Secrets in each service's
+  # namespace: { AWZY_LLM_KEY_AZURE: { secret: azure-openai, key: api-key } }.
+  apiKeySecrets: {}
+
 # awzy-reasoner: risk scores from ClickHouse activity, written to awzy-context (ADR 0056).
 reasoner:
   enabled: true
   intervalSeconds: 900
   replicas: 1
-  # Investigations (ADR 0071): Claude on the install's own Bedrock looks into the people the
-  # reasoner flags. Off until the client enables Claude in Bedrock; the services' workload role
-  # may already invoke it (deploy/terraform/aws/install). Bootstrap sets region.
+  # Investigations (ADR 0071): a model, by the `investigations` route in `models`, looks into
+  # the people the reasoner flags.
   investigations:
     enabled: false
-    region: ""
-    model: "" # default anthropic.claude-opus-5-5; some accounts need us.anthropic.claude-opus-5-5
-    effort: "" # low | medium | high | xhigh | max; default: the model's own
     # The most tokens a calendar month may spend on investigations.
     monthlyTokens: 2000000
     # Members are only ever proposed for containment, never contained automatically.

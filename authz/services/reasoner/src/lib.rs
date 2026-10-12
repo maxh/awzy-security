@@ -102,7 +102,7 @@ pub struct Reasoner {
     /// None when awzy-challenge or awzy-policy isn't configured: nobody is contained.
     pub containments: Option<contain::Containments>,
     /// None until the client turns investigations on (ADR 0071).
-    pub investigations: Option<runs::Investigations<awzy_llm::bedrock::Bedrock>>,
+    pub investigations: Option<runs::Investigations<std::sync::Arc<awzy_llm::ModelRouter>>>,
 }
 
 impl Reasoner {

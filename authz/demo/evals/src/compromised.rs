@@ -13,7 +13,7 @@ use crate::cases::DIRECTIVE;
 pub struct CompromisedModel;
 
 fn respond(content: Vec<Content>, stop: StopReason) -> ModelResponse {
-    ModelResponse { content, stop, usage: Usage::default() }
+    ModelResponse { content, stop, usage: Usage::default(), model: "compromised".into() }
 }
 
 /// Every tool result so far, parsed where it's JSON.

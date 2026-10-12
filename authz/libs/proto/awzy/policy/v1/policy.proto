@@ -30,6 +30,10 @@ service PolicyService {
   // which tiers fail open. Never set means every tool is unclassified and everything fails closed.
   rpc GetOutageFallback(GetOutageFallbackRequest) returns (GetOutageFallbackResponse);
   rpc SetOutageFallback(SetOutageFallbackRequest) returns (SetOutageFallbackResponse);
+  // The model routing (ADR 0114): which models Awzy Bot and investigations use. The client portal
+  // sets it; the portal and awzy-reasoner follow it.
+  rpc GetModelRouting(GetModelRoutingRequest) returns (GetModelRoutingResponse);
+  rpc SetModelRouting(SetModelRoutingRequest) returns (SetModelRoutingResponse);
 
   // Break-glass: republishes an earlier bundle when a bad one locks admins out. Authenticated by
   // a signature from a key enrolled at install time, not by the IdP or the PDP, so it works when
@@ -261,4 +265,44 @@ message SetOutageFallbackRequest {
 
 message SetOutageFallbackResponse {
   OutageFallback fallback = 1;
+}
+
+// A model routing setting (ADR 0114): the catalog of models and each feature's route.
+message ModelRouting {
+  // Increases with every change; 0 when never set, and then each service keeps the routing its
+  // deploy configuration started it with.
+  int64 version = 1;
+  // awzy_llm::Routing, as JSON: kept as text so the catalog's specs can gain fields without a
+  // change here. Signed as these bytes.
+  string routing_json = 2;
+  // Who set it (ADR 0060); unset when never set.
+  awzy.authz.v1.Actor changed_by_actor = 3;
+  google.protobuf.Timestamp changed_at = 4;
+  // ECDSA P-256 signature (DER) over awzy-signing's model_routing_payload, set when awzy-policy
+  // has a signing key.
+  bytes signature = 5;
+  // The key that signed: `sha256:<fingerprint>`.
+  string signing_key_id = 6;
+}
+
+message GetModelRoutingRequest {
+  // The version the caller has; 0 if none.
+  int64 known_version = 1;
+}
+
+message GetModelRoutingResponse {
+  // Unset when `unchanged` is true.
+  ModelRouting routing = 1;
+  bool unchanged = 2;
+}
+
+message SetModelRoutingRequest {
+  // awzy_llm::Routing, as JSON. The portal checks it against the install's connections first.
+  string routing_json = 1;
+  // Who is setting it (ADR 0060).
+  awzy.authz.v1.Actor changed_by_actor = 2;
+}
+
+message SetModelRoutingResponse {
+  ModelRouting routing = 1;
 }

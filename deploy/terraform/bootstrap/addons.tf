@@ -191,13 +191,17 @@ resource "helm_release" "config" {
         }
         publicUrl = coalesce(var.client_portal.public_url, "https://${var.ingress.hostname}")
         hostname  = var.ingress.hostname
-        awzyBot   = { enabled = var.awzy_bot && local.c.cloud == "aws", region = local.c.region, model = var.llm_model }
+        awzyBot   = { enabled = var.awzy_bot && local.llm_routing != null }
+      }
+      # What the models can reach, and the routing to start with (ADR 0114).
+      models = {
+        connections   = local.llm_connections
+        routing       = local.llm_routing == null ? {} : local.llm_routing
+        apiKeySecrets = var.llm_api_key_secrets
       }
       reasoner = {
         investigations = {
-          enabled          = var.investigations && local.c.cloud == "aws"
-          region           = local.c.region
-          model            = var.llm_model
+          enabled          = var.investigations && local.llm_routing != null
           monthlyTokens    = var.investigation_budget.monthly_tokens
           privilegedGroups = var.investigation_budget.privileged_groups
         }

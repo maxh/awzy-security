@@ -1,0 +1,19 @@
+[package]
+name = "awzy-model-routing"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+awzy-authz-proto.workspace = true
+awzy-llm.workspace = true
+awzy-service-auth.workspace = true
+awzy-signing.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+p256.workspace = true

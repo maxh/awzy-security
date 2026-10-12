@@ -14,8 +14,8 @@ use std::sync::{Arc, Mutex};
 
 use async_graphql::{Context, InputObject, Object, Result, SimpleObject};
 use awzy_llm::{
-    bedrock::Bedrock, fake::FakeModel, run_with_tools, Content, LlmError, Message, ModelProvider, ModelRequest,
-    ModelResponse, Role, StopReason, Tool, ToolOutcome, ToolSpec,
+    fake::FakeModel, run_with_tools, Content, Conversation, LlmError, Message, ModelProvider, ModelRequest,
+    ModelResponse, ModelRouter, Role, StopReason, Tool, ToolOutcome, ToolSpec,
 };
 use awzy_model::DecisionId;
 use rmcp::schemars::JsonSchema;
@@ -30,31 +30,65 @@ use crate::{
     Services,
 };
 
-/// The model Awzy Bot uses: Bedrock in an install, a scripted model in tests.
+/// Awzy Bot's route in the install's model routing (ADR 0114).
+pub const FEATURE: &str = "awzy_bot";
+
+/// Where Awzy Bot's conversations get their model: the install's router, a scripted model in tests.
 #[derive(Clone)]
 pub enum BotModel {
-    Bedrock(Arc<Bedrock>),
+    Routed(Arc<ModelRouter>),
     Scripted(Arc<FakeModel>),
 }
 
-impl ModelProvider for BotModel {
+impl BotModel {
+    /// The install's router, which follows the model routing; none for a scripted model.
+    pub fn router(&self) -> Option<Arc<ModelRouter>> {
+        match self {
+            Self::Routed(router) => Some(router.clone()),
+            Self::Scripted(_) => None,
+        }
+    }
+
+    /// The model for one turn of a conversation, which stays on it throughout.
+    fn conversation(&self) -> Result<BotConversation, LlmError> {
+        Ok(match self {
+            Self::Routed(router) => BotConversation::Routed(router.conversation(FEATURE)?),
+            Self::Scripted(m) => BotConversation::Scripted(m.clone()),
+        })
+    }
+}
+
+enum BotConversation {
+    Routed(Conversation),
+    Scripted(Arc<FakeModel>),
+}
+
+impl ModelProvider for BotConversation {
     async fn respond(&self, request: &ModelRequest) -> Result<ModelResponse, LlmError> {
         match self {
-            Self::Bedrock(m) => m.respond(request).await,
+            Self::Routed(c) => c.respond(request).await,
             Self::Scripted(m) => m.respond(request).await,
         }
     }
 }
 
-/// AWZY_BOT_ENABLED=true turns Awzy Bot on, with Claude on Bedrock (`awzy_llm::bedrock`:
-/// AWZY_LLM_MODEL, AWZY_LLM_EFFORT, and the AWS region and credentials from the environment).
+/// AWZY_BOT_ENABLED=true turns Awzy Bot on, with the model its route names in the install's
+/// routing (AWZY_LLM_CONNECTIONS and AWZY_LLM_ROUTING; see [`ModelRouter::from_env`]).
 pub async fn model_from_env() -> Option<BotModel> {
     if std::env::var("AWZY_BOT_ENABLED").as_deref() != Ok("true") {
         return None;
     }
-    let config = awzy_llm::bedrock::BedrockConfig::from_env();
-    tracing::info!(model = %config.model, "Awzy Bot is on");
-    Some(BotModel::Bedrock(Arc::new(Bedrock::from_env(config).await)))
+    match ModelRouter::from_env().await {
+        Ok(router) => {
+            let route = router.routing().routes.get(FEATURE).cloned();
+            tracing::info!(?route, "Awzy Bot is on");
+            Some(BotModel::Routed(Arc::new(router)))
+        }
+        Err(error) => {
+            tracing::warn!(%error, "Awzy Bot is off: its models aren't set up");
+            None
+        }
+    }
 }
 
 const SYSTEM: &str = "You are Awzy Bot, the assistant in awzy's client portal. awzy decides, per action and per \
@@ -303,7 +337,8 @@ impl AwzyBotMutation {
         // The bot lives on the Policies page; each tool checks its own access too.
         let viewer = access::require(ctx, PortalAction::View, PortalArea::Policies).await?;
         let services = ctx.data::<Services>()?.clone();
-        let model = services.bot.clone().ok_or("Awzy Bot isn't set up for this install")?;
+        let bot = services.bot.clone().ok_or("Awzy Bot isn't set up for this install")?;
+        let model = bot.conversation().map_err(|e| format!("Awzy Bot can't reach its model: {e}"))?;
         let message = input.message.trim();
         if message.is_empty() {
             return Err("ask Awzy Bot something".into());
@@ -456,7 +491,12 @@ mod tests {
 
     #[tokio::test]
     async fn refusals_and_installs_without_the_bot_say_so() {
-        let refusal = ModelResponse { content: vec![], stop: StopReason::Refusal, usage: Default::default() };
+        let refusal = ModelResponse {
+            content: vec![],
+            stop: StopReason::Refusal,
+            usage: Default::default(),
+            model: "fake".into(),
+        };
         let (schema, _) = schema_with_bot(vec![refusal]).await;
         let alice = testing::human("alice", "security");
         let out = testing::run(&schema, &alice, ask("…", None)).await;
