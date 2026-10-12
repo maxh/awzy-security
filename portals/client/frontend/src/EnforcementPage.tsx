@@ -78,6 +78,10 @@ function Enforcement({
           }
           changedAt
         }
+        containmentReview {
+          automated
+          liftedOnReview
+        }
         enforcementSummary {
           since
           total
@@ -123,6 +127,7 @@ function Enforcement({
   const [error, setError] = useState<string | null>(null);
 
   const { enforcement: current, containmentEnforcement: containments, enforcementSummary: s } = data;
+  const review = data.containmentReview;
   const enforcing = current.mode === "ENFORCE";
   const target = enforcing ? "MONITOR" : "ENFORCE";
   const containing = containments.mode === "ENFORCE";
@@ -208,6 +213,13 @@ function Enforcement({
               ? "awzy-reasoner contains a person when their risk is elevated, a challenge for them was rejected, and they tried to move data out, all in the same day. Every PDP applies it within seconds."
               : "awzy-reasoner records whom it would contain (elevated risk, a rejected challenge, and an attempt to move data out, in the same day) without applying it. Review them on the Challenges page, where you can contain the person or dismiss the record."}
           </Text>
+          {review && review.automated > 0 && (
+            <Text size="sm" c="dimmed" maw={760}>
+              Lifted on review: {review.liftedOnReview} of the {review.automated} containments awzy-reasoner made in the
+              last 30 days ({Math.round((100 * review.liftedOnReview) / review.automated)}%), lifted or dismissed by a
+              person. The lower it is, the more its containments hold up.
+            </Text>
+          )}
         </Stack>
       </Section>
 

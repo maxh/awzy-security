@@ -352,6 +352,23 @@ type ContainmentPayload {
 	containment: Containment!
 }
 
+"""
+How awzy-reasoner's containments held up on human review (#140): of those it made in a
+period, how many a person lifted, or dismissed when only recorded. The share lifted is what
+decides when automated containments can leave monitor.
+"""
+type ContainmentReview {
+	"""
+	awzy-reasoner's containments since `since`, applied or only recorded.
+	"""
+	automated: Int!
+	"""
+	Those a person has since lifted or dismissed.
+	"""
+	liftedOnReview: Int!
+	since: UtcTimestamp!
+}
+
 input CreatePolicyDraftInput {
 	schema: String!
 	policies: String!
@@ -1184,6 +1201,12 @@ type Query {
 	Every challenge, newest first. For those who administer challenges.
 	"""
 	challenges(status: ChallengeStatus, first: Int): [Challenge!]!
+	"""
+	How awzy-reasoner's containments held up on review over the last `days` (default 30): for
+	the Enforcement page, beside automated containments' mode. Counts the 500 most recent.
+	Null when awzy-challenge can't say, so the page still loads.
+	"""
+	containmentReview(days: Int! = 30): ContainmentReview
 	"""
 	Containments, newest first. For those who administer challenges.
 	"""

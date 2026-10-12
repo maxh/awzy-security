@@ -25,7 +25,7 @@ use awzy_authz_proto::{
 };
 use awzy_model::{entity_type, ChallengeId, ContainmentId, DecisionId};
 use awzy_portal::{Actor, Qid, UtcTimestamp};
-use chrono::DateTime;
+use chrono::{DateTime, Utc};
 
 use crate::{
     access::{authorize, require, PortalAction, PortalArea, Surface, Viewer},
@@ -358,6 +358,29 @@ impl ChallengeQuery {
     ) -> Result<Vec<Challenge>> {
         require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
         list(ctx, String::new(), status, first).await
+    }
+
+    /// How awzy-reasoner's containments held up on review over the last `days` (default 30): for
+    /// the Enforcement page, beside automated containments' mode. Counts the 500 most recent.
+    /// Null when awzy-challenge can't say, so the page still loads.
+    async fn containment_review(
+        &self,
+        ctx: &Context<'_>,
+        #[graphql(default = 30)] days: i32,
+    ) -> Result<Option<crate::containment_review::ContainmentReview>> {
+        require(ctx, PortalAction::View, PortalArea::Enforcement).await?;
+        let Ok(mut challenge) = client(ctx) else { return Ok(None) };
+        let req = ListContainmentsRequest { active_only: false, principal: None, limit: 500, include_monitor: true };
+        match challenge.list_containments(req).await {
+            Ok(res) => {
+                let since = Utc::now() - chrono::Duration::days(days.clamp(1, 365).into());
+                Ok(Some(crate::containment_review::review(&res.into_inner().containments, since)))
+            }
+            Err(status) => {
+                tracing::warn!(error = %status.message(), "containment review: awzy-challenge didn't answer");
+                Ok(None)
+            }
+        }
     }
 
     /// Containments, newest first. For those who administer challenges.

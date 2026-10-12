@@ -13,6 +13,7 @@ pub mod awzy_bot;
 mod challenges;
 mod connector_config;
 mod connectors;
+mod containment_review;
 mod decisions;
 mod diagnostics;
 pub mod directory;
