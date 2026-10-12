@@ -221,7 +221,7 @@ mod tests {
                     "corp_url": "https://corp.example.com",
                     "interval_secs": 60,
                     "last": { "delivered": true, "error": null, "heartbeat": {
-                        "schema_version": 1, "install_qid": "install_0199a8f2-6c1e-7b3a-9d4e-2f8c1a5b7e90",
+                        "schema_version": 1, "install_qid": "install_00000000-0000-7000-8000-000000000001",
                         "sent_at": "2026-10-11T12:00:00Z", "chart_version": "0.1.0", "services": [],
                     } },
                 }))
