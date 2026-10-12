@@ -2,7 +2,7 @@
 //! write them and clients read them with the same definition.
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 /// One connector's settings, as the client portal set them (ADR 0104).
@@ -144,6 +144,11 @@ pub struct Cited {
     pub why: String,
 }
 
+/// A list awzy-context may store as null.
+fn null_as_empty<'de, D: Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<Vec<T>, D::Error> {
+    Ok(Option::<Vec<T>>::deserialize(d)?.unwrap_or_default())
+}
+
 /// One of awzy-reasoner's investigations, as awzy-context keeps it (ADR 0071).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Investigation {
@@ -155,10 +160,10 @@ pub struct Investigation {
     pub verdict: String,
     pub risk: i32,
     pub summary: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub evidence: Vec<Cited>,
     pub containment: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub notes: Vec<String>,
     pub model: String,
     pub input_tokens: i64,
@@ -185,4 +190,47 @@ pub struct InvestigationList {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CloseInvestigation {
     pub reason: String,
+}
+
+/// The principals snapshot the PDPs load: people, groups, and service accounts as Cedar
+/// entities, with the groups each is in as its parents.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PrincipalsSnapshot {
+    #[serde(default)]
+    pub version: i64,
+    #[serde(default)]
+    pub entities: Vec<CedarEntity>,
+}
+
+/// Tokens spent on investigations over a period.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct InvestigationUsage {
+    #[serde(default)]
+    pub investigations: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct InvestigationUsageOne {
+    pub usage: InvestigationUsage,
+}
+
+/// One principal's risk score, as awzy-reasoner writes it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RiskScore {
+    pub principal: EntityUid,
+    pub score: i32,
+    #[serde(default)]
+    pub reasons: Vec<String>,
+    /// For a person: how much their requests look like software using their credentials.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub automation: Option<i32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub automation_reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RiskBatch {
+    pub scores: Vec<RiskScore>,
 }

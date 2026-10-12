@@ -1,149 +1,103 @@
 //! awzy-context, for who is on which team, documents' text, and to write scores and
 //! investigations, with this service's token for awzy-context (ADR 0055).
 
-use std::{
-    collections::{BTreeSet, HashMap},
-    time::Duration,
-};
+use std::collections::{BTreeSet, HashMap};
 
-use anyhow::{bail, Context};
-use axum::http::{header, Method, Request};
-use bytes::Bytes;
-use http_body_util::{BodyExt, Full};
-use serde_json::{json, Value};
+use awzy_context_api::{
+    model::{CedarEntity, PrincipalsSnapshot, RiskScore},
+    ContextApi, ContextError,
+};
+use serde_json::Value;
 
 use crate::{activity::Principal, Scored};
 
 /// The most scores one request carries; awzy-context takes up to 10,000.
 const BATCH: usize = 1000;
-const TIMEOUT: Duration = Duration::from_secs(30);
 
+/// awzy-context's API as the reasoner uses it, through its one client (#222).
 pub struct ContextClient {
-    base_url: String,
-    http: awzy_http::Client,
-    tokens: awzy_service_auth::TokenSource,
+    api: ContextApi,
 }
 
 impl ContextClient {
     pub fn new(base_url: &str, tokens: awzy_service_auth::TokenSource) -> Self {
-        Self { base_url: base_url.trim_end_matches('/').to_string(), http: awzy_http::client(), tokens }
-    }
-
-    async fn send(&self, method: Method, path: &str, body: Option<Value>) -> anyhow::Result<Value> {
-        let mut req = Request::builder()
-            .method(method.clone())
-            .uri(format!("{}{path}", self.base_url))
-            .header(header::CONTENT_TYPE, "application/json");
-        if let Some(authorization) = self.tokens.authorization("awzy-context")? {
-            req = req.header(header::AUTHORIZATION, authorization);
-        }
-        let body = body.map(|b| Bytes::from(b.to_string())).unwrap_or_default();
-        let res = tokio::time::timeout(TIMEOUT, self.http.request(req.body(Full::new(body))?))
-            .await
-            .with_context(|| format!("{method} {path} timed out"))??;
-        let status = res.status();
-        let bytes = res.into_body().collect().await?.to_bytes();
-        if !status.is_success() {
-            bail!("{method} {path}: {status}: {}", String::from_utf8_lossy(&bytes));
-        }
-        Ok(serde_json::from_slice(&bytes)?)
+        Self { api: ContextApi::new(base_url, tokens) }
     }
 
     /// The principals snapshot the PDPs load: people, groups, and service accounts.
-    pub async fn snapshot(&self) -> anyhow::Result<Value> {
-        self.send(Method::GET, "/v1/principals", None).await
+    pub async fn snapshot(&self) -> Result<PrincipalsSnapshot, ContextError> {
+        self.api.principals().await
     }
 
     /// Each principal's team, from the principals snapshot.
-    pub async fn teams(&self) -> anyhow::Result<HashMap<Principal, String>> {
+    pub async fn teams(&self) -> Result<HashMap<Principal, String>, ContextError> {
         Ok(teams(&self.snapshot().await?))
     }
 
     /// A resource's title and text, or None when awzy-context doesn't have it.
-    pub async fn resource(&self, id: &str) -> anyhow::Result<Option<(String, String)>> {
-        match self.send(Method::GET, &format!("/v1/resources/{}", awzy_http::encode(id)), None).await {
-            Ok(body) => {
-                let r = &body["resource"];
-                Ok(Some((r["name"].as_str().unwrap_or(id).to_string(), r["text"].as_str().unwrap_or("").to_string())))
-            }
-            Err(e) if e.to_string().contains(": 404 ") => Ok(None),
-            Err(e) => Err(e),
-        }
+    pub async fn resource(&self, id: &str) -> Result<Option<(String, String)>, ContextError> {
+        Ok(self.api.resource(id).await?.map(|r| (r.name, r.text.unwrap_or_default())))
     }
 
     /// Records an investigation (ADR 0071) and returns its QID.
-    pub async fn put_investigation(&self, record: Value) -> anyhow::Result<String> {
-        let body = self.send(Method::POST, "/v1/investigations", Some(record)).await?;
-        Ok(body["investigation"]["qid"].as_str().unwrap_or_default().to_string())
+    pub async fn put_investigation(&self, record: Value) -> Result<String, ContextError> {
+        Ok(self.api.put_investigation(&record).await?.qid)
     }
 
     /// Everyone investigated since `since`.
     pub async fn investigated_since(
         &self,
         since: chrono::DateTime<chrono::Utc>,
-    ) -> anyhow::Result<BTreeSet<Principal>> {
-        let path = format!("/v1/investigations?limit=500&since={}", awzy_http::encode(&since.to_rfc3339()));
-        let body = self.send(Method::GET, &path, None).await?;
-        Ok(body["investigations"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|i| {
-                Some((i["principal"]["type"].as_str()?.to_string(), i["principal"]["id"].as_str()?.to_string()))
-            })
-            .collect())
+    ) -> Result<BTreeSet<Principal>, ContextError> {
+        let list = self.api.investigations_since(since, 500).await?;
+        Ok(list.into_iter().map(|i| (i.principal.kind, i.principal.id)).collect())
     }
 
     /// Tokens spent on investigations since `since`.
-    pub async fn investigation_tokens(&self, since: chrono::DateTime<chrono::Utc>) -> anyhow::Result<u64> {
-        let path = format!("/v1/investigations/usage?since={}", awzy_http::encode(&since.to_rfc3339()));
-        let usage = &self.send(Method::GET, &path, None).await?["usage"];
-        Ok(usage["input_tokens"].as_u64().unwrap_or(0) + usage["output_tokens"].as_u64().unwrap_or(0))
+    pub async fn investigation_tokens(&self, since: chrono::DateTime<chrono::Utc>) -> Result<u64, ContextError> {
+        let usage = self.api.investigation_usage(since).await?;
+        Ok((usage.input_tokens.max(0) + usage.output_tokens.max(0)).unsigned_abs())
     }
 
     /// Replaces these principals' scores.
-    pub async fn put(&self, scores: &[Scored]) -> anyhow::Result<()> {
+    pub async fn put(&self, scores: &[Scored]) -> Result<(), ContextError> {
         for chunk in scores.chunks(BATCH) {
-            let scores: Vec<Value> = chunk
+            let scores = chunk
                 .iter()
-                .map(|s| {
-                    let mut score = json!({
-                        "principal": { "type": s.principal.0, "id": s.principal.1 },
-                        "score": s.score.score,
-                        "reasons": s.score.reasons,
-                    });
-                    if let Some(a) = &s.automation {
-                        score["automation"] = json!(a.score);
-                        score["automation_reasons"] = json!(a.reasons);
-                    }
-                    score
+                .map(|s| RiskScore {
+                    principal: awzy_context_api::model::EntityUid {
+                        kind: s.principal.0.clone(),
+                        id: s.principal.1.clone(),
+                    },
+                    score: s.score.score,
+                    reasons: s.score.reasons.clone(),
+                    automation: s.automation.as_ref().map(|a| a.score),
+                    automation_reasons: s.automation.as_ref().map(|a| a.reasons.clone()).unwrap_or_default(),
                 })
                 .collect();
-            self.send(Method::POST, "/v1/risk", Some(json!({ "scores": scores }))).await?;
+            self.api.put_risk(scores).await?;
         }
         Ok(())
     }
 }
 
+/// The groups an entity is directly in.
+fn groups_of(e: &CedarEntity) -> Vec<String> {
+    e.parents.iter().filter(|p| p.kind == "Group").map(|p| p.id.clone()).collect()
+}
+
+/// A person or service account's key, or None for any other entity.
+fn principal_of(e: &CedarEntity) -> Option<Principal> {
+    matches!(e.uid.kind.as_str(), "Human" | "ServiceAccount").then(|| (e.uid.kind.clone(), e.uid.id.clone()))
+}
+
 /// Every group each principal is in, directly or through the groups it's in.
-pub fn memberships(snapshot: &Value) -> HashMap<Principal, BTreeSet<String>> {
-    let entities: Vec<&Value> = snapshot["entities"].as_array().into_iter().flatten().collect();
-    let groups_of = |e: &Value| -> Vec<String> {
-        let parents = e["parents"].as_array().into_iter().flatten();
-        parents.filter(|p| p["type"] == "Group").filter_map(|p| p["id"].as_str()).map(str::to_string).collect()
-    };
-    let parents: HashMap<String, Vec<String>> = entities
-        .iter()
-        .filter(|e| e["uid"]["type"] == "Group")
-        .filter_map(|e| Some((e["uid"]["id"].as_str()?.to_string(), groups_of(e))))
-        .collect();
+pub fn memberships(snapshot: &PrincipalsSnapshot) -> HashMap<Principal, BTreeSet<String>> {
+    let parents: HashMap<String, Vec<String>> =
+        snapshot.entities.iter().filter(|e| e.uid.kind == "Group").map(|e| (e.uid.id.clone(), groups_of(e))).collect();
     let mut out = HashMap::new();
-    for e in &entities {
-        let (Some(kind @ ("Human" | "ServiceAccount")), Some(id)) =
-            (e["uid"]["type"].as_str(), e["uid"]["id"].as_str())
-        else {
-            continue;
-        };
+    for e in &snapshot.entities {
+        let Some(principal) = principal_of(e) else { continue };
         let mut all = BTreeSet::new();
         let mut todo = groups_of(e);
         while let Some(g) = todo.pop() {
@@ -151,34 +105,25 @@ pub fn memberships(snapshot: &Value) -> HashMap<Principal, BTreeSet<String>> {
                 todo.extend(parents.get(&g).cloned().unwrap_or_default());
             }
         }
-        out.insert((kind.to_string(), id.to_string()), all);
+        out.insert(principal, all);
     }
     out
 }
 
 /// A principal's team is the smallest group it's directly in (ties by name), so a team is
 /// "analysts" rather than "all-staff".
-fn teams(snapshot: &Value) -> HashMap<Principal, String> {
-    let entities: Vec<&Value> = snapshot["entities"].as_array().into_iter().flatten().collect();
-    let groups_of = |e: &Value| -> Vec<String> {
-        let parents = e["parents"].as_array().into_iter().flatten();
-        parents.filter(|p| p["type"] == "Group").filter_map(|p| p["id"].as_str()).map(str::to_string).collect()
-    };
+fn teams(snapshot: &PrincipalsSnapshot) -> HashMap<Principal, String> {
     let mut size: HashMap<String, usize> = HashMap::new();
-    for e in &entities {
+    for e in &snapshot.entities {
         for g in groups_of(e) {
             *size.entry(g).or_default() += 1;
         }
     }
     let mut teams = HashMap::new();
-    for e in &entities {
-        let (Some(kind @ ("Human" | "ServiceAccount")), Some(id)) =
-            (e["uid"]["type"].as_str(), e["uid"]["id"].as_str())
-        else {
-            continue;
-        };
+    for e in &snapshot.entities {
+        let Some(principal) = principal_of(e) else { continue };
         if let Some(team) = groups_of(e).into_iter().min_by_key(|g| (size[g], g.clone())) {
-            teams.insert((kind.to_string(), id.to_string()), team);
+            teams.insert(principal, team);
         }
     }
     teams
@@ -186,17 +131,23 @@ fn teams(snapshot: &Value) -> HashMap<Principal, String> {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
+
+    fn snapshot(v: Value) -> PrincipalsSnapshot {
+        serde_json::from_value(v).unwrap()
+    }
 
     #[test]
     fn memberships_include_the_groups_groups_are_in() {
-        let snapshot = json!({ "version": 1, "entities": [
+        let snapshot_json = json!({ "version": 1, "entities": [
             { "uid": { "type": "Human", "id": "lee" }, "attrs": {}, "parents": [{ "type": "Group", "id": "it-admin" }] },
             { "uid": { "type": "Group", "id": "it-admin" }, "attrs": {}, "parents": [{ "type": "Group", "id": "it" }] },
             { "uid": { "type": "Group", "id": "it" }, "attrs": {}, "parents": [{ "type": "Group", "id": "everyone" }] },
             { "uid": { "type": "Human", "id": "nora" }, "attrs": {}, "parents": [] },
         ]});
-        let m = memberships(&snapshot);
+        let m = memberships(&snapshot(snapshot_json));
         let lee: Vec<&str> = m[&("Human".to_string(), "lee".to_string())].iter().map(String::as_str).collect();
         assert_eq!(lee, vec!["everyone", "it", "it-admin"]);
         assert!(m[&("Human".to_string(), "nora".to_string())].is_empty());
@@ -208,7 +159,7 @@ mod tests {
             let parents: Vec<Value> = groups.iter().map(|g| json!({ "type": "Group", "id": g })).collect();
             json!({ "uid": { "type": "Human", "id": id }, "attrs": {}, "parents": parents })
         };
-        let snapshot = json!({ "version": 3, "entities": [
+        let snapshot_json = json!({ "version": 3, "entities": [
             member("ana", &["all-staff", "analysts"]),
             member("ben", &["all-staff", "analysts"]),
             member("cy", &["all-staff", "sales"]),
@@ -216,7 +167,7 @@ mod tests {
             { "uid": { "type": "ServiceAccount", "id": "genie" }, "attrs": {}, "parents": [] },
             { "uid": { "type": "Group", "id": "analysts" }, "attrs": {}, "parents": [{ "type": "Group", "id": "all-staff" }] },
         ]});
-        let teams = teams(&snapshot);
+        let teams = teams(&snapshot(snapshot_json));
         let team = |id: &str| teams.get(&("Human".to_string(), id.to_string())).map(String::as_str);
         assert_eq!(
             (team("ana"), team("ben"), team("cy"), team("dee")),
