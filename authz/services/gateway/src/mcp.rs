@@ -248,6 +248,7 @@ impl GatewayState {
 pub fn router(state: GatewayState) -> Router {
     Router::new()
         .route("/mcp/{upstream}", any(proxy))
+        .route("/mcp/challenges/{qid}", axum::routing::get(wait::wait))
         .route("/.well-known/oauth-protected-resource/mcp/{upstream}", axum::routing::get(resource_metadata))
         .with_state(state)
 }
@@ -596,6 +597,10 @@ fn blocked_message(what: &str, res: &CheckResponse, portal_url: Option<&str>) ->
     if let Some(url) = challenge_url {
         meta["awzy/challenge_url"] = json!(url);
     }
+    if !res.challenge_qid.is_empty() {
+        // Where an agent with no person in its session waits for the answer (ADR 0111).
+        meta["awzy/challenge_wait"] = json!(wait::path(&res.challenge_qid));
+    }
     (text, meta)
 }
 
@@ -675,6 +680,8 @@ fn upstream_uri(url: &str, query: Option<&str>) -> Result<Uri, axum::http::uri::
 fn wire_ref(r: &EntityRef) -> WireRef {
     WireRef { r#type: r.kind.clone(), id: r.id.clone() }
 }
+
+mod wait;
 
 #[cfg(test)]
 mod tests;

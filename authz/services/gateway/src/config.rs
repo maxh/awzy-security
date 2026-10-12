@@ -99,6 +99,10 @@ impl GatewayConfig {
     pub fn validate(&self) -> anyhow::Result<()> {
         anyhow::ensure!(self.outage.cached_allow_ttl_secs <= 3600, "outage.cached_allow_ttl_secs is at most 3600");
         for up in &self.upstreams {
+            anyhow::ensure!(
+                up.name != "challenges",
+                "an upstream can't be named challenges: /mcp/challenges is the gateway's own"
+            );
             for (tool, rt) in &up.resource_tools {
                 anyhow::ensure!(
                     ["read", "write"].contains(&rt.action.as_str()) && !rt.argument.is_empty(),

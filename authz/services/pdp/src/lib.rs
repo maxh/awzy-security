@@ -19,6 +19,7 @@ pub mod principals;
 pub mod replay;
 pub mod resources;
 mod sync;
+pub mod waiting;
 
 pub use decision_log::{DecisionLog, DEFAULT_DECISIONS_TOPIC};
 pub use enforcement::{Enforcement, ScopedMode};
@@ -626,6 +627,8 @@ pub fn router(state: AppState) -> Router {
         awzy_service_auth::Guard::new(state.service_auth.clone(), awzy_service_auth::Allowed::AnyServiceAccount);
     Router::new()
         .route("/v1/access/evaluation", post(evaluate))
+        // An agent waiting for its challenge's answer (ADR 0111).
+        .route("/v1/access/challenge", post(waiting::http))
         .with_state(state.clone())
         .merge(grpc::router(state.clone()))
         .route_layer(axum::middleware::from_fn_with_state(guard, awzy_service_auth::require))

@@ -11,25 +11,45 @@ resource? The same port serves gRPC and HTTP.
 `awzy.authz.v1.Authorizer/Check`, defined in
 [`authz.proto`](https://github.com/maxh/awzy-security/blob/main/authz/libs/proto/awzy/authz/v1/authz.proto).
 
-| Request field | |
-| --- | --- |
-| `principal` | Who is acting: `{type: "Human" \| "ServiceAccount", id}`. |
-| `action` | What they're doing, e.g. `read`. |
-| `resource` | What they're doing it to. |
-| `context` | Request context; must match the schema for the action. |
-| `on_behalf_of` | The person a service account acts for. |
-| `human_present` | Whether a person can answer a challenge now. |
+| Request field   |                                                           |
+| --------------- | --------------------------------------------------------- |
+| `principal`     | Who is acting: `{type: "Human" \| "ServiceAccount", id}`. |
+| `action`        | What they're doing, e.g. `read`.                          |
+| `resource`      | What they're doing it to.                                 |
+| `context`       | Request context; must match the schema for the action.    |
+| `on_behalf_of`  | The person a service account acts for.                    |
+| `human_present` | Whether a person can answer a challenge now.              |
 
-| Response field | |
-| --- | --- |
-| `decision_qid` | The decision's ID, for explaining it later. |
-| `verdict` | `ALLOW`, `DENY`, or `CHALLENGE`. |
-| `challenges` | Every challenge that must be passed. |
-| `policies` | The policies that decided it. |
-| `mode` | `MONITOR` means allow whatever the verdict says. |
-| `challenge_qid` | The challenge to answer before retrying. |
+| Response field  |                                                  |
+| --------------- | ------------------------------------------------ |
+| `decision_qid`  | The decision's ID, for explaining it later.      |
+| `verdict`       | `ALLOW`, `DENY`, or `CHALLENGE`.                 |
+| `challenges`    | Every challenge that must be passed.             |
+| `policies`      | The policies that decided it.                    |
+| `mode`          | `MONITOR` means allow whatever the verdict says. |
+| `challenge_qid` | The challenge to answer before retrying.         |
 
 An enforcement point that doesn't understand `mode` applies the verdict, which fails safe.
+
+### Waiting for a challenge's answer
+
+`awzy.authz.v1.Authorizer/WaitForChallenge`, for an agent with no person in its session: it waits
+while awzy asks the person, then retries the same request.
+
+| Request field               |                                                                     |
+| --------------------------- | ------------------------------------------------------------------- |
+| `challenge_qid`             | From the check's response.                                          |
+| `principal`, `on_behalf_of` | The check's, as you validated them. Anyone else's gets `NOT_FOUND`. |
+| `wait_secs`                 | How long to wait for an answer: 0 to look, at most 25.              |
+
+| Response field     |                                                                                                      |
+| ------------------ | ---------------------------------------------------------------------------------------------------- |
+| `outcome`          | `PENDING` (ask again), `PASSED` (retry), `REJECTED` (don't), or `EXPIRED` (a retry opens a new one). |
+| `expires_at`       | Pending: when it expires unanswered. Rejected: when the request stops being denied.                  |
+| `grant_expires_at` | Passed: until when a retry is allowed.                                                               |
+| `pending`          | Pending: the challenges still to pass.                                                               |
+
+Over HTTP it's `POST /v1/access/challenge` with the same fields as JSON.
 
 ## HTTP
 

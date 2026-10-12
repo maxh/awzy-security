@@ -2,7 +2,7 @@
 
 use awzy_authz_proto::authz::v1::{
     authorizer_server::{Authorizer, AuthorizerServer},
-    CheckRequest, CheckResponse,
+    CheckRequest, CheckResponse, WaitForChallengeRequest, WaitForChallengeResponse,
 };
 use awzy_model::Check;
 use axum::Router;
@@ -23,6 +23,28 @@ impl Authorizer for Service {
             crate::CheckError::Invalid(_) => Status::invalid_argument(e.to_string()),
         })?;
         Ok(Response::new(decision.into()))
+    }
+
+    async fn wait_for_challenge(
+        &self,
+        request: Request<WaitForChallengeRequest>,
+    ) -> Result<Response<WaitForChallengeResponse>, Status> {
+        let req = request.into_inner();
+        let id: awzy_model::ChallengeId =
+            req.challenge_qid.parse().map_err(|e| Status::invalid_argument(format!("challenge_qid: {e}")))?;
+        let principal: awzy_model::EntityRef =
+            req.principal.ok_or_else(|| Status::invalid_argument("principal is required"))?.into();
+        let on_behalf_of: Option<awzy_model::EntityRef> = req.on_behalf_of.map(Into::into);
+        let wait = std::time::Duration::from_secs(req.wait_secs.into());
+        let challenges = self.0.challenges.clone();
+        crate::waiting::wait(&principal, on_behalf_of.as_ref(), wait, || challenges.get(id))
+            .await
+            .map(Response::new)
+            .map_err(|e| match e {
+                crate::waiting::WaitError::NotFound => Status::not_found(e.to_string()),
+                crate::waiting::WaitError::NotConfigured => Status::failed_precondition(e.to_string()),
+                crate::waiting::WaitError::Unavailable(_) => Status::unavailable(e.to_string()),
+            })
     }
 }
 
