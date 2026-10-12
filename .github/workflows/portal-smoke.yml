@@ -1,0 +1,27 @@
+name: portal-smoke
+
+# Every page of the demo installs' client portals answers (tools/ci/portal-smoke.py): signed in as
+# the demo's security admin, every query the deployed frontend sends. It catches what the unit
+# tests can't, since they run with service access checks off: one service refusing another, a
+# schema the frontend doesn't match, a backend down. Every six hours, so a release that broke a
+# page is found within one, and on demand.
+on:
+  schedule:
+    - cron: "41 */6 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/ci/portal-smoke.py"
+      - ".github/workflows/portal-smoke.yml"
+
+jobs:
+  smoke:
+    # The demos' hostnames, space-separated, in a repository variable.
+    if: vars.AWZY_CORP_DEMO_HOSTS != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every page answers
+        run: python3 tools/ci/portal-smoke.py ${{ vars.AWZY_CORP_DEMO_HOSTS }}
