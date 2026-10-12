@@ -1,4 +1,5 @@
 import type { ActivityLog } from "./activity.ts";
+import { type Filter, needsRowChecks, parseFilter } from "./filter.ts";
 import { TokenError, type TokenVerifier } from "./token.ts";
 import {
   ALWAYS_FAIL_CLOSED,
@@ -9,6 +10,10 @@ import {
   type CheckResult,
   type DecisionNote,
   type Mode,
+  type Plan,
+  type PlanOutcome,
+  type PlanRequest,
+  type PlanResult,
   type Principal,
   type Verdict,
 } from "./types.ts";
@@ -144,7 +149,96 @@ export class Awzy {
     }
   }
 
-  async #principal(req: CheckRequest): Promise<Principal> {
+  /**
+   * Which rows of a type the caller may act on, as a filter for the app's own query (ADR 0113).
+   * When awzy can't answer within the budget the result is `unavailable`: show nothing, or fall
+   * back to checking rows one by one.
+   */
+  async plan(req: PlanRequest): Promise<PlanResult> {
+    let p: Principal;
+    try {
+      p = await this.#principal(req);
+    } catch (e) {
+      return { allowed: false, kind: "unauthenticated", reason: e instanceof Error ? e.message : String(e) };
+    }
+    const body = {
+      principal: p.principal,
+      action: req.action,
+      resource_type: req.resourceType,
+      context: req.context ?? {},
+      entities: req.entities ?? [],
+      ...(p.onBehalfOf ? { on_behalf_of: p.onBehalfOf } : {}),
+      ...(p.humanPresent === undefined ? {} : { human_present: p.humanPresent }),
+      ...(req.planQid ? { plan_qid: req.planQid } : {}),
+    };
+    const signal = AbortSignal.timeout(this.#options.budgetMs ?? 250);
+    let res: { status: number; body?: Record<string, unknown> };
+    try {
+      res = await this.#post("/v1/access/plan", body, signal);
+    } catch (e) {
+      const why = signal.aborted
+        ? "awzy-pdp didn't answer within the budget"
+        : `awzy-pdp can't be reached: ${String(e)}`;
+      return { allowed: false, kind: "unavailable", reason: why };
+    }
+    if (!res.body) return { allowed: false, kind: "unavailable", reason: `awzy-pdp answered ${res.status}` };
+    const d = res.body;
+    const outcomes: ReadonlySet<string> = new Set(["always_allowed", "always_denied", "challenge", "conditional"]);
+    const wireOutcome = text(d, "outcome");
+    const isOutcome = (o: string | undefined): o is PlanOutcome => o !== undefined && outcomes.has(o);
+    // An outcome it can't read shows nothing, as a verdict it can't read denies.
+    const outcome: PlanOutcome = isOutcome(wireOutcome) ? wireOutcome : "always_denied";
+    const mode: Mode = text(d, "mode") === "monitor" ? "monitor" : "enforce";
+    this.#lastMode = mode;
+    const filter = parseFilter(d["filter"]);
+    const enforced: Filter =
+      outcome === "always_allowed" ? { op: "true" } : outcome === "conditional" ? filter : { op: "false" };
+    const plan: Plan = {
+      ok: true,
+      qid: text(d, "qid") ?? "",
+      outcome,
+      filter,
+      apply: mode === "monitor" ? { op: "true" } : enforced,
+      challenges: kinds(d, "challenges"),
+      challengeCouldWiden: d["challenge_could_widen"] === true,
+      needsRowChecks: needsRowChecks(filter),
+      attributes: strings(d, "attributes"),
+      mode,
+      maxAgeSecs: typeof d["max_age_secs"] === "number" ? d["max_age_secs"] : 0,
+      pinned: d["pinned"] === true,
+    };
+    this.#options.onDecision?.({
+      decisionQid: plan.qid,
+      action: req.action,
+      resource: { type: req.resourceType, id: "" },
+      principal: p.principal,
+      ...(p.onBehalfOf ? { onBehalfOf: p.onBehalfOf } : {}),
+      result: "allowed",
+      mode,
+    });
+    return plan;
+  }
+
+  /**
+   * Records what a plan's query returned in awzy-intake, as a `listed` access of `count` rows
+   * linked to the plan, so a bulk read through a plan still moves risk (ADR 0113). Part of the
+   * contract: call it for every page shown.
+   */
+  async reportPlan(req: PlanRequest, plan: Plan, count: number): Promise<void> {
+    const p = await this.#principal(req);
+    this.#options.activity?.record({
+      principal: p.principal,
+      ...(p.onBehalfOf ? { onBehalfOf: p.onBehalfOf } : {}),
+      action: req.action,
+      resource: { type: req.resourceType, id: "" },
+      outcome: "success",
+      access: "listed",
+      count,
+      attributes: { plan_qid: plan.qid },
+    });
+  }
+
+  async #principal(req: { principal?: Principal; authorization?: string }): Promise<Principal> {
     if (req.principal) return req.principal;
     if (!this.#options.tokens) throw new TokenError("no token verifier is configured");
     return this.#options.tokens.principal(req.authorization);

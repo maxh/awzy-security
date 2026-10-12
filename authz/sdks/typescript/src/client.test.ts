@@ -218,3 +218,82 @@ describe("checkMany and run", () => {
     });
   });
 });
+
+describe("plan", () => {
+  const conditional = {
+    body: {
+      qid: "plan_0192a000-0000-7000-8000-000000000009",
+      outcome: "conditional",
+      filter: { op: "compare", attr: ["tenant"], cmp: "eq", value: "acme" },
+      challenges: [],
+      challenge_could_widen: false,
+      needs_row_checks: false,
+      attributes: ["tenant"],
+      mode: "enforce",
+      max_age_secs: 60,
+      pinned: false,
+    },
+  };
+  const planReq = { principal: bot, action: "view_customer", resourceType: "Customer" };
+
+  it("asks for a type, and applies the filter in enforce mode", async () => {
+    const pdp = fakePdp(() => conditional);
+    const awzy = new Awzy({ pdpUrl: "http://pdp", fetch: pdp.fetch });
+    const plan = await awzy.plan({ ...planReq, planQid: "plan_0192a000-0000-7000-8000-000000000008" });
+    expect(pdp.calls[0]).toMatchObject({
+      path: "/v1/access/plan",
+      body: {
+        principal: bot.principal,
+        on_behalf_of: bot.onBehalfOf,
+        resource_type: "Customer",
+        plan_qid: "plan_0192a000-0000-7000-8000-000000000008",
+      },
+    });
+    expect(plan).toMatchObject({ ok: true, outcome: "conditional", apply: conditional.body.filter });
+  });
+
+  it("shows every row in monitor mode, and none while a challenge is pending", async () => {
+    const monitor = new Awzy({
+      pdpUrl: "http://pdp",
+      fetch: fakePdp(() => ({ body: { ...conditional.body, mode: "monitor" } })).fetch,
+    });
+    expect(await monitor.plan(planReq)).toMatchObject({ apply: { op: "true" }, filter: conditional.body.filter });
+    const challenged = new Awzy({
+      pdpUrl: "http://pdp",
+      fetch: fakePdp(() => ({ body: { ...conditional.body, outcome: "challenge", challenges: ["verification"] } }))
+        .fetch,
+    });
+    expect(await challenged.plan(planReq)).toMatchObject({ apply: { op: "false" }, challenges: ["verification"] });
+  });
+
+  it("is unavailable when awzy-pdp can't answer, and reads an unknown outcome as no row", async () => {
+    const down = new Awzy({ pdpUrl: "http://pdp", fetch: fakePdp(() => "down").fetch });
+    expect(await down.plan(planReq)).toMatchObject({ allowed: false, kind: "unavailable" });
+    const odd = new Awzy({
+      pdpUrl: "http://pdp",
+      fetch: fakePdp(() => ({ body: { ...conditional.body, outcome: "maybe" } })).fetch,
+    });
+    expect(await odd.plan(planReq)).toMatchObject({ outcome: "always_denied", apply: { op: "false" } });
+  });
+
+  it("reports what a plan returned as a listed access linked to it", async () => {
+    const intake = fakePdp(() => ({ body: {} }));
+    const activity = new ActivityLog({ url: "http://intake", token: "t", system: "acme-crm", fetch: intake.fetch });
+    const awzy = new Awzy({ pdpUrl: "http://pdp", fetch: fakePdp(() => conditional).fetch, activity });
+    const plan = await awzy.plan(planReq);
+    if (!("ok" in plan)) throw new Error(`expected a plan, got ${plan.kind}`);
+    await awzy.reportPlan(planReq, plan, 40);
+    await activity.flush();
+    expect(intake.calls[0]?.body).toMatchObject({
+      events: [
+        {
+          action: "view_customer",
+          resource: { type: "Customer", id: "" },
+          access: "listed",
+          count: 40,
+          attributes: { plan_qid: "plan_0192a000-0000-7000-8000-000000000009" },
+        },
+      ],
+    });
+  });
+});

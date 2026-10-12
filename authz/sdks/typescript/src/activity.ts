@@ -8,6 +8,9 @@ export interface Activity {
   action: string;
   resource?: EntityRef;
   outcome?: "success" | "failure";
+  /** How the resource was touched, and how many rows: `listed` for a plan's results. */
+  access?: "listed" | "read" | "written" | "exported";
+  count?: number;
   attributes?: Record<string, unknown>;
 }
 
@@ -67,6 +70,8 @@ export class ActivityLog {
       if (a.onBehalfOf) e["on_behalf_of"] = a.onBehalfOf;
       if (a.resource) e["resource"] = a.resource;
       if (a.outcome) e["outcome"] = a.outcome;
+      if (a.access) e["access"] = a.access;
+      if (a.count !== undefined) e["count"] = a.count;
       return e;
     });
     try {
