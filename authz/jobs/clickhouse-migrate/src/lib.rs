@@ -20,6 +20,7 @@ const MIGRATIONS: &[(u32, &str, &str)] = &[
     (7, "principal", include_str!("../migrations/0007_principal.sql")),
     (8, "by_resource", include_str!("../migrations/0008_by_resource.sql")),
     (9, "attributes_from", include_str!("../migrations/0009_attributes_from.sql")),
+    (10, "event_access", include_str!("../migrations/0010_event_access.sql")),
 ];
 
 /// The tables whose rows expire after the install's retention.
@@ -454,6 +455,10 @@ mod tests {
             outcome: "failure".into(),
             source_ip: "203.0.113.7".into(),
             attributes: r#"{"errorCode":"AccessDenied"}"#.into(),
+            access: String::new(),
+            count: 0,
+            tool: String::new(),
+            action_class: String::new(),
         };
         events.send(std::slice::from_ref(&event)).await.unwrap();
 

@@ -450,7 +450,24 @@ pub struct EventRecord {
     pub source_ip: String,
     /// Source-specific fields, as JSON text.
     pub attributes: String,
+    /// How much it touched (#288): `listed`, `read`, `exported`, or `written`; empty when the
+    /// source doesn't say.
+    #[serde(default)]
+    pub access: String,
+    /// For a list, search, or export: how many rows of `resource_type` it returned. 0 when the
+    /// source doesn't say.
+    #[serde(default)]
+    pub count: u64,
+    /// The typed tool function an agent called, when it was one, and its class (`read`,
+    /// `write`, or an app's own).
+    #[serde(default)]
+    pub tool: String,
+    #[serde(default)]
+    pub action_class: String,
 }
+
+/// The kinds of access an event can report (#288), from least to most data moved out.
+pub const ACCESS_KINDS: &[&str] = &["listed", "read", "written", "exported"];
 
 #[cfg(test)]
 mod tests {

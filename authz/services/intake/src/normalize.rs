@@ -73,6 +73,19 @@ pub struct AppEvent {
     pub source_ip: Option<String>,
     #[serde(default)]
     pub attributes: Map<String, Value>,
+    /// How much it touched (#288): `listed`, `read`, `exported`, or `written`.
+    #[serde(default)]
+    pub access: Option<String>,
+    /// For a list, search, or export: how many rows it returned, of `resource.type` (the
+    /// resource's ID may be empty for a list).
+    #[serde(default)]
+    pub count: Option<u64>,
+    /// For an agent calling a typed tool function: the tool, and its class (`read`, `write`, or
+    /// the app's own).
+    #[serde(default)]
+    pub tool: Option<String>,
+    #[serde(default)]
+    pub action_class: Option<String>,
 }
 
 pub fn app(batch: AppBatch, now: DateTime<Utc>) -> Result<Vec<EventRecord>, NormalizeError> {
@@ -97,6 +110,19 @@ pub fn app(batch: AppBatch, now: DateTime<Utc>) -> Result<Vec<EventRecord>, Norm
                 return Err(invalid(i, format!("`outcome` must be success or failure, not {outcome:?}")));
             }
             check_time(i, e.at, now)?;
+            let access = e.access.unwrap_or_default();
+            if !access.is_empty() && !awzy_model::ACCESS_KINDS.contains(&access.as_str()) {
+                return Err(invalid(
+                    i,
+                    format!("`access` must be one of {}, not {access:?}", awzy_model::ACCESS_KINDS.join(", ")),
+                ));
+            }
+            if e.count.is_some() && access.is_empty() {
+                return Err(invalid(
+                    i,
+                    "`count` needs `access`: say whether the rows were listed, read, written, or exported",
+                ));
+            }
             let on_behalf_of = e.on_behalf_of.unwrap_or_else(|| EntityRef::new("", ""));
             let resource = e.resource.unwrap_or_else(|| EntityRef::new("", ""));
             Ok(EventRecord {
@@ -115,6 +141,10 @@ pub fn app(batch: AppBatch, now: DateTime<Utc>) -> Result<Vec<EventRecord>, Norm
                 outcome,
                 source_ip: e.source_ip.unwrap_or_default(),
                 attributes: Value::Object(e.attributes).to_string(),
+                access,
+                count: e.count.unwrap_or(0),
+                tool: e.tool.unwrap_or_default(),
+                action_class: e.action_class.unwrap_or_default(),
             })
         })
         .collect()
@@ -234,6 +264,10 @@ fn cloudtrail_record(
         outcome: if error_code.is_empty() { "success" } else { "failure" }.into(),
         source_ip: text(&r["sourceIPAddress"]),
         attributes: Value::Object(attributes).to_string(),
+        access: String::new(),
+        count: 0,
+        tool: String::new(),
+        action_class: String::new(),
     })
 }
 
@@ -270,6 +304,29 @@ mod tests {
         assert_eq!((e.resource_type.as_str(), e.resource_id.as_str()), ("Ticket", "ENG-42"));
         assert_eq!(e.attributes, r#"{"project":"ENG"}"#);
         assert!(e.id.to_string().starts_with("event_"));
+    }
+
+    /// What an access touched (#288): its kind, how many rows of which type, and the tool.
+    #[test]
+    fn an_access_says_how_much_it_touched() {
+        let export = app_batch(json!([{
+            "at": "2026-10-09T14:00:00Z", "system": "crm", "principal": { "type": "ServiceAccount", "id": "sales-genie" },
+            "on_behalf_of": { "type": "Human", "id": "nora" }, "action": "export_customers",
+            "resource": { "type": "Customer", "id": "" }, "access": "exported", "count": 500,
+            "tool": "exportCustomers", "action_class": "read",
+        }]));
+        let e = &app(export, now()).unwrap()[0];
+        assert_eq!((e.access.as_str(), e.count, e.resource_type.as_str()), ("exported", 500, "Customer"));
+        assert_eq!((e.tool.as_str(), e.action_class.as_str()), ("exportCustomers", "read"));
+
+        let event = |extra: Value| {
+            let mut e = json!({ "at": "2026-10-09T14:00:00Z", "system": "crm", "principal": { "type": "Human", "id": "bob" }, "action": "list" });
+            e.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            app(app_batch(json!([e])), now())
+        };
+        assert!(event(json!({ "access": "downloaded" })).is_err(), "only the known kinds");
+        assert!(event(json!({ "count": 3 })).is_err(), "a count says what kind of access it counts");
+        assert_eq!(event(json!({})).unwrap()[0].access, "", "both are optional");
     }
 
     #[test]

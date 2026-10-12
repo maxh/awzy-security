@@ -14,6 +14,39 @@ pub struct Day {
     /// Resources opened that neither the principal nor its team had opened before (ADR 0064).
     /// Only counted for the last day.
     pub unfamiliar: u64,
+    /// Rows touched by accesses that said their kind (#288), each weighted by
+    /// [`ACCESS_WEIGHTS`]: a list's rows count for less than a read's, an export's for more.
+    pub rows: f64,
+    /// Of those, the rows exported, unweighted, to name in a reason.
+    pub exported: u64,
+}
+
+/// How much each kind of access counts per row it touched, against a read or a write's 1.
+/// Seeing rows in a list moves little data; exporting them moves all of it out.
+pub struct AccessWeights {
+    pub listed: f64,
+    pub exported: f64,
+}
+
+pub const ACCESS_WEIGHTS: AccessWeights = AccessWeights { listed: 0.25, exported: 4.0 };
+
+impl Day {
+    /// How much it touched: the resources it opened, plus its weighted rows.
+    pub fn volume(&self) -> f64 {
+        self.resources as f64 + self.rows
+    }
+
+    /// The volume in words, for a reason.
+    fn touched(&self) -> String {
+        let mut words = format!("opened {} resources", self.resources);
+        if self.rows > 0.0 {
+            words.push_str(&format!(" and touched rows worth {:.0}", self.rows));
+            if self.exported > 0 {
+                words.push_str(&format!(", {} of them exported", self.exported));
+            }
+        }
+        words
+    }
 }
 
 /// A score from 0 to 100 and what raised it.
@@ -51,25 +84,22 @@ pub fn score(last_day: Day, baseline: &[Day], peers: &[Day]) -> Score {
     let mut reasons = Vec::new();
 
     if baseline.len() >= MIN_BASELINE_DAYS {
-        let usual = baseline.iter().map(|d| d.resources as f64).sum::<f64>() / baseline.len() as f64;
-        let p = above(last_day.resources, usual);
+        let usual = baseline.iter().map(Day::volume).sum::<f64>() / baseline.len() as f64;
+        let p = above(last_day.volume(), usual);
         if p >= 1.0 {
             points += p;
-            reasons.push(format!("opened {} resources in the last day; usually {usual:.0} a day", last_day.resources));
+            reasons.push(format!("{} in the last day; usually {usual:.0} a day", last_day.touched()));
         }
     }
 
     if peers.len() >= MIN_PEERS {
-        let mut theirs: Vec<u64> = peers.iter().map(|d| d.resources).collect();
-        theirs.sort_unstable();
-        let median = theirs[theirs.len() / 2] as f64;
-        let p = above(last_day.resources, median);
+        let mut theirs: Vec<f64> = peers.iter().map(Day::volume).collect();
+        theirs.sort_unstable_by(f64::total_cmp);
+        let median = theirs[theirs.len() / 2];
+        let p = above(last_day.volume(), median);
         if p >= 1.0 {
             points += p;
-            reasons.push(format!(
-                "opened {} resources in the last day; its team's median is {median:.0}",
-                last_day.resources
-            ));
+            reasons.push(format!("{} in the last day; its team's median is {median:.0}", last_day.touched()));
         }
     }
 
@@ -89,9 +119,9 @@ pub fn score(last_day: Day, baseline: &[Day], peers: &[Day]) -> Score {
     Score { score: points.round().clamp(0.0, 100.0) as i32, reasons }
 }
 
-/// Points for `observed` resources against a normal of `usual`.
-fn above(observed: u64, usual: f64) -> f64 {
-    let multiple = observed as f64 / usual.max(FLOOR_RESOURCES);
+/// Points for an `observed` volume against a normal of `usual`.
+fn above(observed: f64, usual: f64) -> f64 {
+    let multiple = observed / usual.max(FLOOR_RESOURCES);
     ((multiple - 1.0) * POINTS_PER_MULTIPLE).clamp(0.0, MOST_PER_COMPARISON)
 }
 
@@ -153,5 +183,20 @@ mod tests {
         let s = score(Day { denied: 2, ..day(10) }, &[day(10); 20], &[]);
         assert_eq!(s.score, 10);
         assert_eq!(score(Day { denied: 50, ..day(10) }, &[day(10); 20], &[]).score, 20);
+    }
+
+    /// The paper's "500 percent more files than their peer group" counts rows, not events, and
+    /// an export of them counts for more than the same rows listed (#288).
+    #[test]
+    fn a_bulk_export_moves_risk_more_than_listing_the_same_rows() {
+        let baseline = [day(12); 20];
+        let peers = [day(11), day(12), day(13)];
+        let with_rows = |weight: f64, exported: u64| Day { rows: 40.0 * weight, exported, ..day(12) };
+        let listed = score(with_rows(ACCESS_WEIGHTS.listed, 0), &baseline, &peers);
+        let exported = score(with_rows(ACCESS_WEIGHTS.exported, 40), &baseline, &peers);
+        assert!(exported.score > listed.score, "{exported:?} against {listed:?}");
+        assert!(exported.reasons[0].contains("40 of them exported"), "{:?}", exported.reasons);
+        // Listed, 40 rows weigh 10 resources: 22 against 12 a day still stands out, a little.
+        assert!(listed.score > 0, "a 40-row list still stands out against 12 a day");
     }
 }

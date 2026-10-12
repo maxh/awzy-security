@@ -120,6 +120,10 @@ pub(crate) mod tests {
             outcome: "success".into(),
             source_ip: String::new(),
             attributes: "{}".into(),
+            access: String::new(),
+            count: 0,
+            tool: String::new(),
+            action_class: String::new(),
         }
     }
 

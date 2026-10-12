@@ -137,6 +137,8 @@ pub struct Exfiltration {
     pub action: &'static str,
     pub resource: String,
     pub system: &'static str,
+    /// The rows it moved out (#288).
+    pub rows: u64,
 }
 
 /// The scenarios' attempts to move data out: Nora exporting her accounts after the plan's owner
@@ -148,6 +150,7 @@ pub fn exfiltration() -> Vec<Exfiltration> {
         action: "export",
         resource: "synthetic:folder:sales-northeast-finserv/accounts".into(),
         system: "larkspur-drive",
+        rows: 240,
     }]
 }
 
