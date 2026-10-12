@@ -81,7 +81,7 @@ type Install implements Node {
 	"""
 	Support sessions asked for on this install, newest first (ADR 0095).
 	"""
-	supportSessions: [SupportSession!]!
+	supportSessions(after: String, first: Int): SupportSessionConnection!
 	id: ID!
 	client: String!
 	"""
@@ -111,7 +111,7 @@ type Install implements Node {
 	"""
 	Chart versions the install has run, newest first: its upgrade history.
 	"""
-	versionHistory: [VersionSeen!]!
+	versionHistory(after: String, first: Int): VersionSeenConnection!
 	"""
 	The staff member who registered it.
 	What the client is licensed for, shared by all its installs; null until staff set it.
@@ -382,7 +382,7 @@ type Query {
 	Chart versions installs report, newest first. Installs that haven't reported a version
 	aren't counted.
 	"""
-	releases: [Release!]!
+	releases(after: String, first: Int): ReleaseConnection!
 	"""
 	Each channel's chart version, stable first. A channel never moved isn't listed.
 	"""
@@ -394,7 +394,7 @@ type Query {
 	"""
 	Every install's support sessions, newest first, up to 200.
 	"""
-	supportSessions: [SupportSession!]!
+	supportSessions(after: String, first: Int): SupportSessionConnection!
 }
 
 input RegisterInstallInput {
@@ -434,13 +434,42 @@ type RegisterInstallPayload {
 type Release {
 	version: String!
 	installCount: Int!
-	installs: [Install!]!
+	installs(after: String, first: Int): InstallConnection!
 }
 
 enum ReleaseChannel {
 	STABLE
 	FAST
 	PINNED
+}
+
+type ReleaseConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [ReleaseEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [Release!]!
+}
+
+"""
+An edge in a connection.
+"""
+type ReleaseEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: Release!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
 }
 
 input RenameClientInput {
@@ -535,6 +564,35 @@ type SupportSession implements Node {
 	install: Install
 }
 
+type SupportSessionConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [SupportSessionEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [SupportSession!]!
+}
+
+"""
+An edge in a connection.
+"""
+type SupportSessionEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: SupportSession!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
 enum SupportSessionStatus {
 	"""
 	Asked for; the install hasn't decided, or hasn't got it yet.
@@ -559,6 +617,35 @@ scalar UtcTimestamp
 type VersionSeen {
 	chartVersion: String!
 	firstSeenAt: UtcTimestamp!
+}
+
+type VersionSeenConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [VersionSeenEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [VersionSeen!]!
+}
+
+"""
+An edge in a connection.
+"""
+type VersionSeenEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: VersionSeen!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
 }
 
 """
