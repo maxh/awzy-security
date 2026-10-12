@@ -60,17 +60,41 @@ changes anything.
 
 ## Applying, and the drift check
 
-CI builds and deploys code, but never applies Terraform: a person does, with the credentials
-above, so CI's roles can't change the accounts. A merged change to `build/` or `corp-portal/` stays
-unapplied until then. The `terraform-drift` workflow plans both modules against their recorded
-state each day and after every change here, as a read-only role (`corp-portal/drift.tf`), and keeps
-an issue open for each module with changes waiting, listing them, until it's applied.
+`build/` and `corp-portal/` are applied by CI (ADR 0115), in the `terraform-corp` workflow:
 
-It needs the role's ARN in the repository variable `AWZY_CORP_AWS_PLAN_ROLE_ARN` (from
-`tofu output ci_plan_role_arn` in `corp-portal/`), and this `deployment.env` in the repository
-secret `AWZY_CORP_DEPLOYMENT_ENV` (`gh secret set AWZY_CORP_DEPLOYMENT_ENV <
-deploy/terraform/corp/deployment.env`). Its logs print resource addresses only, never plan
-details, since those hold account IDs.
+- **On a pull request** that changes them, it plans both against their recorded state, as the
+  read-only role `awzy-ci-plan` (`corp-portal/drift.tf`), and keeps a comment on the pull request
+  listing what merging would change.
+- **After merge**, the apply waits in the GitHub environment `corp-terraform` until someone
+  approves it, then refreshes, plans, and applies both, as `awzy-ci-terraform`
+  (`corp-portal/terraform-ci.tf`), which only that environment can assume.
+- **Daily**, the `terraform-drift` workflow plans both again and keeps an issue open for each
+  module with changes waiting, until they're applied: an apply nobody approved, or one that
+  failed.
+
+Logs and comments print resource addresses only, never plan details, since those hold account
+IDs. `state/` and `org/` run in the management account and stay with a person, with the
+credentials above.
+
+CI needs, from `corp-portal/`'s outputs and files here:
+
+| Where | Name | Value |
+| --- | --- | --- |
+| Repository variable | `AWZY_CORP_AWS_PLAN_ROLE_ARN` | `tofu output ci_plan_role_arn` |
+| Repository secret | `AWZY_CORP_DEPLOYMENT_ENV` | this `deployment.env` |
+| Repository variable | `AWZY_CORP_AWS_TERRAFORM_ROLE_ARN` | `tofu output ci_terraform_role_arn` |
+| `corp-terraform` environment secret | `AWZY_CORP_CLOUDFLARE_TOKEN` | the Cloudflare API token |
+
+The two roles are the one part applied by hand, once, since a pipeline can't create the role it
+runs as. Then create the environment with a required reviewer and set the rest:
+
+```sh
+gh api -X PUT repos/{owner}/{repo}/environments/corp-terraform \
+  -F 'reviewers[][type]=User' -F "reviewers[][id]=$(gh api user --jq .id)" \
+  -F 'deployment_branch_policy[protected_branches]=true' -F 'deployment_branch_policy[custom_branch_policies]=false'
+gh variable set AWZY_CORP_AWS_TERRAFORM_ROLE_ARN --body "$(cd corp-portal && tofu output -raw ci_terraform_role_arn)"
+gh secret set AWZY_CORP_CLOUDFLARE_TOKEN --env corp-terraform < ~/.config/awzy/cf-token
+```
 
 ## First run (already done)
 

@@ -1,18 +1,12 @@
 name: terraform-drift
 
-# Corp Terraform that's merged but not applied (tools/ci/terraform-drift.sh). CI never applies
-# Terraform; a person does, so this says when one hasn't: a plan of each module against its
-# recorded state, as the read-only plan role (deploy/terraform/corp/corp-portal/drift.tf), with an
-# issue kept open per module until it's applied. Daily, and after every change to that Terraform.
+# Corp Terraform that's merged but not applied (tools/ci/terraform-drift.sh): terraform-corp's
+# apply is waiting for approval, or failed. A plan of each module against its recorded state, as
+# the read-only plan role (deploy/terraform/corp/corp-portal/drift.tf), with an issue kept open
+# per module until it's applied. Daily, so a merge's own apply has time to run first.
 on:
   schedule:
     - cron: "17 13 * * *"
-  push:
-    branches: [main]
-    paths:
-      - "deploy/terraform/corp/**"
-      - "tools/ci/terraform-drift.sh"
-      - ".github/workflows/terraform-drift.yml"
   workflow_dispatch:
 
 concurrency:
