@@ -58,7 +58,8 @@ async fn serve(addr: &str) -> anyhow::Result<()> {
 
 fn token(secret: &str, sub: &str, act: Option<&str>, group: &str) -> anyhow::Result<String> {
     let exp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs() + 3600;
-    let mut claims = json!({ "iss": "https://idp.bench", "aud": "awzy-gateway", "sub": sub, "groups": [group], "exp": exp });
+    let mut claims =
+        json!({ "iss": "https://idp.bench", "aud": "awzy-gateway", "sub": sub, "groups": [group], "exp": exp });
     if let Some(account) = act {
         claims["act"] = json!({ "sub": account });
     }
@@ -78,7 +79,10 @@ fn call(i: usize) -> Value {
 
 async fn load(url: String, clients: usize, seconds: u64) -> anyhow::Result<()> {
     let secret = std::env::var(SECRET_ENV).map_err(|_| anyhow::anyhow!("{SECRET_ENV} is not set"))?;
-    let tokens = Arc::new([token(&secret, "alice", None, "security")?, token(&secret, "bob", Some("sales-genie"), "engineering")?]);
+    let tokens = Arc::new([
+        token(&secret, "alice", None, "security")?,
+        token(&secret, "bob", Some("sales-genie"), "engineering")?,
+    ]);
     let deadline = Instant::now() + Duration::from_secs(seconds);
     let failed = Arc::new(AtomicUsize::new(0));
     let mut workers = Vec::new();
@@ -124,7 +128,12 @@ async fn load(url: String, clients: usize, seconds: u64) -> anyhow::Result<()> {
     anyhow::ensure!(!all.is_empty(), "no successful calls ({} failed)", failed.load(Ordering::Relaxed));
     let at = |p: f64| all[((all.len() as f64 - 1.0) * p).round() as usize].as_secs_f64() * 1000.0;
     println!("{url}, {clients} clients, {seconds}s; a third also checked on a document");
-    println!("calls    {} ok, {} failed, {:.0}/s", all.len(), failed.load(Ordering::Relaxed), all.len() as f64 / seconds as f64);
+    println!(
+        "calls    {} ok, {} failed, {:.0}/s",
+        all.len(),
+        failed.load(Ordering::Relaxed),
+        all.len() as f64 / seconds as f64
+    );
     println!("p50 {:.2} ms, p95 {:.2} ms, p99 {:.2} ms, p99.9 {:.2} ms", at(0.5), at(0.95), at(0.99), at(0.999));
     Ok(())
 }
