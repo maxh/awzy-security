@@ -1,5 +1,6 @@
 //! What a [`crate::Pdp`] works out once per bundle so each check doesn't: the entities it has
-//! parsed, each policy's ID and challenge, and the policies with every challenge set aside.
+//! parsed and assembled, each policy's ID and challenge, and each action's policies, with and
+//! without the challenges.
 //!
 //! Profiling a PDP under load found most of a check's CPU outside policy evaluation: in Cedar's
 //! JSON parser, for entities that arrive check after check unchanged (the same principals,
@@ -11,7 +12,9 @@ use std::{
 };
 
 use awzy_model::ChallengeKind;
-use cedar_policy::{Context, Entities, Entity, EntityUid, PolicyId, PolicySet, RestrictedExpression, Schema};
+use cedar_policy::{
+    ActionConstraint, Context, Entities, Entity, EntityUid, PolicyId, PolicySet, RestrictedExpression, Schema,
+};
 
 /// Parsed entities kept before the cache starts over: enough for a working set of principals
 /// and resources, a few megabytes.
@@ -20,6 +23,9 @@ const CAPACITY: usize = 10_000;
 /// Cedar entities by their JSON, parsed and validated against one schema.
 pub(crate) struct ParsedEntities {
     parsed: RwLock<HashMap<String, Arc<Entity>>>,
+    /// Requests' whole entity sets, by their entities' JSON in order, with Cedar's transitive
+    /// closure computed: the same principal and resource come back check after check.
+    assembled: RwLock<HashMap<String, Entities>>,
     /// The schema's action entities when it groups actions, for `action in Action::"group"`.
     /// Without groups they say nothing: Cedar treats an action it has no entity for as one with
     /// no ancestors, and adding them to each request's entities is a third of the work.
@@ -28,20 +34,32 @@ pub(crate) struct ParsedEntities {
 
 impl ParsedEntities {
     pub(crate) fn new(schema: &Schema) -> anyhow::Result<Self> {
-        let actions = schema.action_entities()?;
-        let grouped = actions.iter().any(|a| actions.ancestors(&a.uid()).is_some_and(|mut up| up.next().is_some()));
-        let actions = if grouped { actions.into_iter().collect() } else { Vec::new() };
-        Ok(Self { parsed: RwLock::default(), actions })
+        let actions = if groups_actions(schema)? { schema.action_entities()?.into_iter().collect() } else { Vec::new() };
+        Ok(Self { parsed: RwLock::default(), assembled: RwLock::default(), actions })
     }
 
     /// `json` (an array of Cedar entity JSON) as Cedar entities, validated against `schema`
     /// with its action entities added: what `Entities::from_json_value` gives, from entities
     /// parsed once each.
     pub(crate) fn entities(&self, schema: &Schema, json: Vec<serde_json::Value>) -> anyhow::Result<Entities> {
+        // The same text is the same entity; an entity written another way is only a miss.
+        let keys: Vec<String> = json.iter().map(|v| v.to_string()).collect();
+        let whole = keys.join("\n");
+        if let Some(entities) = self.assembled.read().unwrap_or_else(|e| e.into_inner()).get(&whole) {
+            return Ok(entities.clone());
+        }
+        let entities = self.assemble(schema, json, keys)?;
+        let mut assembled = self.assembled.write().unwrap_or_else(|e| e.into_inner());
+        if assembled.len() >= CAPACITY {
+            assembled.clear();
+        }
+        assembled.insert(whole, entities.clone());
+        Ok(entities)
+    }
+
+    fn assemble(&self, schema: &Schema, json: Vec<serde_json::Value>, keys: Vec<String>) -> anyhow::Result<Entities> {
         let mut parsed = Vec::with_capacity(json.len());
-        for value in json {
-            // The same text is the same entity; an entity written another way is only a miss.
-            let key = value.to_string();
+        for (value, key) in json.into_iter().zip(keys) {
             let cached = self.parsed.read().unwrap_or_else(|e| e.into_inner()).get(&key).cloned();
             let entity = match cached {
                 Some(entity) => entity,
@@ -114,26 +132,68 @@ fn restricted(value: &serde_json::Value) -> Option<RestrictedExpression> {
     })
 }
 
-/// Each policy's ID as decisions report it and the challenge it asks for, and the policies
-/// without the `@challenge` ones.
-pub(crate) struct PreparedPolicies {
-    ids: HashMap<PolicyId, String>,
-    challenges: HashMap<PolicyId, ChallengeKind>,
-    /// Asks whether a request is allowed once its challenges are set aside. A set that has set
-    /// aside some passed challenges gives the same set without the rest.
+/// Whether the schema puts any action in a group, for `action in Action::"group"`.
+fn groups_actions(schema: &Schema) -> anyhow::Result<bool> {
+    let actions = schema.action_entities()?;
+    let grouped = actions.iter().any(|a| actions.ancestors(&a.uid()).is_some_and(|mut up| up.next().is_some()));
+    Ok(grouped)
+}
+
+/// The policies a check evaluates, and the same without the `@challenge` ones: whether a
+/// request is allowed once its challenges are set aside. (A set that has set aside some passed
+/// challenges gives the same set without the rest.)
+pub(crate) struct Policies {
+    pub(crate) all: PolicySet,
     pub(crate) without_challenges: PolicySet,
 }
 
+impl Policies {
+    fn new(policies: Vec<cedar_policy::Policy>) -> anyhow::Result<Self> {
+        let rest = policies.iter().filter(|p| p.annotation("challenge").is_none()).cloned();
+        Ok(Self { without_challenges: PolicySet::from_policies(rest)?, all: PolicySet::from_policies(policies)? })
+    }
+}
+
+/// Each policy's ID as decisions report it and the challenge it asks for, and each action's
+/// policies.
+pub(crate) struct PreparedPolicies {
+    ids: HashMap<PolicyId, String>,
+    challenges: HashMap<PolicyId, ChallengeKind>,
+    /// Every policy, for an action the schema doesn't name.
+    every: Policies,
+    /// By action ID: only the policies whose scope can match it. Cedar builds and evaluates each
+    /// policy's condition for every request, and most are scoped to other actions. Empty when
+    /// the schema groups actions, where scope matching needs the action's ancestors.
+    by_action: HashMap<String, Policies>,
+}
+
 impl PreparedPolicies {
-    pub(crate) fn new(policies: &PolicySet) -> anyhow::Result<Self> {
+    pub(crate) fn new(policies: &PolicySet, schema: &Schema) -> anyhow::Result<Self> {
         let ids = policies.policies().map(|p| (p.id().clone(), crate::policy_id(p))).collect();
         let challenges = policies
             .policies()
             .filter_map(|p| Some((p.id().clone(), p.annotation("challenge").and_then(ChallengeKind::parse)?)))
             .collect();
-        let without_challenges =
-            PolicySet::from_policies(policies.policies().filter(|p| p.annotation("challenge").is_none()).cloned())?;
-        Ok(Self { ids, challenges, without_challenges })
+        let mut by_action = HashMap::new();
+        if !groups_actions(schema)? {
+            // The Action type the PDP's requests use; a namespaced schema's actions keep every policy.
+            for action in schema.actions().filter(|a| a.type_name().to_string() == "Action") {
+                let applies = |p: &&cedar_policy::Policy| match p.action_constraint() {
+                    ActionConstraint::Any => true,
+                    ActionConstraint::Eq(a) => a == *action,
+                    // Without groups, `in` an action is that action.
+                    ActionConstraint::In(actions) => actions.contains(action),
+                };
+                let scoped = Policies::new(policies.policies().filter(applies).cloned().collect())?;
+                by_action.insert(action.id().unescaped().to_string(), scoped);
+            }
+        }
+        Ok(Self { ids, challenges, every: Policies::new(policies.policies().cloned().collect())?, by_action })
+    }
+
+    /// The policies a check of `action` evaluates.
+    pub(crate) fn for_action(&self, action: &str) -> &Policies {
+        self.by_action.get(action).unwrap_or(&self.every)
     }
 
     /// The ID decisions report for the policy Cedar calls `id`.
@@ -192,6 +252,25 @@ mod tests {
         assert_eq!(up, vec![r#"Action::"reading""#]);
 
         assert!(ParsedEntities::new(&schema()).unwrap().actions.is_empty(), "awzy's schema doesn't group actions");
+    }
+
+    #[test]
+    fn each_action_evaluates_the_policies_whose_scope_can_match_it() {
+        let policies: PolicySet = crate::DEFAULT_POLICIES.parse().unwrap();
+        let prepared = PreparedPolicies::new(&policies, &schema()).unwrap();
+        let read: EntityUid = r#"Action::"read""#.parse().unwrap();
+        let can_read = |p: &cedar_policy::Policy| match p.action_constraint() {
+            ActionConstraint::Any => true,
+            ActionConstraint::Eq(a) => a == read,
+            ActionConstraint::In(actions) => actions.contains(&read),
+        };
+        let scoped: Vec<_> = prepared.for_action("read").all.policies().map(|p| p.id().clone()).collect();
+        let expected: Vec<_> = policies.policies().filter(|p| can_read(p)).map(|p| p.id().clone()).collect();
+        assert_eq!(scoped.len(), expected.len());
+        assert!(expected.iter().all(|id| scoped.contains(id)));
+        assert!(scoped.len() < policies.policies().count(), "other actions' policies are left out");
+
+        assert_eq!(prepared.for_action("no-such-action").all.policies().count(), policies.policies().count());
     }
 
     #[test]

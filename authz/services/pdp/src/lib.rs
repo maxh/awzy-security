@@ -152,7 +152,7 @@ impl Pdp {
         let probe = serde_json::json!({ "risk_score": 0, "human_present": true, "support_areas": [] });
         let knows_support_areas = Context::from_json_value(probe, Some((&schema, &view))).is_ok();
         Ok(Self {
-            prepared: prepared::PreparedPolicies::new(&policies)?,
+            prepared: prepared::PreparedPolicies::new(&policies, &schema)?,
             parsed: prepared::ParsedEntities::new(&schema)?,
             schema,
             policies,
@@ -265,12 +265,14 @@ impl Pdp {
             risk: facts.risk,
             automation: facts.automation.filter(|_| self.knows_automation),
         };
+        let scoped = self.prepared.for_action(&req.action);
         let without_passed;
         let policy_set = if passed.is_empty() {
-            &self.policies
+            &scoped.all
         } else {
             without_passed = PolicySet::from_policies(
-                self.policies
+                scoped
+                    .all
                     .policies()
                     .filter(|p| !(p.annotation("challenge").is_some() && passed.contains(&policy_id(p))))
                     .cloned(),
@@ -338,7 +340,7 @@ impl Pdp {
                 match kinds {
                     // And only in front of something policy would otherwise allow: passing a
                     // challenge on a request nothing permits would still end in a deny.
-                    Some(kinds) if !kinds.is_empty() && self.allowed_without_challenges(&request, entities) => {
+                    Some(kinds) if !kinds.is_empty() && self.allowed_without_challenges(&req.action, &request, entities) => {
                         Verdict::Challenge { challenges: kinds.into_iter().collect() }
                     }
                     _ => Verdict::Deny,
@@ -351,8 +353,8 @@ impl Pdp {
 
 impl Pdp {
     /// Whether `request` is allowed once every `@challenge` policy is set aside.
-    fn allowed_without_challenges(&self, request: &Request, entities: &Entities) -> bool {
-        let rest = &self.prepared.without_challenges;
+    fn allowed_without_challenges(&self, action: &str, request: &Request, entities: &Entities) -> bool {
+        let rest = &self.prepared.for_action(action).without_challenges;
         let evaluating = std::time::Instant::now();
         let allowed =
             self.authorizer.is_authorized(request, rest, entities).decision() == cedar_policy::Decision::Allow;
