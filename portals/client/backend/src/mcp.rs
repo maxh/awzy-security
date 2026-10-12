@@ -302,6 +302,7 @@ impl ClientPortalMcp {
         Extension(parts): Extension<Parts>,
         Parameters(p): Parameters<RequestLiftParams>,
     ) -> Result<Json<RequestLiftOut>, ErrorData> {
+        self.changes_allowed()?;
         let viewer = self.allow(&parts, PortalAction::View, PortalArea::Challenges).await?;
         self.record(&viewer, "request_containment_lift");
         let mut client =
@@ -408,6 +409,7 @@ impl ClientPortalMcp {
         Extension(parts): Extension<Parts>,
         Parameters(p): Parameters<ProposePolicyParams>,
     ) -> Result<Json<Proposal>, ErrorData> {
+        self.changes_allowed()?;
         let viewer = self.allow(&parts, PortalAction::Administer, PortalArea::Policies).await?;
         self.record(&viewer, "propose_policy");
         let schema = match p.schema {
@@ -434,6 +436,14 @@ impl ClientPortalMcp {
 }
 
 impl ClientPortalMcp {
+    /// Refuses a tool that changes something on a read-only portal ([`crate::read_only`]).
+    fn changes_allowed(&self) -> Result<(), ErrorData> {
+        if self.services.read_only {
+            return Err(ErrorData::invalid_request(crate::read_only::REFUSED, None));
+        }
+        Ok(())
+    }
+
     /// The signed-in caller, if the PDP lets them do `action` in `area`.
     /// Whether the viewer may see one of the sensitive fields (ADR 0103), as the portal checks it.
     async fn visible(&self, viewer: &Viewer, area: PortalArea, field: &str) -> Result<bool, ErrorData> {

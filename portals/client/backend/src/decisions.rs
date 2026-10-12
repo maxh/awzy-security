@@ -641,6 +641,7 @@ mod tests {
             context_api: None,
             bot: None,
             activity: Default::default(),
+            read_only: false,
         });
         let alice = crate::testing::human("alice", "security");
         let run = |q: &str| {

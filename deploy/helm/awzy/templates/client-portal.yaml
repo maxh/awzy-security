@@ -36,6 +36,12 @@
 {{- if $p.publicUrl }}
 {{- $env = append $env (dict "name" "AWZY_PORTAL_PUBLIC_URL" "value" $p.publicUrl) }}
 {{- end }}
+{{- /* Anyone can sign in to a demo, so by default it changes nothing. */ -}}
+{{- $readOnly := .Values.demoIdp.enabled }}
+{{- if ne $p.readOnly nil }}{{- $readOnly = $p.readOnly }}{{- end }}
+{{- if $readOnly }}
+{{- $env = append $env (dict "name" "AWZY_PORTAL_READ_ONLY" "value" "true") }}
+{{- end }}
 {{- if $p.auth.subjectClaim }}
 {{- $env = append $env (dict "name" "AWZY_AUTH_SUBJECT_CLAIM" "value" $p.auth.subjectClaim) }}
 {{- end }}
