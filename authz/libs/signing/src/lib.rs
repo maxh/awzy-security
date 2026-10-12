@@ -79,6 +79,14 @@ pub fn fallback_payload(version: i64, changed_by: &str, changed_at_unix: i64, co
     format!("awzy.fallback.v1\n{version}\n{changed_by}\n{changed_at_unix}\n{content}\n").into_bytes()
 }
 
+/// The bytes a model routing setting signs (ADR 0114): its version, who set it and when, in Unix
+/// seconds, and the SHA-256 of its JSON as stored. The version lets a service refuse an older
+/// routing offered as the current one.
+pub fn model_routing_payload(version: i64, changed_by: &str, changed_at_unix: i64, routing_json: &str) -> Vec<u8> {
+    let content = format!("{:x}", Sha256::digest(routing_json.as_bytes()));
+    format!("awzy.model-routing.v1\n{version}\n{changed_by}\n{changed_at_unix}\n{content}\n").into_bytes()
+}
+
 /// Signs payloads: a PEM key ([`BundleSigner`]) or a cloud KMS key.
 #[async_trait::async_trait]
 pub trait PayloadSigner: Send + Sync {

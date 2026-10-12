@@ -12,6 +12,7 @@ members = [
     "libs/telemetry",
     "tools/dev-idp",
     "authz/libs/activity",
+    "authz/libs/model-routing",
     "authz/libs/proto",
     "authz/services/challenge",
     "authz/demo/evals",
@@ -128,6 +129,7 @@ awzy-kube = { path = "libs/kube" }
 awzy-portal = { path = "libs/portal" }
 awzy-registry = { path = "portals/corp/registry" }
 awzy-activity = { path = "authz/libs/activity" }
+awzy-model-routing = { path = "authz/libs/model-routing" }
 awzy-authz-proto = { path = "authz/libs/proto" }
 awzy-llm = { path = "libs/llm" }
 awzy-migrations = { path = "libs/migrations" }

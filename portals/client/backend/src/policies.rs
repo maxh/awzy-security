@@ -291,7 +291,8 @@ pub(crate) mod tests {
         policy_service_client::PolicyServiceClient,
         policy_service_server::{PolicyService, PolicyServiceServer},
         CreateDraftResponse, EnforcementSetting, GetActiveResponse, GetBundleResponse, GetEnforcementRequest,
-        GetEnforcementResponse, GetOutageFallbackRequest, GetOutageFallbackResponse, ListBundlesResponse,
+        GetEnforcementResponse, GetModelRoutingRequest, GetModelRoutingResponse, GetOutageFallbackRequest,
+        GetOutageFallbackResponse, ListBundlesResponse, ModelRouting, SetModelRoutingRequest, SetModelRoutingResponse,
         ListEnforcementChangesRequest, ListEnforcementChangesResponse, PublishResponse, SetEnforcementRequest,
         SetEnforcementResponse, SetOutageFallbackRequest, SetOutageFallbackResponse,
     };
@@ -300,10 +301,14 @@ pub(crate) mod tests {
     use super::*;
     use crate::{testing, Services};
 
-    /// In-memory awzy-policy: validates with the real PDP loader, versions from 1, and keeps
-    /// enforcement switches newest first.
+    /// In-memory awzy-policy: validates with the real PDP loader, versions from 1, keeps
+    /// enforcement switches newest first, and the model routing's versions.
     #[derive(Default, Clone)]
-    pub(crate) struct FakePolicy(Arc<Mutex<Vec<WireBundle>>>, Arc<Mutex<Vec<EnforcementSetting>>>);
+    pub(crate) struct FakePolicy(
+        Arc<Mutex<Vec<WireBundle>>>,
+        Arc<Mutex<Vec<EnforcementSetting>>>,
+        Arc<Mutex<Vec<ModelRouting>>>,
+    );
 
     #[tonic::async_trait]
     impl PolicyService for FakePolicy {
@@ -414,6 +419,31 @@ pub(crate) mod tests {
             _: Request<SetOutageFallbackRequest>,
         ) -> Result<Response<SetOutageFallbackResponse>, Status> {
             Err(Status::unimplemented("fake"))
+        }
+        async fn get_model_routing(
+            &self,
+            _: Request<GetModelRoutingRequest>,
+        ) -> Result<Response<GetModelRoutingResponse>, Status> {
+            let routing = self.2.lock().unwrap().last().cloned().unwrap_or(ModelRouting {
+                routing_json: "{}".into(),
+                ..Default::default()
+            });
+            Ok(Response::new(GetModelRoutingResponse { routing: Some(routing), unchanged: false }))
+        }
+        async fn set_model_routing(
+            &self,
+            req: Request<SetModelRoutingRequest>,
+        ) -> Result<Response<SetModelRoutingResponse>, Status> {
+            let req = req.into_inner();
+            let mut versions = self.2.lock().unwrap();
+            let routing = ModelRouting {
+                version: versions.len() as i64 + 1,
+                routing_json: req.routing_json,
+                changed_by_actor: req.changed_by_actor,
+                ..Default::default()
+            };
+            versions.push(routing.clone());
+            Ok(Response::new(SetModelRoutingResponse { routing: Some(routing) }))
         }
         async fn list_enforcement_changes(
             &self,

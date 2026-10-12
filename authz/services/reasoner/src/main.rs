@@ -34,8 +34,17 @@ async fn main() -> anyhow::Result<()> {
         }
     };
     let investigations = if or("AWZY_REASONER_INVESTIGATIONS", "false") == "true" {
+        let router = std::sync::Arc::new(awzy_llm::ModelRouter::from_env().await?);
+        // The investigations route as set in the client portal and kept by awzy-policy (ADR 0114).
+        if let Ok(addr) = std::env::var("AWZY_POLICY_ADDR") {
+            let policy = awzy_authz_proto::policy::v1::policy_service_client::PolicyServiceClient::new(
+                awzy_service_auth::grpc_channel(tonic::transport::Channel::from_shared(addr)?.connect_lazy(), "awzy-policy"),
+            );
+            let setting = std::sync::Arc::new(awzy_model_routing::RoutingSetting::new(router.clone()));
+            tokio::spawn(setting.follow(policy, awzy_model_routing::verifier_from_env()?));
+        }
         Some(awzy_reasoner::runs::Investigations {
-            models: awzy_llm::ModelRouter::from_env().await?,
+            models: router,
             monthly_tokens: or("AWZY_REASONER_INVESTIGATION_TOKENS", "2000000").parse()?,
             privileged_groups: or("AWZY_REASONER_PRIVILEGED_GROUPS", "it,security")
                 .split(',')

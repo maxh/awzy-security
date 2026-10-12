@@ -40,7 +40,7 @@ locals {
   # before it installs (ADR 0098). Raise it when a chart starts needing something new from here or
   # from the cloud layer (a Secret, a key, a value), and raise the chart's bootstrap.required to
   # match in the same change; tools/ci/check-bootstrap-level.sh keeps the two equal.
-  bootstrap_level = 3
+  bootstrap_level = 4
 
   namespaces = {
     system = "awzy-system"
@@ -210,6 +210,16 @@ resource "kubernetes_secret_v1" "policy_verify" {
   metadata {
     name      = "awzy-policy-verify"
     namespace = kubernetes_namespace_v1.awzy["system"].metadata[0].name
+  }
+  data = { "verify.pem" = local.c.policy_signing.public_key_pem }
+}
+
+# The same public key for the client portal, which takes Awzy Bot's model routing only as
+# awzy-policy signed it (ADR 0114).
+resource "kubernetes_secret_v1" "policy_verify_portal" {
+  metadata {
+    name      = "awzy-policy-verify"
+    namespace = kubernetes_namespace_v1.awzy["portal"].metadata[0].name
   }
   data = { "verify.pem" = local.c.policy_signing.public_key_pem }
 }

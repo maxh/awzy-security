@@ -41,6 +41,14 @@ pub enum BotModel {
 }
 
 impl BotModel {
+    /// The install's router, which follows the model routing; none for a scripted model.
+    pub fn router(&self) -> Option<Arc<ModelRouter>> {
+        match self {
+            Self::Routed(router) => Some(router.clone()),
+            Self::Scripted(_) => None,
+        }
+    }
+
     /// The model for one turn of a conversation, which stays on it throughout.
     fn conversation(&self) -> Result<BotConversation, LlmError> {
         Ok(match self {

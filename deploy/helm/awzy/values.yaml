@@ -10,7 +10,7 @@ bootstrap:
   # 2: metrics-server, which the autoscalers below read CPU from (#66)
   # 3: the connectors' credentials in the cloud's secrets manager, in place of bootstrap's Secrets
   #    (ADR 0104)
-  required: 3
+  required: 4
 
 image:
   # install_contract.registry_prefix, e.g. 123456789012.dkr.ecr.us-east-2.amazonaws.com/awzy

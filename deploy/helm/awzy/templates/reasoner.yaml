@@ -24,7 +24,15 @@
   (dict "name" "AWZY_REASONER_PRIVILEGED_GROUPS" "value" (join "," .privilegedGroups))
 ) }}
 {{- end }}{{- end }}
+{{- $volumes := list -}}
+{{- $mounts := list -}}
+{{- /* Investigations' model routing comes signed from awzy-policy (ADR 0114). */ -}}
+{{- if $inv.enabled }}
+{{- $env = append $env (dict "name" "AWZY_POLICY_VERIFY_KEY_FILE" "value" "/var/run/secrets/awzy/policy-verify/verify.pem") }}
+{{- $volumes = append $volumes (dict "name" "policy-verify" "secret" (dict "secretName" (required "policy.verifyKeySecret is required" .Values.policy.verifyKeySecret))) }}
+{{- $mounts = append $mounts (dict "name" "policy-verify" "mountPath" "/var/run/secrets/awzy/policy-verify" "readOnly" true) }}
+{{- end }}
 {{ include "awzy.service" (dict "root" . "name" "awzy-reasoner" "namespace" $sys "values" .Values.reasoner
   "tokens" (list "awzy-challenge" "awzy-context" "awzy-policy")
-  "env" $env) }}
+  "env" $env "volumes" $volumes "mounts" $mounts) }}
 {{- end }}

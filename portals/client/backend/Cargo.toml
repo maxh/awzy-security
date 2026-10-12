@@ -36,6 +36,7 @@ chrono.workspace = true
 clickhouse.workspace = true
 rmcp.workspace = true
 awzy-llm.workspace = true
+awzy-model-routing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tonic.workspace = true

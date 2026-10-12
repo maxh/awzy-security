@@ -88,5 +88,11 @@ data:
   support.pub: {{ . | quote }}
 {{- end }}
 ---
+{{- /* Awzy Bot's model routing comes signed from awzy-policy (ADR 0114). */ -}}
+{{- if $p.awzyBot.enabled }}
+{{- $env = append $env (dict "name" "AWZY_POLICY_VERIFY_KEY_FILE" "value" "/var/run/secrets/awzy/policy-verify/verify.pem") }}
+{{- $volumes = append $volumes (dict "name" "policy-verify" "secret" (dict "secretName" (required "policy.verifyKeySecret is required" .Values.policy.verifyKeySecret))) }}
+{{- $mounts = append $mounts (dict "name" "policy-verify" "mountPath" "/var/run/secrets/awzy/policy-verify" "readOnly" true) }}
+{{- end }}
 {{ include "awzy.service" (dict "root" . "name" "awzy-client-portal" "namespace" .Values.namespaces.portal "values" $p "env" $env
   "tokens" (list "awzy-challenge" "awzy-context" "awzy-pdp" "awzy-policy") "volumes" $volumes "mounts" $mounts) }}

@@ -25,6 +25,7 @@ mod investigations;
 mod issuers;
 mod lookup;
 mod mcp;
+pub mod models;
 mod node;
 mod outage;
 mod policies;
@@ -214,6 +215,7 @@ pub struct ClientPortalQuery(
     lookup::LookupQuery,
     diagnostics::DiagnosticsQuery,
     repairs::RepairQuery,
+    models::ModelsQuery,
 );
 
 #[derive(MergedObject, Default)]
@@ -231,6 +233,7 @@ pub struct ClientPortalMutation(
     investigations::InvestigationMutation,
     repairs::RepairMutation,
     connector_config::ConnectorConfigMutation,
+    models::ModelsMutation,
 );
 
 /// Live updates: the Challenges page's challenges and containments.

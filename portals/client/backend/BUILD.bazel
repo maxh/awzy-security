@@ -18,6 +18,7 @@ awzy_service(
         "//authz/libs/activity",
         "//authz/libs/secrets-aws",
         "//authz/libs/identity",
+        "//authz/libs/model-routing",
         "//authz/services/pdp",
         "//authz/libs/proto",
         "//authz/libs/service-auth",
