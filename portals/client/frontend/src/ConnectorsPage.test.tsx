@@ -1,57 +1,23 @@
 // @vitest-environment jsdom
-import { MantineProvider } from "@mantine/core";
-import { cleanup, render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { RelayEnvironmentProvider } from "react-relay";
-import { createMockEnvironment, MockPayloadGenerator } from "relay-test-utils";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { MockPayloadGenerator } from "relay-test-utils";
+import { describe, expect, it, vi } from "vitest";
 
 import { Configure } from "./ConnectorsPage";
-
-// relay-test-utils' mock environment calls jest.fn; Vitest's vi is the same API.
-vi.hoisted(() => Object.assign(globalThis, { jest: vi }));
+import { renderWithRelay } from "./testing";
 
 vi.mock("@tanstack/react-router", () => ({
   getRouteApi: () => ({ useLoaderData: () => null }),
   useRouter: () => ({ invalidate: () => Promise.resolve() }),
 }));
 
-beforeAll(() => {
-  // Mantine reads these, and jsdom has neither.
-  window.matchMedia = (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    // MediaQueryList still declares the old listener methods, so a stand-in has them too.
-    // oxlint-disable-next-line typescript/no-deprecated
-    addListener: () => {},
-    // oxlint-disable-next-line typescript/no-deprecated
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false,
-  });
-  globalThis.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  };
-});
-
-// Without Vitest globals, Testing Library doesn't unmount between tests by itself.
-afterEach(cleanup);
-
 const JIRA = { name: "JIRA" as const, key: "jira", title: "Jira", credential: "API token" };
 
 function renderConfigure(credentialsSupported: boolean) {
-  const environment = createMockEnvironment();
   const onClose = vi.fn();
-  render(
-    <MantineProvider>
-      <RelayEnvironmentProvider environment={environment}>
-        <Configure connector={JIRA} current={undefined} credentialsSupported={credentialsSupported} onClose={onClose} />
-      </RelayEnvironmentProvider>
-    </MantineProvider>,
+  const environment = renderWithRelay(
+    <Configure connector={JIRA} current={undefined} credentialsSupported={credentialsSupported} onClose={onClose} />,
   );
   return { environment, onClose };
 }
