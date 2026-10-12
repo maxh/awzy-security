@@ -103,3 +103,20 @@ npm.npm_translate_lock(
     verify_node_modules_ignored = "//:.bazelignore",
 )
 use_repo(npm, "npm")
+
+# ---- Python client library (ADR 0114): its tests, from the lockfile its pyproject.toml makes
+bazel_dep(name = "rules_python", version = "2.4.0")
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    is_default = True,
+    python_version = "3.12",
+)
+
+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+pip.parse(
+    hub_name = "pypi_sdk",
+    python_version = "3.12",
+    requirements_lock = "//authz/sdks/python:requirements_lock.txt",
+)
+use_repo(pip, "pypi_sdk")

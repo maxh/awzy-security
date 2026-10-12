@@ -1,7 +1,7 @@
 name: sdks
 
-# The client libraries in languages Bazel doesn't build (ADR 0114), each with its own toolchain:
-# lint, types, and its tests, which include the shared conformance spec.
+# Each client library's own linters (ADR 0114), as oxlint is for TypeScript. Their tests, the shared
+# conformance spec among them, run in Bazel with everything else.
 on:
   pull_request:
     paths:
@@ -31,4 +31,3 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - run: mypy src
-      - run: pytest -q

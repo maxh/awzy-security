@@ -1,0 +1,33 @@
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+
+# The Python client library (ADR 0114). pyproject.toml is the source of truth for its dependencies;
+# requirements_lock.txt is made from it (`pip-compile --extra test --generate-hashes
+# --strip-extras --output-file requirements_lock.txt pyproject.toml`), and Bazel installs from that.
+exports_files(["requirements_lock.txt"])
+
+py_library(
+    name = "awzy_authz",
+    srcs = glob(["src/awzy_authz/*.py"]),
+    data = ["src/awzy_authz/py.typed"],
+    imports = ["src"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@pypi_sdk//httpx",
+        "@pypi_sdk//pyjwt",
+        # PyJWT's [crypto] extra, for RS256 and ES256.
+        "@pypi_sdk//cryptography",
+    ],
+)
+
+# Its tests, the shared conformance spec among them, run by pytest.
+py_test(
+    name = "unit",
+    size = "small",
+    srcs = glob(["tests/*.py"]),
+    data = ["//authz/sdks/conformance:scenarios"],
+    main = "tests/pytest_main.py",
+    deps = [
+        ":awzy_authz",
+        "@pypi_sdk//pytest",
+    ],
+)
