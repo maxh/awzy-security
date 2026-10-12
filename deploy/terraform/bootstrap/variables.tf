@@ -21,9 +21,9 @@ variable "install_contract" {
     registry_prefix = string
     # Each connector's credential in the cloud's secrets manager (ADR 0104).
     connector_secrets = map(string)
-    # The cloud's model service for Awzy Bot and investigations (ADR 0114): bedrock or vertex,
-    # its region, and for vertex the project. Null: the cloud has none, and both stay off.
-    model_service = optional(object({ provider = string, region = string, project = optional(string, "") }))
+    # The cloud's own model service, as a model connection (ADR 0114): { kind = "bedrock", region }
+    # or { kind = "vertex", project, region }. Null: the cloud has none.
+    model_connection = optional(map(string))
   })
 }
 
@@ -67,13 +67,13 @@ variable "client_portal" {
 }
 
 variable "awzy_bot" {
-  description = "Awzy Bot in the client portal (ADR 0048). Needs Claude enabled in your cloud's model service, in the install's account (Amazon Bedrock on AWS, Vertex AI on Google Cloud)"
+  description = "Awzy Bot in the client portal (ADR 0048), with the model llm_model or llm_routing names (ADR 0114)"
   type        = bool
   default     = false
 }
 
 variable "investigations" {
-  description = "awzy-reasoner's investigations of the people it flags (ADR 0071). Needs Claude enabled in your cloud's model service, in the install's account (Amazon Bedrock on AWS, Vertex AI on Google Cloud)"
+  description = "awzy-reasoner's investigations of the people it flags (ADR 0071), with the model llm_model or llm_routing names (ADR 0114)"
   type        = bool
   default     = false
 }
@@ -88,9 +88,27 @@ variable "investigation_budget" {
 }
 
 variable "llm_model" {
-  description = "The model ID in your cloud's model service for Awzy Bot and investigations, when the default (Claude Opus 5.5) isn't reachable directly: on Bedrock, e.g. a cross-region profile like us.anthropic.claude-opus-5-5; on Vertex AI, a pinned version like claude-opus-5-5@YYYYMMDD"
-  type        = string
-  default     = ""
+  description = "The model for Awzy Bot and investigations on your cloud's own model service, in its API's terms (ADR 0114): on Bedrock, { api = \"converse\", model_id = \"us.anthropic.claude-opus-5-5\", cache_points = true }; on Vertex AI, { api = \"gemini\", model = \"gemini-2.5-pro\" } or { api = \"anthropic_messages\", model = \"claude-opus-5-5\" }. Ignored with llm_routing. Null: both features stay off"
+  type        = any
+  default     = null
+}
+
+variable "llm_connections" {
+  description = "Model services beyond your cloud's own, by name (ADR 0114): e.g. { vllm = { kind = \"openai\", url = \"http://vllm.models.svc:8000/v1\" } }. The cloud's own is `cloud`. An API key's environment variable comes from llm_api_key_secrets"
+  type        = map(map(string))
+  default     = {}
+}
+
+variable "llm_api_key_secrets" {
+  description = "The Secrets (in each service's namespace) holding the API keys connections name in api_key_env: { AWZY_LLM_KEY_VLLM = { secret = \"vllm-key\", key = \"api-key\" } }"
+  type        = map(object({ secret = string, key = optional(string, "api-key") }))
+  default     = {}
+}
+
+variable "llm_routing" {
+  description = "The model catalog and each feature's route to start with (ADR 0114), in place of llm_model: { models = [{ name, connection, spec }], routes = { awzy_bot = { targets = [{ model, weight }], fallback = [] }, investigations = … } }. Changed later in the client portal"
+  type        = any
+  default     = null
 }
 
 variable "slack" {

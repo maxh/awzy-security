@@ -255,14 +255,16 @@ impl Tool for CaseTool<'_> {
     }
 }
 
-/// An investigation's run: the checked outcome, the model's own finding before the checks, and
-/// what it cost.
+/// An investigation's run: the checked outcome, the model's own finding before the checks, what
+/// it cost, and which model ran it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Run {
     pub outcome: Outcome,
     pub finding: Option<Finding>,
     pub tool_calls: Vec<String>,
     pub usage: Usage,
+    /// The catalog name of the model that answered last.
+    pub model: String,
 }
 
 /// The most rounds of tool calls one investigation may take.
@@ -280,7 +282,13 @@ pub async fn investigate<P: ModelProvider>(model: &P, case: &Case) -> Result<Run
     );
     let run = run_with_tools(model, SYSTEM, vec![Message::user(opening)], &tools, MAX_TOKENS, MAX_ROUNDS).await?;
     let finding = parse(&run.last.text());
-    Ok(Run { outcome: check(case, finding.clone()), finding, tool_calls: run.calls, usage: run.usage })
+    Ok(Run {
+        outcome: check(case, finding.clone()),
+        finding,
+        tool_calls: run.calls,
+        usage: run.usage,
+        model: run.last.model,
+    })
 }
 
 /// The finding in a model's last answer: the JSON object in it, fenced or not.

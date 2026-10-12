@@ -4,9 +4,9 @@ output "install_contract" {
   value = {
     cloud  = "aws"
     region = data.aws_region.current.region
-    # Claude on Bedrock in the install account; the workload role may already invoke it.
-    model_service = { provider = "bedrock", region = data.aws_region.current.region, project = "" }
-    size_profile  = var.size_profile
+    # Bedrock in the install account, as a model connection (ADR 0114); the workload role may call it.
+    model_connection = { kind = "bedrock", region = data.aws_region.current.region }
+    size_profile     = var.size_profile
     cluster = {
       name     = module.eks.cluster_name
       endpoint = module.eks.cluster_endpoint

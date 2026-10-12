@@ -51,7 +51,7 @@
 {{- end }}
 {{- if $p.awzyBot.enabled }}
 {{- $env = append $env (dict "name" "AWZY_BOT_ENABLED" "value" "true") }}
-{{- $env = concat $env (include "awzy.modelServiceEnv" (dict "root" . "component" $p.awzyBot "what" "Awzy Bot") | fromYamlArray) }}
+{{- $env = concat $env (include "awzy.modelsEnv" . | fromYamlArray) }}
 {{- end }}
 {{- /* Its MCP calls, recorded as activity (ADR 0084); the token's Secret is in its namespace too. */ -}}
 {{- if .Values.intake.enabled }}

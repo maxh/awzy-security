@@ -10,33 +10,55 @@ through awzy.
 Each is a variable in the cluster layer's Terraform (`deploy/terraform/bootstrap`), applied as in
 [Installing awzy](/guides/install/), step 5.
 
-## Awzy Bot and investigations: Claude in your cloud
+## Awzy Bot and investigations: a model of your choosing
 
-Both use Claude through your cloud's own model service, in the install's account, with the
-permissions the cloud layer already gives awzy's workloads. Prompts and answers stay in your
-account. That's Amazon Bedrock on AWS and Vertex AI on Google Cloud; Azure's is planned behind
-the same interface.
+Both work with any model you can reach: your cloud's own model service, in the install's account,
+with the permissions the cloud layer already gives awzy's workloads, or another service you add,
+such as a model you host. On your cloud's own service, prompts and answers stay in your account.
 
-First, enable Anthropic's Claude models in your cloud's model service. If the default model ID
-isn't reachable there, set the one that is with `llm_model`.
+Set the model in the API it speaks, in that API's own terms, with `llm_model`:
 
-**On AWS:** request access to Claude in the install account's Bedrock console, in the install's
-region. Some accounts can only reach Claude through a cross-region inference profile, a model ID
-starting `us.`:
+**On AWS:** any model on Amazon Bedrock, through Bedrock's Converse API. First request access to
+the model in the install account's Bedrock console, in the install's region. Some models are
+reached through a cross-region inference profile, an ID starting `us.`:
 
 ```hcl
-llm_model = "us.anthropic.claude-opus-5-5"
+llm_model = { api = "converse", model_id = "us.anthropic.claude-opus-5-5", cache_points = true }
 ```
 
-**On Google Cloud:** enable Claude Opus in the install project's Vertex AI Model Garden (Model
-Garden, then Claude Opus, then Enable). The cloud layer turns on the Vertex AI API and lets
-awzy's workloads call it. Requests go to Vertex AI's `global` endpoint, which serves Claude from
-any region with capacity; to keep them in one region that offers Claude, set the cloud layer's
-`model_region` (for example `us-east5`). To pin a model version:
+**On Google Cloud:** Gemini needs nothing beyond what the cloud layer sets up (it turns on the
+Vertex AI API and lets awzy's workloads call it). Claude, or another partner model, is enabled
+first in the project's Vertex AI Model Garden. Requests go to Vertex AI's `global` endpoint; to
+keep them in one region, set the cloud layer's `model_region` (for example `us-east5`).
 
 ```hcl
-llm_model = "claude-opus-5-5@YYYYMMDD"
+llm_model = { api = "gemini", model = "gemini-2.5-pro", thinking_level = "low" }
+# or
+llm_model = { api = "anthropic_messages", model = "claude-opus-5-5" }
 ```
+
+**Another service:** add it with `llm_connections` and describe its models with `llm_routing`.
+Anything that speaks OpenAI's chat completions works (vLLM, Ollama, Azure OpenAI), as does
+Anthropic's API. An API key comes from a Secret, through `llm_api_key_secrets`:
+
+```hcl
+llm_connections     = { vllm = { kind = "openai", url = "http://vllm.models.svc:8000/v1", api_key_env = "AWZY_LLM_KEY_VLLM" } }
+llm_api_key_secrets = { AWZY_LLM_KEY_VLLM = { secret = "vllm-key" } }
+llm_routing = {
+  models = [
+    { name = "gemini", connection = "cloud", spec = { api = "gemini", model = "gemini-2.5-pro" } },
+    { name = "llama", connection = "vllm", spec = { api = "openai_chat", model = "meta-llama/Llama-4-Maverick" } },
+  ]
+  routes = {
+    awzy_bot       = { targets = [{ model = "gemini", weight = 9 }, { model = "llama", weight = 1 }], fallback = ["llama"] }
+    investigations = { targets = [{ model = "gemini" }] }
+  }
+}
+```
+
+A route splits a feature's conversations between models by weight, so you can try a model on a
+share of them, and falls back in order when a model is busy or down. A routing can only use the
+connections the install has, so it never sends prompts anywhere you didn't set up.
 
 ### Awzy Bot
 

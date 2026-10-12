@@ -1,38 +1,37 @@
-//! Model access for awzy's AI features, Awzy Bot first (ADR 0048): policy drafting, explaining
-//! decisions, and later classification, justification checks, and investigations.
+//! Model access for awzy's AI features (ADR 0048, 0114): Awzy Bot's policy drafting and
+//! explanations, the reasoner's investigations, and later classification and justification checks.
 //!
-//! Services build a [`ModelRequest`] and call a [`ModelProvider`], a [`CloudModel`] in an install:
-//! the install's own cloud model service, so prompts never leave the client's account. Amazon
-//! Bedrock on AWS ([`bedrock`]) and Vertex AI on Google Cloud ([`vertex`]); Azure's can follow
-//! behind the same trait.
+//! Callers speak in neutral types ([`ModelRequest`], [`Message`], [`Content`]) and get a model
+//! for each conversation from a [`ModelRouter`], which picks one from the install's catalog by
+//! the feature's route: any model, on any service the install can reach. Each wire format is an
+//! adapter behind those types: Bedrock's Converse API ([`converse`]), Claude's Messages API
+//! ([`anthropic`]), Gemini's `generateContent` ([`gemini`]), and OpenAI's chat completions
+//! ([`openai`]), which covers OpenAI, Azure, self-hosted, and open models.
 //!
 //! Nothing on the awzy-pdp hot path may call this, and model output is only ever a proposal:
 //! the callers' tools read, explain, and draft, and a person acts.
 
-pub mod bedrock;
-mod cloud;
+pub mod anthropic;
+mod connections;
+pub mod converse;
 pub mod fake;
-mod messages;
+pub mod gemini;
+pub mod openai;
+mod router;
+mod spec;
 mod tools;
-pub mod vertex;
 
-use std::future::Future;
+use std::{future::Future, sync::Arc};
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
-pub use cloud::CloudModel;
+pub use connections::{Connection, Connections};
+pub use router::{Conversation, ModelEntry, ModelRouter, Route, RouteTarget, Routing};
+pub use spec::{
+    AnthropicSpec, ConverseSpec, Effort, GeminiSpec, ModelSpec, OpenaiSpec, ReasoningEffort, ThinkingLevel,
+};
 pub use tools::{run_with_tools, Tool, ToolOutcome, ToolRun};
-
-/// What every model service takes.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ModelSettings {
-    /// The model's ID in that service.
-    pub model: String,
-    /// How hard the model works: low, medium, high, xhigh, or max. None leaves the model's
-    /// default.
-    pub effort: Option<String>,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -41,7 +40,7 @@ pub enum Role {
     Assistant,
 }
 
-/// One block of a message, in the shape of Claude's Messages API.
+/// One block of a message. Every model's own blocks are translated to and from these.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Content {
@@ -59,10 +58,13 @@ pub enum Content {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         is_error: bool,
     },
-    /// Any other block the model returns (its thinking, for one). It's passed back unchanged
-    /// when the conversation continues, which the model requires.
-    #[serde(untagged)]
-    Other(Value),
+    /// What only the model that wrote it understands, in that model's wire `format`: Claude's
+    /// thinking, Gemini's thought signatures. Sent back unchanged to a model of the same format,
+    /// which needs it to continue, and left out for any other.
+    Opaque {
+        format: String,
+        data: Value,
+    },
 }
 
 impl Content {
@@ -93,8 +95,8 @@ pub struct ToolSpec {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModelRequest {
-    /// Instructions that frame the conversation. Kept the same across turns so the provider
-    /// can cache it.
+    /// Instructions that frame the conversation. Kept the same across turns so the service can
+    /// cache it.
     pub system: String,
     pub messages: Vec<Message>,
     pub tools: Vec<ToolSpec>,
@@ -109,18 +111,6 @@ pub enum StopReason {
     /// The model declined. The caller says so to the person rather than retrying.
     Refusal,
     Other(String),
-}
-
-impl StopReason {
-    fn parse(s: &str) -> Self {
-        match s {
-            "end_turn" | "stop_sequence" => Self::EndTurn,
-            "tool_use" => Self::ToolUse,
-            "max_tokens" => Self::MaxTokens,
-            "refusal" => Self::Refusal,
-            other => Self::Other(other.to_string()),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -141,6 +131,8 @@ pub struct ModelResponse {
     pub content: Vec<Content>,
     pub stop: StopReason,
     pub usage: Usage,
+    /// The catalog entry that answered (its model ID, outside a router), for what a run records.
+    pub model: String,
 }
 
 impl ModelResponse {
@@ -162,7 +154,8 @@ pub enum LlmError {
     /// The model service turned the request away for now (throttling, quota); try later.
     #[error("the model service is busy or over quota: {0}")]
     Unavailable(String),
-    /// Model access isn't set up: no permission, the model isn't enabled, or the ID is wrong.
+    /// Model access isn't set up: no permission, the model isn't enabled, the ID is wrong, or no
+    /// route names a model for the feature.
     #[error("the model isn't available to this install: {0}")]
     NotConfigured(String),
     #[error("the model service failed: {0}")]
@@ -171,10 +164,45 @@ pub enum LlmError {
     Malformed(String),
 }
 
-/// A model service. Implementations: [`CloudModel`] (and the providers it chooses between), and
-/// [`fake::FakeModel`] for tests.
+/// A model to talk to. Implementations: a router's [`Conversation`], each wire format's model,
+/// and [`fake::FakeModel`] for tests.
 pub trait ModelProvider: Send + Sync {
     fn respond(&self, request: &ModelRequest) -> impl Future<Output = Result<ModelResponse, LlmError>> + Send;
+}
+
+impl<P: ModelProvider> ModelProvider for Arc<P> {
+    fn respond(&self, request: &ModelRequest) -> impl Future<Output = Result<ModelResponse, LlmError>> + Send {
+        self.as_ref().respond(request)
+    }
+}
+
+/// Where a feature gets a model for each conversation, so every turn of one goes to the same
+/// model: [`ModelRouter`] in an install, a scripted model in tests.
+pub trait Models: Send + Sync {
+    type Conversation: ModelProvider;
+    /// A model for one conversation of `feature` (`awzy_bot`, `investigations`).
+    fn conversation(&self, feature: &str) -> Result<Self::Conversation, LlmError>;
+}
+
+impl Models for Arc<fake::FakeModel> {
+    type Conversation = Arc<fake::FakeModel>;
+    fn conversation(&self, _feature: &str) -> Result<Self::Conversation, LlmError> {
+        Ok(self.clone())
+    }
+}
+
+/// `params` merged into `body`, objects key by key: a spec's `extra`, the settings awzy hasn't
+/// typed, reaching the model as they are.
+pub(crate) fn merge_params(body: &mut Value, params: &Map<String, Value>) {
+    let Value::Object(target) = body else { return };
+    for (k, v) in params {
+        match (target.get_mut(k), v) {
+            (Some(existing @ Value::Object(_)), Value::Object(inner)) => merge_params(existing, inner),
+            _ => {
+                target.insert(k.clone(), v.clone());
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -183,16 +211,28 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn content_round_trips_including_blocks_awzy_doesnt_know() {
+    fn content_round_trips_with_what_only_its_model_understands() {
         let blocks = json!([
-            { "type": "thinking", "thinking": "", "signature": "abc" },
+            { "type": "opaque", "format": "anthropic", "data": { "type": "thinking", "thinking": "", "signature": "abc" } },
             { "type": "text", "text": "Bob was denied because…" },
             { "type": "tool_use", "id": "toolu_1", "name": "explain_decision", "input": { "id": "decision_x" } },
         ]);
         let parsed: Vec<Content> = serde_json::from_value(blocks.clone()).unwrap();
-        assert!(matches!(parsed[0], Content::Other(_)));
+        assert!(matches!(parsed[0], Content::Opaque { .. }));
         assert!(matches!(parsed[1], Content::Text { .. }));
         assert!(matches!(parsed[2], Content::ToolUse { .. }));
-        assert_eq!(serde_json::to_value(&parsed).unwrap(), blocks, "passed back byte for byte");
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), blocks);
+    }
+
+    #[test]
+    fn params_merge_into_the_body_object_by_object() {
+        let mut body = json!({ "max_tokens": 10, "generationConfig": { "maxOutputTokens": 10 } });
+        let params = json!({ "temperature": 0.2, "generationConfig": { "thinkingConfig": { "thinkingLevel": "low" } } });
+        merge_params(&mut body, params.as_object().unwrap());
+        assert_eq!(
+            body,
+            json!({ "max_tokens": 10, "temperature": 0.2,
+                    "generationConfig": { "maxOutputTokens": 10, "thinkingConfig": { "thinkingLevel": "low" } } })
+        );
     }
 }

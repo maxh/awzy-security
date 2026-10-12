@@ -15,7 +15,7 @@
 -}}
 {{- $inv := .Values.reasoner.investigations }}
 {{- if $inv.enabled }}
-{{- $env = concat $env (include "awzy.modelServiceEnv" (dict "root" . "component" $inv "what" "investigations") | fromYamlArray) }}
+{{- $env = concat $env (include "awzy.modelsEnv" . | fromYamlArray) }}
 {{- end }}
 {{- with $inv }}{{- if .enabled }}
 {{- $env = concat $env (list

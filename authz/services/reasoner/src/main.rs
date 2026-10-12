@@ -34,11 +34,8 @@ async fn main() -> anyhow::Result<()> {
         }
     };
     let investigations = if or("AWZY_REASONER_INVESTIGATIONS", "false") == "true" {
-        let model = awzy_llm::CloudModel::from_env().await?;
-        let model_name = model.model().to_string();
         Some(awzy_reasoner::runs::Investigations {
-            model,
-            model_name,
+            models: awzy_llm::ModelRouter::from_env().await?,
             monthly_tokens: or("AWZY_REASONER_INVESTIGATION_TOKENS", "2000000").parse()?,
             privileged_groups: or("AWZY_REASONER_PRIVILEGED_GROUPS", "it,security")
                 .split(',')

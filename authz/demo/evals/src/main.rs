@@ -7,7 +7,7 @@
 //! checks.
 
 use awzy_evals::{cases, compromised::CompromisedModel, report};
-use awzy_llm::CloudModel;
+use awzy_llm::ModelRouter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -15,7 +15,8 @@ async fn main() -> anyhow::Result<()> {
     let (model, results) = if std::env::args().any(|a| a == "--compromised") {
         ("compromised".to_string(), report::run(&CompromisedModel, &cases).await?)
     } else {
-        let model = CloudModel::from_env().await?;
+        // The investigations route of AWZY_LLM_CONNECTIONS and AWZY_LLM_ROUTING: any model to compare.
+        let model = ModelRouter::from_env().await?.conversation("investigations")?;
         (model.model().to_string(), report::run(&model, &cases).await?)
     };
     println!("{}", report::markdown(&model, &results));

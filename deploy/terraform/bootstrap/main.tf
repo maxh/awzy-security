@@ -25,8 +25,16 @@ terraform {
 
 locals {
   c = var.install_contract
-  # The model service's region, for charts that still read it per feature.
-  model_region = try(local.c.model_service.region, "")
+  # What the install's models can reach, and the routing to start with (ADR 0114): llm_routing,
+  # or llm_model on the cloud's own service for both features.
+  llm_connections = merge(local.c.model_connection == null ? {} : { cloud = local.c.model_connection }, var.llm_connections)
+  llm_routing = var.llm_routing != null ? var.llm_routing : (var.llm_model == null ? null : {
+    models = [{ name = "default", connection = "cloud", spec = var.llm_model }]
+    routes = {
+      awzy_bot       = { targets = [{ model = "default", weight = 1 }] }
+      investigations = { targets = [{ model = "default", weight = 1 }] }
+    }
+  })
 
   # What this bootstrap (and the install contract it reads) provides, as one number the chart checks
   # before it installs (ADR 0098). Raise it when a chart starts needing something new from here or

@@ -19,7 +19,12 @@ impl FakeModel {
 
     /// A final text answer.
     pub fn answer(text: &str) -> ModelResponse {
-        ModelResponse { content: vec![Content::text(text)], stop: StopReason::EndTurn, usage: Usage::default() }
+        ModelResponse {
+            content: vec![Content::text(text)],
+            stop: StopReason::EndTurn,
+            usage: Usage::default(),
+            model: "fake".into(),
+        }
     }
 
     /// A request to call one tool.
@@ -28,6 +33,7 @@ impl FakeModel {
             content: vec![Content::ToolUse { id: id.into(), name: name.into(), input }],
             stop: StopReason::ToolUse,
             usage: Usage::default(),
+            model: "fake".into(),
         }
     }
 
