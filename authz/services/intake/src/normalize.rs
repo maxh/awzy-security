@@ -123,6 +123,16 @@ pub fn app(batch: AppBatch, now: DateTime<Utc>) -> Result<Vec<EventRecord>, Norm
                     "`count` needs `access`: say whether the rows were listed, read, written, or exported",
                 ));
             }
+            // What a query plan returned (ADR 0113): the rows the app showed, linked to the plan, an
+            // access like any other so volume anomalies still see bulk reads through plans.
+            if let Some(plan) = e.attributes.get("plan_qid") {
+                if plan.as_str().and_then(|p| p.parse::<awzy_model::PlanId>().ok()).is_none() {
+                    return Err(invalid(i, format!("`attributes.plan_qid` must be a plan's QID, not {plan}")));
+                }
+                if access.is_empty() || e.count.is_none() {
+                    return Err(invalid(i, "a plan's results need `access` (listed) and `count`"));
+                }
+            }
             let on_behalf_of = e.on_behalf_of.unwrap_or_else(|| EntityRef::new("", ""));
             let resource = e.resource.unwrap_or_else(|| EntityRef::new("", ""));
             Ok(EventRecord {
@@ -327,6 +337,24 @@ mod tests {
         assert!(event(json!({ "access": "downloaded" })).is_err(), "only the known kinds");
         assert!(event(json!({ "count": 3 })).is_err(), "a count says what kind of access it counts");
         assert_eq!(event(json!({})).unwrap()[0].access, "", "both are optional");
+    }
+
+    #[test]
+    fn a_plans_results_are_a_listed_access_linked_to_the_plan() {
+        let event = |extra: Value| {
+            let mut e = json!({ "at": "2026-10-09T14:00:00Z", "system": "crm",
+                "principal": { "type": "ServiceAccount", "id": "acme-crm.renewals-bot" }, "action": "view_customer",
+                "resource": { "type": "Customer", "id": "" } });
+            e.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            app(app_batch(json!([e])), now())
+        };
+        let plan = "plan_0192a000-0000-7000-8000-000000000009";
+        let listed = event(json!({ "access": "listed", "count": 40, "attributes": { "plan_qid": plan } })).unwrap();
+        assert_eq!((listed[0].access.as_str(), listed[0].count), ("listed", 40));
+        assert!(listed[0].attributes.contains(plan));
+        assert!(event(json!({ "attributes": { "plan_qid": plan } })).is_err(), "it says how many rows");
+        let not_a_plan = json!({ "access": "listed", "count": 1, "attributes": { "plan_qid": "decision_0192a000-0000-7000-8000-000000000009" } });
+        assert!(event(not_a_plan).is_err());
     }
 
     #[test]
