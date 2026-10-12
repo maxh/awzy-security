@@ -129,6 +129,10 @@ clientPortal:
   # GraphQL runs only the portal's own pages' queries (ADR 0088). Only awzy's own staging and demo
   # installs turn it off, so a local frontend can run against them (ADR 0024).
   persistedQueriesOnly: true
+  # Refuse every change (GraphQL mutations, and the MCP tools that change something), so whoever
+  # signs in can look at everything but alter nothing. Empty: on exactly when demoIdp is, since
+  # anyone can sign in to a demo. An install of awzy's own that needs changes sets false.
+  readOnly: ~
   # Public hostname; when set, the portal is served through the Gateway below.
   hostname: ""
   # Awzy Bot (ADR 0048): the Policies page's assistant, with Claude on the install's own

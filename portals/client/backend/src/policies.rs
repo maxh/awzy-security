@@ -445,6 +445,7 @@ pub(crate) mod tests {
             context_api: None,
             bot: None,
             activity: Default::default(),
+            read_only: false,
         });
         let alice = testing::human("alice", "security");
         let run = |q: String| {
@@ -557,6 +558,7 @@ pub(crate) mod tests {
             context_api: None,
             bot: None,
             activity: Default::default(),
+            read_only: false,
         });
         let bob = testing::human("bob", "engineering");
 
@@ -598,6 +600,7 @@ pub(crate) mod tests {
             bot: None,
             activity: Default::default(),
             challenge: None,
+            read_only: false,
         });
         let err = testing::run_err(&no_pdp, &alice, "{ policyBundles { id } }").await;
         assert!(err.contains("AWZY_PDP_ADDR"), "nothing is authorized without a PDP: {err}");
