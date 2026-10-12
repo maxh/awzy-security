@@ -347,7 +347,10 @@ mod tests {
         let folder = EntityRef::new("Resource", "folder");
         let f = Filter::In { ancestor: folder.clone() };
         assert_eq!(f.matches(&folder, &json!({}), &[]), Some(true));
-        assert_eq!(f.matches(&EntityRef::new("Resource", "doc"), &json!({}), &[folder.clone()]), Some(true));
+        assert_eq!(
+            f.matches(&EntityRef::new("Resource", "doc"), &json!({}), std::slice::from_ref(&folder)),
+            Some(true)
+        );
         assert_eq!(f.matches(&EntityRef::new("Resource", "other"), &json!({}), &[]), Some(false));
     }
 
