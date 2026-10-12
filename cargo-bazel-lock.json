@@ -1,5 +1,5 @@
 {
-  "checksum": "3ab693c3b9083456769a25752f502e30620d5990537692b63c7f5e0254c62e0a",
+  "checksum": "2bff263439850cd3cacecbfb304ae47a03a166148eb8bf5fb35f4d8e52deed21",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -4690,6 +4690,10 @@
           {
             "id": "thiserror 2.0.21",
             "target": "thiserror"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
           }
         ],
         "deps_dev": [

@@ -73,7 +73,8 @@ pub async fn respond(client: &Client, spec: &ConverseSpec, request: &ModelReques
         call = call.tool_config(tools.build().map_err(built)?);
     }
     if !spec.additional_model_request_fields.is_empty() {
-        call = call.additional_model_request_fields(document(&Value::Object(spec.additional_model_request_fields.clone())));
+        call = call
+            .additional_model_request_fields(document(&Value::Object(spec.additional_model_request_fields.clone())));
     }
     let out = call.send().await.map_err(|e| {
         // The whole chain: credential and network failures carry no service error code.
@@ -130,9 +131,9 @@ fn message(m: &Message) -> Result<bedrock::Message, aws_smithy_types::error::ope
     for c in &m.content {
         let block = match c {
             Content::Text { text } => ContentBlock::Text(text.clone()),
-            Content::ToolUse { id, name, input } => {
-                ContentBlock::ToolUse(ToolUseBlock::builder().tool_use_id(id).name(name).input(document(input)).build()?)
-            }
+            Content::ToolUse { id, name, input } => ContentBlock::ToolUse(
+                ToolUseBlock::builder().tool_use_id(id).name(name).input(document(input)).build()?,
+            ),
             Content::ToolResult { tool_use_id, content, is_error } => ContentBlock::ToolResult(
                 ToolResultBlock::builder()
                     .tool_use_id(tool_use_id)
@@ -167,7 +168,9 @@ fn document(v: &Value) -> Document {
         }),
         Value::String(s) => Document::String(s.clone()),
         Value::Array(items) => Document::Array(items.iter().map(document).collect()),
-        Value::Object(o) => Document::Object(o.iter().map(|(k, v)| (k.clone(), document(v))).collect::<HashMap<_, _>>()),
+        Value::Object(o) => {
+            Document::Object(o.iter().map(|(k, v)| (k.clone(), document(v))).collect::<HashMap<_, _>>())
+        }
     }
 }
 
@@ -220,7 +223,10 @@ mod tests {
         let m = Message {
             role: Role::Assistant,
             content: vec![
-                Content::Opaque { format: FORMAT.into(), data: json!({ "reasoningText": { "text": "hm", "signature": "s" } }) },
+                Content::Opaque {
+                    format: FORMAT.into(),
+                    data: json!({ "reasoningText": { "text": "hm", "signature": "s" } }),
+                },
                 Content::Opaque { format: "gemini".into(), data: json!({ "thoughtSignature": "g" }) },
                 Content::Text { text: "Looking.".into() },
                 Content::ToolUse { id: "t1".into(), name: "explain_decision".into(), input: json!({ "id": "d" }) },

@@ -157,7 +157,10 @@ mod tests {
                 Message {
                     role: Role::Assistant,
                     content: vec![
-                        Content::Opaque { format: FORMAT.into(), data: json!({ "type": "thinking", "thinking": "", "signature": "s" }) },
+                        Content::Opaque {
+                            format: FORMAT.into(),
+                            data: json!({ "type": "thinking", "thinking": "", "signature": "s" }),
+                        },
                         Content::Opaque { format: "gemini".into(), data: json!({ "thoughtSignature": "g" }) },
                         Content::ToolUse { id: "toolu_1".into(), name: "a".into(), input: json!({}) },
                     ],

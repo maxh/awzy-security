@@ -169,7 +169,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r.stop, StopReason::ToolUse);
-        assert_eq!(r.content, vec![Content::ToolUse { id: "call_1".into(), name: "explain_decision".into(), input: json!({ "id": "decision_1" }) }]);
+        assert_eq!(
+            r.content,
+            vec![Content::ToolUse {
+                id: "call_1".into(),
+                name: "explain_decision".into(),
+                input: json!({ "id": "decision_1" })
+            }]
+        );
         assert_eq!(r.usage, Usage { input_tokens: 100, output_tokens: 20 });
 
         let request = ModelRequest {
@@ -179,10 +186,18 @@ mod tests {
                 Message { role: Role::Assistant, content: r.content },
                 Message {
                     role: Role::User,
-                    content: vec![Content::ToolResult { tool_use_id: "call_1".into(), content: "denied by p1".into(), is_error: false }],
+                    content: vec![Content::ToolResult {
+                        tool_use_id: "call_1".into(),
+                        content: "denied by p1".into(),
+                        is_error: false,
+                    }],
                 },
             ],
-            tools: vec![ToolSpec { name: "explain_decision".into(), description: "E".into(), input_schema: json!({ "type": "object" }) }],
+            tools: vec![ToolSpec {
+                name: "explain_decision".into(),
+                description: "E".into(),
+                input_schema: json!({ "type": "object" }),
+            }],
             max_tokens: 1000,
         };
         let spec: OpenaiSpec = serde_json::from_value(
@@ -201,8 +216,11 @@ mod tests {
 
     #[test]
     fn a_declined_answer_is_a_refusal() {
-        let r = parse(br#"{"choices":[{"message":{"content":null,"refusal":"I can't help with that."},"finish_reason":"stop"}]}"#, "gpt")
-            .unwrap();
+        let r = parse(
+            br#"{"choices":[{"message":{"content":null,"refusal":"I can't help with that."},"finish_reason":"stop"}]}"#,
+            "gpt",
+        )
+        .unwrap();
         assert_eq!(r.stop, StopReason::Refusal);
     }
 }

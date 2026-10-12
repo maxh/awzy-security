@@ -14,8 +14,8 @@ use std::sync::{Arc, Mutex};
 
 use async_graphql::{Context, InputObject, Object, Result, SimpleObject};
 use awzy_llm::{
-    fake::FakeModel, run_with_tools, Content, Conversation, LlmError, Message, ModelProvider, ModelRequest, ModelRouter,
-    ModelResponse, Role, StopReason, Tool, ToolOutcome, ToolSpec,
+    fake::FakeModel, run_with_tools, Content, Conversation, LlmError, Message, ModelProvider, ModelRequest,
+    ModelResponse, ModelRouter, Role, StopReason, Tool, ToolOutcome, ToolSpec,
 };
 use awzy_model::DecisionId;
 use rmcp::schemars::JsonSchema;
@@ -483,8 +483,12 @@ mod tests {
 
     #[tokio::test]
     async fn refusals_and_installs_without_the_bot_say_so() {
-        let refusal =
-            ModelResponse { content: vec![], stop: StopReason::Refusal, usage: Default::default(), model: "fake".into() };
+        let refusal = ModelResponse {
+            content: vec![],
+            stop: StopReason::Refusal,
+            usage: Default::default(),
+            model: "fake".into(),
+        };
         let (schema, _) = schema_with_bot(vec![refusal]).await;
         let alice = testing::human("alice", "security");
         let out = testing::run(&schema, &alice, ask("…", None)).await;

@@ -24,7 +24,10 @@ pub fn body(request: &ModelRequest, spec: &GeminiSpec) -> Value {
     if !request.system.is_empty() {
         body.insert("systemInstruction".into(), json!({ "parts": [{ "text": request.system }] }));
     }
-    body.insert("contents".into(), Value::Array(request.messages.iter().map(|m| content(m, &request.messages)).collect()));
+    body.insert(
+        "contents".into(),
+        Value::Array(request.messages.iter().map(|m| content(m, &request.messages)).collect()),
+    );
     if !request.tools.is_empty() {
         let declarations: Vec<Value> = request
             .tools
@@ -50,7 +53,9 @@ pub fn body(request: &ModelRequest, spec: &GeminiSpec) -> Value {
 /// The thought signature Gemini gave call `id`, if any.
 fn signature<'a>(m: &'a Message, id: &str) -> Option<&'a Value> {
     m.content.iter().find_map(|c| match c {
-        Content::Opaque { format, data } if format == FORMAT && data.get("call").and_then(Value::as_str) == Some(id) => {
+        Content::Opaque { format, data }
+            if format == FORMAT && data.get("call").and_then(Value::as_str) == Some(id) =>
+        {
             data.get("thoughtSignature")
         }
         _ => None,
@@ -171,7 +176,10 @@ pub fn parse(bytes: &[u8], model: &str) -> Result<ModelResponse, LlmError> {
             calls += 1;
             let id = format!("gemini_call_{}", NEXT_CALL.fetch_add(1, Ordering::Relaxed));
             if let Some(sig) = part.thought_signature {
-                content.push(Content::Opaque { format: FORMAT.into(), data: json!({ "call": id, "thoughtSignature": sig }) });
+                content.push(Content::Opaque {
+                    format: FORMAT.into(),
+                    data: json!({ "call": id, "thoughtSignature": sig }),
+                });
             }
             content.push(Content::ToolUse { id, name: call.name, input: call.args });
         } else if let (Some(text), false) = (part.text, part.thought) {
@@ -223,10 +231,15 @@ mod tests {
         let request = ModelRequest {
             system: "You are Awzy Bot.".into(),
             messages: conversation,
-            tools: vec![ToolSpec { name: "explain_decision".into(), description: "E".into(), input_schema: json!({ "type": "object" }) }],
+            tools: vec![ToolSpec {
+                name: "explain_decision".into(),
+                description: "E".into(),
+                input_schema: json!({ "type": "object" }),
+            }],
             max_tokens: 1000,
         };
-        let spec: GeminiSpec = serde_json::from_value(json!({ "model": "gemini-2.5-pro", "thinking_level": "low" })).unwrap();
+        let spec: GeminiSpec =
+            serde_json::from_value(json!({ "model": "gemini-2.5-pro", "thinking_level": "low" })).unwrap();
         let body = body(&request, &spec);
         assert_eq!(body["systemInstruction"]["parts"][0]["text"], "You are Awzy Bot.");
         assert_eq!(body["contents"][1]["role"], "model");

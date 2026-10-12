@@ -85,7 +85,10 @@ pub(crate) enum TokenSource {
 }
 
 fn env_secret(var: &str) -> Result<String, LlmError> {
-    std::env::var(var).ok().filter(|v| !v.is_empty()).ok_or_else(|| LlmError::NotConfigured(format!("{var} is not set")))
+    std::env::var(var)
+        .ok()
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| LlmError::NotConfigured(format!("{var} is not set")))
 }
 
 impl Endpoint {
@@ -199,7 +202,12 @@ impl TokenSource {
 }
 
 /// POSTs `body` as JSON and returns the answer's body, or the error a failed status means.
-async fn post(http: &awzy_http::Client, url: &str, headers: &[(&str, &str)], body: &Value) -> Result<Vec<u8>, LlmError> {
+async fn post(
+    http: &awzy_http::Client,
+    url: &str,
+    headers: &[(&str, &str)],
+    body: &Value,
+) -> Result<Vec<u8>, LlmError> {
     let mut req = Request::post(url).header(header::CONTENT_TYPE, "application/json");
     for (k, v) in headers {
         req = req.header(*k, *v);
@@ -217,9 +225,10 @@ async fn post(http: &awzy_http::Client, url: &str, headers: &[(&str, &str)], bod
 fn classify(status: StatusCode, body: &str) -> LlmError {
     let message = format!("{status}: {}", body.chars().take(500).collect::<String>());
     match status {
-        StatusCode::TOO_MANY_REQUESTS | StatusCode::SERVICE_UNAVAILABLE | StatusCode::BAD_GATEWAY | StatusCode::GATEWAY_TIMEOUT => {
-            LlmError::Unavailable(message)
-        }
+        StatusCode::TOO_MANY_REQUESTS
+        | StatusCode::SERVICE_UNAVAILABLE
+        | StatusCode::BAD_GATEWAY
+        | StatusCode::GATEWAY_TIMEOUT => LlmError::Unavailable(message),
         // No permission, the API or the model not enabled, or a model ID the service doesn't have.
         StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN | StatusCode::NOT_FOUND => LlmError::NotConfigured(message),
         _ => LlmError::Failed(message),
