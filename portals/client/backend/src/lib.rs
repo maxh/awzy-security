@@ -248,9 +248,12 @@ fn schema_builder(
     services: Services,
 ) -> async_graphql::SchemaBuilder<ClientPortalQuery, ClientPortalMutation, ClientPortalSubscription> {
     let read_only = services.read_only;
-    let builder =
-        Schema::build(ClientPortalQuery::default(), ClientPortalMutation::default(), ClientPortalSubscription::default())
-            .data(services);
+    let builder = Schema::build(
+        ClientPortalQuery::default(),
+        ClientPortalMutation::default(),
+        ClientPortalSubscription::default(),
+    )
+    .data(services);
     // Refused before anything else sees the operation.
     let builder = if read_only { builder.extension(read_only::ReadOnly) } else { builder };
     builder
