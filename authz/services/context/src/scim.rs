@@ -114,7 +114,8 @@ fn meta(kind: &str, id: Uuid, created: chrono::DateTime<chrono::Utc>, updated: c
 fn user_json(u: &User) -> Value {
     let mut r = u.input.resource.as_object().cloned().unwrap_or_default();
     r.remove("password");
-    let schemas = if r.contains_key(ENTERPRISE_SCHEMA) { json!([USER_SCHEMA, ENTERPRISE_SCHEMA]) } else { json!([USER_SCHEMA]) };
+    let schemas =
+        if r.contains_key(ENTERPRISE_SCHEMA) { json!([USER_SCHEMA, ENTERPRISE_SCHEMA]) } else { json!([USER_SCHEMA]) };
     r.insert("schemas".into(), schemas);
     r.insert("id".into(), json!(u.scim_id));
     r.insert("userName".into(), json!(u.input.user_name));
@@ -576,7 +577,10 @@ mod tests {
         let department = format!("{ENTERPRISE_SCHEMA}:department");
         set_attribute(&mut r, &department, json!("finance"));
         set_attribute(&mut r, &format!("{ENTERPRISE_SCHEMA}:manager"), json!("mgr-id"));
-        assert_eq!(Value::Object(r.clone()), json!({ ENTERPRISE_SCHEMA: { "department": "finance", "manager": "mgr-id" } }));
+        assert_eq!(
+            Value::Object(r.clone()),
+            json!({ ENTERPRISE_SCHEMA: { "department": "finance", "manager": "mgr-id" } })
+        );
         set_attribute(&mut r, &department, Value::Null);
         assert_eq!(Value::Object(r.clone()), json!({ ENTERPRISE_SCHEMA: { "manager": "mgr-id" } }));
         set_attribute(&mut r, ENTERPRISE_SCHEMA, json!({ "division": "east" }));

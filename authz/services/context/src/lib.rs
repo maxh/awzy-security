@@ -11,9 +11,9 @@
 pub mod classify;
 pub mod connector_settings;
 pub mod contact;
-pub mod human_attributes;
 #[cfg(test)]
 mod contract_tests;
+pub mod human_attributes;
 mod invalid;
 pub mod investigations;
 pub mod issuers;

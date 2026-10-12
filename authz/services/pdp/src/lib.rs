@@ -157,7 +157,8 @@ impl Pdp {
                     attrs.insert("sensitivity".into(), serde_json::json!("internal"));
                 }
                 attrs.insert((*attr).into(), example.clone());
-                let probe = serde_json::json!([{ "uid": { "type": kind, "id": "probe" }, "attrs": attrs, "parents": [] }]);
+                let probe =
+                    serde_json::json!([{ "uid": { "type": kind, "id": "probe" }, "attrs": attrs, "parents": [] }]);
                 Entities::from_json_value(probe, Some(&schema)).is_err()
             })
             .map(|(kind, attr, _)| (*kind, *attr))
