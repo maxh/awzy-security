@@ -16,7 +16,16 @@ export default defineConfig({
       editLink: { baseUrl: "https://github.com/maxh/awzy-security/edit/main/docs/site/" },
       customCss: ["./src/styles/theme.css"],
       sidebar: [
-        { label: "Start here", items: ["introduction", "principles", "concepts/how-awzy-decides", "client-portal"] },
+        {
+          label: "Start here",
+          items: [
+            "introduction",
+            "concepts/existing-authorization",
+            "principles",
+            "concepts/how-awzy-decides",
+            "client-portal",
+          ],
+        },
         {
           label: "Workflows",
           items: [
@@ -38,18 +47,25 @@ export default defineConfig({
           ],
         },
         {
-          label: "Guides",
+          // Putting awzy in front of your agents and apps.
+          label: "Building on awzy",
+          items: [
+            "guides/writing-policies",
+            "guides/mcp-gateway",
+            "guides/typescript-sdk",
+            "guides/sending-events",
+            "guides/connectors",
+          ],
+        },
+        {
+          // Installing and operating it.
+          label: "Running awzy",
           items: [
             "guides/install",
             "guides/connecting-your-idp",
             "guides/upgrading",
             "guides/monitoring",
             "guides/troubleshooting",
-            "guides/writing-policies",
-            "guides/mcp-gateway",
-            "guides/typescript-sdk",
-            "guides/sending-events",
-            "guides/connectors",
             "guides/optional-features",
             "guides/break-glass",
             "guides/data-retention",
