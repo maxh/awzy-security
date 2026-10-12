@@ -14,7 +14,7 @@ use std::{
 use anyhow::{bail, Context};
 use awzy_server::metrics::{Counter, LastSuccess, Source};
 use axum::http::{Method, StatusCode};
-use serde::Deserialize;
+use serde::{de::DeserializeOwned, Deserialize};
 use serde_json::{json, Value};
 
 use crate::{
@@ -43,23 +43,76 @@ pub struct DriveConfig {
     pub interval: Duration,
 }
 
+/// The settings the client portal keeps for Drive (ADR 0104).
+#[derive(Deserialize)]
+struct DriveSettings {
+    #[serde(default)]
+    subject: String,
+    admin_subject: Option<String>,
+    domain: Option<String>,
+    interval_secs: Option<u64>,
+}
+
 impl DriveConfig {
     /// From the settings the client portal set (ADR 0104): `subject`, and optionally
     /// `admin_subject`, `domain` (the subject's, by default), and `interval_secs`.
     pub fn from_settings(s: &serde_json::Value) -> anyhow::Result<Self> {
-        let text = |k: &str| s[k].as_str().map(str::trim).filter(|v| !v.is_empty()).map(str::to_string);
-        let subject = text("subject").context("Drive's settings have no subject")?;
-        let domain = text("domain")
+        let s = DriveSettings::deserialize(s).context("Drive's settings")?;
+        let text = |v: Option<&str>| v.map(str::trim).filter(|v| !v.is_empty()).map(str::to_string);
+        let subject = text(Some(&s.subject)).context("Drive's settings have no subject")?;
+        let domain = text(s.domain.as_deref())
             .or_else(|| subject.split_once('@').map(|(_, d)| d.to_string()))
             .context("Drive needs a domain when the subject isn't an email address")?;
         Ok(Self {
             subject,
-            admin_subject: text("admin_subject"),
+            admin_subject: text(s.admin_subject.as_deref()),
             domain: domain.to_lowercase(),
             api_base: "https://www.googleapis.com".into(),
-            interval: Duration::from_secs(s["interval_secs"].as_u64().unwrap_or(300)),
+            interval: Duration::from_secs(s.interval_secs.unwrap_or(300)),
         })
     }
+}
+
+/// One page of a Drive or Directory list call. Each call fills the list it's for.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct ListPage {
+    next_page_token: Option<String>,
+    drives: Vec<SharedDrive>,
+    permissions: Vec<Permission>,
+    files: Vec<File>,
+    groups: Vec<Group>,
+}
+
+/// A Google Workspace group, from the Directory API.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+struct Group {
+    email: Option<String>,
+    name: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StartPageToken {
+    start_page_token: String,
+}
+
+/// One page of a shared drive's changes.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct ChangesPage {
+    changes: Vec<Change>,
+    next_page_token: Option<String>,
+    new_start_page_token: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct Change {
+    file_id: String,
+    removed: bool,
+    file: Option<File>,
 }
 
 /// How the connector gets Google access tokens.
@@ -283,14 +336,15 @@ impl DriveSync {
         }
     }
 
-    async fn get(&self, subject: &str, scope: &str, path: &str) -> anyhow::Result<Value> {
+    async fn get<T: DeserializeOwned>(&self, subject: &str, scope: &str, path: &str) -> anyhow::Result<T> {
         let url = format!("{}{path}", self.cfg.api_base);
         for wait in BACKOFF.iter().map(|s| Some(Duration::from_secs(*s))).chain([None]) {
             let token = self.credentials.token(subject, scope).await?;
             let headers = [("authorization", format!("Bearer {token}"))];
             let (status, body) = self.http.send(Method::GET, &url, &headers, Body::None).await?;
             if status.is_success() {
-                return Ok(body);
+                let what = path.split('?').next().unwrap_or(path);
+                return T::deserialize(body).with_context(|| format!("Google's answer for {what}"));
             }
             let slow_down = status == StatusCode::TOO_MANY_REQUESTS
                 || (status == StatusCode::FORBIDDEN && body.to_string().contains("RateLimitExceeded"))
@@ -303,8 +357,14 @@ impl DriveSync {
         unreachable!("the last attempt either returns or fails")
     }
 
-    /// Every page of a Drive list call, collecting `field`.
-    async fn pages<T: for<'de> Deserialize<'de>>(&self, path: &str, field: &str) -> anyhow::Result<Vec<T>> {
+    /// Every page of a list call, as `subject`, collecting what `take` picks from each.
+    async fn pages<T>(
+        &self,
+        subject: &str,
+        scope: &str,
+        path: &str,
+        take: fn(ListPage) -> Vec<T>,
+    ) -> anyhow::Result<Vec<T>> {
         let mut items = Vec::new();
         let mut page: Option<String> = None;
         loop {
@@ -312,18 +372,18 @@ impl DriveSync {
             if let Some(token) = &page {
                 p.push_str(&format!("&pageToken={}", encode(token)));
             }
-            let mut body = self.get(&self.cfg.subject, DRIVE_METADATA, &p).await?;
-            let list = body[field].take();
-            items.extend(serde_json::from_value::<Vec<T>>(if list.is_null() { json!([]) } else { list })?);
-            match body["nextPageToken"].as_str() {
-                Some(next) => page = Some(next.to_string()),
-                None => return Ok(items),
+            let mut body: ListPage = self.get(subject, scope, &p).await?;
+            page = body.next_page_token.take();
+            items.extend(take(body));
+            if page.is_none() {
+                return Ok(items);
             }
         }
     }
 
     async fn drives(&self) -> anyhow::Result<Vec<SharedDrive>> {
-        self.pages("/drive/v3/drives?pageSize=100&fields=nextPageToken,drives(id,name)", "drives").await
+        let path = "/drive/v3/drives?pageSize=100&fields=nextPageToken,drives(id,name)";
+        self.pages(&self.cfg.subject, DRIVE_METADATA, path, |p| p.drives).await
     }
 
     async fn permissions(&self, id: &str) -> anyhow::Result<Vec<Permission>> {
@@ -331,7 +391,7 @@ impl DriveSync {
             "/drive/v3/files/{}/permissions?supportsAllDrives=true&pageSize=100&fields=nextPageToken,permissions({PERMISSION_FIELDS})",
             encode(id)
         );
-        self.pages(&path, "permissions").await
+        self.pages(&self.cfg.subject, DRIVE_METADATA, &path, |p| p.permissions).await
     }
 
     async fn files(&self, drive_id: &str) -> anyhow::Result<Vec<File>> {
@@ -340,38 +400,22 @@ impl DriveSync {
             encode(drive_id),
             encode("trashed = false")
         );
-        self.pages(&path, "files").await
+        self.pages(&self.cfg.subject, DRIVE_METADATA, &path, |p| p.files).await
     }
 
     /// The domain's groups, email to name, read as the admin. Empty without one.
     async fn load_groups(&mut self) -> anyhow::Result<()> {
         let Some(admin) = self.cfg.admin_subject.clone() else { return Ok(()) };
-        let mut groups = HashMap::new();
-        let mut page: Option<String> = None;
-        loop {
-            let mut path = "/admin/directory/v1/groups?customer=my_customer&maxResults=200".to_string();
-            if let Some(token) = &page {
-                path.push_str(&format!("&pageToken={}", encode(token)));
-            }
-            let body = self.get(&admin, DIRECTORY_GROUPS, &path).await?;
-            for g in body["groups"].as_array().into_iter().flatten() {
-                if let (Some(email), Some(name)) = (g["email"].as_str(), g["name"].as_str()) {
-                    groups.insert(email.to_lowercase(), name.to_string());
-                }
-            }
-            match body["nextPageToken"].as_str() {
-                Some(next) => page = Some(next.to_string()),
-                None => break,
-            }
-        }
-        self.groups = groups;
+        let path = "/admin/directory/v1/groups?customer=my_customer&maxResults=200";
+        let groups = self.pages(&admin, DIRECTORY_GROUPS, path, |p| p.groups).await?;
+        self.groups = groups.into_iter().filter_map(|g| Some((g.email?.to_lowercase(), g.name?))).collect();
         Ok(())
     }
 
     async fn start_cursor(&self, drive_id: &str) -> anyhow::Result<String> {
         let path = format!("/drive/v3/changes/startPageToken?driveId={}&supportsAllDrives=true", encode(drive_id));
-        let body = self.get(&self.cfg.subject, DRIVE_METADATA, &path).await?;
-        Ok(body["startPageToken"].as_str().context("no startPageToken from Drive")?.to_string())
+        let body: StartPageToken = self.get(&self.cfg.subject, DRIVE_METADATA, &path).await?;
+        Ok(body.start_page_token)
     }
 
     async fn file(&self, file: &File) -> anyhow::Result<Value> {
@@ -403,10 +447,11 @@ impl DriveSync {
             cursors.insert(drive.id.clone(), self.start_cursor(&drive.id).await?);
             let members = self.permissions(&drive.id).await?;
             let mut resources = vec![drive_resource(&drive, &members, &self.cfg, &self.groups)];
+            seen.insert(resource_id(&drive.id));
             for file in self.files(&drive.id).await? {
+                seen.insert(resource_id(&file.id));
                 resources.push(self.file(&file).await?);
             }
-            seen.extend(resources.iter().filter_map(|r| r["id"].as_str().map(str::to_string)));
             summary.written += self.write(&resources).await?;
         }
         for gone in self.context.resource_ids(SOURCE).await?.difference(&seen) {
@@ -436,25 +481,26 @@ impl DriveSync {
                     encode(&drive.id),
                     encode(&cursor)
                 );
-                let body = self.get(&self.cfg.subject, DRIVE_METADATA, &path).await?;
-                for change in body["changes"].as_array().into_iter().flatten() {
-                    let file: Option<File> = serde_json::from_value(change["file"].clone()).ok();
-                    match file {
-                        Some(file) if !change["removed"].as_bool().unwrap_or(false) && !file.trashed => {
+                let body: ChangesPage = self.get(&self.cfg.subject, DRIVE_METADATA, &path).await?;
+                for change in body.changes {
+                    match change.file {
+                        Some(file) if !change.removed && !file.trashed => {
                             resources.push(self.file(&file).await?);
                         }
                         _ => {
-                            let id = change["fileId"].as_str().context("a change without a fileId")?;
-                            self.delete(&resource_id(id)).await?;
+                            if change.file_id.is_empty() {
+                                bail!("a change without a fileId");
+                            }
+                            self.delete(&resource_id(&change.file_id)).await?;
                             summary.deleted += 1;
                         }
                     }
                 }
-                if let Some(next) = body["nextPageToken"].as_str() {
-                    cursor = next.to_string();
+                if let Some(next) = body.next_page_token {
+                    cursor = next;
                     continue;
                 }
-                cursor = body["newStartPageToken"].as_str().context("no newStartPageToken from Drive")?.to_string();
+                cursor = body.new_start_page_token.context("no newStartPageToken from Drive")?;
                 break;
             }
             summary.written += self.write(&resources).await?;
