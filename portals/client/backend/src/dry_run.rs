@@ -73,6 +73,16 @@ pub async fn recent_requests(
     Ok((groups, total, distinct))
 }
 
+/// How many query plans the PDPs made since `days` ago.
+pub async fn recent_plans(ch: &::clickhouse::Client, days: u32) -> anyhow::Result<u64> {
+    let since = (Utc::now() - Duration::days(i64::from(days))).timestamp_millis();
+    Ok(ch
+        .query("SELECT count() FROM plans WHERE at >= fromUnixTimestamp64Milli(?, 'UTC')")
+        .bind(since)
+        .fetch_one()
+        .await?)
+}
+
 fn request_of(g: &RequestGroup) -> anyhow::Result<Check> {
     let context = match g.context.trim() {
         "" => Default::default(),
@@ -149,6 +159,9 @@ pub struct PolicyDryRun {
     /// Requests that couldn't be replayed, and why the first one couldn't.
     pub skipped_requests: u64,
     pub skipped_reason: Option<String>,
+    /// Query plans in the window (ADR 0113). A plan decides no one resource, so a dry run
+    /// doesn't replay them; it says how many there were.
+    pub plans_not_replayed: u64,
 }
 
 /// Compares `draft` with `active` over `groups`.
@@ -257,6 +270,7 @@ pub(crate) fn to_json(r: &PolicyDryRun) -> serde_json::Value {
         })).collect::<Vec<_>>(),
         "skipped_requests": r.skipped_requests,
         "skipped_reason": r.skipped_reason,
+        "plans_not_replayed": r.plans_not_replayed,
     })
 }
 
@@ -291,6 +305,7 @@ pub(crate) async fn run(services: &Services, draft_qid: &str, days: Option<u32>)
     let replayer = replayer(services).await?;
     let (groups, decisions, distinct) = recent_requests(ch, days, MAX_REQUESTS).await?;
     let (unchanged, changes, skipped, skipped_reason) = compare(&replayer, &active, &draft, &groups).await;
+    let plans_not_replayed = recent_plans(ch, days).await?;
     Ok(PolicyDryRun {
         days,
         compared_with_version,
@@ -302,6 +317,7 @@ pub(crate) async fn run(services: &Services, draft_qid: &str, days: Option<u32>)
         changes,
         skipped_requests: skipped,
         skipped_reason,
+        plans_not_replayed,
     })
 }
 
@@ -390,6 +406,7 @@ mod tests {
             kafka_brokers: "localhost:1".into(),
             decisions_topic: format!("unused.{database}"),
             events_topic: format!("unused-events.{database}"),
+            plans_topic: format!("unused-plans.{database}"),
             consumer_group: database.clone(),
         };
         awzy_clickhouse::migrate(&ch, &settings).await.unwrap();

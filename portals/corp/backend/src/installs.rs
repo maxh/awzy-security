@@ -383,7 +383,8 @@ impl FleetQuery {
             | E::Containment
             | E::SecurityKey
             | E::Ceremony
-            | E::Investigation => None,
+            | E::Investigation
+            | E::Plan => None,
         })
     }
 

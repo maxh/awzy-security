@@ -180,6 +180,7 @@ mod tests {
             kafka_brokers: "localhost:1".into(),
             decisions_topic: format!("unused.{database}"),
             events_topic: format!("unused-events.{database}"),
+            plans_topic: format!("unused-plans.{database}"),
             consumer_group: database.clone(),
         };
         awzy_clickhouse::migrate(&ch, &settings).await.unwrap();
@@ -247,5 +248,61 @@ mod tests {
         assert_eq!(ana[&19].resources, 10);
         let ben = &history[&("Human".to_string(), "ben".to_string())];
         assert_eq!(ben[&0], Day { accesses: 11, resources: 11, denied: 1, ..Day::default() });
+    }
+
+    /// With --config=local-stack: what an agent listed through query plans (ADR 0113) reaches its
+    /// volume, weighted as listed rows, so a bulk read through plans moves its risk.
+    #[tokio::test]
+    async fn a_plans_listed_rows_reach_the_volume_score() {
+        let Ok(url) = std::env::var("AWZY_TEST_CLICKHOUSE_URL") else {
+            eprintln!("skipping: AWZY_TEST_CLICKHOUSE_URL is not set");
+            return;
+        };
+        let database = format!("test_{}", uuid::Uuid::now_v7().simple());
+        let admin = clickhouse::Client::default().with_url(&url).with_user("awzy").with_password("awzy");
+        admin.query(&format!("CREATE DATABASE {database}")).execute().await.unwrap();
+        let ch = admin.clone().with_database(&database);
+        let settings = awzy_clickhouse::Settings {
+            kafka_brokers: "localhost:1".into(),
+            decisions_topic: format!("unused.{database}"),
+            events_topic: format!("unused-events.{database}"),
+            plans_topic: format!("unused-plans.{database}"),
+            consumer_group: database.clone(),
+        };
+        awzy_clickhouse::migrate(&ch, &settings).await.unwrap();
+
+        // Ten customers a day for a fortnight, then one plan whose pages showed 400 today.
+        let as_of = Utc::now();
+        let mut events = Vec::new();
+        for days_ago in 1..15i64 {
+            for n in 0..10 {
+                let at =
+                    (as_of - chrono::Duration::days(days_ago) - chrono::Duration::minutes(n + 1)).timestamp_millis();
+                events.push(format!(
+                    "(generateUUIDv4(), fromUnixTimestamp64Milli({at}, 'UTC'), 'ServiceAccount', 'acme-crm.bot', 'Customer', 'c-{days_ago}-{n}', '', 0)"
+                ));
+            }
+        }
+        let today = as_of.timestamp_millis() - 1000;
+        events.push(format!(
+            "(generateUUIDv4(), fromUnixTimestamp64Milli({today}, 'UTC'), 'ServiceAccount', 'acme-crm.bot', 'Customer', '', 'listed', 400)"
+        ));
+        ch.query(&format!(
+            "INSERT INTO events (id, at, principal_type, principal_id, resource_type, resource_id, access, count) VALUES {}",
+            events.join(",")
+        ))
+        .execute()
+        .await
+        .unwrap();
+
+        let history = load(&ch, as_of).await.unwrap();
+        admin.query(&format!("DROP DATABASE {database}")).execute().await.unwrap();
+
+        let bot = &history[&("ServiceAccount".to_string(), "acme-crm.bot".to_string())];
+        let listed = crate::score::ACCESS_WEIGHTS.listed * 400.0;
+        assert_eq!(bot[&0].rows, listed, "{:?}", bot[&0]);
+        let baseline: Vec<Day> = (1..15).filter_map(|d| bot.get(&d).copied()).collect();
+        let s = crate::score::score(bot[&0], &baseline, &[]);
+        assert!(s.score > 0, "a bulk list through plans stands out: {s:?}");
     }
 }

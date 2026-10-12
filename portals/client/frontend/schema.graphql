@@ -1030,6 +1030,11 @@ type PolicyDryRun {
 	"""
 	skippedRequests: Int!
 	skippedReason: String
+	"""
+	Query plans in the window (ADR 0113). A plan decides no one resource, so a dry run
+	doesn't replay them; it says how many there were.
+	"""
+	plansNotReplayed: Int!
 }
 
 type PolicyDryRunChange {

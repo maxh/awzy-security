@@ -69,7 +69,7 @@ async-graphql = "7.2"
 async-graphql-axum = "7.2"
 async-trait = "0.1"
 axum = "0.8"
-cedar-policy = "4.13"
+cedar-policy = "=4.13.0"
 http = "1"
 http-body-util = "0.1"
 # rustls with ring: aws-lc-rs needs CMake, which the hermetic Bazel toolchain doesn't have.

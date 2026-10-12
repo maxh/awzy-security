@@ -608,6 +608,7 @@ mod tests {
             kafka_brokers: "localhost:1".into(),
             decisions_topic: format!("unused.{database}"),
             events_topic: format!("unused-events.{database}"),
+            plans_topic: format!("unused-plans.{database}"),
             consumer_group: database.clone(),
         };
         awzy_clickhouse::migrate(&ch, &settings).await.unwrap();

@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 awzy-http.workspace = true
 chrono.workspace = true
+sha2.workspace = true
 awzy-kafka.workspace = true
 rskafka.workspace = true
 arc-swap.workspace = true
@@ -20,7 +21,8 @@ tokio.workspace = true
 tracing.workspace = true
 awzy-server.workspace = true
 awzy-telemetry.workspace = true
-cedar-policy.workspace = true
+# Partial evaluation for query plans (ADR 0113), experimental in Cedar: the version is pinned.
+cedar-policy = { workspace = true, features = ["partial-eval"] }
 serde.workspace = true
 serde_json.workspace = true
 awzy-model.workspace = true

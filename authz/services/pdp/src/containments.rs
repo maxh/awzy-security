@@ -41,6 +41,9 @@ pub struct Containments {
     started: Instant,
     /// Milliseconds after `started` when the feed was last heard from.
     heard_at_ms: AtomicU64,
+    /// Moves with each list, so a cached query plan is dropped when anyone is contained or
+    /// lifted (ADR 0113).
+    epoch: AtomicU64,
 }
 
 impl Containments {
@@ -61,6 +64,7 @@ impl Containments {
             client,
             started: Instant::now(),
             heard_at_ms: AtomicU64::new(0),
+            epoch: AtomicU64::new(0),
         }
     }
 
@@ -68,9 +72,15 @@ impl Containments {
         self.loaded.load(Ordering::Acquire)
     }
 
+    /// Moves whenever the list is replaced.
+    pub fn epoch(&self) -> u64 {
+        self.epoch.load(Ordering::Acquire)
+    }
+
     /// Replaces the list: `(principal, containment QID)` pairs.
     pub fn load(&self, active: impl IntoIterator<Item = (EntityRef, String)>) {
         self.active.store(Arc::new(active.into_iter().map(|(who, id)| (key(&who), id)).collect()));
+        self.epoch.fetch_add(1, Ordering::AcqRel);
         self.heard();
         self.loaded.store(true, Ordering::Release);
     }

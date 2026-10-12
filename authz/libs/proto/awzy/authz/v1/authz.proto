@@ -18,6 +18,9 @@ service Authorizer {
   // The apps an admin trusts to sign tokens for their own agents (ADR 0110), besides the client's
   // IdP. Enforcement points accept their tokens only for service accounts under each one's prefix.
   rpc ListTrustedIssuers(ListTrustedIssuersRequest) returns (ListTrustedIssuersResponse);
+  // Which resources of a type a principal may act on, as a filter the app runs in its own data
+  // layer (ADR 0113): every row, no row, a challenge first, or the rows a filter matches.
+  rpc Plan(PlanRequest) returns (PlanResponse);
 }
 
 // A typed reference to a world-model entity, e.g. type "Human", id "alice".
@@ -166,4 +169,55 @@ message TrustedIssuer {
   string audience = 4;
   // It signs tokens only for service accounts whose ID starts with this, e.g. "acme-crm.".
   string agent_prefix = 5;
+}
+
+message PlanRequest {
+  // As in CheckRequest, with a resource type instead of a resource.
+  EntityRef principal = 1;
+  EntityRef on_behalf_of = 2;
+  string action = 3;
+  // The entity type the app lists, e.g. "Customer".
+  string resource_type = 4;
+  google.protobuf.Struct context = 5;
+  optional bool human_present = 6;
+  // The first page's plan, to keep paginating with: the same plan comes back until it's older
+  // than its max_age or the principal is contained. Empty for a new plan.
+  string plan_qid = 7 [(awzy.authz.v1.qid) = "plan"];
+  // The principals' entities, as in CheckRequest.
+  repeated Entity entities = 8;
+}
+
+enum PlanOutcome {
+  PLAN_OUTCOME_UNSPECIFIED = 0;
+  // Every row: no filter is needed.
+  PLAN_OUTCOME_ALWAYS_ALLOWED = 1;
+  // No row: the query can short-circuit.
+  PLAN_OUTCOME_ALWAYS_DENIED = 2;
+  // Every row needs `challenges` passed first; `filter` applies once they are.
+  PLAN_OUTCOME_CHALLENGE = 3;
+  // The rows `filter` matches.
+  PLAN_OUTCOME_CONDITIONAL = 4;
+}
+
+message PlanResponse {
+  // QID: plan_<uuid>.
+  string qid = 1 [(awzy.authz.v1.qid) = "plan"];
+  PlanOutcome outcome = 2;
+  // The filter tree, as the Decision API reference documents it.
+  google.protobuf.Struct filter = 3;
+  repeated ChallengeKind challenges = 4;
+  // A challenge that depends on the resource hides rows; passing it could show more.
+  bool challenge_could_widen = 5;
+  // The filter has a part the app must check row by row (`unknown` or `unmappable`).
+  bool needs_row_checks = 6;
+  // The resource attributes the filter reads.
+  repeated string attributes = 7;
+  repeated string policies = 8;
+  // MONITOR: show every row, and record what the filter would hide.
+  EnforcementMode mode = 9;
+  int64 policy_version = 10;
+  int64 principals_version = 11;
+  uint32 max_age_secs = 12;
+  // The same plan as the request's plan_qid.
+  bool pinned = 13;
 }

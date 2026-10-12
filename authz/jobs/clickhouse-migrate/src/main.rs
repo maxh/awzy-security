@@ -22,13 +22,14 @@ async fn main() -> anyhow::Result<()> {
         kafka_brokers: env("AWZY_CLICKHOUSE_KAFKA_BROKERS")?,
         decisions_topic: std::env::var("AWZY_DECISIONS_TOPIC").unwrap_or_else(|_| "awzy.decisions.v1".into()),
         events_topic: std::env::var("AWZY_EVENTS_TOPIC").unwrap_or_else(|_| "awzy.events.v1".into()),
+        plans_topic: std::env::var("AWZY_PLANS_TOPIC").unwrap_or_else(|_| "awzy.plans.v1".into()),
         consumer_group: std::env::var("AWZY_CLICKHOUSE_CONSUMER_GROUP").unwrap_or_else(|_| "awzy-clickhouse".into()),
     };
     // Best effort: locally the brokers are named as ClickHouse reaches them, inside Docker.
     // AWZY_KAFKA_TLS says whether to reach them over TLS, as it does for the services.
     let topic_brokers = awzy_kafka::Brokers::from_env("AWZY_CLICKHOUSE_KAFKA_BROKERS")?
         .context("AWZY_CLICKHOUSE_KAFKA_BROKERS is not set")?;
-    let topics = [settings.decisions_topic.as_str(), settings.events_topic.as_str()];
+    let topics = [settings.decisions_topic.as_str(), settings.events_topic.as_str(), settings.plans_topic.as_str()];
     match tokio::time::timeout(
         std::time::Duration::from_secs(10),
         awzy_clickhouse::ensure_topics(&topic_brokers, &topics),

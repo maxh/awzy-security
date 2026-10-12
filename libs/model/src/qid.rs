@@ -159,6 +159,8 @@ qids! {
     /// One support session (ADR 0095): awzy staff asked for it in the corp portal, which minted
     /// the ID, and a client admin decides it in the client portal.
     SupportSessionId, SupportSession, "support_session";
+    /// One query plan (ADR 0113): which resources of a type a principal may act on, as a filter.
+    PlanId, Plan, "plan";
 }
 
 #[cfg(test)]
