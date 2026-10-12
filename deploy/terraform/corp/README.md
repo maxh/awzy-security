@@ -29,11 +29,14 @@ cd build && tofu init && tofu plan
 
 `deployment.env` names the state buckets too (`TF_VAR_state_bucket`, `TF_VAR_build_state_bucket`),
 which the backends read. It's the only record of which accounts this tree manages, so a copy
-lives in Secrets Manager in the management account (`awzy/deployment-env/corp`):
+lives in Secrets Manager in the management account (`awzy/deployment-env/corp`), and another on
+this machine in `~/backup/awzy/deployment-env/` (`AWZY_DEPLOYMENT_ENV_DIR`), for when the
+checkout is gone and the AWS session has expired:
 
 ```sh
-tools/deployment-env push corp                                          # after editing it
+tools/deployment-env push corp                                          # after editing it; copies locally too
 tools/deployment-env pull corp --profile awzy-corp --region us-east-2   # on a new machine
+tools/deployment-env pull corp --local                                  # from this machine's copy
 ```
 
 CI publishes with the repository's Actions variables, set from `build/`'s outputs:

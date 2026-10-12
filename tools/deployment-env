@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
-# Backs up a deployment's deployment.env to AWS Secrets Manager, and restores it.
+# Backs up a deployment's deployment.env to AWS Secrets Manager, and restores it. Keeps a copy on
+# this machine too.
 #
 # deployment.env is gitignored (ADR 0053) and is the only record of which accounts, buckets,
 # and names a deployment's Terraform targets. The backup lives in that deployment's own
 # management account, as the secret awzy/deployment-env/<deployment>. A GCP deployment (its file
 # sets TF_VAR_project) is backed up in its project's Secret Manager instead, as
-# awzy-deployment-env-<deployment>.
+# awzy-deployment-env-<deployment>. Each push, and `local`, also copies it to
+# $AWZY_DEPLOYMENT_ENV_DIR (default ~/backup/awzy/deployment-env) as <deployment>.env, readable
+# only by you, for when the checkout is gone and the cloud session has expired.
 #
 #   tools/deployment-env push corp
+#   tools/deployment-env local corp
 #   tools/deployment-env pull corp --profile awzy-corp --region us-east-2
 #   tools/deployment-env pull example-client-gcp --project <project id>
+#   tools/deployment-env pull corp --local
 #
 # A deployment is a folder with a deployment.env: deploy/terraform/<name> or
 # deploy/terraform/examples/<name>. `push` reads the profile and region from the file; `pull`
@@ -26,7 +31,8 @@ main() {
   dir=$(find_deployment "$deployment")
   file="$dir/deployment.env"
   case "$action" in
-    push) push "$deployment" "$file" ;;
+    push) push "$deployment" "$file" && save_local "$deployment" "$file" ;;
+    local) save_local "$deployment" "$file" ;;
     pull) pull "$deployment" "$file" "$@" ;;
     *) usage ;;
   esac
@@ -34,8 +40,10 @@ main() {
 
 usage() {
   echo "usage: tools/deployment-env push <deployment>" >&2
+  echo "       tools/deployment-env local <deployment>" >&2
   echo "       tools/deployment-env pull <deployment> --profile <aws profile> --region <region> [--force]" >&2
   echo "       tools/deployment-env pull <deployment> --project <gcp project> [--force]" >&2
+  echo "       tools/deployment-env pull <deployment> --local [--force]" >&2
   exit 2
 }
 
@@ -52,6 +60,19 @@ find_deployment() {
 
 secret_name() {
   echo "awzy/deployment-env/$1"
+}
+
+# This machine's copy of a deployment's file.
+local_copy() {
+  echo "${AWZY_DEPLOYMENT_ENV_DIR:-$HOME/backup/awzy/deployment-env}/$1.env"
+}
+
+save_local() {
+  local deployment=$1 file=$2 copy
+  [ -f "$file" ] || { echo "no $file to copy" >&2; exit 1; }
+  copy=$(local_copy "$deployment")
+  (umask 077 && mkdir -p "$(dirname "$copy")" && cp "$file" "$copy")
+  echo "copied $file to $copy"
 }
 
 # Secret Manager names can't hold a slash.
@@ -111,22 +132,27 @@ push_gcp() {
 pull() {
   local deployment=$1 file=$2
   shift 2
-  local profile="" region="" project="" force=false
+  local profile="" region="" project="" from_local=false force=false
   while [ $# -gt 0 ]; do
     case "$1" in
       --profile) profile=$2; shift 2 ;;
       --project) project=$2; shift 2 ;;
       --region) region=$2; shift 2 ;;
+      --local) from_local=true; shift ;;
       --force) force=true; shift ;;
       *) usage ;;
     esac
   done
-  [ -n "$project" ] || { [ -n "$profile" ] && [ -n "$region" ]; } || usage
+  $from_local || [ -n "$project" ] || { [ -n "$profile" ] && [ -n "$region" ]; } || usage
 
   local name
   backup=$(mktemp)
   trap 'rm -f "$backup"' EXIT
-  if [ -n "$project" ]; then
+  if $from_local; then
+    name=$(local_copy "$deployment")
+    [ -f "$name" ] || { echo "no local copy at $name" >&2; exit 1; }
+    cp "$name" "$backup"
+  elif [ -n "$project" ]; then
     name=$(gcp_secret_name "$deployment")
     gcloud secrets versions access latest --secret "$name" --project "$project" > "$backup"
   else
