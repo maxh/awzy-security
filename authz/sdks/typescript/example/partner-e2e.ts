@@ -1,6 +1,6 @@
 // The design partner's path through this library, against a running install (tools/demo partner):
 // an app-minted agent's token validated, a check in monitor, a query plan turned into SQL, and the
-// plan's results reported to awzy-intake. Inputs are AWZY_TEST_* variables; it exits non-zero on
+// plan's results sent to awzy-intake. Inputs are AWZY_TEST_* variables; it exits non-zero on
 // the first thing that isn't as it should be.
 
 import { ActivityLog, Awzy, serviceTokenFromDir, type SqlMapping, TokenVerifier, toPostgres } from "../src/index.ts";
@@ -75,7 +75,8 @@ if (!("ok" in plan) || !plan.qid) fail(`plan: ${JSON.stringify(plan)}`);
 const sql = toPostgres(plan.filter, resources);
 ok(`a plan (${plan.outcome}) maps to WHERE ${sql.where.slice(0, 80)}${sql.where.length > 80 ? "…" : ""}`);
 
-// 4. Its results reported to awzy-intake as a listed access linked to the plan.
+// 4. Its results sent to awzy-intake as a listed access linked to the plan. Sending is best effort,
+// so this can't see that they arrived; tools/demo checks ClickHouse for them.
 await awzy.reportPlan(req, plan, 3);
 await activity.flush();
-ok(`the plan's results are reported to awzy-intake (${plan.qid})`);
+ok(`the plan's results are sent to awzy-intake (${plan.qid})`);
