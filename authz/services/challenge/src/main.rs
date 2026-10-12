@@ -32,7 +32,12 @@ async fn main() -> anyhow::Result<()> {
                 .context("AWZY_CHALLENGE_PORTAL_URL is required with AWZY_CHALLENGE_SLACK_TOKEN")?;
             let api = std::env::var("AWZY_CHALLENGE_SLACK_API").unwrap_or_else(|_| "https://slack.com/api".into());
             let slack = awzy_challenge::slack::Slack::new(&api, &token, &channel);
-            worker = Some(awzy_challenge::notify::Worker { pool, slack, portal_url });
+            // A person's SCIM email, for those whose userName isn't one (#65).
+            let contacts = std::env::var("AWZY_CHALLENGE_CONTEXT_ADDR")
+                .ok()
+                .filter(|a| !a.is_empty())
+                .map(|a| awzy_context_api::ContextApi::new(&a, awzy_service_auth::TokenSource::from_env()));
+            worker = Some(awzy_challenge::notify::Worker { pool, slack, portal_url, contacts });
             tracing::info!("telling people what's waiting for them in Slack");
             store = store.with_notifications();
         }

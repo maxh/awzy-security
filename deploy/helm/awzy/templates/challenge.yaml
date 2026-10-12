@@ -30,10 +30,11 @@ Secret and the security team's channel. Links go to the portal's public URL. */}
 {{- with .Values.challenge.slack }}{{- if and .tokenSecret .securityChannel }}
 {{- $url := $.Values.clientPortal.publicUrl | default (printf "https://%s" (required "clientPortal.hostname or publicUrl is required for Slack notifications" $.Values.clientPortal.hostname)) | trimSuffix "/" }}
 {{- $env = concat $env (list
+  (dict "name" "AWZY_CHALLENGE_CONTEXT_ADDR" "value" (printf "http://awzy-context.%s.svc:8080" $sys))
   (dict "name" "AWZY_CHALLENGE_PORTAL_URL" "value" $url)
   (dict "name" "AWZY_CHALLENGE_SLACK_SECURITY_CHANNEL" "value" .securityChannel)
   (dict "name" "AWZY_CHALLENGE_SLACK_TOKEN" "valueFrom" (dict "secretKeyRef" (dict "name" .tokenSecret "key" "token")))
 ) }}
 {{- end }}{{- end }}
 {{ include "awzy.service" (dict "root" . "name" "awzy-challenge" "namespace" $sys "values" .Values.challenge
-  "tokens" (list "awzy-pdp") "env" $env) }}
+  "tokens" (list "awzy-context" "awzy-pdp") "env" $env) }}

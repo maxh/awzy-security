@@ -248,3 +248,10 @@ pub struct IdPage {
     pub resources: Vec<Id>,
     pub work_items: Vec<Id>,
 }
+
+/// How to reach a person: the email their IdP provisioned, if any (#65).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HumanContact {
+    pub user_name: String,
+    pub email: Option<String>,
+}

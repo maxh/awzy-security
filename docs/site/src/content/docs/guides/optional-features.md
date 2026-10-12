@@ -85,6 +85,7 @@ include document contents or the evidence behind a containment.
    Keep the token out of version control, for example in a `.tfvars` file you don't commit. It's
    stored as a Kubernetes Secret in the `awzy-system` namespace.
 
-awzy finds people in Slack by email, using their IdP user name. Someone whose user name isn't an
-email address doesn't get direct messages; the security team's channel still does. Links use
+awzy finds people in Slack by email: the primary email your IdP provisions for them over SCIM
+(else their work email), or their user name when it is an email address. Someone with neither
+doesn't get direct messages; the security team's channel still does. Links use
 the client portal's public URL, so set its hostname first.

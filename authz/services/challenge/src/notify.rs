@@ -285,9 +285,26 @@ pub struct Worker {
     pub pool: PgPool,
     pub slack: Slack,
     pub portal_url: String,
+    /// awzy-context, for the email a person's IdP provisioned (#65). Without it, only people
+    /// whose `userName` is an email address are reached.
+    pub contacts: Option<awzy_context_api::ContextApi>,
 }
 
 impl Worker {
+    /// Where to message `user_name`: the email awzy-context has for them, else the name itself.
+    /// A lookup that fails falls back too, and the send says why it can't reach them.
+    async fn address_of(&self, user_name: &str) -> String {
+        let Some(contacts) = &self.contacts else { return user_name.to_string() };
+        match contacts.human_contact(user_name).await {
+            Ok(Some(c)) => c.email.unwrap_or_else(|| user_name.to_string()),
+            Ok(None) => user_name.to_string(),
+            Err(error) => {
+                tracing::warn!(%error, "couldn't read a person's email from awzy-context; trying their userName");
+                user_name.to_string()
+            }
+        }
+    }
+
     /// Sends what's due, every few seconds, for as long as the service runs.
     pub async fn run(self) {
         let mut ticks = tokio::time::interval(EVERY);
@@ -318,7 +335,10 @@ impl Worker {
             let notice: Result<Json<Notice>, _> = row.try_get("details");
             let outcome = match (notice, Recipient::parse(row.try_get("recipient")?)) {
                 (Err(e), _) => Err(anyhow::anyhow!("unreadable notification: {e}")),
-                (Ok(n), Some(Recipient::Human(id))) => self.slack.to_human(&id, &render(&n.0, &self.portal_url)).await,
+                (Ok(n), Some(Recipient::Human(id))) => {
+                    let address = self.address_of(&id).await;
+                    self.slack.to_human(&address, &render(&n.0, &self.portal_url)).await
+                }
                 (Ok(n), Some(Recipient::Security)) => self.slack.to_security(&render(&n.0, &self.portal_url)).await,
                 (Ok(_), None) => Err(anyhow::anyhow!("unknown recipient")),
             };

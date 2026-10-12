@@ -275,6 +275,11 @@ impl ContextApi {
         }
     }
 
+    /// How to reach a person; `None` when the IdP hasn't provisioned them, or deactivated them.
+    pub async fn human_contact(&self, user_name: &str) -> Result<Option<HumanContact>, ContextError> {
+        self.read(&format!("/v1/humans/{}/contact", encode(user_name))).await
+    }
+
     /// Resources whose ID or name contains `query`, ignoring case: at most `limit`.
     pub async fn search_resources(&self, query: &str, limit: u32) -> Result<Vec<Resource>, ContextError> {
         let path = format!("/v1/resources?limit={limit}&q={}", encode(query));
