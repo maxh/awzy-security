@@ -31,8 +31,8 @@ impl PrincipalType {
 pub struct PrincipalDetail {
     /// Whether awzy knows it at all: provisioned by the IdP, or a registered service account.
     pub known: bool,
-    /// Its Cedar attributes, as JSON: `active`, a service account's `owner` and `ai`. Null when a
-    /// policy hides them (ADR 0103).
+    /// Its Cedar attributes, as JSON: a person's `active` and HR attributes, a service account's
+    /// `owner` and `ai`. Null when a policy hides them (ADR 0103).
     pub attributes: Option<JsonObject>,
     /// Every group above it, nested groups included.
     pub groups: Vec<String>,

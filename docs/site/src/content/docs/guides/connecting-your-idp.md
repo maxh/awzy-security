@@ -88,6 +88,33 @@ awzy. You can still:
 Without provisioning, a person who signs in is checked with the groups in their token alone, and
 awzy-context has no record of them.
 
+## What policies see about a person
+
+Besides their groups and whether they're active, awzy gives policies these attributes of a
+person when your IdP sends them over SCIM. Each is absent when it doesn't, so policies test for it
+with `has`.
+
+| Attribute | From SCIM | Example |
+| --- | --- | --- |
+| `title` | `title` | `"Software Engineer"` |
+| `employee_type` | `userType`, in lowercase with `_` for spaces | `"contractor"`, `"employee"` |
+| `department` | enterprise extension `department` | `"engineering"` |
+| `division` | enterprise extension `division` | |
+| `organization` | enterprise extension `organization` | |
+| `cost_center` | enterprise extension `costCenter` | |
+
+Okta's SCIM attribute mappings and Entra's default ones send `title` and `department`. Map your
+IdP's employee type to `userType` if it doesn't already, so policies can tell contractors from
+employees:
+
+```cedar
+forbid (principal is Human, action == Action::"read", resource is Resource)
+when {
+  principal has employee_type && principal.employee_type == "contractor" &&
+  resource.sensitivity == "crown_jewels"
+};
+```
+
 ## Checking it works
 
 1. **Provision one person.** Okta's push, or Entra's **Provision on demand**, sends them right

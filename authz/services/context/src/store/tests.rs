@@ -30,6 +30,26 @@ fn user(name: &str) -> UserInput {
 }
 
 #[tokio::test]
+async fn snapshot_carries_what_the_idp_says_about_a_person() {
+    let Some(store) = test_store().await else { return };
+    let ext = crate::human_attributes::ENTERPRISE_SCHEMA;
+    let mut sam = user("sam@acme.com");
+    sam.resource = json!({
+        "userName": "sam@acme.com",
+        "title": "Software Engineer",
+        "userType": "Contractor",
+        ext: { "department": "engineering" },
+    });
+    store.create_user(&sam).await.unwrap();
+    let (_, entities) = store.snapshot().await.unwrap();
+    let sam = entities.iter().find(|e| e["uid"]["id"] == "sam@acme.com").unwrap();
+    assert_eq!(
+        sam["attrs"],
+        json!({ "active": true, "title": "Software Engineer", "employee_type": "contractor", "department": "engineering" })
+    );
+}
+
+#[tokio::test]
 async fn snapshot_has_people_groups_and_nesting() {
     let Some(store) = test_store().await else { return };
     let alice = store.create_user(&user("alice@acme.com")).await.unwrap();

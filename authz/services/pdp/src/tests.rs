@@ -333,7 +333,8 @@ fn an_administrator_at_elevated_risk_touches_a_key_for_high_risk_operations() {
     assert_eq!((d.verdict, d.policies), (verify, vec!["high-risk-verify".to_string()]));
 }
 
-/// Larkspur's shapes (ADR 0061): Sam, a Quarry Labs contractor in engineering; Nora in sales;
+/// Larkspur's shapes (ADR 0061): Sam, a Quarry Labs contractor in engineering; Jo, a contractor
+/// only by the IdP's employee type (ADR 0116), and Ray, an employee, both in engineering; Nora in sales;
 /// SalesGenie in Nora's team; Priya owns the payments design and the strategic plan.
 fn larkspur(pdp: &Pdp) -> Entities {
     let group = |id: &str| json!({ "__entity": { "type": "Group", "id": id } });
@@ -351,6 +352,10 @@ fn larkspur(pdp: &Pdp) -> Entities {
           "parents": [{ "type": "Group", "id": "engineering" }, { "type": "Group", "id": "contractors" }] },
         { "uid": { "type": "Group", "id": "engineering" }, "attrs": {}, "parents": [] },
         { "uid": { "type": "Group", "id": "contractors" }, "attrs": {}, "parents": [] },
+        { "uid": { "type": "Human", "id": "jo" }, "attrs": { "employee_type": "contractor", "department": "engineering" },
+          "parents": [{ "type": "Group", "id": "engineering" }] },
+        { "uid": { "type": "Human", "id": "ray" }, "attrs": { "employee_type": "employee", "title": "Engineer" },
+          "parents": [{ "type": "Group", "id": "engineering" }] },
         { "uid": { "type": "Human", "id": "nora" }, "attrs": {}, "parents": [{ "type": "Group", "id": "sales-ne" }] },
         { "uid": { "type": "Group", "id": "sales-ne" }, "attrs": {}, "parents": [{ "type": "Group", "id": "sales" }] },
         { "uid": { "type": "Group", "id": "sales" }, "attrs": {}, "parents": [] },
@@ -396,6 +401,31 @@ fn the_curious_contractor_needs_the_owners_approval() {
     assert_eq!(d.verdict, Verdict::Allow, "within his statement of work");
     let d = pdp.decide_assigned(&as_("sam", "Human", "read", "export"), &e, Some(&HashSet::new())).unwrap();
     assert_eq!(d.verdict, Verdict::Deny, "not shared with him at all: no challenge to pass");
+}
+
+#[test]
+fn the_idps_employee_type_makes_a_contractor_too() {
+    let pdp = Pdp::with_defaults().unwrap();
+    let e = larkspur(&pdp);
+    let unassigned = HashSet::new();
+    let d = pdp.decide_assigned(&as_("jo", "Human", "read", "payments"), &e, Some(&unassigned)).unwrap();
+    assert_eq!(d.verdict, Verdict::Challenge { challenges: Challenges::of(ChallengeKind::Approval) });
+    assert_eq!(d.policies, vec!["contractors-outside-their-work"]);
+    let d = pdp.decide_assigned(&as_("ray", "Human", "read", "payments"), &e, Some(&unassigned)).unwrap();
+    assert_eq!(d.verdict, Verdict::Allow, "an employee in engineering reads what's shared with it");
+}
+
+#[test]
+fn a_bundle_from_before_hr_attributes_still_loads_its_people() {
+    let mut old_schema = DEFAULT_SCHEMA.to_string();
+    let start = old_schema.find("  // What the IdP says about them over SCIM").unwrap();
+    let end = old_schema[start..].find("};").unwrap() + start;
+    old_schema.replace_range(start..end, "");
+    let policies = "permit (principal, action == Action::\"read\", resource);";
+    let pdp = Pdp::new(&old_schema, policies).unwrap();
+    let person = json!([{ "uid": { "type": "Human", "id": "jo" }, "parents": [],
+        "attrs": { "active": true, "employee_type": "contractor", "title": "Engineer" } }]);
+    assert!(pdp.entities(person).is_ok());
 }
 
 #[test]

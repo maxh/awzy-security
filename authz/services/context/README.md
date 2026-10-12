@@ -5,9 +5,10 @@ Part of [awzy-authz](../../).
 
 Runs LLM preprocessing to classify resource sensitivity and derive work assignments. Publishes
 attribute changes so PDP snapshots stay current. People and groups come from the client's IdP
-over SCIM ([ADR 0031](../../../docs/adr/0031-people-and-groups-from-the-idp-over-scim.md)), and
-service accounts are registered here
-([ADR 0033](../../../docs/adr/0033-service-account-registry-in-awzy-context.md)).
+over SCIM ([ADR 0031](../../../docs/adr/0031-people-and-groups-from-the-idp-over-scim.md)), with
+what the IdP says about each person (title, employee type, department, division, organization,
+cost center) as attributes of their `Human` entity ([ADR 0116](../../../docs/adr/0116-people-carry-what-the-idp-says-about-them.md)), and service accounts are registered
+here ([ADR 0033](../../../docs/adr/0033-service-account-registry-in-awzy-context.md)).
 
 Resources (documents, folders, repositories, tickets) and work items (tickets, accounts, projects,
 statements of work) are written by connectors through `/v1/resources` and `/v1/work-items`, one at

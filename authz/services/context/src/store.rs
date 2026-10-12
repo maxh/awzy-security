@@ -657,8 +657,8 @@ impl ContextStore {
         sqlx::query_scalar("SELECT version FROM snapshot_version").fetch_one(&self.pool).await
     }
 
-    /// Every person and group as Cedar entity JSON: people with `active` and their groups as
-    /// parents, groups with the groups they belong to. Read in one transaction, so the version
+    /// Every person and group as Cedar entity JSON: people with `active`, their HR attributes, and
+    /// their groups as parents, groups with the groups they belong to. Read in one transaction, so the version
     /// matches the entities.
     pub async fn snapshot(&self) -> Result<(i64, Vec<Value>), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
@@ -680,12 +680,15 @@ impl ContextStore {
             names.into_iter().map(|g| json!({ "type": entity_type::GROUP, "id": g })).collect()
         };
         let mut entities = Vec::new();
-        let humans: Vec<(Uuid, String, bool)> =
-            sqlx::query_as("SELECT scim_id, user_name, active FROM humans").fetch_all(&mut *tx).await?;
-        for (id, user_name, active) in &humans {
+        let humans: Vec<(Uuid, String, bool, Value)> =
+            sqlx::query_as("SELECT scim_id, user_name, active, resource FROM humans").fetch_all(&mut *tx).await?;
+        for (id, user_name, active, resource) in &humans {
+            // Their HR attributes from the IdP (ADR 0116), then whether they're active.
+            let mut attrs = crate::human_attributes::of(resource);
+            attrs.insert("active".into(), json!(active));
             entities.push(json!({
                 "uid": { "type": entity_type::HUMAN, "id": user_name },
-                "attrs": { "active": active },
+                "attrs": attrs,
                 // A deactivated person keeps no group access.
                 "parents": if *active { parent_refs(id) } else { vec![] },
             }));

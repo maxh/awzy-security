@@ -184,11 +184,14 @@ forbid (principal is ServiceAccount, action, resource)
 when { context has on_behalf_of && !context.human_present && context.risk_score > 50 };
 
 // The curious contractor: a contractor reaching sensitive data that none of their work links (their
-// statement of work, ADR 0046) needs its owner's approval, however widely it's shared.
+// statement of work, ADR 0046) needs its owner's approval, however widely it's shared. A contractor
+// is in the `contractors` group, or the IdP says so with their employee type.
 @id("contractors-outside-their-work")
 @challenge("approval")
-forbid (principal in Group::"contractors", action in [Action::"read", Action::"write"], resource is Resource)
+forbid (principal, action in [Action::"read", Action::"write"], resource is Resource)
 when {
+  (principal in Group::"contractors" ||
+    (principal is Human && principal has employee_type && principal.employee_type == "contractor")) &&
   (resource.sensitivity == "confidential" || resource.sensitivity == "crown_jewels") &&
   context has assigned && !context.assigned
 };
