@@ -26,26 +26,37 @@ struct Row {
     accesses: u64,
     resources: u64,
     denied: u64,
+    rows: f64,
+    exported: u64,
 }
 
 // Only denials (and events a system refused) count against a principal, not challenges:
 // high-risk-verify challenges whoever this scores highly, and counting those would feed the
 // score back into itself.
+//
+// An event that says what kind of access it was (#288) counts by the rows it touched, weighted by
+// kind (see `score::ACCESS_WEIGHTS`), instead of as one resource: a search returning 500 rows is
+// neither one read nor 500.
 const QUERY: &str = "
 SELECT
     principal_type,
     principal_id,
     toUInt32(intDiv(? - toUnixTimestamp64Milli(at), 86400000)) AS days_ago,
     count() AS accesses,
-    uniqExact(resource_id) AS resources,
-    sum(denied) AS denied
+    uniqExactIf(resource_id, resource_id != '') AS resources,
+    sum(denied) AS denied,
+    sum(rows) AS rows,
+    sumIf(touched, access = 'exported') AS exported
 FROM
 (
-    SELECT at, principal_type, principal_id, resource_id, toUInt8(verdict = 'deny') AS denied
+    SELECT at, principal_type, principal_id, resource_id, toUInt8(verdict = 'deny') AS denied,
+           '' AS access, toUInt64(0) AS touched, toFloat64(0) AS rows
     FROM decisions
     WHERE at > fromUnixTimestamp64Milli(?, 'UTC') AND at <= fromUnixTimestamp64Milli(?, 'UTC')
     UNION ALL
-    SELECT at, principal_type, principal_id, resource_id, toUInt8(outcome = 'failure') AS denied
+    SELECT at, principal_type, principal_id, if(access = '', resource_id, '') AS resource_id,
+           toUInt8(outcome = 'failure') AS denied, access, greatest(count, 1) AS touched,
+           if(access = '', 0, multiIf(access = 'exported', EXPORTED, access = 'listed', LISTED, 1) * greatest(count, 1)) AS rows
     FROM events
     WHERE at > fromUnixTimestamp64Milli(?, 'UTC') AND at <= fromUnixTimestamp64Milli(?, 'UTC')
 )
@@ -56,11 +67,21 @@ GROUP BY principal_type, principal_id, days_ago";
 pub async fn load(clickhouse: &clickhouse::Client, as_of: DateTime<Utc>) -> anyhow::Result<History> {
     let end = as_of.timestamp_millis();
     let start = (as_of - chrono::Duration::days(HISTORY_DAYS)).timestamp_millis();
+    let query = QUERY
+        .replace("EXPORTED", &crate::score::ACCESS_WEIGHTS.exported.to_string())
+        .replace("LISTED", &crate::score::ACCESS_WEIGHTS.listed.to_string());
     let rows: Vec<Row> =
-        clickhouse.query(QUERY).bind(end).bind(start).bind(end).bind(start).bind(end).fetch_all().await?;
+        clickhouse.query(&query).bind(end).bind(start).bind(end).bind(start).bind(end).fetch_all().await?;
     let mut history = History::new();
     for r in rows {
-        let day = Day { accesses: r.accesses, resources: r.resources, denied: r.denied, ..Day::default() };
+        let day = Day {
+            accesses: r.accesses,
+            resources: r.resources,
+            denied: r.denied,
+            rows: r.rows,
+            exported: r.exported,
+            ..Day::default()
+        };
         history.entry((r.principal_type, r.principal_id)).or_default().insert(r.days_ago, day);
     }
     Ok(history)
@@ -222,9 +243,9 @@ mod tests {
         let ana = &history[&("Human".to_string(), "ana".to_string())];
         assert_eq!(ana.len(), 20);
         // Sixty documents, the handbook, and a tool.
-        assert_eq!(ana[&0], Day { accesses: 62, resources: 62, denied: 0, unfamiliar: 0 });
+        assert_eq!(ana[&0], Day { accesses: 62, resources: 62, denied: 0, ..Day::default() });
         assert_eq!(ana[&19].resources, 10);
         let ben = &history[&("Human".to_string(), "ben".to_string())];
-        assert_eq!(ben[&0], Day { accesses: 11, resources: 11, denied: 1, unfamiliar: 0 });
+        assert_eq!(ben[&0], Day { accesses: 11, resources: 11, denied: 1, ..Day::default() });
     }
 }

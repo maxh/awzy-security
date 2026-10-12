@@ -50,6 +50,36 @@ in the cluster layer's Terraform (see [Installing awzy](/guides/install/), step 
   containments: `download`, `export`, `send_external`, and `share_external`.
 - `attributes` holds anything else worth keeping. Don't put document contents there.
 
+### How much an access touched
+
+An event can say what kind of access it was and how many rows it covered, so a search that
+returns 500 rows reads as neither one read nor 500:
+
+```json
+{
+  "at": "2026-10-09T10:31:00-04:00",
+  "system": "crm",
+  "principal": { "type": "ServiceAccount", "id": "sales-genie" },
+  "on_behalf_of": { "type": "Human", "id": "nora@example.com" },
+  "action": "export_customers",
+  "resource": { "type": "Customer", "id": "" },
+  "access": "exported",
+  "count": 500,
+  "tool": "exportCustomers",
+  "action_class": "read"
+}
+```
+
+- `access` is `listed`, `read`, `written`, or `exported`. Leave it out when you can't tell.
+- `count` is how many rows the access returned, of `resource.type`. For a list or search,
+  `resource.id` can be empty. A `count` needs an `access`.
+- `tool` and `action_class` name the typed tool function an agent called, and its class (`read`,
+  `write`, or your app's own), when the access was one.
+
+awzy's risk scores count these by rows, weighted by kind: a listed row counts a quarter of a read,
+and an exported row four times as much. So a bulk export raises someone's risk more than seeing
+the same rows in a list, and "far more than their peers" compares rows, not events.
+
 ## Your cloud's audit logs
 
 Each cloud's audit log format has its own endpoint, which takes log files as the cloud writes them

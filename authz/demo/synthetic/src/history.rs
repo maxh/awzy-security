@@ -52,9 +52,23 @@ pub fn event(date: NaiveDate, a: &Access) -> Value {
         "resource": { "type": "Resource", "id": a.resource },
         "outcome": "success",
         "attributes": { "tool": a.tool },
+        "tool": a.tool,
     });
+    // How much it touched (#288): a document read is one row; a folder listing a handful.
+    if a.tool == LIST {
+        e["access"] = json!("listed");
+        e["count"] = json!(5 + a.minute % 20);
+    } else {
+        e["access"] = json!("read");
+        e["count"] = json!(1);
+    }
     // An operation is on the tool, as the gateway checks it; what it operated on is an attribute.
     if system == ADMIN {
+        // An operation moves no rows, so it says no access kind.
+        if let Value::Object(fields) = &mut e {
+            fields.remove("access");
+            fields.remove("count");
+        }
         e["action"] = json!(a.tool);
         e["resource"] = json!({ "type": "McpTool", "id": format!("{ADMIN}/{}", a.tool) });
         e["attributes"]["target"] = json!(a.resource);
@@ -75,6 +89,8 @@ pub fn exfiltration_event(at: DateTime<Utc>, e: &crate::scenarios::Exfiltration)
         "resource": { "type": "Resource", "id": e.resource },
         "outcome": "success",
         "attributes": {},
+        "access": "exported",
+        "count": e.rows,
     })
 }
 
@@ -174,6 +190,11 @@ mod tests {
         assert_eq!((e["system"].as_str(), e["action"].as_str()), (Some("larkspur-admin"), Some(op.tool)));
         assert_eq!(e["resource"], json!({ "type": "McpTool", "id": format!("larkspur-admin/{}", op.tool) }));
         assert_eq!(e["attributes"]["target"], json!(op.resource));
+        assert!(e.get("access").is_none(), "an operation moves no rows");
+        // Reads and listings say how much they touched (#288).
+        assert!(matches!(p["access"].as_str(), Some("read" | "listed")) && p["count"].as_u64() >= Some(1), "{p}");
+        let exported = exfiltration_event(Utc::now(), &crate::scenarios::exfiltration()[0]);
+        assert_eq!((exported["access"].as_str(), exported["count"].as_u64()), (Some("exported"), Some(240)));
         for e in day.iter().map(|a| event(date("2026-10-08"), a)) {
             assert!(e.get("why").is_none() && e["attributes"].get("why").is_none(), "the ground truth stays here");
         }
