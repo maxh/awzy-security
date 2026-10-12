@@ -52,7 +52,7 @@ when { context has on_behalf_of && !context.human_present && context.risk_score 
 | `client` | The calling software, such as `browser`, `cli`, or `mcp`, as the enforcement point saw it. Optional. |
 | `mcp_client` | The MCP client's name, such as `claude-code`, from awzy-gateway. Optional, and only a hint. |
 
-Every field, with its type and who sets it: [Domain model](/reference/domain-model/#request-context).
+Every field, with its type and who sets it: [API conventions](/reference/api-conventions/#request-context).
 
 ## Your app's own data
 

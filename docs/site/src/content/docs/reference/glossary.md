@@ -15,7 +15,7 @@ enforce, and `approve` on someone else's challenged request.
 
 **Actor.** Who did something that awzy records, such as publishing a bundle or lifting a
 containment: an entity, and the person it acted for, if any. See the
-[domain model](/reference/domain-model/#who-did-something).
+[domain model](/concepts/domain-model/#who-did-something).
 
 **Approval.** A challenge that someone else answers: whoever your policy allows to approve the
 resource, such as its owner or the security team, or an agent you name. See
@@ -23,7 +23,7 @@ resource, such as its owner or the security team, or an agent you name. See
 
 **Assigned work.** Whether the principal has open work, such as a ticket, an account, or a
 statement of work, that links the resource or a folder above it. Policies see it as
-`context.assigned`. See [work items](/reference/domain-model/#work-items).
+`context.assigned`. See [work items](/concepts/domain-model/#work-items).
 
 **Automated containment.** A containment awzy-reasoner makes on its own, when a person's risk is
 elevated, a challenge for them was rejected, and they tried to move data out, all in the same
@@ -141,7 +141,7 @@ policies (`principal is Human`) and in the decision API. See
 [People, agents, and delegation](/concepts/principals-and-delegation/).
 
 **QID.** The ID awzy gives its own records: the record's type, an underscore, and a UUID, such as
-`decision_0199a8f2-…`. See the [domain model](/reference/domain-model/#qids).
+`decision_0199a8f2-…`. See the [domain model](/reference/api-conventions/#qids).
 
 **Resource.** Something people access: a document, a folder, a repository. Resources nest, and
 carry a sensitivity, an owner, and their sharing.
@@ -158,7 +158,7 @@ pass a verification challenge.
 
 **Sensitivity.** How much harm exposure would do: `public`, `internal`, `confidential`, or
 `crown_jewels`. Set by a label, or by awzy's classifier, and never lowered. See
-[sensitivity](/reference/domain-model/#sensitivity).
+[sensitivity](/concepts/domain-model/#sensitivity).
 
 **Sensitivity tier.** One of `sensitivity`'s four values. A setting that holds one says `tier`, such
 as the tiers that fail open during a PDP outage.
