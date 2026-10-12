@@ -2,8 +2,8 @@
 //! and typed errors, and a field awzy-context renames fails to deserialize instead of reading as
 //! empty. The server uses these types too, where it can, and contract tests hold it to the rest.
 //!
-//! Covered so far: connector settings (ADR 0104) and reading resources. The rest of the API moves
-//! here area by area.
+//! Covered so far: connector settings (ADR 0104), reading resources, investigations (ADR 0071),
+//! the principals snapshot, and risk scores. The rest of the API moves here area by area.
 
 pub mod model;
 
@@ -13,8 +13,9 @@ use awzy_http::{encode, Body, Method, Request, StatusCode};
 use serde::de::DeserializeOwned;
 
 use crate::model::{
-    ConnectorSettings, ConnectorSettingsList, ConnectorSettingsOne, PutConnectorSettings, Resource, ResourceEntities,
-    ResourceList, ResourceOne,
+    CloseInvestigation, ConnectorSettings, ConnectorSettingsList, ConnectorSettingsOne, Investigation,
+    InvestigationList, InvestigationOne, InvestigationUsage, InvestigationUsageOne, PrincipalsSnapshot,
+    PutConnectorSettings, Resource, ResourceEntities, ResourceList, ResourceOne, RiskBatch, RiskScore,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -116,6 +117,78 @@ impl ContextApi {
     /// to work on it; `None` when awzy-context doesn't know it.
     pub async fn resource_entities(&self, id: &str) -> Result<Option<ResourceEntities>, ContextError> {
         self.read(&format!("/v1/resources/{}/entities", encode(id))).await
+    }
+
+    /// Investigations, newest first, optionally only those with `status`: at most `limit`.
+    pub async fn investigations(&self, status: Option<&str>, limit: u32) -> Result<Vec<Investigation>, ContextError> {
+        let status = status.map(|s| format!("&status={}", encode(s))).unwrap_or_default();
+        let path = format!("/v1/investigations?limit={limit}{status}");
+        Ok(self.read::<InvestigationList>(&path).await?.map(|l| l.investigations).unwrap_or_default())
+    }
+
+    /// Investigations finished since `since`, newest first: at most `limit`.
+    pub async fn investigations_since(
+        &self,
+        since: chrono::DateTime<chrono::Utc>,
+        limit: u32,
+    ) -> Result<Vec<Investigation>, ContextError> {
+        let path = format!("/v1/investigations?limit={limit}&since={}", encode(&since.to_rfc3339()));
+        Ok(self.read::<InvestigationList>(&path).await?.map(|l| l.investigations).unwrap_or_default())
+    }
+
+    /// Tokens spent on investigations finished since `since`.
+    pub async fn investigation_usage(
+        &self,
+        since: chrono::DateTime<chrono::Utc>,
+    ) -> Result<InvestigationUsage, ContextError> {
+        let path = format!("/v1/investigations/usage?since={}", encode(&since.to_rfc3339()));
+        Ok(self.read::<InvestigationUsageOne>(&path).await?.map(|u| u.usage).unwrap_or_default())
+    }
+
+    /// Records an investigation awzy-reasoner ran and returns it as stored, with its QID.
+    pub async fn put_investigation(&self, record: &serde_json::Value) -> Result<Investigation, ContextError> {
+        let path = "/v1/investigations";
+        let res = self.call(Method::POST, path, None, Some(record.clone())).await?;
+        Ok(decode::<InvestigationOne>(path, res)?.investigation)
+    }
+
+    /// The principals snapshot the PDPs load.
+    pub async fn principals(&self) -> Result<PrincipalsSnapshot, ContextError> {
+        let path = "/v1/principals";
+        let res = self.call(Method::GET, path, None, None).await?;
+        decode(path, res)
+    }
+
+    /// Replaces these principals' risk scores.
+    pub async fn put_risk(&self, scores: Vec<RiskScore>) -> Result<(), ContextError> {
+        let path = "/v1/risk";
+        let body = serde_json::to_value(RiskBatch { scores })
+            .map_err(|source| ContextError::Unexpected { path: path.to_string(), source })?;
+        let res = self.call(Method::POST, path, None, Some(body)).await?;
+        decode::<serde_json::Value>(path, res).map(|_| ())
+    }
+
+    /// One investigation; `None` when there's no such one.
+    pub async fn investigation(&self, qid: &str) -> Result<Option<Investigation>, ContextError> {
+        Ok(self
+            .read::<InvestigationOne>(&format!("/v1/investigations/{}", encode(qid)))
+            .await?
+            .map(|i| i.investigation))
+    }
+
+    /// Closes `qid` for `reason`, as `actor` (an `Actor`'s string form). `Invalid` says why
+    /// awzy-context refused; a 404 or 409 is `Refused` with its reason.
+    pub async fn close_investigation(
+        &self,
+        qid: &str,
+        reason: &str,
+        actor: &str,
+    ) -> Result<Investigation, ContextError> {
+        let path = format!("/v1/investigations/{}/close", encode(qid));
+        let body = serde_json::to_value(CloseInvestigation { reason: reason.to_string() })
+            .map_err(|source| ContextError::Unexpected { path: path.clone(), source })?;
+        let res = self.call(Method::POST, &path, Some(actor), Some(body)).await?;
+        Ok(decode::<InvestigationOne>(&path, res)?.investigation)
     }
 
     /// Resources whose ID or name contains `query`, ignoring case: at most `limit`.

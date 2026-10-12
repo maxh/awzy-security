@@ -4,112 +4,60 @@
 
 use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject, ID};
 use awzy_model::InvestigationId;
-use awzy_portal::{Actor, Qid, UtcTimestamp};
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use awzy_portal::{Actor, ErrorCode, Qid, UtcTimestamp};
 use serde_json::{json, Value};
 
 use crate::{
     access::{require, PortalAction, PortalArea},
     decisions::EntityRef,
-    directory::{context, ContextClient},
+    directory::context_api,
 };
 
 /// The most one list returns.
 const MOST: i32 = 200;
 
-// ---- What awzy-context sends
+// ---- What awzy-context sends: its types, from the one client for its API (#222)
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct WireSubject {
-    #[serde(rename = "type")]
-    pub kind: String,
-    pub id: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct WireCited {
-    pub id: String,
-    #[serde(default)]
-    pub why: String,
-}
-
-/// One investigation as awzy-context keeps it.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct WireInvestigation {
-    pub qid: String,
-    pub principal: WireSubject,
-    pub trigger: String,
-    pub floor: i32,
-    pub status: String,
-    pub verdict: String,
-    pub risk: i32,
-    pub summary: String,
-    #[serde(default)]
-    pub evidence: Vec<WireCited>,
-    pub containment: String,
-    #[serde(default)]
-    pub notes: Vec<String>,
-    pub model: String,
-    pub input_tokens: i64,
-    pub output_tokens: i64,
-    pub started_at: DateTime<Utc>,
-    pub finished_at: DateTime<Utc>,
-    pub closed_by: Option<String>,
-    pub closed_at: Option<DateTime<Utc>>,
-    pub close_reason: Option<String>,
-}
+pub use awzy_context_api::model::Investigation as WireInvestigation;
+use awzy_context_api::{ContextApi, ContextError};
 
 // ---- Operations, shared with the MCP tools
 
 /// Newest first, optionally only those with `status`.
-pub async fn list(context: &ContextClient, status: Option<&str>, first: i32) -> anyhow::Result<Vec<WireInvestigation>> {
-    #[derive(Deserialize)]
-    struct Body {
-        investigations: Vec<WireInvestigation>,
-    }
-    let status = status.map(|s| format!("&status={s}")).unwrap_or_default();
-    let body: Body = context.get(&format!("/v1/investigations?limit={}{status}", first.clamp(1, MOST))).await?;
-    Ok(body.investigations)
+pub async fn list(
+    context: &ContextApi,
+    status: Option<&str>,
+    first: i32,
+) -> Result<Vec<WireInvestigation>, ContextError> {
+    context.investigations(status, first.clamp(1, MOST).unsigned_abs()).await
 }
 
-/// One investigation, or None when there's no such one.
-pub async fn get(context: &ContextClient, qid: &str) -> anyhow::Result<Option<WireInvestigation>> {
-    #[derive(Deserialize)]
-    struct Body {
-        investigation: WireInvestigation,
-    }
-    let (status, body) =
-        context.call("GET", &format!("/v1/investigations/{}", awzy_http::encode(qid)), None, None).await?;
-    match status {
-        200 => Ok(Some(serde_json::from_slice::<Body>(&body)?.investigation)),
-        400 | 404 => Ok(None),
-        _ => anyhow::bail!("awzy-context answered {status}: {}", String::from_utf8_lossy(&body)),
+/// One investigation, or None when there's no such one (a malformed QID included).
+pub async fn get(context: &ContextApi, qid: &str) -> Result<Option<WireInvestigation>, ContextError> {
+    match context.investigation(qid).await {
+        Err(ContextError::Invalid(_)) => Ok(None),
+        found => found,
     }
 }
 
-/// Closes `qid` as `actor`, for `reason`.
+/// Closes `qid` as `actor`, for `reason`, with a code saying what kind of refusal it was.
 pub async fn close(
-    context: &ContextClient,
+    context: &ContextApi,
     qid: &str,
     reason: &str,
     actor: &awzy_model::Actor,
-) -> std::result::Result<WireInvestigation, String> {
-    #[derive(Deserialize)]
-    struct Body {
-        investigation: WireInvestigation,
-    }
-    let path = format!("/v1/investigations/{}/close", awzy_http::encode(qid));
-    let (status, body) = context
-        .call("POST", &path, Some(&actor.to_string()), Some(json!({ "reason": reason })))
-        .await
-        .map_err(|e| e.to_string())?;
-    let text = String::from_utf8_lossy(&body).to_string();
-    match status {
-        200 => serde_json::from_slice::<Body>(&body).map(|b| b.investigation).map_err(|e| e.to_string()),
-        400 | 404 | 409 => Err(text),
-        _ => Err(format!("awzy-context answered {status}: {text}")),
-    }
+) -> Result<WireInvestigation, async_graphql::Error> {
+    context.close_investigation(qid, reason, &actor.to_string()).await.map_err(|e| {
+        let code = match &e {
+            ContextError::Invalid(_) | ContextError::Refused { status: 409, .. } => ErrorCode::InvalidInput,
+            ContextError::Refused { status: 404, .. } => ErrorCode::NotFound,
+            _ => ErrorCode::Unavailable,
+        };
+        code.error(match e {
+            ContextError::Invalid(m) | ContextError::Refused { status: 404 | 409, body: m } => m,
+            other => other.to_string(),
+        })
+    })
 }
 
 // ---- GraphQL
@@ -278,7 +226,7 @@ impl InvestigationQuery {
         #[graphql(default = 50)] first: i32,
     ) -> Result<Vec<Investigation>> {
         require(ctx, PortalAction::View, PortalArea::Investigations).await?;
-        let list = list(context(ctx)?, status.map(InvestigationStatus::as_str), first).await?;
+        let list = list(context_api(ctx)?, status.map(InvestigationStatus::as_str), first).await?;
         Ok(list.into_iter().map(Investigation).collect())
     }
 }
@@ -286,7 +234,7 @@ impl InvestigationQuery {
 /// One investigation, for `node(id)`. For those who may view investigations.
 pub(crate) async fn get_by_id(ctx: &Context<'_>, id: InvestigationId) -> Result<Option<Investigation>> {
     require(ctx, PortalAction::View, PortalArea::Investigations).await?;
-    Ok(get(context(ctx)?, &id.to_string()).await?.map(Investigation))
+    Ok(get(context_api(ctx)?, &id.to_string()).await?.map(Investigation))
 }
 
 #[derive(InputObject)]
@@ -317,7 +265,7 @@ impl InvestigationMutation {
         if reason.is_empty() {
             return Err("say what the review found".into());
         }
-        let closed = close(context(ctx)?, &input.investigation_qid.to_string(), reason, &viewer.actor()).await?;
+        let closed = close(context_api(ctx)?, &input.investigation_qid.to_string(), reason, &viewer.actor()).await?;
         Ok(CloseInvestigationPayload { investigation: Investigation(closed) })
     }
 }

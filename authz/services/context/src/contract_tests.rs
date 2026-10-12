@@ -47,3 +47,40 @@ fn a_resource_reads_back_through_the_client_api() {
         ("gdrive:1", ["bob".to_string()].as_slice())
     );
 }
+
+/// An investigation as this server writes it reads back through the client's type.
+#[test]
+fn an_investigation_reads_back_through_the_client_api() {
+    use crate::investigations::{Investigation, InvestigationInput};
+
+    let at = chrono::DateTime::parse_from_rfc3339("2026-10-11T12:00:00Z").unwrap().with_timezone(&Utc);
+    let i = Investigation {
+        qid: "investigation_0199a8f2-6c1e-7b3a-9d4e-2f8c1a5b7e90".into(),
+        input: InvestigationInput {
+            principal: awzy_model::EntityRef::new("Human", "nora"),
+            trigger: "risk 63".into(),
+            floor: 63,
+            status: "needs_review".into(),
+            verdict: "suspicious".into(),
+            risk: 70,
+            summary: "exported the board deck".into(),
+            evidence: json!([{ "id": "decision_1", "why": "the export" }]),
+            containment: "none".into(),
+            notes: vec!["checked the share".into()],
+            finding: None,
+            model: "m".into(),
+            input_tokens: 10,
+            output_tokens: 2,
+            started_at: at,
+        },
+        finished_at: at,
+        closed_by: Some("Human::priya".into()),
+        closed_at: Some(at),
+        close_reason: Some("benign".into()),
+    };
+    let wire = serde_json::to_value(json!({ "investigation": i })).unwrap();
+    let read: awzy_context_api::model::InvestigationOne = serde_json::from_value(wire).unwrap();
+    let c = read.investigation;
+    assert_eq!((c.principal.kind.as_str(), c.principal.id.as_str()), ("Human", "nora"));
+    assert_eq!((c.evidence[0].why.as_str(), c.close_reason.as_deref()), ("the export", Some("benign")));
+}

@@ -2,7 +2,7 @@
 //! write them and clients read them with the same definition.
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 /// One connector's settings, as the client portal set them (ADR 0104).
@@ -126,4 +126,111 @@ pub struct EntityUid {
     #[serde(rename = "type")]
     pub kind: String,
     pub id: String,
+}
+
+/// Who an investigation is about.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InvestigationPrincipal {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub id: String,
+}
+
+/// Something an investigation's finding rests on, and why.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Cited {
+    pub id: String,
+    #[serde(default)]
+    pub why: String,
+}
+
+/// A list awzy-context may store as null.
+fn null_as_empty<'de, D: Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<Vec<T>, D::Error> {
+    Ok(Option::<Vec<T>>::deserialize(d)?.unwrap_or_default())
+}
+
+/// One of awzy-reasoner's investigations, as awzy-context keeps it (ADR 0071).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Investigation {
+    pub qid: String,
+    pub principal: InvestigationPrincipal,
+    pub trigger: String,
+    pub floor: i32,
+    pub status: String,
+    pub verdict: String,
+    pub risk: i32,
+    pub summary: String,
+    #[serde(default, deserialize_with = "null_as_empty")]
+    pub evidence: Vec<Cited>,
+    pub containment: String,
+    #[serde(default, deserialize_with = "null_as_empty")]
+    pub notes: Vec<String>,
+    pub model: String,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub started_at: DateTime<Utc>,
+    pub finished_at: DateTime<Utc>,
+    /// Who closed it (an actor's typed text, ADR 0060), when, and why; null while open.
+    pub closed_by: Option<String>,
+    pub closed_at: Option<DateTime<Utc>>,
+    pub close_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InvestigationOne {
+    pub investigation: Investigation,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InvestigationList {
+    pub investigations: Vec<Investigation>,
+}
+
+/// Closing an investigation once a person has reviewed it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CloseInvestigation {
+    pub reason: String,
+}
+
+/// The principals snapshot the PDPs load: people, groups, and service accounts as Cedar
+/// entities, with the groups each is in as its parents.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PrincipalsSnapshot {
+    #[serde(default)]
+    pub version: i64,
+    #[serde(default)]
+    pub entities: Vec<CedarEntity>,
+}
+
+/// Tokens spent on investigations over a period.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct InvestigationUsage {
+    #[serde(default)]
+    pub investigations: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct InvestigationUsageOne {
+    pub usage: InvestigationUsage,
+}
+
+/// One principal's risk score, as awzy-reasoner writes it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RiskScore {
+    pub principal: EntityUid,
+    pub score: i32,
+    #[serde(default)]
+    pub reasons: Vec<String>,
+    /// For a person: how much their requests look like software using their credentials.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub automation: Option<i32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub automation_reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RiskBatch {
+    pub scores: Vec<RiskScore>,
 }
