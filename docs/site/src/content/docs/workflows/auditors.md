@@ -23,20 +23,24 @@ all need `administer`, or the security key of whoever does them. The security te
 what you see, such as keeping requests' context to its privacy team, without changing this
 policy. See [changing who can do what](/workflows/security-team/#changing-who-can-do-what).
 
+This shows you everything in the table below except other people's challenges and the
+containments, which only those who can act on them see today. Ask the security team for those;
+see [what isn't in the portal yet](#what-isnt-in-the-portal-yet).
+
 ## The evidence
 
-| Control                                             | Where                              | What it shows                                                                                                                                                                                        |
-| --------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Access is decided per action                        | **Decisions**                      | Every allow, deny, and challenge: who, for whom, which action, which resource, when, and in which mode                                                                                               |
-| Decisions follow approved policy                    | **Decisions**, open one            | The policies that produced it, with their source, from the bundle in force at the time                                                                                                               |
-| Policy changes are controlled                       | **Policies**                       | Every bundle: drafts, the active one, and those it replaced, each with its version and who wrote it, and who published the active one. A draft is validated and can be dry-run before it's published |
-| Enforcement is on, and changes to it are controlled | **Enforcement**, History           | Every switch between monitor and enforce, for the install and for each action or tool, with who made it and when. Each switch takes a touch of the person's security key                             |
-| Sensitive actions get a second look                 | **Challenges**                     | Each challenge, its kind (a justification, a security key, or an approval), who answered it, and their reason or note                                                                                |
-| Risky access is stopped                             | **Challenges**, Containments       | Each containment, why, and who or what made it; lifting one takes a reason                                                                                                                           |
-| Software has an accountable owner                   | **Directory**, Service accounts    | Each service account and AI agent, its owner (a person from the IdP), whether it's AI, and who registered it                                                                                         |
-| People come from the IdP                            | **Directory**, People and groups   | People and groups exactly as the IdP provisions them. They can't be edited in awzy                                                                                                                   |
-| Flagged principals are reviewed                     | **Investigations**, when turned on | Each finding, its evidence, what was done, and the review that closed it                                                                                                                             |
-| Vendor access is approved and bounded               | **Support**                        | Each support session awzy staff asked for: the areas, why, who approved it, for how long, and every page they opened                                                                                 |
+| Control                                             | Where                                 | What it shows                                                                                                                                                                                        |
+| --------------------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Access is decided per action                        | **Decisions**                         | Every allow, deny, and challenge: who, for whom, which action, which resource, when, and in which mode                                                                                               |
+| Decisions follow approved policy                    | **Decisions**, open one               | The policies that produced it, with their source, from the bundle in force at the time                                                                                                               |
+| Policy changes are controlled                       | **Policies**                          | Every bundle: drafts, the active one, and those it replaced, each with its version and who wrote it, and who published the active one. A draft is validated and can be dry-run before it's published |
+| Enforcement is on, and changes to it are controlled | **Enforcement**, History              | Every switch between monitor and enforce, for the install and for each action or tool, with who made it and when. Each switch takes a touch of the person's security key                             |
+| Sensitive actions get a second look                 | **Challenges** (admins)               | Each challenge, its kind (a justification, a security key, or an approval), who answered it, and their reason or note                                                                                |
+| Risky access is stopped                             | **Challenges**, Containments (admins) | Each containment, why, and who or what made it; lifting one takes a reason                                                                                                                           |
+| Software has an accountable owner                   | **Directory**, Service accounts       | Each service account and AI agent, its owner (a person from the IdP), whether it's AI, and who registered it                                                                                         |
+| People come from the IdP                            | **Directory**, People and groups      | People and groups exactly as the IdP provisions them. They can't be edited in awzy                                                                                                                   |
+| Flagged principals are reviewed                     | **Investigations**, when turned on    | Each finding, its evidence, what was done, and the review that closed it                                                                                                                             |
+| Vendor access is approved and bounded               | **Support**                           | Each support session awzy staff asked for: the areas, why, who approved it, for how long, and every page they opened                                                                                 |
 
 Who did something is recorded as a person, a service account acting for a person, one of awzy's
 own services (such as an automated containment), or a break-glass key: never as free text.
@@ -55,6 +59,12 @@ own services (such as an automated containment), or a break-glass key: never as 
   of the install was enforcing.
 
 ## What isn't in the portal yet
+
+- **Read-only access to every challenge and containment.** Viewing the Challenges page shows you
+  only the challenges sent to you. Seeing everyone's, and the containments, takes the right to
+  administer challenges, which would also let you approve requests and contain people, so an
+  auditor isn't given it. Ask the security team to pull the challenges and containments for your
+  audit period from the Challenges page.
 
 - **Exporting decisions.** The Decisions page filters by principal, resource, verdict, and mode,
   and shows a decision's full detail, but has no download. For a sample, ask the company's
