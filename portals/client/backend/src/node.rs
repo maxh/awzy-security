@@ -48,7 +48,7 @@ impl NodeQuery {
             QidEntity::SecurityKey => crate::security_keys::get_by_id(ctx, id.parse()?).await?.map(Node::SecurityKey),
             QidEntity::SupportSession => crate::support::get_by_id(ctx, id.parse()?).await?.map(Node::SupportSession),
             // Not objects this portal serves.
-            QidEntity::Install | QidEntity::Event | QidEntity::Ceremony => None,
+            QidEntity::Install | QidEntity::Event | QidEntity::Ceremony | QidEntity::Plan => None,
         })
     }
 }

@@ -1,5 +1,5 @@
 {
-  "checksum": "0024e214889f9d0c053f21406ccae7d7f09a3cca8151a641087e536ba5725a2e",
+  "checksum": "3e3025ed590017075febce0a641c77ef4eec6c3eabc40110bb7369e1f31332ee",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -4847,6 +4847,10 @@
             "target": "serde_json"
           },
           {
+            "id": "sha2 0.10.9",
+            "target": "sha2"
+          },
+          {
             "id": "thiserror 2.0.21",
             "target": "thiserror"
           },
@@ -6952,7 +6956,8 @@
           "datetime",
           "decimal",
           "default",
-          "ipaddr"
+          "ipaddr",
+          "partial-eval"
         ],
         "deps": [
           {
@@ -7056,7 +7061,8 @@
           "datetime",
           "decimal",
           "default",
-          "ipaddr"
+          "ipaddr",
+          "partial-eval"
         ],
         "deps": [
           {

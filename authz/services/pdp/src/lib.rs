@@ -14,6 +14,7 @@ mod decision_log;
 mod enforcement;
 mod grpc;
 pub mod metrics;
+pub mod plan;
 mod prepared;
 pub mod principals;
 pub mod replay;
@@ -400,11 +401,11 @@ impl Pdp {
 }
 
 /// A policy's ID as decisions report it: its `@id` annotation, else Cedar's.
-fn policy_id(p: &cedar_policy::Policy) -> String {
+pub(crate) fn policy_id(p: &cedar_policy::Policy) -> String {
     p.annotation("id").map(str::to_string).unwrap_or_else(|| p.id().to_string())
 }
 
-fn uid(e: &EntityRef) -> anyhow::Result<EntityUid> {
+pub(crate) fn uid(e: &EntityRef) -> anyhow::Result<EntityUid> {
     Ok(EntityUid::from_type_name_and_id(EntityTypeName::from_str(&e.kind)?, EntityId::new(&e.id)))
 }
 
@@ -426,6 +427,10 @@ pub struct AppState {
     pub containments: Arc<containments::Containments>,
     /// Opens and resolves enforced challenges, if configured.
     pub challenges: Arc<challenges::ChallengeResolver>,
+    /// Query plans, cached while what they rest on holds (ADR 0113).
+    pub plans: Arc<plan::PlanCache>,
+    /// Where plans are recorded, when configured.
+    pub plan_log: Option<Arc<plan::PlanLog>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -454,7 +459,14 @@ impl AppState {
             service_auth: Arc::new(awzy_service_auth::Verifier::off()),
             containments: Arc::new(containments::Containments::none()),
             challenges: Arc::new(challenges::ChallengeResolver::none()),
+            plans: Arc::default(),
+            plan_log: None,
         }
+    }
+
+    pub fn with_plan_log(mut self, log: Arc<plan::PlanLog>) -> Self {
+        self.plan_log = Some(log);
+        self
     }
 
     /// Containments and challenges from awzy-challenge.
@@ -627,6 +639,8 @@ pub fn router(state: AppState) -> Router {
         awzy_service_auth::Guard::new(state.service_auth.clone(), awzy_service_auth::Allowed::AnyServiceAccount);
     Router::new()
         .route("/v1/access/evaluation", post(evaluate))
+        // Which resources of a type a principal may act on, as a filter (ADR 0113).
+        .route("/v1/access/plan", post(plan::http))
         // An agent waiting for its challenge's answer (ADR 0111).
         .route("/v1/access/challenge", post(waiting::http))
         .with_state(state.clone())

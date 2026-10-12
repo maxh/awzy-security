@@ -2,8 +2,8 @@
 
 use awzy_authz_proto::authz::v1::{
     authorizer_server::{Authorizer, AuthorizerServer},
-    CheckRequest, CheckResponse, ListTrustedIssuersRequest, ListTrustedIssuersResponse, TrustedIssuer,
-    WaitForChallengeRequest, WaitForChallengeResponse,
+    CheckRequest, CheckResponse, ListTrustedIssuersRequest, ListTrustedIssuersResponse, PlanOutcome, PlanRequest,
+    PlanResponse, TrustedIssuer, WaitForChallengeRequest, WaitForChallengeResponse,
 };
 use awzy_model::Check;
 use axum::Router;
@@ -24,6 +24,58 @@ impl Authorizer for Service {
             crate::CheckError::Invalid(_) => Status::invalid_argument(e.to_string()),
         })?;
         Ok(Response::new(decision.into()))
+    }
+
+    async fn plan(&self, request: Request<PlanRequest>) -> Result<Response<PlanResponse>, Status> {
+        let req = request.into_inner();
+        let entities = awzy_authz_proto::entities_to_json(req.entities);
+        let plan_id = match req.plan_qid.as_str() {
+            "" => None,
+            qid => Some(qid.parse().map_err(|e| Status::invalid_argument(format!("plan_qid: {e}")))?),
+        };
+        let plan = crate::plan::PlanRequest {
+            principal: req.principal.ok_or_else(|| Status::invalid_argument("principal is required"))?.into(),
+            on_behalf_of: req.on_behalf_of.map(Into::into),
+            action: req.action,
+            resource_type: req.resource_type,
+            context: req.context.map(awzy_authz_proto::struct_to_json).unwrap_or_default(),
+            human_present: req.human_present,
+            plan_id,
+        };
+        let res = self.0.plan(&plan, entities).await.map_err(|e| match e {
+            crate::CheckError::NotReady | crate::CheckError::Unavailable(_) => Status::unavailable(e.to_string()),
+            crate::CheckError::Invalid(_) => Status::invalid_argument(e.to_string()),
+        })?;
+        let filter = match serde_json::to_value(&res.filter) {
+            Ok(serde_json::Value::Object(m)) => Some(awzy_authz_proto::json_to_struct(m)),
+            _ => None,
+        };
+        let outcome = match res.outcome {
+            crate::plan::Outcome::AlwaysAllowed => PlanOutcome::AlwaysAllowed,
+            crate::plan::Outcome::AlwaysDenied => PlanOutcome::AlwaysDenied,
+            crate::plan::Outcome::Challenge => PlanOutcome::Challenge,
+            crate::plan::Outcome::Conditional => PlanOutcome::Conditional,
+        };
+        let challenges = res
+            .challenges
+            .iter()
+            .filter_map(|k| awzy_model::ChallengeKind::parse(k))
+            .collect::<awzy_model::Challenges>();
+        Ok(Response::new(PlanResponse {
+            qid: res.qid.to_string(),
+            outcome: outcome as i32,
+            filter,
+            challenges: awzy_authz_proto::challenges_to_wire(challenges),
+            challenge_could_widen: res.challenge_could_widen,
+            needs_row_checks: res.needs_row_checks,
+            attributes: res.attributes,
+            policies: res.policies,
+            mode: awzy_authz_proto::authz::v1::EnforcementMode::from(res.mode) as i32,
+            policy_version: res.policy_version,
+            principals_version: res.principals_version,
+            max_age_secs: res.max_age_secs as u32,
+            pinned: res.pinned,
+        }))
     }
 
     async fn wait_for_challenge(

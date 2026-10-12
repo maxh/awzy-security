@@ -5,14 +5,16 @@
 mod actor;
 mod fallback;
 mod issuer;
+mod plan;
 mod qid;
 
 pub use actor::{actor_type, Actor};
 pub use fallback::{FallbackError, OutageFallback, ALWAYS_FAIL_CLOSED, TIERS, UNCLASSIFIED_TIER};
 pub use issuer::{InvalidIssuer, TrustedIssuer};
+pub use plan::PlanRecord;
 pub use qid::{
-    CeremonyId, ChallengeId, ContainmentId, DecisionId, EventId, InstallId, InvestigationId, PolicyBundleId, QidEntity,
-    QidError, SecurityKeyId, SupportSessionId, TypedQid,
+    CeremonyId, ChallengeId, ContainmentId, DecisionId, EventId, InstallId, InvestigationId, PlanId, PolicyBundleId,
+    QidEntity, QidError, SecurityKeyId, SupportSessionId, TypedQid,
 };
 
 use chrono::{DateTime, Utc};
