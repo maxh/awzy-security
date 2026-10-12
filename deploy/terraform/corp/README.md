@@ -60,7 +60,7 @@ changes anything.
 
 ## Applying, and the drift check
 
-`build/` and `corp-portal/` are applied by CI (ADR 0115), in the `terraform-corp` workflow:
+`build/` and `corp-portal/` are applied by CI (ADR 0115), in the `terraform` workflow:
 
 - **On a pull request** that changes them, it plans both against their recorded state, as the
   read-only role `awzy-ci-plan` (`corp-portal/drift.tf`), and keeps a comment on the pull request

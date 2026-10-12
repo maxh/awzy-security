@@ -1,5 +1,5 @@
 # The role CI plans the corp modules as, without refreshing (ADR 0115): for a pull request's list
-# of changes (.github/workflows/terraform-corp.yml), and for the drift check, which says when
+# of changes (.github/workflows/terraform.yml), and for the drift check, which says when
 # merged Terraform hasn't been applied (.github/workflows/terraform-drift.yml). Read-only, and only
 # what a plan without a refresh reads: the state, and the few things the modules look up.
 # Workflows on main and on pull requests can assume it; pull requests from forks get no token.

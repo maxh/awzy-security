@@ -52,3 +52,21 @@ variable "backup_retention_days" {
     error_message = "backup_retention_days must be at least 14, so a week's incrementals outlive their full backup by a week."
   }
 }
+
+variable "cluster_creator_admin" {
+  description = "Make whoever runs this a cluster admin. False when a pipeline applies it, with its role and the people's in cluster_admins, so access doesn't follow whoever ran it last"
+  type        = bool
+  default     = true
+}
+
+variable "cluster_admins" {
+  description = "IAM principals with cluster admin, by a name of your choosing: { name = role ARN }"
+  type        = map(string)
+  default     = {}
+}
+
+variable "cluster_viewers" {
+  description = "IAM principals that can read the cluster but not change it or read its secrets, such as a pipeline's plan role: { name = role ARN }"
+  type        = map(string)
+  default     = {}
+}

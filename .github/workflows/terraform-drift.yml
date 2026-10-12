@@ -1,6 +1,6 @@
 name: terraform-drift
 
-# Corp Terraform that's merged but not applied (tools/ci/terraform-drift.sh): terraform-corp's
+# Corp Terraform that's merged but not applied (tools/ci/terraform-drift.sh): the terraform workflow's
 # apply is waiting for approval, or failed. A plan of each module against its recorded state, as
 # the read-only plan role (deploy/terraform/corp/corp-portal/drift.tf), with an issue kept open
 # per module until it's applied. Daily, so a merge's own apply has time to run first.

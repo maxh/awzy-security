@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # terraform-drift.sh <module>...: plans each corp Terraform module (deploy/terraform/<module>)
 # against its recorded state, without refreshing or locking, and says which have merged changes
-# that aren't applied: the terraform-corp workflow's apply is waiting for approval, or failed.
+# that aren't applied: the terraform workflow's apply is waiting for approval, or failed.
 #
 # Keeps one GitHub issue open per module while it differs, listing what would change, and closes
 # it once the module is applied. Prints only resource addresses: plans hold account IDs and ARNs,
@@ -12,6 +12,7 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
+env_dir=deploy/terraform/corp
 # shellcheck source=tools/ci/terraform-env.sh
 source tools/ci/terraform-env.sh
 
@@ -21,7 +22,7 @@ open_issue() { # <module> <changes>
   local t number body
   t=$(title "$1")
   number=$(gh issue list --state open --search "in:title \"$t\"" --json number,title --jq ".[] | select(.title == \"$t\") | .number" | head -1)
-  body=$(printf 'Merged Terraform in `deploy/terraform/%s` differs from what was last applied (checked at %s):\n\n```\n%s\n```\n\nThe `terraform-corp` workflow applies it once its run for the merge is approved (`deploy/terraform/corp/README.md`). This issue closes itself once the module is applied.\n' \
+  body=$(printf 'Merged Terraform in `deploy/terraform/%s` differs from what was last applied (checked at %s):\n\n```\n%s\n```\n\nThe `terraform` workflow applies it once its run for the merge is approved (`deploy/terraform/corp/README.md`). This issue closes itself once the module is applied.\n' \
     "$1" "${GITHUB_SHA:0:7}" "$2")
   if [ -n "$number" ]; then
     gh issue edit "$number" --body "$body" >/dev/null

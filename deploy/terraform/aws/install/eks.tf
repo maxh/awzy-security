@@ -11,8 +11,27 @@ module "eks" {
   endpoint_public_access       = true
   endpoint_public_access_cidrs = var.eks_public_access_cidrs
 
-  # Whoever runs this gets cluster admin, so bootstrap can install Argo CD next.
-  enable_cluster_creator_admin_permissions = true
+  # Whoever runs this gets cluster admin, so bootstrap can install Argo CD next, unless a
+  # pipeline applies it: then the admins are listed, so access doesn't follow the last runner.
+  enable_cluster_creator_admin_permissions = var.cluster_creator_admin
+  # The secrets key's administrators: likewise whoever runs this, or the listed admins.
+  kms_key_administrators = var.cluster_creator_admin ? [] : values(var.cluster_admins)
+  access_entries = merge(
+    { for name, arn in var.cluster_admins : name => {
+      principal_arn = arn
+      policy_associations = { admin = {
+        policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+        access_scope = { type = "cluster" }
+      } }
+    } },
+    { for name, arn in var.cluster_viewers : name => {
+      principal_arn = arn
+      policy_associations = { view = {
+        policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy"
+        access_scope = { type = "cluster" }
+      } }
+    } },
+  )
 
   addons = {
     vpc-cni = {
