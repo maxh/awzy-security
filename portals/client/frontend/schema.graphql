@@ -74,6 +74,25 @@ input AssertionInput {
 	signature: String!
 }
 
+"""
+Where a decision's resource attributes came from (ADR 0108), so an explanation says whom it
+trusted.
+"""
+enum AttributesFrom {
+	"""
+	awzy-context, which replaces what the enforcement point sends for a `Resource`.
+	"""
+	AWZY_CONTEXT
+	"""
+	The enforcement point: an app-owned type, or a type awzy-context doesn't hold.
+	"""
+	ENFORCEMENT_POINT
+	"""
+	Neither knew the resource, so it was decided at the default tier, unclassified.
+	"""
+	DEFAULT
+}
+
 input BeginChallengeVerificationInput {
 	challengeQid: Qid!
 }
@@ -446,6 +465,10 @@ type Decision implements Node {
 	IDs of the policies that determined the principal's own check.
 	"""
 	policies: [String!]!
+	"""
+	Where the resource's attributes came from; null for decisions made before it was kept.
+	"""
+	resourceAttributesFrom: AttributesFrom
 	"""
 	The policy bundle version in force; 0 means the built-in defaults.
 	"""
