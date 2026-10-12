@@ -1,0 +1,40 @@
+load("@bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//authz/sdks/typescript:typescript/package_json.bzl", tsc_bin = "bin")
+load("@npm//authz/sdks/typescript:vitest/package_json.bzl", vitest_bin = "bin")
+
+# The TypeScript SDK (ADR 0112): an enforcement point in a client's own app.
+npm_link_all_packages()
+
+# One copy of the sources in bazel-bin, shared by both targets below.
+copy_to_bin(
+    name = "srcs",
+    srcs = glob(["src/**/*.ts", "example/**/*.ts"]) + [
+        "package.json",
+        "tsconfig.json",
+    ],
+)
+
+SRCS = [
+    ":srcs",
+    "//:tsconfig_base",
+    ":node_modules",
+]
+
+tsc_bin.tsc_test(
+    name = "typecheck",
+    size = "small",
+    args = ["-p", "tsconfig.json"],
+    chdir = package_name(),
+    data = SRCS,
+)
+
+# The unit and conformance tests (`*.test.ts`), with Vitest, unsandboxed like the portals'.
+vitest_bin.vitest_test(
+    name = "unit",
+    size = "small",
+    args = ["run"],
+    chdir = package_name(),
+    data = SRCS,
+    tags = ["no-sandbox"],
+)

@@ -1,4 +1,5 @@
 node_modules/
+authz/sdks/typescript/node_modules/
 portals/common/ui/node_modules/
 portals/common/relay/node_modules/
 portals/client/frontend/node_modules/

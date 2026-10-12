@@ -1,0 +1,23 @@
+{
+  "name": "@awzy/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "coverage": "vitest run --coverage.enabled --coverage.reporter=text-summary",
+    "example": "node example/agent.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "jose": "^6.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@vitest/coverage-v8": "^5.0.3",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}
