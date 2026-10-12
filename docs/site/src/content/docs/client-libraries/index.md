@@ -7,10 +7,11 @@ A client library makes your own code an enforcement point: before your app or ag
 action, it asks awzy, and applies the answer. awzy-gateway does this for MCP tool calls without
 any code; a client library does it for everything else your code does.
 
-| Language          | Package           |                                             |
-| ----------------- | ----------------- | ------------------------------------------- |
-| TypeScript (Node) | `@awzy/authz-sdk` | [TypeScript](/client-libraries/typescript/) |
-| Python            | `awzy-authz-sdk`  | [Python](/client-libraries/python/)         |
+| Language          | Package                                       |                                             |
+| ----------------- | --------------------------------------------- | ------------------------------------------- |
+| TypeScript (Node) | `@awzy/authz-sdk`                             | [TypeScript](/client-libraries/typescript/) |
+| Python            | `awzy-authz-sdk`                              | [Python](/client-libraries/python/)         |
+| Go                | `github.com/maxh/awzy-security/authz/sdks/go` | [Go](/client-libraries/go/)                 |
 
 ## What every library does
 
