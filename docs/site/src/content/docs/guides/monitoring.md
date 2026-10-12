@@ -68,6 +68,16 @@ not a deny; awzy-gateway then follows its outage tiers. The PDP's log names each
 A service has answered more than 5% of its HTTP requests with a 5xx for 10 minutes. Its log names
 the failing requests.
 
+### AwzyServiceCallRefused (ticket)
+
+One awzy service refused a call from another, which never happens when the install is set up
+right. The alert names the route, the reason, and the caller.
+
+- `unlisted`: no access rule names the method, so every caller is refused. It's a bug in that
+  release; upgrade, or report it.
+- `not_allowed`: the caller isn't in the route's group, usually a chart setting that names who may
+  call what. Check that the chart and bootstrap come from the same release.
+
 ### AwzyPdpContainmentFeedStale (page)
 
 A PDP hasn't heard awzy-challenge's containment feed for over 2 seconds. Until it recovers, the

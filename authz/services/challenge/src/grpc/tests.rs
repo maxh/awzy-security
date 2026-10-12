@@ -256,3 +256,12 @@ async fn a_monitored_containment_is_listed_but_never_applied() {
     assert_eq!(listed(client.list_containments(list(false)).await.unwrap()), 0, "left out unless asked for");
     assert_eq!(listed(client.list_containments(list(true)).await.unwrap()), 1);
 }
+
+#[test]
+fn every_method_the_service_has_has_exactly_one_access_rule() {
+    // A method no rule names is refused for every caller, as awzy-policy's ListEnforcementSettings
+    // once was.
+    let proto = include_str!("../../../../libs/proto/awzy/challenge/v1/challenge.proto");
+    let gaps = Access::off().guard().gaps(proto);
+    assert!(gaps.is_empty(), "{gaps:#?}");
+}

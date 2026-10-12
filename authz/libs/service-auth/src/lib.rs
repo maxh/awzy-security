@@ -15,6 +15,8 @@
 //! `AWZY_SERVICE_AUTH_ISSUER` (and `AWZY_SERVICE_AUTH_CA_FILE` for a private CA) stand in for the
 //! cluster's keys and issuer: `tools/demo` runs this way, with the dev IdP minting the tokens.
 
+mod refused;
+
 use std::{
     collections::HashMap,
     path::PathBuf,
@@ -267,8 +269,21 @@ pub struct Guard {
 
 impl Guard {
     pub fn new(verifier: Arc<Verifier>, allowed: Allowed) -> Self {
+        refused::register();
         Self { verifier, allowed }
     }
+}
+
+/// What a refusal is counted under: a gRPC method's path (a fixed set), or an HTTP route's
+/// pattern, never a path with an ID in it.
+fn route_of(req: &Request) -> String {
+    let path = req.uri().path();
+    if path.starts_with("/awzy.") {
+        return path.to_string();
+    }
+    req.extensions()
+        .get::<axum::extract::MatchedPath>()
+        .map_or_else(|| "unmatched".to_string(), |m| m.as_str().to_string())
 }
 
 /// axum middleware: 401 without a valid service token, 403 for a caller the routes don't allow.
@@ -280,10 +295,16 @@ pub async fn require(State(guard): State<Guard>, req: Request, next: Next) -> Re
         Ok(_) => next.run(req).await,
         Err(e @ AuthError::Forbidden(_)) => {
             tracing::warn!(error = %e, path = %req.uri().path(), "refused a service call");
+            let caller = match &e {
+                AuthError::Forbidden(caller) => Some(caller.as_str()),
+                _ => None,
+            };
+            refused::count(&route_of(&req), refused::Reason::NotAllowed, caller);
             (StatusCode::FORBIDDEN, e.to_string()).into_response()
         }
         Err(e) => {
             tracing::warn!(error = %e, path = %req.uri().path(), "unauthenticated service call");
+            refused::count(&route_of(&req), refused::Reason::Unauthenticated, None);
             (StatusCode::UNAUTHORIZED, e.to_string()).into_response()
         }
     }
@@ -308,8 +329,51 @@ pub enum Rule {
 
 impl PathGuard {
     pub fn new(verifier: Arc<Verifier>, rules: Vec<(String, Rule)>) -> Self {
+        refused::register();
         Self { verifier, rules: Arc::new(rules) }
     }
+
+    /// What's wrong with these rules for the gRPC services `proto` declares: a method no rule
+    /// names (refused for every caller), a method named twice, or a rule for a method the service
+    /// doesn't have. Empty when there's nothing; for each service's tests.
+    pub fn gaps(&self, proto: &str) -> Vec<String> {
+        let methods = proto_methods(proto);
+        let mut gaps = Vec::new();
+        for m in &methods {
+            match self.rules.iter().filter(|(path, _)| path == m).count() {
+                0 => gaps.push(format!("{m}: no rule names it, so every call is refused")),
+                1 => {}
+                n => gaps.push(format!("{m}: {n} rules name it")),
+            }
+        }
+        for (path, _) in self.rules.iter() {
+            if !methods.contains(path) {
+                gaps.push(format!("{path}: a rule names it, but the proto has no such method"));
+            }
+        }
+        gaps
+    }
+}
+
+/// Each method's path, `/<package>.<Service>/<Method>`, for every service in `proto`.
+fn proto_methods(proto: &str) -> Vec<String> {
+    let package = proto
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("package "))
+        .map(|p| p.trim_end_matches(';').trim())
+        .unwrap_or_default();
+    let mut service = None;
+    let mut methods = Vec::new();
+    for line in proto.lines().map(str::trim) {
+        if let Some(name) = line.strip_prefix("service ") {
+            service = name.split_whitespace().next().map(str::to_string);
+        } else if let (Some(s), Some(rest)) = (&service, line.strip_prefix("rpc ")) {
+            if let Some(method) = rest.split('(').next() {
+                methods.push(format!("/{package}.{s}/{}", method.trim()));
+            }
+        }
+    }
+    methods
 }
 
 /// axum middleware for a `PathGuard`: the matching rule's callers, 401/403 otherwise.
@@ -321,6 +385,7 @@ pub async fn require_by_path(State(guard): State<PathGuard>, req: Request, next:
         None if guard.verifier.0.is_none() => next.run(req).await,
         None => {
             tracing::warn!(path = %req.uri().path(), "refused a call to a method no rule names");
+            refused::count(req.uri().path(), refused::Reason::Unlisted, None);
             (StatusCode::FORBIDDEN, "no caller may call this").into_response()
         }
     }
@@ -605,6 +670,21 @@ mod tests {
         assert_eq!(callers, ["awzy-system/awzy", "awzy-portal/awzy"]);
         let Allowed::Only(none) = Allowed::from_env("AWZY_TEST_SERVICE_AUTH_UNSET") else { panic!() };
         assert!(none.is_empty(), "a group the chart didn't fill is closed");
+    }
+
+    #[test]
+    fn gaps_name_methods_without_a_rule_and_rules_without_a_method() {
+        let proto = "syntax = \"proto3\";\npackage awzy.demo.v1;\n\nservice Things {\n  rpc Get(GetRequest) returns (Thing);\n  // Writes.\n  rpc Put(PutRequest) returns (Thing);\n  rpc Delete(DeleteRequest) returns (Empty);\n}\n";
+        let rule = |m: &str| (format!("/awzy.demo.v1.Things/{m}"), Rule::Allow(Allowed::AnyServiceAccount));
+        let complete = PathGuard::new(Arc::new(Verifier::off()), vec![rule("Get"), rule("Put"), rule("Delete")]);
+        assert!(complete.gaps(proto).is_empty());
+
+        let guard = PathGuard::new(Arc::new(Verifier::off()), vec![rule("Get"), rule("Get"), rule("Remove")]);
+        let gaps = guard.gaps(proto);
+        assert!(gaps.iter().any(|g| g.starts_with("/awzy.demo.v1.Things/Put: no rule")), "{gaps:?}");
+        assert!(gaps.iter().any(|g| g.starts_with("/awzy.demo.v1.Things/Delete: no rule")), "{gaps:?}");
+        assert!(gaps.iter().any(|g| g.starts_with("/awzy.demo.v1.Things/Get: 2 rules")), "{gaps:?}");
+        assert!(gaps.iter().any(|g| g.starts_with("/awzy.demo.v1.Things/Remove: a rule names it")), "{gaps:?}");
     }
 
     #[tokio::test]

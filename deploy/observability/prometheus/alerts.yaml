@@ -46,6 +46,16 @@ groups:
         annotations:
           summary: "{{ $labels.job }} answers {{ $value | humanizePercentage }} of requests with a 5xx"
 
+      # One awzy service refusing another: a caller missing from a group in the chart, or a method
+      # no group names. Never expected between awzy's own services, so one is enough. Calls without
+      # a token are left out: those can come from anywhere in the cluster.
+      - alert: AwzyServiceCallRefused
+        expr: sum by (job, route, reason, caller) (increase(awzy_service_calls_refused_total{reason!="unauthenticated"}[15m])) > 0
+        labels: { severity: ticket }
+        annotations:
+          summary: "{{ $labels.job }} refused {{ $labels.caller }} calling {{ $labels.route }} ({{ $labels.reason }})"
+          description: "unlisted: no access rule names the method, so every caller is refused. not_allowed: the caller isn't in the route's group in the chart."
+
   # The platform plan's freshness targets, as the PDP sees them.
   - name: awzy-freshness
     rules:
