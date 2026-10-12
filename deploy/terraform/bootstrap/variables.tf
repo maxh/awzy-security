@@ -105,6 +105,13 @@ variable "llm_api_key_secrets" {
   default     = {}
 }
 
+variable "llm_api_keys" {
+  description = "API keys for the connections in llm_connections, by the environment variable their api_key_env names: { AWZY_LLM_KEY_VERTEX = \"…\" }. Kept in a Secret bootstrap makes, in place of llm_api_key_secrets"
+  type        = map(string)
+  default     = {}
+  sensitive   = true
+}
+
 variable "llm_routing" {
   description = "The model catalog and each feature's route to start with (ADR 0114), in place of llm_model: { models = [{ name, connection, spec }], routes = { awzy_bot = { targets = [{ model, weight }], fallback = [] }, investigations = … } }. Changed later in the client portal"
   type        = any

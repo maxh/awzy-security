@@ -183,7 +183,8 @@ mod tests {
     #[test]
     fn an_api_runs_only_on_the_services_that_offer_it() {
         let bedrock = Connection::Bedrock { region: "us-east-2".into() };
-        let vertex = Connection::Vertex { project: "p".into(), region: "global".into(), token_env: None };
+        let vertex =
+            Connection::Vertex { project: "p".into(), region: "global".into(), token_env: None, api_key_env: None };
         let gemini: ModelSpec = serde_json::from_value(json!({ "api": "gemini", "model": "gemini-2.5-pro" })).unwrap();
         let claude: ModelSpec =
             serde_json::from_value(json!({ "api": "anthropic_messages", "model": "claude-opus-5-5" })).unwrap();
