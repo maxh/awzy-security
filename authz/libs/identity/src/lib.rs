@@ -501,7 +501,10 @@ mod tests {
         });
         let app = Router::new().route("/jwks", get(move || async move { Json(json!({ "keys": [jwk] })) }));
         let (base, ca) = crate::jwks::tests::serve_https(app).await;
-        let ca_file = std::env::temp_dir().join(format!("awzy-identity-test-ca-{}.pem", std::process::id()));
+        // One file per server: tests run in parallel, each with its own CA.
+        static SERVERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = SERVERS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let ca_file = std::env::temp_dir().join(format!("awzy-identity-test-ca-{}-{n}.pem", std::process::id()));
         std::fs::write(&ca_file, ca).unwrap();
         let pem = key.to_pkcs8_pem(LineEnding::LF).unwrap();
         (EncodingKey::from_ec_pem(pem.as_bytes()).unwrap(), format!("{base}/jwks"), ca_file.display().to_string())
