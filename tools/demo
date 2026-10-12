@@ -4,6 +4,7 @@
 #
 #   tools/demo up      # build, start everything, seed the company, print where to sign in
 #   tools/demo check   # is every part answering? (what CI runs)
+#   tools/demo partner # an app's own agent, end to end: trusted, registered, checked, planned
 #   tools/demo down    # stop it; `down --wipe` also removes the local stack's data
 #   tools/demo logs    # where each service's log is
 #
@@ -123,7 +124,8 @@ up() {
   log "the MCP gateway in front of larkspur-drive and larkspur-admin"
   cat >"$state/gateway.json" <<EOF
 {
-  "token": { "issuer": "https://idp.local", "audience": "awzy-gateway", "hs256_secret_env": "AWZY_GATEWAY_DEV_SECRET" },
+  "token": { "issuer": "https://idp.local", "audience": "awzy-gateway", "hs256_secret_env": "AWZY_GATEWAY_DEV_SECRET",
+             "jwks_ca_file": "$PWD/$state/idp-ca.pem" },
   "service_account_registry": "awzy-context",
   "upstreams": [
     { "name": "larkspur-drive", "url": "http://127.0.0.1:$DRIVE/mcp",
@@ -193,6 +195,88 @@ check() {
   return $failed
 }
 
+# The design partner's path, end to end on the running demo: an app trusted to mint its own
+# agents' tokens registers one, and that agent's calls are checked as it acting for its person.
+partner() {
+  local idp=https://127.0.0.1:$IDP app=acme-crm agent=acme-crm.renewals-bot failed=0 human
+  local ca="$PWD/$state/idp-ca.pem"
+  pass() { echo "ok   $*"; }
+  fail() { echo "FAIL $*"; failed=1; }
+  # A token the dev IdP signs as the app: for the app itself, or for one of its agents.
+  app_token() { curl -sf --cacert "$ca" "$idp/apps/$app/token" -H 'content-type: application/json' -d "$1" |
+    sed -nE 's/.*"access_token": ?"([^"]+)".*/\1/p'; }
+
+  # Someone in Larkspur's directory owns the agent and is the person it acts for.
+  human=$(curl -sf "http://127.0.0.1:$CONTEXT/v1/directory/humans?limit=1" | grep -o '"user_name": *"[^"]*"' |
+    head -1 | sed -E 's/.*"([^"]+)"$/\1/')
+  if [ -n "$human" ]; then pass "$human from the directory owns the agent"; else fail "no one in the directory"; fi
+
+  # An admin trusts the app (here straight in awzy-context; the portal's Directory page does it).
+  if curl -sf -X PUT "http://127.0.0.1:$CONTEXT/v1/token-issuers/$app" -H 'content-type: application/json' \
+    -H 'x-awzy-actor: Human::alice' \
+    -d "{\"issuer\": \"$idp/apps/$app\", \"jwks_url\": \"$idp/apps/$app/jwks\", \"audience\": \"awzy-agents\"}" >/dev/null; then
+    pass "$app trusted to sign its agents' tokens"
+  else
+    fail "trusting $app"
+  fi
+
+  # The app registers its agent with a token it signs for itself, once the portal has the list.
+  local own registered=""
+  own=$(app_token "{\"sub\": \"$app\"}")
+  for _ in $(seq 1 30); do
+    if curl -sf -X PUT "http://127.0.0.1:$PORTAL/api/v1/agents/$agent" -H "authorization: Bearer $own" \
+      -H 'content-type: application/json' -d "{\"owner\": \"$human\", \"description\": \"Drafts renewals\"}" >/dev/null; then
+      registered=yes
+      break
+    fi
+    sleep 1
+  done
+  if [ -n "$registered" ]; then pass "$app registered $agent"; else fail "$app registering $agent"; fi
+  # And can't register one outside its name.
+  status=$(curl -s -o /dev/null -w '%{http_code}' -X PUT "http://127.0.0.1:$PORTAL/api/v1/agents/sales-genie" \
+    -H "authorization: Bearer $own" -H 'content-type: application/json' -d "{\"owner\": \"$human\"}")
+  if [ "$status" = 403 ]; then pass "$app can't register agents outside its name"; else fail "outside its name: $status"; fi
+
+  # The agent, acting for that person, calls a tool through the gateway with the app's token.
+  local token mcp
+  token=$(app_token "{\"sub\": \"$human\", \"act\": \"$agent\"}")
+  mcp() { curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$GATEWAY/mcp/larkspur-drive" -H "authorization: Bearer $1" \
+    -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
+    -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "read_document", "arguments": {"id": "demo-check"}}}'; }
+  local seen=""
+  for _ in $(seq 1 30); do
+    status=$(mcp "$token")
+    if [ "$status" != 401 ]; then seen=$status; break; fi
+    sleep 1
+  done
+  if [ -n "$seen" ]; then pass "the gateway takes $agent's app-signed token ($seen)"; else fail "the gateway refuses $agent's token"; fi
+  # An app can't sign for a person on their own.
+  status=$(mcp "$(app_token "{\"sub\": \"$human\"}")")
+  if [ "$status" = 401 ]; then pass "an app-signed token for a person is refused"; else fail "a person's app-signed token: $status"; fi
+
+  # Its check is in the decision log, as the agent acting for that person.
+  local logged=0
+  for _ in $(seq 1 30); do
+    logged=$(curl -sf "http://localhost:8123/?user=awzy&password=awzy" \
+      --data "SELECT count() FROM awzy.decisions WHERE principal_id = '$agent' AND on_behalf_of_id = '$human'" || echo 0)
+    [ "${logged:-0}" -gt 0 ] && break
+    sleep 2
+  done
+  if [ "${logged:-0}" -gt 0 ]; then pass "$agent's decisions logged for $human"; else fail "no decisions for $agent"; fi
+
+  # Waiting on a challenge answers only the agent it was opened for: an unknown one isn't found.
+  status=$(curl -s -o /dev/null -w '%{http_code}' -H "authorization: Bearer $token" \
+    "http://127.0.0.1:$GATEWAY/mcp/challenges/challenge_0192a000-0000-7000-8000-000000000001?wait=0")
+  if [ "$status" = 404 ]; then pass "the agent can wait on its challenges"; else fail "waiting on a challenge: $status"; fi
+
+  # A query plan for what the agent may read, for its list tools.
+  outcome=$(curl -sf "http://127.0.0.1:$PDP/v1/access/plan" -H 'content-type: application/json' -d "{
+    \"principal\": {\"type\": \"ServiceAccount\", \"id\": \"$agent\"}, \"on_behalf_of\": {\"type\": \"Human\", \"id\": \"$human\"},
+    \"action\": \"read\", \"resource_type\": \"Resource\", \"context\": {}}" | sed -nE 's/.*"outcome": ?"([a-z_]+)".*/\1/p')
+  if [ -n "$outcome" ]; then pass "a query plan for $agent ($outcome)"; else fail "no query plan"; fi
+  return $failed
+}
+
 down() {
   for f in "$state"/*.pid; do
     [ -e "$f" ] || continue
@@ -205,7 +289,8 @@ down() {
 case "${1:-}" in
   up) up ;;
   check) check ;;
+  partner) partner ;;
   down) shift; down "$@" ;;
   logs) ls -1 "$PWD/$state/logs/"* ;;
-  *) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
