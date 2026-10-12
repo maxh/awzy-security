@@ -53,15 +53,28 @@ impl Response {
 /// the outside services they call.
 pub fn client() -> Client {
     let _ = rustls::crypto::ring::default_provider().install_default();
-    let https = hyper_rustls::HttpsConnectorBuilder::new().with_webpki_roots().https_or_http().enable_http1().build();
+    let https = hyper_rustls::HttpsConnectorBuilder::new()
+        .with_webpki_roots()
+        .https_or_http()
+        .enable_http1()
+        .wrap_connector(connector());
     Hyper::builder(TokioExecutor::new()).build(https)
+}
+
+/// TCP for the clients: requests go out without waiting on Nagle's algorithm, as tonic's do.
+fn connector() -> HttpConnector {
+    let mut http = HttpConnector::new();
+    http.set_nodelay(true);
+    http.enforce_http(false);
+    http
 }
 
 /// HTTPS trusting only `roots`, such as the cluster's CA, and nothing over plain HTTP.
 pub fn client_with_roots(roots: rustls::RootCertStore) -> Client {
     let _ = rustls::crypto::ring::default_provider().install_default();
     let tls = rustls::ClientConfig::builder().with_root_certificates(roots).with_no_client_auth();
-    let https = hyper_rustls::HttpsConnectorBuilder::new().with_tls_config(tls).https_only().enable_http1().build();
+    let https =
+        hyper_rustls::HttpsConnectorBuilder::new().with_tls_config(tls).https_only().enable_http1().wrap_connector(connector());
     Hyper::builder(TokioExecutor::new()).build(https)
 }
 
