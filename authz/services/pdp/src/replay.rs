@@ -31,6 +31,15 @@ pub(crate) enum Assembled {
     },
 }
 
+/// The person an `approve` check answers for, which awzy-challenge sets in its context.
+fn approving_for(req: &Check) -> Option<awzy_model::EntityRef> {
+    if req.action != "approve" {
+        return None;
+    }
+    let id = req.context.get("approving_for")?.pointer("/__entity/id")?.as_str()?;
+    Some(awzy_model::EntityRef::new(awzy_model::entity_type::HUMAN, id))
+}
+
 /// The request's inline entities plus its principals from the snapshot and its resource from
 /// awzy-context. Fails only when awzy-context can't be reached for the resource.
 pub(crate) async fn assemble(
@@ -43,7 +52,11 @@ pub(crate) async fn assemble(
         return Ok(Assembled::Unregistered);
     }
     let who: Vec<&awzy_model::EntityRef> = std::iter::once(&req.principal).chain(req.on_behalf_of.as_ref()).collect();
-    let entities = principals.merge(inline, &who);
+    // On an approval, the person it's for too, so policies can read their manager (ADR 0117).
+    // Only their entity: risk and containment stay the approver's.
+    let approving_for = approving_for(req);
+    let loaded: Vec<&awzy_model::EntityRef> = who.iter().copied().chain(approving_for.as_ref()).collect();
+    let entities = principals.merge(inline, &loaded);
     let merged = resources.merge(entities, &req.resource).await?;
     let risk = principals.risk_of(&who);
     let automation = principals.automation_of(&who);
@@ -163,6 +176,34 @@ mod tests {
         assert_eq!(a.policies, ["no-security-reads"]);
         let (b, a) = replay.compare(&before, &after, &request("bob")).await.unwrap();
         assert_eq!(b.verdict, a.verdict, "bob isn't in security, so the draft doesn't touch him");
+    }
+
+    #[tokio::test]
+    async fn a_policy_can_let_the_person_approved_for_s_manager_approve() {
+        let principals = Arc::new(Principals::awaiting_sync());
+        let human = |id: &str| json!({ "__entity": { "type": "Human", "id": id } });
+        principals.load(
+            1,
+            vec![
+                json!({ "uid": { "type": "Human", "id": "carol" }, "attrs": { "active": true }, "parents": [] }),
+                json!({ "uid": { "type": "Human", "id": "bob" }, "attrs": { "active": true }, "parents": [] }),
+                json!({ "uid": { "type": "Human", "id": "dave" }, "attrs": { "active": true, "manager": human("carol") }, "parents": [] }),
+            ],
+        );
+        let replay = Replayer::new(principals, Arc::new(Resources::none()));
+        let managers_approve = "@id(\"managers-approve\")\npermit (principal is Human, action == Action::\"approve\", resource)\n\
+            when { context has approving_for && context.approving_for has manager && context.approving_for.manager == principal };";
+        let pdp = Pdp::new(crate::DEFAULT_SCHEMA, &format!("{}\n{managers_approve}", crate::DEFAULT_POLICIES)).unwrap();
+        let approve = |approver: &str| {
+            let mut req = request(approver);
+            req.action = "approve".into();
+            req.context.insert("approving_for".into(), human("dave"));
+            req
+        };
+        let (d, _) = replay.compare(&pdp, &pdp, &approve("carol")).await.unwrap();
+        assert_eq!((d.verdict, d.policies), (Verdict::Allow, vec!["managers-approve".to_string()]));
+        let (d, _) = replay.compare(&pdp, &pdp, &approve("bob")).await.unwrap();
+        assert_eq!(d.verdict, Verdict::Deny, "not dave's manager");
     }
 
     #[tokio::test]

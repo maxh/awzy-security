@@ -20,8 +20,10 @@ and writes the scores to awzy-context (`POST /v1/risk`). The PDPs pick them up w
 principals snapshot and use each principal's own score as `context.risk_score`.
 
 A score is deterministic ([`score.rs`](src/score.rs)): resources opened against the principal's
-own usual day (after five active days of history), against its team's median (the smallest group
-it's in, with at least three other active members), and denials. Either comparison alone adds at
+own usual day (after five active days of history), against its team's median (the team
+awzy-context names, from the groups the client says are teams, else the smallest group it's in;
+[ADR 0117](../../../docs/adr/0117-a-persons-manager-and-team.md); with at least three other active
+members), and denials. Either comparison alone adds at
 most 50, so it takes both, or one plus denials, to pass the base policy's challenge threshold.
 
 ClickHouse access is a read-only `awzy_reasoner` user that can select `decisions` and `events`

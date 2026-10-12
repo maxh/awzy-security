@@ -119,6 +119,7 @@ Bootstrap takes:
 | `support_public_key` | awzy's support key (`deploy/release/support.pub`), so awzy staff can sign in to a support session your admin approves; `null` leaves support sessions unable to sign in |
 | `ingress` | The portal hostname and the Let's Encrypt contact |
 | `client_portal` | Your IdP's issuer, JWKS URL, and the portal's public URL; the token audiences for the portal (`audience`, default `awzy`) and for its MCP endpoint (`mcp_audience`, default `awzy-mcp`); and `subject_claim`, the claim holding a person's SCIM user name when `sub` doesn't (default `sub`) |
+| `team_groups` | Which of your IdP's groups are teams, by name, each may use `*` (`["sales-*", "security"]`); policies and risk scores then know each person's team. Default: none. See the docs site's "Connecting your IdP" |
 | `awzy_bot` | Whether Awzy Bot runs; needs Claude enabled in your cloud's model service (Bedrock on AWS) |
 | `investigations`, `investigation_budget` | Whether awzy-reasoner investigates the people it flags, and its monthly token budget and privileged groups; needs Claude in your cloud's model service |
 | `llm_model` | The model ID for both, when the default isn't reachable directly |

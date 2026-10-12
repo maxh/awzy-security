@@ -17,6 +17,7 @@ pub mod human_attributes;
 mod invalid;
 pub mod investigations;
 pub mod issuers;
+pub mod org;
 pub mod resources;
 pub mod risk;
 pub mod scim;

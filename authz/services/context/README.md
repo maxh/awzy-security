@@ -7,7 +7,7 @@ Runs LLM preprocessing to classify resource sensitivity and derive work assignme
 attribute changes so PDP snapshots stay current. People and groups come from the client's IdP
 over SCIM ([ADR 0031](../../../docs/adr/0031-people-and-groups-from-the-idp-over-scim.md)), with
 what the IdP says about each person (title, employee type, department, division, organization,
-cost center) as attributes of their `Human` entity ([ADR 0116](../../../docs/adr/0116-people-carry-what-the-idp-says-about-them.md)), and service accounts are registered
+cost center) as attributes of their `Human` entity ([ADR 0116](../../../docs/adr/0116-people-carry-what-the-idp-says-about-them.md)), with their manager and, among the groups `AWZY_CONTEXT_TEAM_GROUPS` names, their team ([ADR 0117](../../../docs/adr/0117-a-persons-manager-and-team.md)), and service accounts are registered
 here ([ADR 0033](../../../docs/adr/0033-service-account-registry-in-awzy-context.md)).
 
 Resources (documents, folders, repositories, tickets) and work items (tickets, accounts, projects,

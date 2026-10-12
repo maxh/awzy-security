@@ -168,6 +168,8 @@ resource "helm_release" "config" {
         breakGlassKeysSecret = var.break_glass_public_keys == null ? "" : "awzy-policy-break-glass"
         signingKmsKey        = local.c.policy_signing.kms_key
       }
+      # Which IdP groups are teams (ADR 0117); empty leaves the chart's default.
+      context = { teamGroups = join(",", var.team_groups) }
       clickhouse = {
         storageClass  = local.c.storage_class.name
         retentionDays = var.clickhouse_retention_days

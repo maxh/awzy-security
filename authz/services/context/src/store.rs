@@ -170,6 +170,8 @@ pub struct ContextStore {
     /// Moves when the principals snapshot or the resource change log does (ADR 0077).
     principals_changed: Arc<Changes>,
     resources_changed: Arc<Changes>,
+    /// Which groups are teams, for each person's `team` (ADR 0117).
+    teams: Arc<crate::org::TeamGroups>,
 }
 
 /// How long the resource change log keeps a change. A PDP further behind drops its whole cache.
@@ -193,7 +195,13 @@ pub(crate) async fn bump(tx: &mut Transaction<'_, Postgres>) -> Result<(), sqlx:
 
 impl ContextStore {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool, principals_changed: Arc::default(), resources_changed: Arc::default() }
+        Self { pool, principals_changed: Arc::default(), resources_changed: Arc::default(), teams: Arc::default() }
+    }
+
+    /// With these groups as teams (ADR 0117).
+    pub fn with_team_groups(mut self, teams: crate::org::TeamGroups) -> Self {
+        self.teams = Arc::new(teams);
+        self
     }
 
     /// Follows the Postgres notifications that move [`Self::principals_changed`] and
@@ -657,9 +665,9 @@ impl ContextStore {
         sqlx::query_scalar("SELECT version FROM snapshot_version").fetch_one(&self.pool).await
     }
 
-    /// Every person and group as Cedar entity JSON: people with `active`, their HR attributes, and
-    /// their groups as parents, groups with the groups they belong to. Read in one transaction, so the version
-    /// matches the entities.
+    /// Every person and group as Cedar entity JSON: people with `active`, their HR attributes,
+    /// manager, and team, and their groups as parents; groups with the groups they belong to.
+    /// Read in one transaction, so the version matches the entities.
     pub async fn snapshot(&self) -> Result<(i64, Vec<Value>), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ").execute(&mut *tx).await?;
@@ -679,13 +687,33 @@ impl ContextStore {
             names.sort();
             names.into_iter().map(|g| json!({ "type": entity_type::GROUP, "id": g })).collect()
         };
+        let mut size: HashMap<&str, usize> = HashMap::new();
+        for names in parents.values() {
+            for name in names {
+                *size.entry(*name).or_default() += 1;
+            }
+        }
         let mut entities = Vec::new();
-        let humans: Vec<(Uuid, String, bool, Value)> =
-            sqlx::query_as("SELECT scim_id, user_name, active, resource FROM humans").fetch_all(&mut *tx).await?;
-        for (id, user_name, active, resource) in &humans {
+        let humans: Vec<(Uuid, String, bool, Value, Option<String>)> =
+            sqlx::query_as("SELECT scim_id, user_name, active, resource, external_id FROM humans")
+                .fetch_all(&mut *tx)
+                .await?;
+        let directory = crate::org::Directory::new(
+            humans.iter().map(|(id, user_name, _, _, external_id)| (id.to_string(), external_id.as_deref(), user_name.as_str())),
+        );
+        for (id, user_name, active, resource, _) in &humans {
             // Their HR attributes from the IdP (ADR 0116), then whether they're active.
             let mut attrs = crate::human_attributes::of(resource);
             attrs.insert("active".into(), json!(active));
+            // Their manager and team (ADR 0117): a manager awzy doesn't know is left out.
+            let manager = crate::org::manager_ref(resource).and_then(|m| directory.resolve(&m));
+            if let Some(manager) = manager.filter(|m| *m != user_name.as_str()) {
+                attrs.insert("manager".into(), json!({ "__entity": { "type": entity_type::HUMAN, "id": manager } }));
+            }
+            let groups = parents.get(id).map(Vec::as_slice).unwrap_or_default();
+            if let Some(team) = self.teams.team_of(groups, &size).filter(|_| *active) {
+                attrs.insert("team".into(), json!({ "__entity": { "type": entity_type::GROUP, "id": team } }));
+            }
             entities.push(json!({
                 "uid": { "type": entity_type::HUMAN, "id": user_name },
                 "attrs": attrs,

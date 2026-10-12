@@ -66,6 +66,12 @@ variable "client_portal" {
   default = {}
 }
 
+variable "team_groups" {
+  description = "Which of the IdP's groups are teams, so policies and awzy-reasoner know each person's team: group names, each may use * (e.g. [\"sales-*\", \"security\"]). Empty: none are. Can change after install"
+  type        = list(string)
+  default     = []
+}
+
 variable "awzy_bot" {
   description = "Awzy Bot in the client portal (ADR 0048), with the model llm_model or llm_routing names (ADR 0114)"
   type        = bool

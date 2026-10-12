@@ -141,6 +141,7 @@ up() {
   # shellcheck disable=SC2046
   start context $(auth $backend) AWZY_LISTEN_ADDR=127.0.0.1:$CONTEXT AWZY_POSTGRES_URL=$pg/awzy_context \
     AWZY_SCIM_TOKEN=$scim_token AWZY_CONTEXT_READERS=$backend,$portal_sa \
+    AWZY_CONTEXT_TEAM_GROUPS="contractors-*,engineering-*,executive,finance,hr,it-admin,legal,sales-*,security,strategy,support" \
     AWZY_CONTEXT_WRITERS=$backend,$demo_data AWZY_CONTEXT_DIRECTORY=$backend,$portal_sa,$demo_data "$context"
   wait_for http://127.0.0.1:$CONTEXT/readyz awzy-context
   # shellcheck disable=SC2046

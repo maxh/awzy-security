@@ -215,6 +215,10 @@ context:
   # Secret in the system namespace with key "token": the SCIM bearer token the client's IdP
   # uses (created by bootstrap).
   scimTokenSecret: awzy-scim-token
+  # Which of the IdP's groups are teams, so each person has one (ADR 0117): group names, each may
+  # use `*` (e.g. "sales-*,security"). Empty: nobody has a team, and awzy-reasoner falls back to
+  # each person's smallest group. A demo install defaults to the synthetic company's teams.
+  teamGroups: ""
   resources:
     requests: { cpu: 100m, memory: 128Mi }
     limits: { memory: 256Mi }
