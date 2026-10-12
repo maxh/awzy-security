@@ -1,11 +1,10 @@
 //! From Cedar's residuals to a plan's filter (ADR 0113). A residual is a policy's condition with
-//! the resource left unknown; what refers to it becomes a filter node, and what the tree can't
-//! express becomes `unmappable`, never a guess.
-
-use std::sync::Arc;
+//! the resource left unknown, read here in Cedar's JSON policy format, which writes an unknown
+//! as a call to `unknown("<name>")`. What refers to the resource becomes a filter node, and what
+//! the tree can't express becomes `unmappable`, never a guess.
 
 use awzy_model::EntityRef;
-use cedar_policy::pst::{self, BinaryOp, Expr, UnaryOp};
+use serde_json::{Map, Value};
 
 use super::filter::{Cmp, Filter, Literal};
 
@@ -17,12 +16,23 @@ pub trait Ancestry {
     fn with_ancestors(&self, entity: &EntityRef) -> Vec<EntityRef>;
 }
 
-pub fn entity(uid: &pst::EntityUID) -> EntityRef {
-    EntityRef::new(uid.ty.to_string(), uid.eid.to_string())
+/// A residual policy's conditions (Cedar's JSON policy format) as one filter over the resource:
+/// every `when` holds and no `unless` does.
+pub fn policy_filter(policy: &Value, ancestry: &dyn Ancestry) -> Filter {
+    let t = Translator { ancestry };
+    let Some(conditions) = policy.get("conditions").and_then(Value::as_array) else { return Filter::True };
+    Filter::and(conditions.iter().map(|c| {
+        let body = c.get("body").unwrap_or(&Value::Null);
+        match c.get("kind").and_then(Value::as_str) {
+            Some("when") => t.boolean(body),
+            Some("unless") => Filter::not(t.boolean(body)),
+            _ => Translator::unmappable(c),
+        }
+    }))
 }
 
-/// The condition `expr` as a filter over the resource.
-pub fn filter(expr: &Expr, ancestry: &dyn Ancestry) -> Filter {
+/// One condition expression as a filter.
+pub fn filter(expr: &Value, ancestry: &dyn Ancestry) -> Filter {
     Translator { ancestry }.boolean(expr)
 }
 
@@ -40,46 +50,100 @@ enum Operand {
     Other,
 }
 
+/// An expression's one key and its body: `{"==": {...}}` is `("==", {...})`.
+fn node(expr: &Value) -> Option<(&str, &Value)> {
+    let obj = expr.as_object()?;
+    if obj.len() != 1 {
+        return None;
+    }
+    obj.iter().next().map(|(k, v)| (k.as_str(), v))
+}
+
+fn field<'a>(body: &'a Value, key: &str) -> &'a Value {
+    body.get(key).unwrap_or(&Value::Null)
+}
+
+/// An entity in Cedar's JSON: `{"__entity": {"type", "id"}}`, or `{"type", "id"}`.
+fn entity(v: &Map<String, Value>) -> Option<EntityRef> {
+    let e = v.get("__entity").and_then(Value::as_object).unwrap_or(v);
+    Some(EntityRef::new(e.get("type")?.as_str()?, e.get("id")?.as_str()?))
+}
+
+/// A value literal (`{"Value": …}`'s body) as a filter literal or set of them.
+fn value(v: &Value) -> Operand {
+    match v {
+        Value::Bool(b) => Operand::Lit(Literal::Bool(*b)),
+        Value::Number(n) => n.as_i64().map_or(Operand::Other, |n| Operand::Lit(Literal::Long(n))),
+        Value::String(s) => Operand::Lit(Literal::String(s.clone())),
+        Value::Object(o) => entity(o).map_or(Operand::Other, |e| Operand::Lit(Literal::Entity(e))),
+        Value::Array(items) => {
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                match value(item) {
+                    Operand::Lit(l) => out.push(l),
+                    _ => return Operand::Other,
+                }
+            }
+            Operand::Set(out)
+        }
+        Value::Null => Operand::Other,
+    }
+}
+
 impl Translator<'_> {
-    fn unmappable(expr: &Expr) -> Filter {
+    fn unmappable(expr: &Value) -> Filter {
         Filter::Unmappable { cedar: expr.to_string() }
     }
 
-    fn boolean(&self, expr: &Expr) -> Filter {
-        match expr {
-            Expr::Literal(pst::Literal::Bool(b)) => {
-                if *b {
-                    Filter::True
-                } else {
-                    Filter::False
-                }
-            }
-            Expr::Unknown { name } if name.as_str() != RESOURCE => Filter::Unknown { name: unknown_name(name) },
-            Expr::UnaryOp { op: UnaryOp::Not, expr: inner } => Filter::not(self.boolean(inner)),
-            Expr::BinaryOp { op: BinaryOp::And, left, right } => Filter::and([self.boolean(left), self.boolean(right)]),
-            Expr::BinaryOp { op: BinaryOp::Or, left, right } => Filter::or([self.boolean(left), self.boolean(right)]),
-            Expr::IfThenElse { cond, then_expr, else_expr } => {
-                let cond = self.boolean(cond);
-                Filter::or([
-                    Filter::and([cond.clone(), self.boolean(then_expr)]),
-                    Filter::and([Filter::not(cond), self.boolean(else_expr)]),
-                ])
-            }
-            Expr::BinaryOp { op, left, right } => self.binary(expr, *op, left, right),
-            Expr::HasAttr { expr: target, attrs } => match self.operand(target) {
-                Operand::Attr(mut path) => {
-                    path.extend(attrs.iter().map(ToString::to_string));
-                    Filter::Has { attr: path }
-                }
-                Operand::Resource => Filter::Has { attr: attrs.iter().map(ToString::to_string).collect() },
+    fn boolean(&self, expr: &Value) -> Filter {
+        let Some((op, body)) = node(expr) else { return Self::unmappable(expr) };
+        match op {
+            "Value" => match body.as_bool() {
+                Some(true) => Filter::True,
+                Some(false) => Filter::False,
+                None => Self::unmappable(expr),
+            },
+            "unknown" => match unknown_name(body) {
+                Some(name) if name != RESOURCE => Filter::Unknown { name: context_name(&name) },
                 _ => Self::unmappable(expr),
             },
-            Expr::Like { expr: target, pattern } => match self.operand(target) {
-                Operand::Attr(attr) => Filter::Like { attr, pattern: pattern_text(pattern) },
+            "!" => Filter::not(self.boolean(field(body, "arg"))),
+            "&&" => Filter::and([self.boolean(field(body, "left")), self.boolean(field(body, "right"))]),
+            "||" => Filter::or([self.boolean(field(body, "left")), self.boolean(field(body, "right"))]),
+            "if-then-else" => {
+                let cond = self.boolean(field(body, "if"));
+                Filter::or([
+                    Filter::and([cond.clone(), self.boolean(field(body, "then"))]),
+                    Filter::and([Filter::not(cond), self.boolean(field(body, "else"))]),
+                ])
+            }
+            "==" | "!=" | "<" | "<=" | ">" | ">=" => self.compare(expr, op, body),
+            "in" => self.membership_or_contains(expr, body),
+            "contains" | "containsAny" | "containsAll" => self.sets(expr, op, body),
+            "has" => {
+                let attrs: Vec<String> = match field(body, "attr") {
+                    Value::String(a) => vec![a.clone()],
+                    Value::Array(a) => a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect(),
+                    _ => return Self::unmappable(expr),
+                };
+                match self.operand(field(body, "left")) {
+                    Operand::Attr(mut path) => {
+                        path.extend(attrs);
+                        Filter::Has { attr: path }
+                    }
+                    Operand::Resource => Filter::Has { attr: attrs },
+                    _ => Self::unmappable(expr),
+                }
+            }
+            "like" => match (self.operand(field(body, "left")), field(body, "pattern").as_array()) {
+                (Operand::Attr(attr), Some(pattern)) => match pattern_text(pattern) {
+                    Some(pattern) => Filter::Like { attr, pattern },
+                    None => Self::unmappable(expr),
+                },
                 _ => Self::unmappable(expr),
             },
             // The resource's type is known, so only a hierarchy check can be left.
-            Expr::Is { expr: target, in_expr, .. } => match (self.operand(target), in_expr) {
+            "is" => match (self.operand(field(body, "left")), body.get("in")) {
                 (Operand::Resource, Some(parent)) => self.membership(expr, parent),
                 _ => Self::unmappable(expr),
             },
@@ -87,67 +151,60 @@ impl Translator<'_> {
         }
     }
 
-    fn binary(&self, whole: &Expr, op: BinaryOp, left: &Arc<Expr>, right: &Arc<Expr>) -> Filter {
+    fn compare(&self, whole: &Value, op: &str, body: &Value) -> Filter {
         let cmp = match op {
-            BinaryOp::Eq => Some(Cmp::Eq),
-            BinaryOp::NotEq => Some(Cmp::Ne),
-            BinaryOp::Less => Some(Cmp::Lt),
-            BinaryOp::LessEq => Some(Cmp::Le),
-            BinaryOp::Greater => Some(Cmp::Gt),
-            BinaryOp::GreaterEq => Some(Cmp::Ge),
-            _ => None,
+            "==" => Cmp::Eq,
+            "!=" => Cmp::Ne,
+            "<" => Cmp::Lt,
+            "<=" => Cmp::Le,
+            ">" => Cmp::Gt,
+            _ => Cmp::Ge,
         };
-        if let Some(cmp) = cmp {
-            return match (self.operand(left), self.operand(right)) {
-                (Operand::Attr(attr), Operand::Lit(value)) => Filter::Compare { attr, cmp, value },
-                (Operand::Lit(value), Operand::Attr(attr)) => Filter::Compare { attr, cmp: cmp.flipped(), value },
-                // `resource == Type::"id"`: the resource is that one entity.
-                (Operand::Resource, Operand::Lit(Literal::Entity(e)))
-                | (Operand::Lit(Literal::Entity(e)), Operand::Resource)
-                    if matches!(cmp, Cmp::Eq | Cmp::Ne) =>
-                {
-                    let only = Filter::Is { id: e };
-                    if cmp == Cmp::Eq {
-                        only
-                    } else {
-                        Filter::not(only)
-                    }
+        match (self.operand(field(body, "left")), self.operand(field(body, "right"))) {
+            (Operand::Attr(attr), Operand::Lit(value)) => Filter::Compare { attr, cmp, value },
+            (Operand::Lit(value), Operand::Attr(attr)) => Filter::Compare { attr, cmp: cmp.flipped(), value },
+            // `resource == Type::"id"`: the resource is that one entity.
+            (Operand::Resource, Operand::Lit(Literal::Entity(e)))
+            | (Operand::Lit(Literal::Entity(e)), Operand::Resource)
+                if matches!(cmp, Cmp::Eq | Cmp::Ne) =>
+            {
+                let only = Filter::Is { id: e };
+                if cmp == Cmp::Eq {
+                    only
+                } else {
+                    Filter::not(only)
                 }
-                _ => Self::unmappable(whole),
-            };
+            }
+            _ => Self::unmappable(whole),
         }
-        match op {
-            BinaryOp::In => match self.operand(left) {
-                Operand::Resource => self.membership(whole, right),
-                // `principal in resource.shared_groups`: the principal, or a group it's in, is in
-                // the set.
-                Operand::Lit(Literal::Entity(e)) => match self.operand(right) {
-                    Operand::Attr(attr) => Filter::ContainsAny {
-                        attr,
-                        values: self.ancestry.with_ancestors(&e).into_iter().map(Literal::Entity).collect(),
-                    },
-                    _ => Self::unmappable(whole),
+    }
+
+    fn membership_or_contains(&self, whole: &Value, body: &Value) -> Filter {
+        match self.operand(field(body, "left")) {
+            Operand::Resource => self.membership(whole, field(body, "right")),
+            // `principal in resource.shared_groups`: the principal, or a group it's in, is in the set.
+            Operand::Lit(Literal::Entity(e)) => match self.operand(field(body, "right")) {
+                Operand::Attr(attr) => Filter::ContainsAny {
+                    attr,
+                    values: self.ancestry.with_ancestors(&e).into_iter().map(Literal::Entity).collect(),
                 },
-                _ => Self::unmappable(whole),
-            },
-            BinaryOp::Contains => match (self.operand(left), self.operand(right)) {
-                (Operand::Attr(attr), Operand::Lit(value)) => Filter::Contains { attr, value },
-                _ => Self::unmappable(whole),
-            },
-            BinaryOp::ContainsAny => match (self.operand(left), self.operand(right)) {
-                (Operand::Attr(attr), Operand::Set(values)) => Filter::ContainsAny { attr, values },
-                _ => Self::unmappable(whole),
-            },
-            BinaryOp::ContainsAll => match (self.operand(left), self.operand(right)) {
-                (Operand::Attr(attr), Operand::Set(values)) => Filter::ContainsAll { attr, values },
                 _ => Self::unmappable(whole),
             },
             _ => Self::unmappable(whole),
         }
     }
 
+    fn sets(&self, whole: &Value, op: &str, body: &Value) -> Filter {
+        match (op, self.operand(field(body, "left")), self.operand(field(body, "right"))) {
+            ("contains", Operand::Attr(attr), Operand::Lit(value)) => Filter::Contains { attr, value },
+            ("containsAny", Operand::Attr(attr), Operand::Set(values)) => Filter::ContainsAny { attr, values },
+            ("containsAll", Operand::Attr(attr), Operand::Set(values)) => Filter::ContainsAll { attr, values },
+            _ => Self::unmappable(whole),
+        }
+    }
+
     /// `resource in <parent>`, for one entity or a set of them.
-    fn membership(&self, whole: &Expr, parent: &Expr) -> Filter {
+    fn membership(&self, whole: &Value, parent: &Value) -> Filter {
         match self.operand(parent) {
             Operand::Lit(Literal::Entity(ancestor)) => Filter::In { ancestor },
             Operand::Set(items) => {
@@ -164,30 +221,29 @@ impl Translator<'_> {
         }
     }
 
-    fn operand(&self, expr: &Expr) -> Operand {
-        match expr {
-            Expr::Unknown { name } if name.as_str() == RESOURCE => Operand::Resource,
-            Expr::Var(pst::Var::Resource) => Operand::Resource,
-            Expr::GetAttr { expr: target, attr } => match self.operand(target) {
-                Operand::Resource => Operand::Attr(vec![attr.to_string()]),
-                Operand::Attr(mut path) => {
-                    path.push(attr.to_string());
-                    Operand::Attr(path)
+    fn operand(&self, expr: &Value) -> Operand {
+        let Some((op, body)) = node(expr) else { return Operand::Other };
+        match op {
+            "unknown" if unknown_name(body).as_deref() == Some(RESOURCE) => Operand::Resource,
+            "Var" if body.as_str() == Some(RESOURCE) => Operand::Resource,
+            "." => {
+                let Some(attr) = body.get("attr").and_then(Value::as_str) else { return Operand::Other };
+                match self.operand(field(body, "left")) {
+                    Operand::Resource => Operand::Attr(vec![attr.to_string()]),
+                    Operand::Attr(mut path) => {
+                        path.push(attr.to_string());
+                        Operand::Attr(path)
+                    }
+                    _ => Operand::Other,
                 }
-                _ => Operand::Other,
-            },
-            Expr::Literal(lit) => match literal(lit) {
-                Some(l) => Operand::Lit(l),
-                None => Operand::Other,
-            },
-            Expr::Set(items) => {
+            }
+            "Value" => value(body),
+            "Set" => {
+                let Some(items) = body.as_array() else { return Operand::Other };
                 let mut out = Vec::with_capacity(items.len());
                 for item in items {
-                    match item.as_ref() {
-                        Expr::Literal(lit) => match literal(lit) {
-                            Some(l) => out.push(l),
-                            None => return Operand::Other,
-                        },
+                    match self.operand(item) {
+                        Operand::Lit(l) => out.push(l),
                         _ => return Operand::Other,
                     }
                 }
@@ -198,32 +254,30 @@ impl Translator<'_> {
     }
 }
 
-fn literal(lit: &pst::Literal) -> Option<Literal> {
-    Some(match lit {
-        pst::Literal::Bool(b) => Literal::Bool(*b),
-        pst::Literal::Long(n) => Literal::Long(*n),
-        pst::Literal::String(s) => Literal::String(s.to_string()),
-        pst::Literal::EntityUID(uid) => Literal::Entity(entity(uid)),
-        #[allow(unreachable_patterns)]
-        _ => return None,
-    })
+/// `unknown("<name>")`'s name: its one argument, a string value.
+fn unknown_name(args: &Value) -> Option<String> {
+    let [arg] = args.as_array()?.as_slice() else { return None };
+    let (op, body) = node(arg)?;
+    (op == "Value").then(|| body.as_str().map(str::to_string)).flatten()
 }
 
 /// The pattern as Cedar writes it, `*` for a wildcard and `\*` for a star.
-fn pattern_text(pattern: &[pst::PatternElem]) -> String {
+fn pattern_text(pattern: &[Value]) -> Option<String> {
     let mut out = String::new();
     for p in pattern {
         match p {
-            pst::PatternElem::Wildcard => out.push('*'),
-            pst::PatternElem::Char('*') => out.push_str("\\*"),
-            pst::PatternElem::Char(c) => out.push(*c),
+            Value::String(w) if w == "Wildcard" => out.push('*'),
+            _ => {
+                let literal = p.get("Literal")?.as_str()?;
+                out.push_str(&literal.replace('*', "\\*"));
+            }
         }
     }
-    out
+    Some(out)
 }
 
 /// Unknowns the PDP leaves in context are named after the key; say where they come from.
-fn unknown_name(name: &str) -> String {
+fn context_name(name: &str) -> String {
     if name.contains('.') || name.contains("::") {
         name.to_string()
     } else {
@@ -236,6 +290,7 @@ mod tests {
     use std::str::FromStr;
 
     use cedar_policy::Policy;
+    use serde_json::json;
 
     use super::*;
 
@@ -247,30 +302,10 @@ mod tests {
         }
     }
 
-    /// The `when` condition of a policy, as a residual would carry it, with `resource` unknown.
-    fn condition(src: &str) -> Expr {
-        let policy = Policy::from_str(src).unwrap();
-        let pst::Policy::Static(p) = policy.to_pst().unwrap() else { panic!("not static") };
-        let Some(pst::Clause::When(expr)) = p.body().clauses().first().cloned() else { panic!("no when") };
-        let resource = Arc::new(Expr::Unknown { name: RESOURCE.into() });
-        replace_resource(&expr, &resource)
-    }
-
-    fn replace_resource(expr: &Expr, with: &Arc<Expr>) -> Expr {
-        let r = |e: &Arc<Expr>| Arc::new(replace_resource(e, with));
-        match expr {
-            Expr::Var(pst::Var::Resource) => with.as_ref().clone(),
-            Expr::GetAttr { expr, attr } => Expr::GetAttr { expr: r(expr), attr: attr.clone() },
-            Expr::HasAttr { expr, attrs } => Expr::HasAttr { expr: r(expr), attrs: attrs.clone() },
-            Expr::BinaryOp { op, left, right } => Expr::BinaryOp { op: *op, left: r(left), right: r(right) },
-            Expr::UnaryOp { op, expr } => Expr::UnaryOp { op: *op, expr: r(expr) },
-            Expr::Like { expr, pattern } => Expr::Like { expr: r(expr), pattern: pattern.clone() },
-            other => other.clone(),
-        }
-    }
-
-    fn translated(src: &str) -> serde_json::Value {
-        serde_json::to_value(filter(&condition(src), &Groups)).unwrap()
+    /// A policy's conditions, as Cedar writes them in JSON; `resource` reads as the unknown.
+    fn translated(src: &str) -> Value {
+        let policy = Policy::from_str(src).unwrap().to_json().unwrap();
+        serde_json::to_value(policy_filter(&policy, &Groups)).unwrap()
     }
 
     #[test]
@@ -279,14 +314,18 @@ mod tests {
             translated(
                 r#"permit(principal, action, resource) when { resource.tenant == "acme" && 3 < resource.tier };"#
             ),
-            serde_json::json!({ "op": "and", "args": [
+            json!({ "op": "and", "args": [
                 { "op": "compare", "attr": ["tenant"], "cmp": "eq", "value": "acme" },
                 { "op": "compare", "attr": ["tier"], "cmp": "gt", "value": 3 },
             ] })
         );
         assert_eq!(
             translated(r#"permit(principal, action, resource) when { resource.labels.containsAny(["a", "b"]) };"#),
-            serde_json::json!({ "op": "contains_any", "attr": ["labels"], "values": ["a", "b"] })
+            json!({ "op": "contains_any", "attr": ["labels"], "values": ["a", "b"] })
+        );
+        assert_eq!(
+            translated(r#"permit(principal, action, resource) unless { resource has archived };"#),
+            json!({ "op": "not", "arg": { "op": "has", "attr": ["archived"] } })
         );
     }
 
@@ -294,7 +333,7 @@ mod tests {
     fn hierarchy_membership_becomes_an_in_node() {
         assert_eq!(
             translated(r#"permit(principal, action, resource) when { resource in Resource::"eng-folder" };"#),
-            serde_json::json!({ "op": "in", "ancestor": { "type": "Resource", "id": "eng-folder" } })
+            json!({ "op": "in", "ancestor": { "type": "Resource", "id": "eng-folder" } })
         );
     }
 
@@ -302,18 +341,35 @@ mod tests {
     fn a_principal_in_a_set_the_resource_holds_expands_to_its_groups() {
         assert_eq!(
             translated(r#"permit(principal, action, resource) when { Human::"bob" in resource.shared_groups };"#),
-            serde_json::json!({ "op": "contains_any", "attr": ["shared_groups"], "values": [
+            json!({ "op": "contains_any", "attr": ["shared_groups"], "values": [
                 { "type": "Human", "id": "bob" }, { "type": "Group", "id": "engineering" },
             ] })
         );
     }
 
     #[test]
+    fn the_unknown_resource_reads_as_the_resource() {
+        let residual = json!({ "==": {
+            "left": { ".": { "left": { "unknown": [{ "Value": "resource" }] }, "attr": "owner" } },
+            "right": { "Value": { "__entity": { "type": "Human", "id": "bob" } } },
+        } });
+        assert_eq!(
+            serde_json::to_value(filter(&residual, &Groups)).unwrap(),
+            json!({ "op": "compare", "attr": ["owner"], "cmp": "eq", "value": { "type": "Human", "id": "bob" } })
+        );
+    }
+
+    #[test]
     fn what_the_tree_cant_express_is_marked_not_guessed() {
-        let f =
-            filter(&condition(r#"permit(principal, action, resource) when { resource.a == resource.b };"#), &Groups);
+        let f = policy_filter(
+            &Policy::from_str(r#"permit(principal, action, resource) when { resource.a == resource.b };"#)
+                .unwrap()
+                .to_json()
+                .unwrap(),
+            &Groups,
+        );
         assert!(matches!(f, Filter::Unmappable { .. }), "{f:?}");
-        let assigned = Expr::Unknown { name: "assigned".into() };
+        let assigned = json!({ "unknown": [{ "Value": "assigned" }] });
         assert_eq!(filter(&assigned, &Groups), Filter::Unknown { name: "context.assigned".into() });
     }
 }

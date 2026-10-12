@@ -13,7 +13,7 @@ use std::{
 };
 
 use awzy_model::{ChallengeKind, EnforcementMode, EntityRef, PlanId};
-use cedar_policy::{pst, Effect, Entities, EntityId, EntityTypeName, EntityUid, Request, RestrictedExpression};
+use cedar_policy::{Effect, Entities, EntityId, EntityTypeName, EntityUid, Request, RestrictedExpression};
 use serde::{Deserialize, Serialize};
 
 pub use filter::{Cmp, Filter, Literal};
@@ -217,13 +217,7 @@ impl Pdp {
         let mut challenges = BTreeSet::new();
         let mut policies = BTreeSet::new();
         for residual in response.all_residuals() {
-            let condition = match residual.to_pst()? {
-                pst::Policy::Static(p) => match p.body().clauses().as_slice() {
-                    [pst::Clause::When(expr)] => translate::filter(expr, &ancestry),
-                    clauses => Filter::Unmappable { cedar: format!("{clauses:?}") },
-                },
-                other => Filter::Unmappable { cedar: format!("{other:?}") },
-            };
+            let condition = translate::policy_filter(&residual.to_json()?, &ancestry);
             if condition == Filter::False {
                 continue;
             }
