@@ -4,7 +4,8 @@
   "plugins": ["typescript", "react", "import", "unicorn", "oxc"],
   "categories": {
     "correctness": "error",
-    "suspicious": "warn"
+    "suspicious": "warn",
+    "perf": "error"
   },
   "rules": {
     // The automatic JSX runtime (jsx: react-jsx) doesn't need React in scope.
@@ -13,7 +14,30 @@
     "import/no-unassigned-import": ["warn", { "allow": ["**/*.css"] }],
     "import/no-named-as-default-member": "off",
     // Narrow with a check, not `as` (#225).
-    "typescript/no-unsafe-type-assertion": "error"
+    "typescript/no-unsafe-type-assertion": "error",
+    // A value typed `any` (JSON.parse's) is narrowed before it's used, like a cast (#225).
+    "typescript/no-unsafe-argument": "error",
+    "typescript/no-unsafe-assignment": "error",
+    "typescript/no-unsafe-call": "error",
+    "typescript/no-unsafe-member-access": "error",
+    // A promise handed to an event handler is a rejection nobody sees.
+    "typescript/no-misused-promises": "error",
+    "typescript/no-deprecated": "error",
+    // `== null` is the one loose comparison: null or undefined.
+    "eqeqeq": ["error", "always", { "null": "ignore" }]
   },
+  "overrides": [
+    {
+      // Plain JavaScript scripts have no types to narrow to, and wait for servers by polling.
+      "files": ["**/*.mjs"],
+      "rules": {
+        "eslint/no-await-in-loop": "off",
+        "typescript/no-unsafe-argument": "off",
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-member-access": "off"
+      }
+    }
+  ],
   "ignorePatterns": ["**/__generated__/**", "**/dist/**"]
 }

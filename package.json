@@ -24,6 +24,11 @@
           "@babel/runtime": "^7.28.0"
         }
       },
+      "@tabler/icons-react": {
+        "peerDependencies": {
+          "@types/react": "^19.0.0"
+        }
+      },
       "@mantine/hooks": {
         "peerDependencies": {
           "react-dom": "^19.2.0"

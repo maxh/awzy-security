@@ -78,11 +78,13 @@ export function Entity({ e }: { e: { readonly type: string; readonly id: string 
   );
 }
 
+const NONE: ReadonlyArray<string> = [];
+
 /** The verdict as a colored badge; monitored ones ("would deny") are outlined. */
 export function VerdictBadge({
   verdict,
   mode,
-  challenges = [],
+  challenges = NONE,
 }: {
   verdict: string;
   mode: string;

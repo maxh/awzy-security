@@ -359,8 +359,8 @@ function Enforcement({
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {data.enforcementHistory.map((c, i) => (
-                <Table.Tr key={i}>
+              {data.enforcementHistory.map((c) => (
+                <Table.Tr key={`${c.changedAt ?? ""}/${c.mode}`}>
                   <Table.Td>{c.changedAt ? formatTime(c.changedAt) : ""}</Table.Td>
                   <Table.Td>
                     <StatusBadge tone={c.mode === "ENFORCE" ? "danger" : "info"}>

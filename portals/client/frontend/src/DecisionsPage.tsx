@@ -1,7 +1,7 @@
 import { EmptyState, oneOf, PageHeader, PageLoader, Section } from "@awzy/ui";
 import { Button, Drawer, Group, Select, Table, Text, TextInput } from "@mantine/core";
 import { IconListSearch, IconSearch } from "@tabler/icons-react";
-import { type FormEvent, Suspense, useState } from "react";
+import { type SyntheticEvent, Suspense, useState } from "react";
 import { graphql, useLazyLoadQuery, usePaginationFragment } from "react-relay";
 
 import type { DecisionsPage_decisions$key } from "./__generated__/DecisionsPage_decisions.graphql";
@@ -54,7 +54,7 @@ function Filters({ onApply }: { onApply: (f: DecisionFilter) => void }) {
   const [verdict, setVerdict] = useState<string | null>(null);
   const [mode, setMode] = useState<string | null>(null);
 
-  const submit = (e: FormEvent) => {
+  const submit = (e: SyntheticEvent) => {
     e.preventDefault();
     onApply({
       principalId: principalId.trim() || null,

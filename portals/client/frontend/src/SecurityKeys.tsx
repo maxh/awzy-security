@@ -130,7 +130,7 @@ export function SecurityKeys({ keys, onChanged }: { keys: ReadonlyArray<Key>; on
                     {k.lastUsedAt ? `last used ${formatTime(k.lastUsedAt)}` : "never used"}
                   </Table.Td>
                   <Table.Td>
-                    <Button size="xs" variant="light" color="red" disabled={busy} onClick={() => remove(k)}>
+                    <Button size="xs" variant="light" color="red" disabled={busy} onClick={() => void remove(k)}>
                       Remove
                     </Button>
                   </Table.Td>
@@ -149,7 +149,7 @@ export function SecurityKeys({ keys, onChanged }: { keys: ReadonlyArray<Key>; on
             onChange={(e) => setName(e.currentTarget.value)}
             w={320}
           />
-          <Button loading={busy} disabled={!name.trim()} onClick={add}>
+          <Button loading={busy} disabled={!name.trim()} onClick={() => void add()}>
             Add key
           </Button>
         </Group>
@@ -222,7 +222,7 @@ export function ResetKeys() {
       </Text>
       <Group align="flex-end">
         <TextInput label="Person" placeholder="bob" value={human} onChange={(e) => setHuman(e.currentTarget.value)} />
-        <Button variant="default" disabled={!human.trim()} onClick={look}>
+        <Button variant="default" disabled={!human.trim()} onClick={() => void look()}>
           Look up keys
         </Button>
       </Group>
@@ -238,7 +238,7 @@ export function ResetKeys() {
                     <Table.Td>{k.name}</Table.Td>
                     <Table.Td c="dimmed">{k.createdAt ? `added ${formatTime(k.createdAt)}` : ""}</Table.Td>
                     <Table.Td>
-                      <Button size="xs" variant="light" color="red" onClick={() => reset(k.id)}>
+                      <Button size="xs" variant="light" color="red" onClick={() => void reset(k.id)}>
                         Remove
                       </Button>
                     </Table.Td>

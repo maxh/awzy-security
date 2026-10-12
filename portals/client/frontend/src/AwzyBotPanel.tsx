@@ -81,6 +81,8 @@ export function AwzyBotPanel({ onDraftSaved }: { onDraftSaved: () => void }) {
             </Text>
           )}
           {turns.map((turn, i) => (
+            // Turns are only ever appended, so a turn's index is its identity.
+            // oxlint-disable-next-line react/no-array-index-key
             <TurnView key={i} turn={turn} />
           ))}
           {isAsking && (

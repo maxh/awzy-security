@@ -22,7 +22,10 @@ beforeAll(() => {
     matches: false,
     media: query,
     onchange: null,
+    // MediaQueryList still declares the old listener methods, so a stand-in has them too.
+    // oxlint-disable-next-line typescript/no-deprecated
     addListener: () => {},
+    // oxlint-disable-next-line typescript/no-deprecated
     removeListener: () => {},
     addEventListener: () => {},
     removeEventListener: () => {},

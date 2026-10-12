@@ -118,8 +118,8 @@ function Report({ draftQid }: { draftQid: string }) {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {c.examples.map((e, i) => (
-                <Table.Tr key={i}>
+              {c.examples.map((e) => (
+                <Table.Tr key={`${e.principalId}/${e.onBehalfOfId ?? ""}/${e.action}/${e.resourceId}`}>
                   <Table.Td>
                     {e.principalId}
                     {e.onBehalfOfId ? ` for ${e.onBehalfOfId}` : ""}

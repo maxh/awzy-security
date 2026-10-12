@@ -29,9 +29,11 @@ const TIERS: { value: SensitivityTier; label: string }[] = [
 ];
 const label = (t: SensitivityTier) => TIERS.find((x) => x.value === t)?.label ?? t;
 // Confidential and crown jewels always fail closed.
-const CAN_FAIL_OPEN: SensitivityTier[] = ["PUBLIC", "INTERNAL"];
+const CAN_FAIL_OPEN: ReadonlySet<SensitivityTier> = new Set(["PUBLIC", "INTERNAL"]);
 
-type Row = { name: string; tier: SensitivityTier };
+/** One row of the form; `id` keeps each row's inputs its own as rows are added and removed. */
+type Row = { id: string; name: string; tier: SensitivityTier };
+const newRow = (name: string, tier: SensitivityTier): Row => ({ id: crypto.randomUUID(), name, tier });
 
 /**
  * What awzy-gateway does while the PDP is unreachable (ADR 0089): each MCP tool's tier, which
@@ -88,8 +90,8 @@ function Fallback({ canEdit, fetchKey, onSaved }: { canEdit: boolean; fetchKey: 
   const [error, setError] = useState<string | null>(null);
 
   const edit = () => {
-    setTools(f.tools.map((t) => ({ name: t.tool, tier: t.tier })));
-    setServers(f.servers.map((s) => ({ name: s.server, tier: s.tier })));
+    setTools(f.tools.map((t) => newRow(t.tool, t.tier)));
+    setServers(f.servers.map((s) => newRow(s.server, s.tier)));
     setFailOpen([...f.failOpenTiers]);
     setError(null);
     setEditing(true);
@@ -237,7 +239,7 @@ function Editor({
       <Checkbox.Group label="Tiers that fail open" value={failOpen} onChange={setFailOpen}>
         <Group mt="xs">
           {TIERS.map((t) => (
-            <Checkbox key={t.value} value={t.value} label={t.label} disabled={!CAN_FAIL_OPEN.includes(t.value)} />
+            <Checkbox key={t.value} value={t.value} label={t.label} disabled={!CAN_FAIL_OPEN.has(t.value)} />
           ))}
         </Group>
       </Checkbox.Group>
@@ -265,7 +267,7 @@ function Rows({
         {title}
       </Text>
       {rows.map((r, i) => (
-        <Group key={i} gap="xs" wrap="nowrap">
+        <Group key={r.id} gap="xs" wrap="nowrap">
           <TextInput
             aria-label="Name"
             placeholder={placeholder}
@@ -292,7 +294,7 @@ function Rows({
         </Group>
       ))}
       <Group>
-        <Button size="xs" variant="light" onClick={() => setRows([...rows, { name: "", tier: "CONFIDENTIAL" }])}>
+        <Button size="xs" variant="light" onClick={() => setRows([...rows, newRow("", "CONFIDENTIAL")])}>
           Add
         </Button>
       </Group>
