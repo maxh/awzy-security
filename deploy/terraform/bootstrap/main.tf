@@ -229,7 +229,7 @@ resource "kubernetes_secret_v1" "policy_verify_portal" {
 # API keys for model services beyond the cloud's own (ADR 0114), for the portal (Awzy Bot) and
 # awzy-reasoner (investigations).
 resource "kubernetes_secret_v1" "llm_keys" {
-  for_each = length(var.llm_api_keys) == 0 ? toset([]) : toset(["portal", "system"])
+  for_each = length(nonsensitive(keys(var.llm_api_keys))) == 0 ? toset([]) : toset(["portal", "system"])
   metadata {
     name      = "awzy-llm-keys"
     namespace = kubernetes_namespace_v1.awzy[each.key].metadata[0].name
