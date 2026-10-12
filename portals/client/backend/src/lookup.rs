@@ -1,8 +1,8 @@
 //! Looking up a principal or a resource as the PDPs see it: the Look up page. The same reads as
 //! the MCP endpoint's `get_principal` and `get_resource`, for those who may view the directory.
 
-use async_graphql::{Context, Enum, Object, Result, SimpleObject};
-use awzy_portal::{JsonObject, JsonString};
+use async_graphql::{connection::Connection, Context, Enum, Object, Result, SimpleObject};
+use awzy_portal::{connection::page, JsonObject, JsonString};
 use serde_json::Value;
 
 use crate::{
@@ -104,14 +104,20 @@ impl LookupQuery {
     }
 
     /// Resources whose ID or name contains `query`, ignoring case. At most 50.
-    async fn search_resources(&self, ctx: &Context<'_>, query: String) -> Result<Vec<ResourceSummary>> {
+    async fn search_resources(
+        &self,
+        ctx: &Context<'_>,
+        query: String,
+        after: Option<String>,
+        first: Option<i32>,
+    ) -> Result<Connection<String, ResourceSummary>> {
         require(ctx, View, PortalArea::Directory).await?;
         let q = query.trim();
         if q.is_empty() {
-            return Ok(vec![]);
+            return page(vec![], |r: &ResourceSummary| r.id.clone(), after, first);
         }
         let found = context_api(ctx)?.search_resources(q, 50).await?;
-        Ok(found
+        let found = found
             .into_iter()
             .map(|r| ResourceSummary {
                 id: r.id,
@@ -121,7 +127,8 @@ impl LookupQuery {
                 owner: r.owner,
                 sensitivity: r.sensitivity,
             })
-            .collect())
+            .collect();
+        page(found, |r| r.id.clone(), after, first)
     }
 
     /// One resource: its tiers and the classifier's reason, owner, sharing, the folders above it,

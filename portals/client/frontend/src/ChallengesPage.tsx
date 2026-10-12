@@ -212,46 +212,50 @@ function Challenges({
     graphql`
       query ChallengesPageQuery {
         canAdminister: viewerCan(action: ADMINISTER, area: CHALLENGES)
-        pending: myChallenges(status: PENDING) {
-          id
-          principal {
-            type
+        pending: myChallenges(status: PENDING, first: 100) {
+          nodes {
             id
+            principal {
+              type
+              id
+            }
+            onBehalfOf {
+              type
+              id
+            }
+            action
+            resource {
+              type
+              id
+            }
+            kinds
+            passed
+            expiresAt
           }
-          onBehalfOf {
-            type
-            id
-          }
-          action
-          resource {
-            type
-            id
-          }
-          kinds
-          passed
-          expiresAt
         }
         recent: myChallenges(first: 20) {
-          id
-          principal {
-            type
+          nodes {
             id
+            principal {
+              type
+              id
+            }
+            onBehalfOf {
+              type
+              id
+            }
+            action
+            resource {
+              type
+              id
+            }
+            status
+            createdAt
+            decidedBy {
+              label
+            }
+            grantExpiresAt
           }
-          onBehalfOf {
-            type
-            id
-          }
-          action
-          resource {
-            type
-            id
-          }
-          status
-          createdAt
-          decidedBy {
-            label
-          }
-          grantExpiresAt
         }
         mySecurityKeys {
           id
@@ -259,26 +263,28 @@ function Challenges({
           createdAt
           lastUsedAt
         }
-        toApprove: challengesToApprove {
-          id
-          principal {
-            type
+        toApprove: challengesToApprove(first: 100) {
+          nodes {
             id
+            principal {
+              type
+              id
+            }
+            onBehalfOf {
+              type
+              id
+            }
+            action
+            resource {
+              type
+              id
+            }
+            kinds
+            passed
+            answererId
+            justification
+            createdAt
           }
-          onBehalfOf {
-            type
-            id
-          }
-          action
-          resource {
-            type
-            id
-          }
-          kinds
-          passed
-          answererId
-          justification
-          createdAt
         }
       }
     `,
@@ -287,12 +293,13 @@ function Challenges({
   // A notification's link names one challenge: bring it into view once it's on the page.
   const linked = linkedChallenge();
   const linkedShown =
-    linked !== null && (data.pending.some((c) => c.id === linked) || data.toApprove.some((c) => c.id === linked));
+    linked !== null &&
+    (data.pending.nodes.some((c) => c.id === linked) || data.toApprove.nodes.some((c) => c.id === linked));
   useEffect(() => {
     if (linked && linkedShown) document.getElementById(linked)?.scrollIntoView({ block: "center" });
   }, [linked, linkedShown]);
-  const recent = data.recent.filter((c) => c.status !== "PENDING");
-  const linkedRecent = linked && !linkedShown ? data.recent.find((c) => c.id === linked) : undefined;
+  const recent = data.recent.nodes.filter((c) => c.status !== "PENDING");
+  const linkedRecent = linked && !linkedShown ? data.recent.nodes.find((c) => c.id === linked) : undefined;
   const hasKeys = data.mySecurityKeys.length > 0;
   // When the page loaded: a pass that has since run out no longer invites a retry.
   const [loadedAt] = useState(() => Date.now());
@@ -308,13 +315,13 @@ function Challenges({
       )}
       <Stack gap="xs">
         <Title order={4}>Waiting for you</Title>
-        {data.pending.length === 0 ? (
+        {data.pending.nodes.length === 0 ? (
           <Text c="dimmed">
             Nothing to answer. When awzy challenges a request you made, or one an agent made for you, it shows up here;
             answer it, then retry the request.
           </Text>
         ) : (
-          data.pending.map((c) => (
+          data.pending.nodes.map((c) => (
             <div key={c.id} id={c.id} style={c.id === linkedChallenge() ? LINKED : undefined}>
               <PendingChallenge challenge={c} hasKeys={hasKeys} onAnswered={onAnswered} />
             </div>
@@ -323,11 +330,11 @@ function Challenges({
       </Stack>
 
       {/* Those who administer challenges see every approval below; others, the ones policy lets them give. */}
-      {!data.canAdminister && data.toApprove.length > 0 && (
+      {!data.canAdminister && data.toApprove.nodes.length > 0 && (
         <Stack gap="xs">
           <Title order={4}>Waiting for your approval</Title>
           <Stack gap="sm">
-            {data.toApprove.map((c) => (
+            {data.toApprove.nodes.map((c) => (
               <Approval key={c.id} challenge={c} onChanged={onChanged} />
             ))}
           </Stack>
@@ -376,7 +383,7 @@ function Challenges({
   );
 }
 
-type Pending = ChallengesPageQuery["response"]["pending"][number];
+type Pending = ChallengesPageQuery["response"]["pending"]["nodes"][number];
 
 function PendingChallenge({
   challenge: c,

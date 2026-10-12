@@ -1,10 +1,18 @@
-import { EmptyState, PageHeader, PageLoader, Section, Stat, StatusBadge } from "@awzy/ui";
+import { EmptyState, PageHeader, PageLoader, Section, ShowMore, Stat, StatusBadge } from "@awzy/ui";
 import { Alert, Button, Group, Modal, SimpleGrid, Stack, Table, Text } from "@mantine/core";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { IconHistory, IconShieldCheck } from "@tabler/icons-react";
 import { Suspense, useState } from "react";
-import { graphql, type PreloadedQuery, usePreloadedQuery, useRelayEnvironment } from "react-relay";
+import {
+  graphql,
+  type PreloadedQuery,
+  usePaginationFragment,
+  usePreloadedQuery,
+  useRelayEnvironment,
+} from "react-relay";
 
+import type { EnforcementPageHistoryPaginationQuery } from "./__generated__/EnforcementPageHistoryPaginationQuery.graphql";
+import type { EnforcementPage_history$key } from "./__generated__/EnforcementPage_history.graphql";
 import type { EnforcementPageQuery } from "./__generated__/EnforcementPageQuery.graphql";
 import type { EnforcementPageSetModeMutation } from "./__generated__/EnforcementPageSetModeMutation.graphql";
 import { Entity, formatTime, Time } from "./format";
@@ -111,17 +119,37 @@ function Enforcement({
             }
           }
         }
-        enforcementHistory(first: 10) {
-          mode
-          changedBy {
-            label
-          }
-          changedAt
-        }
+        ...EnforcementPage_history
       }
     `,
     queryRef,
   );
+  const {
+    data: { enforcementHistory },
+    loadNext,
+    hasNext,
+    isLoadingNext,
+  } = usePaginationFragment<EnforcementPageHistoryPaginationQuery, EnforcementPage_history$key>(
+    graphql`
+      fragment EnforcementPage_history on Query
+      @argumentDefinitions(first: { type: "Int", defaultValue: 5 }, after: { type: "String" })
+      @refetchable(queryName: "EnforcementPageHistoryPaginationQuery") {
+        enforcementHistory(first: $first, after: $after) @connection(key: "EnforcementPage_enforcementHistory") {
+          edges {
+            node {
+              mode
+              changedBy {
+                label
+              }
+              changedAt
+            }
+          }
+        }
+      }
+    `,
+    data,
+  );
+  const history = enforcementHistory.edges.map((e) => e.node);
   const environment = useRelayEnvironment();
   const [isSaving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -365,7 +393,7 @@ function Enforcement({
       </Modal>
 
       <Section title="History" flush>
-        {data.enforcementHistory.length === 0 ? (
+        {history.length === 0 ? (
           <EmptyState icon={<IconHistory size={22} />} title="Never switched" />
         ) : (
           <Table>
@@ -377,7 +405,7 @@ function Enforcement({
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {data.enforcementHistory.map((c) => (
+              {history.map((c) => (
                 <Table.Tr key={`${c.changedAt ?? ""}/${c.mode}`}>
                   <Table.Td>{c.changedAt ? formatTime(c.changedAt) : ""}</Table.Td>
                   <Table.Td>
@@ -391,6 +419,7 @@ function Enforcement({
             </Table.Tbody>
           </Table>
         )}
+        <ShowMore hasMore={hasNext} loading={isLoadingNext} onMore={() => loadNext(20)} />
       </Section>
     </Stack>
   );

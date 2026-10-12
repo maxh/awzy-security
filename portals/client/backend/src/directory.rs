@@ -2,8 +2,8 @@
 //! client's admins register (ADR 0031, ADR 0033). Read from awzy-context; people and groups are
 //! read-only here because the IdP owns them.
 
-use async_graphql::{Context, InputObject, Object, Result, SimpleObject};
-use awzy_portal::{Actor, UtcTimestamp};
+use async_graphql::{connection::Connection, Context, InputObject, Object, Result, SimpleObject};
+use awzy_portal::{connection::page, Actor, UtcTimestamp};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -213,10 +213,12 @@ impl DirectoryQuery {
         &self,
         ctx: &Context<'_>,
         search: Option<String>,
-        #[graphql(default = 200)] first: i32,
-    ) -> Result<Vec<Human>> {
+        after: Option<String>,
+        first: Option<i32>,
+    ) -> Result<Connection<String, Human>> {
         require(ctx, PortalAction::View, PortalArea::Directory).await?;
-        let mut path = format!("/v1/directory/humans?limit={}", first.clamp(1, 1000));
+        // The directory's own cap; a search narrows past it.
+        let mut path = "/v1/directory/humans?limit=1000".to_string();
         if let Some(s) = search.filter(|s| !s.trim().is_empty()) {
             path.push_str(&format!("&search={}", awzy_http::encode(s.trim())));
         }
@@ -225,7 +227,8 @@ impl DirectoryQuery {
             humans: Vec<WireHuman>,
         }
         let w: Wire = context(ctx)?.get(&path).await?;
-        Ok(w.humans
+        let humans = w
+            .humans
             .into_iter()
             .map(|p| Human {
                 user_name: p.user_name,
@@ -234,17 +237,24 @@ impl DirectoryQuery {
                 groups: p.groups,
                 updated_at: UtcTimestamp(p.updated_at),
             })
-            .collect())
+            .collect();
+        page(humans, |h| h.user_name.clone(), after, first)
     }
 
-    async fn groups(&self, ctx: &Context<'_>) -> Result<Vec<DirectoryGroup>> {
+    async fn groups(
+        &self,
+        ctx: &Context<'_>,
+        after: Option<String>,
+        first: Option<i32>,
+    ) -> Result<Connection<String, DirectoryGroup>> {
         require(ctx, PortalAction::View, PortalArea::Directory).await?;
         #[derive(Deserialize)]
         struct Wire {
             groups: Vec<WireGroup>,
         }
         let w: Wire = context(ctx)?.get("/v1/directory/groups").await?;
-        Ok(w.groups
+        let groups = w
+            .groups
             .into_iter()
             .map(|g| DirectoryGroup {
                 name: g.name,
@@ -253,17 +263,23 @@ impl DirectoryQuery {
                 parents: g.parents,
                 updated_at: UtcTimestamp(g.updated_at),
             })
-            .collect())
+            .collect();
+        page(groups, |g| g.name.clone(), after, first)
     }
 
-    async fn service_accounts(&self, ctx: &Context<'_>) -> Result<Vec<ServiceAccount>> {
+    async fn service_accounts(
+        &self,
+        ctx: &Context<'_>,
+        after: Option<String>,
+        first: Option<i32>,
+    ) -> Result<Connection<String, ServiceAccount>> {
         require(ctx, PortalAction::View, PortalArea::Directory).await?;
         #[derive(Deserialize)]
         struct Wire {
             service_accounts: Vec<WireServiceAccount>,
         }
         let w: Wire = context(ctx)?.get("/v1/service-accounts").await?;
-        Ok(w.service_accounts.into_iter().map(Into::into).collect())
+        page(w.service_accounts.into_iter().map(Into::into).collect(), |s: &ServiceAccount| s.id.clone(), after, first)
     }
 }
 
@@ -406,9 +422,9 @@ mod tests {
         let alice = testing::human("alice", "security");
         let bob = testing::human("bob", "engineering");
 
-        let d = testing::run(&schema, &alice, "{ directorySummary { humans activeHumans lastProvisionedAt } humans(search: \"ali\") { userName groups active } }").await;
+        let d = testing::run(&schema, &alice, "{ directorySummary { humans activeHumans lastProvisionedAt } humans(search: \"ali\") { nodes { userName groups active } } }").await;
         assert_eq!(d["directorySummary"]["activeHumans"], 1);
-        assert_eq!(d["humans"][0], json!({ "userName": "alice", "groups": ["security"], "active": true }));
+        assert_eq!(d["humans"]["nodes"][0], json!({ "userName": "alice", "groups": ["security"], "active": true }));
 
         let register = r#"mutation { registerServiceAccount(input: { id: "sales-genie", owner: "bob", ai: true, groups: ["engineering"], description: "Drafts emails" }) { serviceAccount { id owner ai createdBy { type id } } } }"#;
         let r = testing::run(&schema, &alice, register).await;
@@ -420,7 +436,7 @@ mod tests {
 
         let err = testing::run_err(&schema, &bob, register).await;
         assert!(err.starts_with("bob may not administer directory"), "{err}");
-        let err = testing::run_err(&schema, &bob, "{ humans { userName } }").await;
+        let err = testing::run_err(&schema, &bob, "{ humans { nodes { userName } } }").await;
         assert!(err.starts_with("bob may not view directory"), "{err}");
         assert_eq!(seen.lock().unwrap().len(), 1, "bob's attempt never reached awzy-context");
     }

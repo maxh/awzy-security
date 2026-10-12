@@ -1,13 +1,16 @@
 //! Enforcement modes (ADR 0007): the install's mode and automated containments' (ADR 0066), their
 //! history, the would-deny rates that tell an admin whether it's safe to enforce, and the switch.
 
-use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject};
+use async_graphql::{connection::Connection, Context, Enum, InputObject, Object, Result, SimpleObject};
 use awzy_authz_proto::{
     authz::v1::EnforcementMode as WireMode,
     policy::v1::{EnforcementSetting, GetEnforcementRequest, ListEnforcementChangesRequest, SetEnforcementRequest},
 };
 use awzy_model::{ChallengeId, EnforcementMode};
-use awzy_portal::{Actor, Qid, UtcTimestamp};
+use awzy_portal::{
+    connection::{page, MAX_PAGE},
+    Actor, Qid, UtcTimestamp,
+};
 use chrono::DateTime;
 
 use crate::{
@@ -260,10 +263,15 @@ impl EnforcementQuery {
         &self,
         ctx: &Context<'_>,
         #[graphql(default)] scope: EnforcementScope,
-        #[graphql(default = 20)] first: i32,
-    ) -> Result<Vec<Setting>> {
+        after: Option<String>,
+        first: Option<i32>,
+    ) -> Result<Connection<String, Setting>> {
         require(ctx, View, PortalArea::Enforcement).await?;
-        Ok(history(policy_client(ctx)?, scope, first).await?.into_iter().map(Setting).collect())
+        let changes = history(policy_client(ctx)?, scope, MAX_PAGE as i32).await?;
+        // A change has no ID of its own; when it was made is unique within one scope's history.
+        let key =
+            |s: &Setting| s.0.changed_at.as_ref().map(|t| format!("{}.{:09}", t.seconds, t.nanos)).unwrap_or_default();
+        page(changes.into_iter().map(Setting).collect(), key, after, first)
     }
 
     /// Actions and tools with a mode of their own (ADR 0109), which a check takes over the

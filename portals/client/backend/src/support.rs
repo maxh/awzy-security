@@ -10,6 +10,7 @@
 use std::sync::Arc;
 
 use async_graphql::{
+    connection::Connection,
     extensions::{Extension, ExtensionContext, ExtensionFactory, NextExecute},
     Context, Enum, InputObject, Object, Response, Result, SimpleObject, ID,
 };
@@ -19,7 +20,7 @@ use awzy_authz_proto::challenge::v1::{
 };
 use awzy_identity::Principal;
 use awzy_model::{ChallengeId, SupportSessionId};
-use awzy_portal::{Actor, Qid, UtcTimestamp};
+use awzy_portal::{connection::page, Actor, Qid, UtcTimestamp};
 use chrono::{DateTime, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde::Deserialize;
@@ -340,10 +341,16 @@ pub struct SupportQuery;
 #[Object]
 impl SupportQuery {
     /// Support sessions awzy staff asked for, newest first. For those who may view enforcement.
-    async fn support_sessions(&self, ctx: &Context<'_>) -> Result<Vec<SupportSession>> {
+    async fn support_sessions(
+        &self,
+        ctx: &Context<'_>,
+        after: Option<String>,
+        first: Option<i32>,
+    ) -> Result<Connection<String, SupportSession>> {
         require(ctx, View, PortalArea::Enforcement).await?;
         let res = client(ctx)?.list_support_sessions(ListSupportSessionsRequest { limit: 50 }).await.map_err(grpc)?;
-        Ok(res.into_inner().sessions.into_iter().map(SupportSession).collect())
+        let sessions = res.into_inner().sessions.into_iter().map(SupportSession).collect();
+        page(sessions, |s| s.0.request.as_ref().map(|r| r.qid.clone()).unwrap_or_default(), after, first)
     }
 
     /// Null unless the viewer is awzy staff in a support session.

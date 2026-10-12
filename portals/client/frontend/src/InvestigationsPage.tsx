@@ -1,9 +1,14 @@
-import { EmptyState, PageHeader, PageLoader, Section, StatusBadge, type Tone } from "@awzy/ui";
+import { EmptyState, PageHeader, PageLoader, Section, ShowMore, StatusBadge, type Tone } from "@awzy/ui";
 import { Alert, Button, Drawer, Group, List, SegmentedControl, Stack, Table, Text, Textarea } from "@mantine/core";
 import { IconSearch } from "@tabler/icons-react";
 import { Suspense, useState } from "react";
-import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
+import { graphql, useLazyLoadQuery, useMutation, usePaginationFragment } from "react-relay";
 
+import type { InvestigationsPagePaginationQuery } from "./__generated__/InvestigationsPagePaginationQuery.graphql";
+import type {
+  InvestigationsPage_list$data,
+  InvestigationsPage_list$key,
+} from "./__generated__/InvestigationsPage_list.graphql";
 import type { InvestigationsPageQuery, InvestigationStatus } from "./__generated__/InvestigationsPageQuery.graphql";
 import type { InvestigationsPageCloseMutation } from "./__generated__/InvestigationsPageCloseMutation.graphql";
 import { Entity, formatTime, Time } from "./format";
@@ -62,43 +67,68 @@ function Investigations({
     graphql`
       query InvestigationsPageQuery($status: InvestigationStatus) {
         canClose: viewerCan(action: ADMINISTER, area: INVESTIGATIONS)
-        investigations(status: $status, first: 100) {
-          id
-          principal {
-            type
-            id
-          }
-          trigger
-          floor
-          status
-          verdict
-          risk
-          summary
-          evidence {
-            evidenceId
-            why
-          }
-          containment
-          notes
-          model
-          inputTokens
-          outputTokens
-          finishedAt
-          closedBy {
-            label
-          }
-          closedAt
-          closeReason
-        }
+        ...InvestigationsPage_list @arguments(status: $status)
       }
     `,
     { status },
     { fetchKey, fetchPolicy: "store-and-network" },
   );
+  const {
+    data: list,
+    loadNext,
+    hasNext,
+    isLoadingNext,
+  } = usePaginationFragment<InvestigationsPagePaginationQuery, InvestigationsPage_list$key>(
+    graphql`
+      fragment InvestigationsPage_list on Query
+      @argumentDefinitions(
+        status: { type: "InvestigationStatus" }
+        first: { type: "Int", defaultValue: 20 }
+        after: { type: "String" }
+      )
+      @refetchable(queryName: "InvestigationsPagePaginationQuery") {
+        investigations(status: $status, first: $first, after: $after)
+          @connection(key: "InvestigationsPage_investigations") {
+          edges {
+            node {
+              id
+              principal {
+                type
+                id
+              }
+              trigger
+              floor
+              status
+              verdict
+              risk
+              summary
+              evidence {
+                evidenceId
+                why
+              }
+              containment
+              notes
+              model
+              inputTokens
+              outputTokens
+              finishedAt
+              closedBy {
+                label
+              }
+              closedAt
+              closeReason
+            }
+          }
+        }
+      }
+    `,
+    data,
+  );
+  const investigations = list.investigations.edges.map((e) => e.node);
   const [open, setOpen] = useState<string | null>(null);
-  const selected = data.investigations.find((i) => i.id === open) ?? null;
+  const selected = investigations.find((i) => i.id === open) ?? null;
 
-  if (data.investigations.length === 0) {
+  if (investigations.length === 0) {
     return (
       <EmptyState
         icon={<IconSearch size={22} />}
@@ -123,7 +153,7 @@ function Investigations({
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {data.investigations.map((i) => (
+            {investigations.map((i) => (
               <Table.Tr key={i.id} onClick={() => setOpen(i.id)}>
                 <Table.Td>
                   <Time at={i.finishedAt} />
@@ -154,6 +184,7 @@ function Investigations({
           </Table.Tbody>
         </Table>
       </Table.ScrollContainer>
+      <ShowMore hasMore={hasNext} loading={isLoadingNext} onMore={() => loadNext(50)} />
       <Drawer
         opened={selected !== null}
         onClose={() => setOpen(null)}
@@ -167,7 +198,7 @@ function Investigations({
   );
 }
 
-type Row = InvestigationsPageQuery["response"]["investigations"][number];
+type Row = InvestigationsPage_list$data["investigations"]["edges"][number]["node"];
 
 function Detail({
   investigation: i,

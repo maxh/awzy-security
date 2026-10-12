@@ -1,6 +1,6 @@
 //! Policy bundles, through awzy-policy.
 
-use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject, ID};
+use async_graphql::{connection::Connection, Context, Enum, InputObject, Object, Result, SimpleObject, ID};
 use awzy_authz_proto::{
     policy::v1::{
         get_bundle_request::Key, BundleStatus, CreateDraftRequest, GetActiveRequest, GetBundleRequest,
@@ -9,7 +9,10 @@ use awzy_authz_proto::{
     prost_types::Timestamp,
 };
 use awzy_model::PolicyBundleId;
-use awzy_portal::{Actor, Qid, UtcTimestamp};
+use awzy_portal::{
+    connection::{page, MAX_PAGE},
+    Actor, Qid, UtcTimestamp,
+};
 use chrono::DateTime;
 use tonic::Code;
 
@@ -162,10 +165,12 @@ impl PolicyQuery {
     async fn policy_bundles(
         &self,
         ctx: &Context<'_>,
-        #[graphql(default = 50)] first: i32,
-    ) -> Result<Vec<PolicyBundle>> {
+        after: Option<String>,
+        first: Option<i32>,
+    ) -> Result<Connection<String, PolicyBundle>> {
         require(ctx, View, PortalArea::Policies).await?;
-        Ok(list(policy_client(ctx)?, first).await?.into_iter().map(PolicyBundle).collect())
+        let bundles = list(policy_client(ctx)?, MAX_PAGE as i32).await?;
+        page(bundles.into_iter().map(PolicyBundle).collect(), |b| b.0.qid.clone(), after, first)
     }
 }
 
@@ -511,9 +516,9 @@ pub(crate) mod tests {
         .await;
         assert_eq!(published["publishPolicyBundle"]["bundle"]["status"], "ACTIVE");
 
-        let active = run("{ activePolicyBundle { id version } policyBundles { status } }".into()).await;
+        let active = run("{ activePolicyBundle { id version } policyBundles { nodes { status } } }".into()).await;
         assert_eq!(active["activePolicyBundle"]["id"], id.as_str());
-        assert_eq!(active["policyBundles"][0]["status"], "ACTIVE");
+        assert_eq!(active["policyBundles"]["nodes"][0]["status"], "ACTIVE");
 
         let refetched = run(format!("{{ node(id: \"{id}\") {{ ... on PolicyBundle {{ version }} }} }}")).await;
         assert_eq!(refetched["node"]["version"], 1, "the rejected draft was never stored");
@@ -548,10 +553,11 @@ pub(crate) mod tests {
         )
         .await;
         assert_eq!(switched["setEnforcementMode"]["enforcement"]["mode"], "ENFORCE");
-        let history = run("{ enforcement { mode } enforcementHistory { mode changedBy { type id } } }".into()).await;
+        let history =
+            run("{ enforcement { mode } enforcementHistory { nodes { mode changedBy { type id } } } }".into()).await;
         assert_eq!(history["enforcement"]["mode"], "ENFORCE");
         assert_eq!(
-            history["enforcementHistory"][0]["changedBy"],
+            history["enforcementHistory"]["nodes"][0]["changedBy"],
             serde_json::json!({ "type": "Human", "id": "alice" })
         );
         assert_eq!(published["publishPolicyBundle"]["bundle"]["publishedBy"]["id"], "alice");
@@ -595,7 +601,7 @@ pub(crate) mod tests {
         });
         let bob = testing::human("bob", "engineering");
 
-        let err = testing::run_err(&schema, &bob, "{ policyBundles { id } }").await;
+        let err = testing::run_err(&schema, &bob, "{ policyBundles { nodes { id } } }").await;
         assert!(err.starts_with("bob may not view policies (decision decision_"), "{err}");
         let err = testing::run_err(
             &schema,
@@ -611,7 +617,7 @@ pub(crate) mod tests {
         let can = testing::run(&schema, &alice, "{ viewerCan(action: ADMINISTER, area: ENFORCEMENT) }").await;
         assert_eq!(can["viewerCan"], true);
 
-        let anonymous = schema.execute("{ policyBundles { id } }").await;
+        let anonymous = schema.execute("{ policyBundles { nodes { id } } }").await;
         assert_eq!(anonymous.errors[0].message, "sign in first");
         let code = |e: &async_graphql::ServerError| e.extensions.as_ref().and_then(|x| x.get("code")).cloned();
         assert_eq!(code(&anonymous.errors[0]), Some(async_graphql::Value::from("UNAUTHENTICATED")));
@@ -635,9 +641,10 @@ pub(crate) mod tests {
             challenge: None,
             read_only: false,
         });
-        let err = testing::run_err(&no_pdp, &alice, "{ policyBundles { id } }").await;
+        let err = testing::run_err(&no_pdp, &alice, "{ policyBundles { nodes { id } } }").await;
         assert!(err.contains("AWZY_PDP_ADDR"), "nothing is authorized without a PDP: {err}");
-        let res = no_pdp.execute(async_graphql::Request::new("{ policyBundles { id } }").data(alice.clone())).await;
+        let res =
+            no_pdp.execute(async_graphql::Request::new("{ policyBundles { nodes { id } } }").data(alice.clone())).await;
         assert_eq!(code(&res.errors[0]), Some(async_graphql::Value::from("UNAVAILABLE")));
     }
 

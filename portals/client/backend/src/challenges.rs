@@ -11,6 +11,7 @@
 use std::time::{Duration, SystemTime};
 
 use async_graphql::{
+    connection::Connection,
     futures_util::{Stream, StreamExt},
     Context, Enum, InputObject, Object, Result, SimpleObject, Subscription, ID,
 };
@@ -24,7 +25,7 @@ use awzy_authz_proto::{
     prost_types::Timestamp,
 };
 use awzy_model::{entity_type, ChallengeId, ContainmentId, DecisionId};
-use awzy_portal::{Actor, Qid, UtcTimestamp};
+use awzy_portal::{connection::page, Actor, Qid, UtcTimestamp};
 use chrono::{DateTime, Utc};
 
 use crate::{
@@ -65,9 +66,8 @@ fn entity(r: &Option<awzy_authz_proto::authz::v1::EntityRef>) -> Option<EntityRe
     r.as_ref().map(|r| EntityRef { kind: r.r#type.clone(), id: r.id.clone() })
 }
 
-fn first(n: Option<i32>) -> i32 {
-    n.unwrap_or(50).clamp(1, 500)
-}
+/// How many challenges or containments a list reads from awzy-challenge; the portal pages within them.
+const LISTED: i32 = 500;
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq)]
 pub enum ChallengeKind {
@@ -327,26 +327,33 @@ impl ChallengeQuery {
         &self,
         ctx: &Context<'_>,
         status: Option<ChallengeStatus>,
+        after: Option<String>,
         first: Option<i32>,
-    ) -> Result<Vec<Challenge>> {
+    ) -> Result<Connection<String, Challenge>> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let me = answering_human(&viewer)?;
-        list(ctx, me, status, first).await
+        page(list(ctx, me, status, LISTED).await?, |c| c.0.qid.clone(), after, first)
     }
 
     /// Requests waiting for an approval the signed-in principal may give, newest first: a
     /// resource's owner, say, or an overseer agent policy names.
-    async fn challenges_to_approve(&self, ctx: &Context<'_>, first: Option<i32>) -> Result<Vec<Challenge>> {
+    async fn challenges_to_approve(
+        &self,
+        ctx: &Context<'_>,
+        after: Option<String>,
+        first: Option<i32>,
+    ) -> Result<Connection<String, Challenge>> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let services = ctx.data::<Services>()?;
+        let key = |c: &Challenge| c.0.qid.clone();
         if viewer.on_behalf_of.is_some() {
-            return Ok(vec![]);
+            return page(vec![], key, after, first);
         }
-        let pending = list(ctx, String::new(), Some(ChallengeStatus::Pending), Some(500)).await?;
+        let pending = list(ctx, String::new(), Some(ChallengeStatus::Pending), LISTED).await?;
         let checks = pending.iter().map(|c| may_approve(services, &viewer, &c.0));
         let allowed = async_graphql::futures_util::future::join_all(checks).await;
-        let n = self::first(first) as usize;
-        Ok(pending.into_iter().zip(allowed).filter(|(_, ok)| *ok).map(|(c, _)| c).take(n).collect())
+        let mine = pending.into_iter().zip(allowed).filter(|(_, ok)| *ok).map(|(c, _)| c).collect();
+        page(mine, key, after, first)
     }
 
     /// Every challenge, newest first. For those who administer challenges.
@@ -354,10 +361,11 @@ impl ChallengeQuery {
         &self,
         ctx: &Context<'_>,
         status: Option<ChallengeStatus>,
+        after: Option<String>,
         first: Option<i32>,
-    ) -> Result<Vec<Challenge>> {
+    ) -> Result<Connection<String, Challenge>> {
         require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
-        list(ctx, String::new(), status, first).await
+        page(list(ctx, String::new(), status, LISTED).await?, |c| c.0.qid.clone(), after, first)
     }
 
     /// How awzy-reasoner's containments held up on review over the last `days` (default 30): for
@@ -388,13 +396,13 @@ impl ChallengeQuery {
         &self,
         ctx: &Context<'_>,
         #[graphql(default = true)] active_only: bool,
+        after: Option<String>,
         first: Option<i32>,
-    ) -> Result<Vec<Containment>> {
+    ) -> Result<Connection<String, Containment>> {
         require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
-        let req =
-            ListContainmentsRequest { active_only, principal: None, limit: self::first(first), include_monitor: true };
+        let req = ListContainmentsRequest { active_only, principal: None, limit: LISTED, include_monitor: true };
         let list = client(ctx)?.list_containments(req).await.map_err(grpc)?.into_inner().containments;
-        Ok(list.into_iter().map(Containment).collect())
+        page(list.into_iter().map(Containment).collect(), |c| c.0.qid.clone(), after, first)
     }
 }
 
@@ -402,13 +410,10 @@ async fn list(
     ctx: &Context<'_>,
     answerer_id: String,
     status: Option<ChallengeStatus>,
-    n: Option<i32>,
+    limit: i32,
 ) -> Result<Vec<Challenge>> {
-    let req = ListChallengesRequest {
-        answerer_id,
-        status: status.map_or(WireStatus::Unspecified, Into::into).into(),
-        limit: first(n),
-    };
+    let req =
+        ListChallengesRequest { answerer_id, status: status.map_or(WireStatus::Unspecified, Into::into).into(), limit };
     let list = client(ctx)?.list_challenges(req).await.map_err(grpc)?.into_inner().challenges;
     Ok(list.into_iter().map(Challenge).collect())
 }
@@ -532,197 +537,7 @@ impl ChallengeMutation {
 ///   bazel test --config=local-stack //portals/client/backend:backend_test
 /// Without AWZY_TEST_POSTGRES_URL they pass without checking anything.
 #[cfg(test)]
-mod tests {
-    use std::{str::FromStr, sync::Arc};
-
-    use awzy_authz_proto::{authz::v1::ChallengeKind as WireKind, challenge::v1::ResolveRequest};
-    use awzy_challenge::{approvals::Approvals, ChallengeStore, Feed, Lifetimes};
-    use serde_json::json;
-    use sqlx::postgres::{PgConnectOptions, PgPool, PgPoolOptions};
-    use tonic::transport::Channel;
-
-    use super::*;
-    use crate::testing::{human, pdp, pdp_endpoint, run, run_err};
-
-    /// The schema with a PDP and an awzy-challenge in a fresh Postgres schema.
-    async fn setup() -> Option<(crate::ClientPortalSchema, ChallengeClient)> {
-        let Ok(url) = std::env::var("AWZY_TEST_POSTGRES_URL") else {
-            eprintln!("skipping: AWZY_TEST_POSTGRES_URL is not set");
-            return None;
-        };
-        let schema = format!("test_{}", uuid::Uuid::now_v7().simple());
-        sqlx::query(&format!("CREATE SCHEMA {schema}")).execute(&PgPool::connect(&url).await.unwrap()).await.unwrap();
-        let options = PgConnectOptions::from_str(&url).unwrap().options([("search_path", schema.as_str())]);
-        let pool = PgPoolOptions::new().max_connections(2).connect_with(options).await.unwrap();
-        let store = Arc::new(ChallengeStore::new(pool, Lifetimes::default()));
-        store.migrate().await.unwrap();
-        let keys = Arc::new(awzy_challenge::keys::SecurityKeys::new(
-            store.pool().clone(),
-            awzy_challenge::webauthn::RelyingParty::new("portal.example.com", ["https://portal.example.com"]),
-            store.clone(),
-        ));
-        let app = awzy_challenge::router(
-            store,
-            Arc::new(Feed::default()),
-            Arc::new(Approvals::pdp(&pdp_endpoint().await).unwrap()),
-            Some(keys),
-            &awzy_challenge::Access::off(),
-        );
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        let channel = Channel::from_shared(format!("http://{addr}")).unwrap().connect().await.unwrap();
-        let challenge = ChallengeClient::new(awzy_service_auth::grpc_channel(channel, "awzy-challenge"));
-        let services = Services { pdp: Some(pdp().await), challenge: Some(challenge.clone()), ..Default::default() };
-        Some((crate::schema_with(services), challenge))
-    }
-
-    /// Opens a challenge for `who` reading the board deck, as a PDP would.
-    async fn open(client: &mut ChallengeClient, who: &str, kind: WireKind) -> String {
-        let req = ResolveRequest {
-            decision_qid: awzy_model::DecisionId::new().to_string(),
-            principal: Some(awzy_authz_proto::authz::v1::EntityRef { r#type: "Human".into(), id: who.into() }),
-            on_behalf_of: None,
-            action: "read".into(),
-            resource: Some(awzy_authz_proto::authz::v1::EntityRef {
-                r#type: "Resource".into(),
-                id: "board-deck".into(),
-            }),
-            kinds: vec![kind.into()],
-            answerer_id: who.into(),
-            open: true,
-            ..Default::default()
-        };
-        client.resolve(req).await.unwrap().into_inner().challenge_qid
-    }
-
-    #[tokio::test]
-    async fn people_see_and_answer_only_their_own_challenges() {
-        let Some((schema, mut client)) = setup().await else { return };
-        let id = open(&mut client, "bob", WireKind::Justification).await;
-        let (bob, carol, alice) =
-            (human("bob", "engineering"), human("carol", "engineering"), human("alice", "security"));
-
-        let mine = run(&schema, &bob, "{ myChallenges(status: PENDING) { id kinds status } }").await;
-        assert_eq!(mine["myChallenges"], json!([{ "id": id, "kinds": ["JUSTIFICATION"], "status": "PENDING" }]));
-        let theirs = run(&schema, &carol, "{ myChallenges { id } }").await;
-        assert_eq!(theirs["myChallenges"], json!([]));
-        let node = format!(r#"{{ node(id: "{id}") {{ id }} }}"#);
-        assert!(run_err(&schema, &carol, node.as_str()).await.contains("may not administer challenges"));
-        assert_eq!(run(&schema, &alice, node.as_str()).await["node"]["id"], json!(id), "an admin sees any");
-
-        let justify = |text: &str| {
-            format!(
-                r#"mutation {{ justifyChallenge(input: {{ challengeQid: "{id}", justification: "{text}" }}) {{ challenge {{ status justification }} }} }}"#
-            )
-        };
-        let why = "Preparing the audit committee's Q3 review";
-        assert!(run_err(&schema, &carol, justify(why)).await.contains("only bob can answer"));
-        assert!(run_err(&schema, &bob, justify("because")).await.contains("at least 20 characters"));
-        let done = run(&schema, &bob, justify(why)).await;
-        assert_eq!(done["justifyChallenge"]["challenge"], json!({ "status": "PASSED", "justification": why }));
-    }
-
-    #[tokio::test]
-    async fn approvals_and_containments_are_for_those_policy_allows() {
-        let Some((schema, mut client)) = setup().await else { return };
-        let id = open(&mut client, "bob", WireKind::Approval).await;
-        let (bob, carol, alice) =
-            (human("bob", "engineering"), human("carol", "engineering"), human("alice", "security"));
-
-        assert!(run_err(&schema, &bob, "{ challenges { id } }").await.contains("may not administer challenges"));
-        // Each approver sees what policy lets them approve, and nobody their own request.
-        let to_approve = |v: &Viewer| {
-            let (schema, v) = (schema.clone(), v.clone());
-            async move { run(&schema, &v, "{ challengesToApprove { id } }").await["challengesToApprove"].clone() }
-        };
-        assert_eq!(to_approve(&alice).await, json!([{ "id": id }]));
-        assert_eq!(to_approve(&bob).await, json!([]), "bob asked");
-        assert_eq!(to_approve(&carol).await, json!([]), "policy doesn't let carol approve the board deck");
-        let pending = run(&schema, &alice, "{ challenges(status: PENDING) { id principal { id } } }").await;
-        assert_eq!(pending["challenges"], json!([{ "id": id, "principal": { "id": "bob" } }]));
-
-        let decide = format!(
-            r#"mutation {{ decideChallenge(input: {{ challengeQid: "{id}", approve: true, note: "ok" }}) {{ challenge {{ status decidedBy {{ id }} }} }} }}"#
-        );
-        assert!(run_err(&schema, &bob, decide.as_str()).await.contains("doesn't let bob approve"));
-        assert!(run_err(&schema, &carol, decide.as_str()).await.contains("doesn't let carol approve"));
-        let approved = run(&schema, &alice, decide.as_str()).await;
-        assert_eq!(
-            approved["decideChallenge"]["challenge"],
-            json!({ "status": "PASSED", "decidedBy": { "id": "alice" } })
-        );
-
-        let contain = r#"mutation { containPrincipal(input: { principal: { type: "ServiceAccount", id: "sales-genie" },
-            reason: "bulk export of the pipeline" }) { containment { id createdBy { type id } liftedAt } } }"#;
-        assert!(run_err(&schema, &bob, contain).await.contains("may not administer challenges"));
-        let c = run(&schema, &alice, contain).await["containPrincipal"]["containment"].clone();
-        assert_eq!((&c["createdBy"], &c["liftedAt"]), (&json!({ "type": "Human", "id": "alice" }), &json!(null)));
-        let active = run(&schema, &alice, "{ containments { id principal { type id } } }").await;
-        assert_eq!(
-            active["containments"],
-            json!([{ "id": c["id"], "principal": { "type": "ServiceAccount", "id": "sales-genie" } }])
-        );
-
-        let lift = format!(
-            r#"mutation {{ liftContainment(input: {{ containmentQid: {}, reason: "reviewed" }}) {{ containment {{ liftedBy {{ id }} }} }} }}"#,
-            c["id"]
-        );
-        assert_eq!(
-            run(&schema, &alice, lift).await["liftContainment"]["containment"]["liftedBy"]["id"],
-            json!("alice")
-        );
-        assert_eq!(run(&schema, &alice, "{ containments { id } }").await["containments"], json!([]));
-    }
-
-    #[tokio::test]
-    async fn security_keys_start_with_the_portals_relying_party() {
-        let Some((schema, mut client)) = setup().await else { return };
-        let bob = human("bob", "engineering");
-        assert_eq!(run(&schema, &bob, "{ mySecurityKeys { id } }").await["mySecurityKeys"], json!([]));
-
-        let begin =
-            run(&schema, &bob, "mutation { beginSecurityKeyRegistration(input: {}) { ceremonyQid optionsJson } }")
-                .await;
-        let c = &begin["beginSecurityKeyRegistration"];
-        assert!(c["ceremonyQid"].as_str().unwrap().starts_with("ceremony_"));
-        let options: serde_json::Value = serde_json::from_str(c["optionsJson"].as_str().unwrap()).unwrap();
-        assert_eq!(options["rp"]["id"], "portal.example.com");
-        assert_eq!(options["pubKeyCredParams"], json!([{ "type": "public-key", "alg": -7 }]));
-
-        // Without a key, there's nothing to verify with, and nothing to authorize a change.
-        let id = open(&mut client, "bob", WireKind::Verification).await;
-        let verify = format!(
-            r#"mutation {{ beginChallengeVerification(input: {{ challengeQid: "{id}" }}) {{ ceremonyQid }} }}"#
-        );
-        assert!(run_err(&schema, &bob, verify.as_str()).await.contains("has no security key"));
-        let change = "mutation { beginSecurityKeyChange { ceremonyQid } }";
-        assert!(run_err(&schema, &bob, change).await.contains("has no security key"));
-        // Someone else can't start a verification of bob's challenge.
-        let carol = human("carol", "engineering");
-        assert!(run_err(&schema, &carol, verify.as_str()).await.contains("only bob can answer"));
-    }
-
-    #[tokio::test]
-    async fn a_subscription_ends_when_the_token_it_started_with_does() {
-        let mut bob = awzy_identity::Principal::human("bob", None, &[]);
-        bob.expires_at = Some(SystemTime::now() - Duration::from_secs(1));
-        let forever = async_graphql::futures_util::stream::pending::<()>();
-        let stream = while_allowed(Services::default(), Viewer(Arc::new(bob), None), PortalAction::View, forever);
-        let sent = tokio::time::timeout(Duration::from_secs(5), stream.collect::<Vec<_>>()).await;
-        assert_eq!(sent.expect("ended at once"), Vec::<()>::new());
-    }
-
-    #[test]
-    fn only_a_person_answers() {
-        let mut agent = awzy_identity::Principal::human("bob", None, &[]);
-        agent.subject = awzy_model::EntityRef::new("ServiceAccount", "sales-genie");
-        agent.on_behalf_of = Some(awzy_model::EntityRef::new("Human", "bob"));
-        let err = answering_human(&Viewer(Arc::new(agent), None)).unwrap_err();
-        assert!(err.message.contains("sales-genie for bob can't answer challenges"), "{}", err.message);
-        assert_eq!(answering_human(&crate::testing::human("bob", "engineering")).unwrap(), "bob");
-    }
-}
+mod tests;
 
 /// Live updates for the Challenges page, from awzy-challenge's streams.
 #[derive(Default)]

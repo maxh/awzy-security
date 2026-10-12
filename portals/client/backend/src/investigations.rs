@@ -2,9 +2,12 @@
 //! flagged, after awzy's checks decided what it may do (ADR 0067). Read from awzy-context; a
 //! person closes one here once they've reviewed it.
 
-use async_graphql::{Context, Enum, InputObject, Object, Result, SimpleObject, ID};
+use async_graphql::{connection::Connection, Context, Enum, InputObject, Object, Result, SimpleObject, ID};
 use awzy_model::InvestigationId;
-use awzy_portal::{Actor, ErrorCode, Qid, UtcTimestamp};
+use awzy_portal::{
+    connection::{page, MAX_PAGE},
+    Actor, ErrorCode, Qid, UtcTimestamp,
+};
 use serde_json::{json, Value};
 
 use crate::{
@@ -223,11 +226,12 @@ impl InvestigationQuery {
         &self,
         ctx: &Context<'_>,
         status: Option<InvestigationStatus>,
-        #[graphql(default = 50)] first: i32,
-    ) -> Result<Vec<Investigation>> {
+        after: Option<String>,
+        first: Option<i32>,
+    ) -> Result<Connection<String, Investigation>> {
         require(ctx, PortalAction::View, PortalArea::Investigations).await?;
-        let list = list(context_api(ctx)?, status.map(InvestigationStatus::as_str), first).await?;
-        Ok(list.into_iter().map(Investigation).collect())
+        let list = list(context_api(ctx)?, status.map(InvestigationStatus::as_str), MAX_PAGE as i32).await?;
+        page(list.into_iter().map(Investigation).collect(), |i| i.0.qid.clone(), after, first)
     }
 }
 

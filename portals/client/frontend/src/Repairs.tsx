@@ -31,13 +31,15 @@ export function Repairs() {
     graphql`
       query RepairsQuery {
         repairKinds
-        repairRuns {
-          name
-          kind
-          status
-          startedBy
-          startedAt
-          finishedAt
+        repairRuns(first: 20) {
+          nodes {
+            name
+            kind
+            status
+            startedBy
+            startedAt
+            finishedAt
+          }
         }
       }
     `,
@@ -54,7 +56,7 @@ export function Repairs() {
     }
   `);
   if (data.repairKinds.length === 0) return null;
-  const running = (k: RepairKind) => data.repairRuns.some((r) => r.kind === k && r.status === "RUNNING");
+  const running = (k: RepairKind) => data.repairRuns.nodes.some((r) => r.kind === k && r.status === "RUNNING");
   const go = (kind: RepairKind) =>
     start({
       variables: { kind },
@@ -89,7 +91,7 @@ export function Repairs() {
             </Button>
           </Group>
         ))}
-        {data.repairRuns.length > 0 && (
+        {data.repairRuns.nodes.length > 0 && (
           <Table.ScrollContainer minWidth={560}>
             <Table>
               <Table.Thead>
@@ -101,7 +103,7 @@ export function Repairs() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {data.repairRuns.map((r) => (
+                {data.repairRuns.nodes.map((r) => (
                   <Table.Tr key={r.name}>
                     <Table.Td>{KINDS[r.kind].title}</Table.Td>
                     <Table.Td>

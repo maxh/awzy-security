@@ -1,14 +1,27 @@
-import { EmptyState, messageOf, PageHeader, PageLoader, Section, StatusBadge, type Tone } from "@awzy/ui";
+import { EmptyState, messageOf, PageHeader, PageLoader, Section, ShowMore, StatusBadge, type Tone } from "@awzy/ui";
 import { Alert, Button, Checkbox, Group, Modal, NumberInput, Stack, Table, Text } from "@mantine/core";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { IconLifebuoy } from "@tabler/icons-react";
 import { Suspense, useState } from "react";
-import { graphql, type PreloadedQuery, useLazyLoadQuery, usePreloadedQuery, useRelayEnvironment } from "react-relay";
+import {
+  graphql,
+  type PreloadedQuery,
+  useLazyLoadQuery,
+  usePaginationFragment,
+  usePreloadedQuery,
+  useRelayEnvironment,
+} from "react-relay";
 
+import type { SupportPagePaginationQuery } from "./__generated__/SupportPagePaginationQuery.graphql";
+import type {
+  SupportPage_sessions$data,
+  SupportPage_sessions$key,
+  SupportSessionStatus,
+} from "./__generated__/SupportPage_sessions.graphql";
 import type { SupportPageBannerQuery } from "./__generated__/SupportPageBannerQuery.graphql";
 import type { SupportPageDecideMutation } from "./__generated__/SupportPageDecideMutation.graphql";
 import type { SupportPageEndMutation } from "./__generated__/SupportPageEndMutation.graphql";
-import type { SupportPageQuery, SupportSessionStatus } from "./__generated__/SupportPageQuery.graphql";
+import type { SupportPageQuery } from "./__generated__/SupportPageQuery.graphql";
 import { formatTime } from "./format";
 import { mutate, passChallenge } from "./securityKeyChallenge";
 import { webAuthnMessage } from "./webauthn";
@@ -65,35 +78,55 @@ export function SupportPage() {
   );
 }
 
-type Session = SupportPageQuery["response"]["supportSessions"][number];
+type Session = SupportPage_sessions$data["supportSessions"]["edges"][number]["node"];
 
 function Sessions({ queryRef, onChanged }: { queryRef: PreloadedQuery<SupportPageQuery>; onChanged: () => void }) {
   const data = usePreloadedQuery<SupportPageQuery>(
     graphql`
       query SupportPageQuery {
         canDecide: viewerCan(action: ADMINISTER, area: ENFORCEMENT)
-        supportSessions {
-          id
-          status
-          requestedBy
-          areas
-          reason
-          durationMinutes
-          requestedAt
-          approvedAreas
-          expiresAt
-          decidedBy {
-            label
-          }
-          endedBy {
-            label
-          }
-          actionCount
-        }
+        ...SupportPage_sessions
       }
     `,
     queryRef,
   );
+  const {
+    data: list,
+    loadNext,
+    hasNext,
+    isLoadingNext,
+  } = usePaginationFragment<SupportPagePaginationQuery, SupportPage_sessions$key>(
+    graphql`
+      fragment SupportPage_sessions on Query
+      @argumentDefinitions(first: { type: "Int", defaultValue: 20 }, after: { type: "String" })
+      @refetchable(queryName: "SupportPagePaginationQuery") {
+        supportSessions(first: $first, after: $after) @connection(key: "SupportPage_supportSessions") {
+          edges {
+            node {
+              id
+              status
+              requestedBy
+              areas
+              reason
+              durationMinutes
+              requestedAt
+              approvedAreas
+              expiresAt
+              decidedBy {
+                label
+              }
+              endedBy {
+                label
+              }
+              actionCount
+            }
+          }
+        }
+      }
+    `,
+    data,
+  );
+  const sessions = list.supportSessions.edges.map((e) => e.node);
   const environment = useRelayEnvironment();
   const [approving, setApproving] = useState<Session | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -117,7 +150,7 @@ function Sessions({ queryRef, onChanged }: { queryRef: PreloadedQuery<SupportPag
     }
   };
 
-  if (data.supportSessions.length === 0) {
+  if (sessions.length === 0) {
     return (
       <EmptyState
         icon={<IconLifebuoy size={22} />}
@@ -145,7 +178,7 @@ function Sessions({ queryRef, onChanged }: { queryRef: PreloadedQuery<SupportPag
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {data.supportSessions.map((s) => (
+            {sessions.map((s) => (
               <Table.Tr key={s.id}>
                 <Table.Td>
                   <Text size="sm">{s.requestedBy}</Text>
@@ -191,6 +224,7 @@ function Sessions({ queryRef, onChanged }: { queryRef: PreloadedQuery<SupportPag
             ))}
           </Table.Tbody>
         </Table>
+        <ShowMore hasMore={hasNext} loading={isLoadingNext} onMore={() => loadNext(50)} />
       </Section>
       {approving && (
         <Approve

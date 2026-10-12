@@ -26,16 +26,18 @@ function TokenIssuersTable({ fetchKey, onChanged }: { fetchKey: number; onChange
     graphql`
       query TokenIssuersPanelQuery {
         canAdminister: viewerCan(action: ADMINISTER, area: DIRECTORY)
-        tokenIssuers {
-          name
-          issuer
-          jwksUrl
-          audience
-          agentPrefix
-          updatedBy {
-            label
+        tokenIssuers(first: 100) {
+          nodes {
+            name
+            issuer
+            jwksUrl
+            audience
+            agentPrefix
+            updatedBy {
+              label
+            }
+            updatedAt
           }
-          updatedAt
         }
       }
     `,
@@ -66,7 +68,7 @@ function TokenIssuersTable({ fetchKey, onChanged }: { fetchKey: number; onChange
         {data.canAdminister && <Button onClick={() => setRegistering(true)}>Trust an app</Button>}
       </Group>
       {error && <Alert color="red">{error}</Alert>}
-      {data.tokenIssuers.length === 0 ? (
+      {data.tokenIssuers.nodes.length === 0 ? (
         <Text c="dimmed">Only your IdP&apos;s tokens are trusted.</Text>
       ) : (
         <Table>
@@ -80,7 +82,7 @@ function TokenIssuersTable({ fetchKey, onChanged }: { fetchKey: number; onChange
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {data.tokenIssuers.map((app) => (
+            {data.tokenIssuers.nodes.map((app) => (
               <Table.Tr key={app.name}>
                 <Table.Td ff="monospace">{app.name}</Table.Td>
                 <Table.Td ff="monospace">{app.agentPrefix}*</Table.Td>

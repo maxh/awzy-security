@@ -53,30 +53,12 @@ const BOUNDED = new Map([
   ["Query.securityKeys", "one person's few security keys"],
 ]);
 
-/** The client portal's record lists, until they're connections too. Remove each as it's converted. */
-const CLIENT_NOT_YET = new Set([
-  "Query.policyBundles",
-  "Query.enforcementHistory",
-  "Query.humans",
-  "Query.groups",
-  "Query.serviceAccounts",
-  "Query.tokenIssuers",
-  "Query.myChallenges",
-  "Query.challengesToApprove",
-  "Query.challenges",
-  "Query.containments",
-  "Query.investigations",
-  "Query.supportSessions",
-  "Query.searchResources",
-  "Query.repairRuns",
-]);
-
 const isId = (type) => getNamedType(type).name === "ID";
 const isQid = (type) => getNamedType(type).name === "Qid";
 const qidNamed = (name) => name === "qid" || name.endsWith("Qid");
 
 /** The problems in one schema's SDL, as `Type.field: what's wrong`. */
-export function check(sdl, notYet = new Set()) {
+export function check(sdl) {
   const schema = buildSchema(sdl);
   const problems = [];
   const roots = new Set([schema.getQueryType(), schema.getMutationType(), schema.getSubscriptionType()]);
@@ -108,8 +90,7 @@ export function check(sdl, notYet = new Set()) {
         type === schema.getSubscriptionType() ||
         type.name.endsWith("Payload") ||
         type.name.endsWith("Connection") ||
-        BOUNDED.has(at) ||
-        notYet.has(at);
+        BOUNDED.has(at);
       if (listOfObjects && isObjectType(type) && !exempt) {
         problems.push(`${at}: a list of objects is a connection (or BOUNDED, with why)`);
       }
@@ -128,8 +109,7 @@ export function check(sdl, notYet = new Set()) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   let failed = false;
   for (const path of SCHEMAS) {
-    const notYet = path.includes("/client/") ? CLIENT_NOT_YET : new Set();
-    for (const p of check(readFileSync(path, "utf8"), notYet)) {
+    for (const p of check(readFileSync(path, "utf8"))) {
       console.error(`${path}: ${p}`);
       failed = true;
     }
