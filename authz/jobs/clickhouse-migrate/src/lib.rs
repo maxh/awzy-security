@@ -21,10 +21,11 @@ const MIGRATIONS: &[(u32, &str, &str)] = &[
     (8, "by_resource", include_str!("../migrations/0008_by_resource.sql")),
     (9, "attributes_from", include_str!("../migrations/0009_attributes_from.sql")),
     (10, "event_access", include_str!("../migrations/0010_event_access.sql")),
+    (11, "plans", include_str!("../migrations/0011_plans.sql")),
 ];
 
 /// The tables whose rows expire after the install's retention.
-const RETAINED: &[&str] = &["decisions", "events"];
+const RETAINED: &[&str] = &["decisions", "events", "plans"];
 
 /// Sets how many days `decisions` and `events` keep their rows, or with None keeps them all. Run on
 /// every sync, since an install can change it; it alters a table only when its TTL differs, and
@@ -58,6 +59,8 @@ pub struct Settings {
     pub decisions_topic: String,
     /// awzy-intake's events topic.
     pub events_topic: String,
+    /// The PDPs' query plans topic (ADR 0113).
+    pub plans_topic: String,
     /// Each queue table consumes in a group named from this (events add `-events`).
     pub consumer_group: String,
 }
@@ -67,6 +70,7 @@ impl Settings {
         sql.replace("{{kafka_brokers}}", &self.kafka_brokers)
             .replace("{{decisions_topic}}", &self.decisions_topic)
             .replace("{{events_topic}}", &self.events_topic)
+            .replace("{{plans_topic}}", &self.plans_topic)
             .replace("{{consumer_group}}", &self.consumer_group)
     }
 }
@@ -121,7 +125,8 @@ pub async fn ensure_topics(brokers: &awzy_kafka::Brokers, topics: &[&str]) -> an
 }
 
 /// Each Kafka queue table, and the materialized view that reads it.
-const QUEUES: &[(&str, &str)] = &[("decisions_queue", "decisions_mv"), ("events_queue", "events_mv")];
+const QUEUES: &[(&str, &str)] =
+    &[("decisions_queue", "decisions_mv"), ("events_queue", "events_mv"), ("plans_queue", "plans_mv")];
 
 /// Points every Kafka queue table at `brokers`. A migration writes the brokers into a queue table
 /// when it creates it, so when an install's brokers change, as when it moves to TLS (which MSK
@@ -262,6 +267,7 @@ mod tests {
             kafka_brokers: "k:1".into(),
             decisions_topic: "t".into(),
             events_topic: "e".into(),
+            plans_topic: "p".into(),
             consumer_group: "g".into(),
         };
         for (_, name, sql) in MIGRATIONS {
@@ -315,6 +321,7 @@ mod tests {
             kafka_brokers: "plaintext.invalid:9092".into(),
             decisions_topic: format!("unused.{database}"),
             events_topic: format!("unused-events.{database}"),
+            plans_topic: format!("unused-plans.{database}"),
             consumer_group: database.clone(),
         };
         migrate(&client, &settings).await.unwrap();
@@ -346,6 +353,7 @@ mod tests {
             kafka_brokers: "localhost:1".into(),
             decisions_topic: format!("unused.{database}"),
             events_topic: format!("unused-events.{database}"),
+            plans_topic: format!("unused-plans.{database}"),
             consumer_group: database.clone(),
         };
         migrate(&admin.clone().with_database(&database), &settings).await.unwrap();
@@ -395,6 +403,7 @@ mod tests {
             kafka_brokers: clickhouse_brokers,
             decisions_topic: topic,
             events_topic,
+            plans_topic: format!("test.plans.{suffix}"),
             consumer_group: database.clone(),
         };
         let every: Vec<u32> = MIGRATIONS.iter().map(|(v, ..)| *v).collect();

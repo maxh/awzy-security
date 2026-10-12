@@ -59,6 +59,10 @@ async fn main() -> anyhow::Result<()> {
         Some(brokers) => {
             let topic = std::env::var("AWZY_DECISIONS_TOPIC").unwrap_or_else(|_| DEFAULT_DECISIONS_TOPIC.into());
             state = state.with_log(DecisionLog::connect_kafka(&brokers, &topic).await?);
+            // Query plans have their own record and topic (ADR 0113).
+            let plans =
+                std::env::var("AWZY_PLANS_TOPIC").unwrap_or_else(|_| awzy_pdp::plan::DEFAULT_PLANS_TOPIC.into());
+            state = state.with_plan_log(awzy_pdp::plan::PlanLog::connect_kafka(&brokers, &plans).await?);
         }
         None => tracing::warn!("AWZY_KAFKA_BROKERS is not set; decisions are not logged"),
     }

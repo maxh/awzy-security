@@ -91,3 +91,87 @@ Both checks challenge, and every challenge that fires is required. `mode` is `mo
 admin switches the install to enforce, so the enforcement point allows the request and the
 verdict is recorded as a "would challenge". When awzy-reasoner has scored bob and sales-genie,
 their own scores replace the `risk_score` sent here.
+
+## Query plans
+
+When your app lists or searches its own records, ask which ones a principal may act on, and turn
+the answer into a filter for your query, instead of checking every row. `POST /v1/access/plan`
+(`awzy.authz.v1.Authorizer/Plan` over gRPC) takes the same `principal`, `on_behalf_of`, `action`,
+and `context` as an evaluation, and a `resource_type` instead of a resource:
+
+```sh
+curl -s http://awzy-pdp:8080/v1/access/plan -H 'content-type: application/json' -d '{
+  "principal": {"type": "ServiceAccount", "id": "acme-crm.renewals-bot"},
+  "on_behalf_of": {"type": "Human", "id": "dana"},
+  "action": "view_customer",
+  "resource_type": "Customer",
+  "context": {"risk_score": 10}
+}'
+```
+
+```json
+{
+  "qid": "plan_0199…",
+  "outcome": "conditional",
+  "filter": {
+    "op": "and",
+    "args": [
+      { "op": "compare", "attr": ["tenant"], "cmp": "eq", "value": "acme" },
+      { "op": "not", "arg": { "op": "contains", "attr": ["labels"], "value": "legal-hold" } }
+    ]
+  },
+  "challenges": [],
+  "challenge_could_widen": false,
+  "needs_row_checks": false,
+  "attributes": ["labels", "tenant"],
+  "policies": ["acme-agents-see-acme"],
+  "mode": "enforce",
+  "policy_version": 12,
+  "principals_version": 3081,
+  "max_age_secs": 60,
+  "pinned": false
+}
+```
+
+| `outcome`        | What to do                                                                 |
+| ---------------- | -------------------------------------------------------------------------- |
+| `always_allowed` | Every row. No filter needed.                                               |
+| `always_denied`  | No row. Skip the query.                                                    |
+| `challenge`      | Every row needs `challenges` passed first; `filter` applies once they are. |
+| `conditional`    | The rows `filter` matches.                                                 |
+
+An agent acting for a person sees only rows both may see. In monitor mode the plan still returns
+the real filter: show every row, and record what the filter would have hidden.
+
+### The filter
+
+Each node has an `op`. `attr` is a path into the resource's attributes.
+
+| `op`                                       | Matches a row when                                                                        |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `true`, `false`                            | Always, never.                                                                            |
+| `and`, `or` (`args`), `not` (`arg`)        | As in boolean logic.                                                                      |
+| `compare`                                  | `attr` compared by `cmp` (`eq`, `ne`, `lt`, `le`, `gt`, `ge`) with `value`.               |
+| `has`                                      | The row has `attr`.                                                                       |
+| `contains`, `contains_any`, `contains_all` | The set at `attr` holds `value`, any of `values`, all of `values`.                        |
+| `like`                                     | The text at `attr` matches `pattern`, where `*` matches anything.                         |
+| `in`                                       | The row is `ancestor` or under it in your hierarchy: join on its ancestor closure.        |
+| `is`                                       | The row is the entity `id`.                                                               |
+| `unknown`, `unmappable`                    | awzy can't say from the row's attributes. Check these rows one by one with an evaluation. |
+
+`needs_row_checks` is true when the filter has an `unknown` or `unmappable` node. A row with an
+attribute missing never matches, so treat a missing value as not matching, as SQL's `NULL` does.
+`challenge_could_widen` says a challenge hides some rows, which passing it would show.
+
+### Paging and freshness
+
+A plan is good for `max_age_secs`. To page through results with the same filter, send the first
+page's `qid` as `plan_qid` with each next page: you get the same plan back, with `pinned: true`,
+until it's older than `max_age_secs` or the principal is contained. A new plan is made sooner when
+policies change or awzy rescores the principal.
+
+### Reporting what a plan returned
+
+Send what you showed to awzy-intake as an app event with `access: "listed"`, `count` set to the
+number of rows, and the plan's `qid` in the event's `attributes` as `plan_qid`. awzy's risk scores
+count listed rows like any other access, so a bulk read through a plan still stands out.
