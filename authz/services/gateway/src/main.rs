@@ -23,13 +23,20 @@ async fn main() -> anyhow::Result<()> {
     // timeouts bound how long a tool call waits on an unreachable PDP before the outage rules
     // apply (ADR 0030). Without them, each call in the example install's outage drill waited
     // about 8 seconds.
-    let pdp = AuthorizerClient::new(awzy_service_auth::grpc_channel(
-        Channel::from_shared(pdp_addr)?
-            .connect_timeout(std::time::Duration::from_millis(500))
-            .timeout(std::time::Duration::from_secs(2))
-            .connect_lazy(),
-        "awzy-pdp",
-    ));
+    // Several connections, taken in turn, so checks spread over PDP pods and don't queue on one
+    // connection's lock (AWZY_GATEWAY_PDP_CONNECTIONS, default 4).
+    let connections: usize =
+        std::env::var("AWZY_GATEWAY_PDP_CONNECTIONS").ok().and_then(|n| n.parse().ok()).unwrap_or(4).max(1);
+    let mut pdp = Vec::with_capacity(connections);
+    for _ in 0..connections {
+        pdp.push(AuthorizerClient::new(awzy_service_auth::grpc_channel(
+            Channel::from_shared(pdp_addr.clone())?
+                .connect_timeout(std::time::Duration::from_millis(500))
+                .timeout(std::time::Duration::from_secs(2))
+                .connect_lazy(),
+            "awzy-pdp",
+        )));
+    }
     // Containments from awzy-challenge, so a PDP outage never replays an allow for a contained
     // principal (ADR 0030). Without it, outages replay as before.
     // Forwarded tool calls, recorded in awzy-intake (ADR 0084).

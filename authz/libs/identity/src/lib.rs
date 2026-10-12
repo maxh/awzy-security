@@ -9,6 +9,7 @@
 //!   person in `sub` (ADR 0016).
 
 pub mod jwks;
+mod verified;
 
 use awzy_model::{entity_type, EntityRef};
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
@@ -107,7 +108,7 @@ pub enum IdentityError {
     UnregisteredServiceAccount(String),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct Claims {
     sub: String,
     /// Seconds; some IdPs write it with a fraction.
@@ -126,7 +127,7 @@ struct Claims {
     other: std::collections::HashMap<String, Value>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct Actor {
     sub: String,
 }
@@ -176,6 +177,7 @@ pub struct Verifier {
     issuer: String,
     audience: String,
     subject_claim: Option<String>,
+    verified: verified::Verified,
 }
 
 impl Verifier {
@@ -194,7 +196,13 @@ impl Verifier {
             }
         };
         let subject_claim = config.subject_claim.clone().filter(|c| c != "sub");
-        Ok(Self { keys, issuer: config.issuer.clone(), audience: config.audience.clone(), subject_claim })
+        Ok(Self {
+            keys,
+            issuer: config.issuer.clone(),
+            audience: config.audience.clone(),
+            subject_claim,
+            verified: Default::default(),
+        })
     }
 
     fn validation(&self, alg: Algorithm) -> Validation {
@@ -211,20 +219,14 @@ impl Verifier {
         registry: &R,
     ) -> Result<Principal, IdentityError> {
         let token = authorization.and_then(|h| h.strip_prefix("Bearer ")).ok_or(IdentityError::Missing)?;
-        let invalid = |e: jsonwebtoken::errors::Error| IdentityError::Invalid(e.to_string());
-        let claims = match &self.keys {
-            Keys::Static(key, alg) => decode::<Claims>(token, key, &self.validation(*alg)).map_err(invalid)?.claims,
-            Keys::Jwks(jwks) => {
-                let header = decode_header(token).map_err(invalid)?;
-                if !matches!(header.alg, Algorithm::RS256 | Algorithm::ES256) {
-                    return Err(IdentityError::Invalid(format!("algorithm {:?} is not accepted", header.alg)));
-                }
-                let kid = header.kid.ok_or_else(|| IdentityError::Invalid("token has no key ID (kid)".into()))?;
-                let key = jwks.key(&kid).await.map_err(|e| IdentityError::Invalid(e.to_string()))?;
-                decode::<Claims>(token, &key, &self.validation(header.alg)).map_err(invalid)?.claims
+        let mut claims = match self.verified.get(token) {
+            Some(claims) => claims,
+            None => {
+                let claims = self.verify(token).await?;
+                self.verified.insert(token, &claims);
+                claims
             }
         };
-        let mut claims = claims;
         // The configured claim names a person. An application's own token has none and keeps its
         // `sub`, which is how it's registered.
         let acts_for_itself = claims.act.is_none()
@@ -241,6 +243,23 @@ impl Verifier {
             }
         }
         principal_from_claims(claims, registry)
+    }
+
+    /// The token's claims, once its signature, issuer, audience, and expiry check out.
+    async fn verify(&self, token: &str) -> Result<Claims, IdentityError> {
+        let invalid = |e: jsonwebtoken::errors::Error| IdentityError::Invalid(e.to_string());
+        Ok(match &self.keys {
+            Keys::Static(key, alg) => decode::<Claims>(token, key, &self.validation(*alg)).map_err(invalid)?.claims,
+            Keys::Jwks(jwks) => {
+                let header = decode_header(token).map_err(invalid)?;
+                if !matches!(header.alg, Algorithm::RS256 | Algorithm::ES256) {
+                    return Err(IdentityError::Invalid(format!("algorithm {:?} is not accepted", header.alg)));
+                }
+                let kid = header.kid.ok_or_else(|| IdentityError::Invalid("token has no key ID (kid)".into()))?;
+                let key = jwks.key(&kid).await.map_err(|e| IdentityError::Invalid(e.to_string()))?;
+                decode::<Claims>(token, &key, &self.validation(header.alg)).map_err(invalid)?.claims
+            }
+        })
     }
 }
 

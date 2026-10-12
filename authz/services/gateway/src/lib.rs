@@ -12,4 +12,4 @@ pub mod metrics;
 
 pub use awzy_identity::{ServiceAccountConfig, TokenConfig, TokenKey};
 pub use config::{GatewayConfig, UpstreamConfig};
-pub use mcp::{router, GatewayState};
+pub use mcp::{router, GatewayState, PdpClients};
