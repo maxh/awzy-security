@@ -28,7 +28,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use awzy_model::{entity_type, EntityRef};
+use awzy_model::{entity_type, AttributesFrom, EntityRef};
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
 
@@ -64,6 +64,8 @@ pub struct Loaded {
 pub struct Merged {
     pub entities: Value,
     pub assignees: Option<Arc<HashSet<String>>>,
+    /// Where the resource's attributes came from (ADR 0108).
+    pub from: AttributesFrom,
 }
 
 struct Cached {
@@ -185,31 +187,33 @@ impl Resources {
     /// The request's entities with the resource, and its ancestors, from awzy-context. Fails
     /// only when awzy-context can't be reached and nothing is cached for the resource.
     pub async fn merge(&self, request: Value, resource: &EntityRef) -> anyhow::Result<Merged> {
-        let unchanged = |entities| Ok(Merged { entities, assignees: None });
+        let unchanged = |entities| Ok(Merged { entities, assignees: None, from: AttributesFrom::EnforcementPoint });
         let Some(endpoint) = &self.endpoint else { return unchanged(request) };
         if resource.kind != entity_type::RESOURCE {
             return unchanged(request);
         }
         let Value::Array(mut entities) = request else { return unchanged(request) };
-        let assignees = match self.lookup(endpoint, &resource.id).await? {
+        let (assignees, from) = match self.lookup(endpoint, &resource.id).await? {
             Some(loaded) => {
                 entities.retain(|e| !loaded.entities.iter().any(|c| c["uid"] == e["uid"]));
                 entities.extend(loaded.entities.iter().cloned());
-                loaded.assignees.clone()
+                (loaded.assignees.clone(), AttributesFrom::AwzyContext)
             }
             None => {
                 let uid = json!({ "type": entity_type::RESOURCE, "id": resource.id });
-                if !entities.iter().any(|e| e["uid"] == uid) {
+                if entities.iter().any(|e| e["uid"] == uid) {
+                    (Arc::default(), AttributesFrom::EnforcementPoint)
+                } else {
                     entities.push(json!({
                         "uid": uid,
                         "attrs": { "sensitivity": DEFAULT_SENSITIVITY, "unclassified": true },
                         "parents": [],
                     }));
+                    (Arc::default(), AttributesFrom::Default)
                 }
-                Arc::default()
             }
         };
-        Ok(Merged { entities: Value::Array(entities), assignees: Some(assignees) })
+        Ok(Merged { entities: Value::Array(entities), assignees: Some(assignees), from })
     }
 
     async fn lookup(&self, endpoint: &str, id: &str) -> anyhow::Result<Option<Arc<Loaded>>> {
@@ -351,6 +355,7 @@ mod tests {
         let merged = r.merge(sent.clone(), &resource("drive:plans/fy27")).await.unwrap();
         assert_eq!(ids(&merged.entities), ["bob", "drive:plans/fy27", "drive:plans"], "the resource and its folder");
         assert_eq!(merged.entities[1]["attrs"]["sensitivity"], "crown_jewels");
+        assert_eq!(merged.from, AttributesFrom::AwzyContext, "awzy-context's replaced what was sent");
         let assignees = merged.assignees.unwrap();
         assert!(assignees.contains("nora.patel@larkspur.example") && assignees.len() == 1);
 
@@ -364,10 +369,12 @@ mod tests {
         let r = Resources::from_context(url);
         let merged = r.merge(json!([]), &resource("drive:new")).await.unwrap();
         assert_eq!(merged.entities[0]["attrs"], json!({ "sensitivity": DEFAULT_SENSITIVITY, "unclassified": true }));
+        assert_eq!(merged.from, AttributesFrom::Default);
         assert!(merged.assignees.unwrap().is_empty(), "known to have no one assigned");
 
         let sent = json!([{ "uid": { "type": "Resource", "id": "drive:new" }, "attrs": { "sensitivity": "confidential" }, "parents": [] }]);
-        assert_eq!(r.merge(sent.clone(), &resource("drive:new")).await.unwrap().entities, sent);
+        let described = r.merge(sent.clone(), &resource("drive:new")).await.unwrap();
+        assert_eq!((described.entities, described.from), (sent, AttributesFrom::EnforcementPoint));
         assert_eq!(calls.load(Ordering::SeqCst), 1, "not knowing it is cached too");
     }
 
@@ -390,6 +397,12 @@ mod tests {
         let unused = Resources::from_context("http://127.0.0.1:1".into());
         let tool = unused.merge(sent.clone(), &EntityRef::new("McpTool", "drive/search")).await.unwrap();
         assert_eq!((tool.entities, tool.assignees), (sent.clone(), None), "assignment unknown");
+        assert_eq!(tool.from, AttributesFrom::EnforcementPoint);
+        // An app-owned type (ADR 0108) is the enforcement point's, and never looked up.
+        let customer =
+            json!([{ "uid": { "type": "Customer", "id": "c-1" }, "attrs": { "tenant": "acme" }, "parents": [] }]);
+        let merged = unused.merge(customer.clone(), &EntityRef::new("Customer", "c-1")).await.unwrap();
+        assert_eq!((merged.entities, merged.from), (customer, AttributesFrom::EnforcementPoint));
         let none = Resources::none().merge(sent.clone(), &resource("drive:x")).await.unwrap();
         assert_eq!((none.entities, none.assignees), (sent, None));
     }

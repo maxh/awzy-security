@@ -30,7 +30,7 @@ const MAX_WINDOW: Duration = Duration::days(30);
 
 const COLUMNS: &str = "id, at, principal_type, principal_id, on_behalf_of_type, on_behalf_of_id, human_present, \
     action, resource_type, resource_id, verdict, mode, challenge, policies, on_behalf_of_verdict, on_behalf_of_policies, \
-    policy_version, context";
+    policy_version, context, resource_attributes_from";
 
 #[derive(::clickhouse::Row, serde::Deserialize, Clone, Debug)]
 pub struct DecisionRow {
@@ -55,6 +55,20 @@ pub struct DecisionRow {
     pub on_behalf_of_policies: Vec<String>,
     pub policy_version: i64,
     pub context: String,
+    /// awzy-context | enforcement-point | default (ADR 0108); empty before it was kept.
+    pub resource_attributes_from: String,
+}
+
+/// Where a decision's resource attributes came from (ADR 0108), so an explanation says whom it
+/// trusted.
+#[derive(Enum, Copy, Clone, Eq, PartialEq)]
+pub enum AttributesFrom {
+    /// awzy-context, which replaces what the enforcement point sends for a `Resource`.
+    AwzyContext,
+    /// The enforcement point: an app-owned type, or a type awzy-context doesn't hold.
+    EnforcementPoint,
+    /// Neither knew the resource, so it was decided at the default tier, unclassified.
+    Default,
 }
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq, serde::Deserialize, rmcp::schemars::JsonSchema)]
@@ -152,6 +166,15 @@ impl Decision {
     /// IDs of the policies that determined the principal's own check.
     async fn policies(&self) -> &[String] {
         &self.0.policies
+    }
+
+    /// Where the resource's attributes came from; null for decisions made before it was kept.
+    async fn resource_attributes_from(&self) -> Option<AttributesFrom> {
+        match awzy_model::AttributesFrom::parse(&self.0.resource_attributes_from)? {
+            awzy_model::AttributesFrom::AwzyContext => Some(AttributesFrom::AwzyContext),
+            awzy_model::AttributesFrom::EnforcementPoint => Some(AttributesFrom::EnforcementPoint),
+            awzy_model::AttributesFrom::Default => Some(AttributesFrom::Default),
+        }
     }
 
     /// The policy bundle version in force; 0 means the built-in defaults.
@@ -563,6 +586,7 @@ mod tests {
             on_behalf_of_policies: vec![],
             policy_version: 0,
             context: String::new(),
+            resource_attributes_from: "awzy-context".into(),
         };
         assert_eq!(parse_cursor(&cursor_for(&row)).unwrap(), (row.at, row.id));
         assert!(parse_cursor("nonsense").is_err());
