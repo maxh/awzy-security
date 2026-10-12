@@ -172,6 +172,17 @@ CREATE TABLE public.snapshot_version (
     CONSTRAINT snapshot_version_singleton_check CHECK (singleton)
 );
 
+CREATE TABLE public.token_issuers (
+    name text NOT NULL,
+    issuer text NOT NULL,
+    jwks_url text NOT NULL,
+    audience text NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE public.work_items (
     id text NOT NULL,
     source text NOT NULL,
@@ -219,6 +230,12 @@ ALTER TABLE ONLY public.service_accounts
 
 ALTER TABLE ONLY public.snapshot_version
     ADD CONSTRAINT snapshot_version_pkey PRIMARY KEY (singleton);
+
+ALTER TABLE ONLY public.token_issuers
+    ADD CONSTRAINT token_issuers_issuer_key UNIQUE (issuer);
+
+ALTER TABLE ONLY public.token_issuers
+    ADD CONSTRAINT token_issuers_pkey PRIMARY KEY (name);
 
 ALTER TABLE ONLY public.work_items
     ADD CONSTRAINT work_items_pkey PRIMARY KEY (id);

@@ -7,11 +7,20 @@
 //!   (client-credentials token).
 //! - An `act` claim (RFC 8693 token exchange): `act.sub` is a service account acting for the
 //!   person in `sub` (ADR 0016).
+//!
+//! Besides the client's IdP, apps an admin registered sign tokens for their own agents, the
+//! service accounts under their prefix ([`TrustedIssuers`]; ADR 0110).
 
 pub mod jwks;
 mod verified;
 
-use awzy_model::{entity_type, EntityRef};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
+
+use awzy_model::{entity_type, EntityRef, TrustedIssuer};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -172,12 +181,80 @@ enum Keys {
     Jwks(Box<Jwks>),
 }
 
+/// Apps trusted to sign tokens for their own agents (ADR 0110), by the `iss` their tokens carry.
+/// A handle: the verifier and whatever refreshes the list from the PDP share it.
+/// How often enforcement points ask the PDP for the list: a removed app's tokens stop within it.
+const REFRESH: std::time::Duration = std::time::Duration::from_secs(10);
+
+#[derive(Clone, Default)]
+pub struct TrustedIssuers {
+    apps: Arc<RwLock<HashMap<String, AppIssuer>>>,
+    /// The IdP's private CA, trusted for apps' JWKS endpoints too.
+    ca: Option<Arc<[u8]>>,
+}
+
+#[derive(Clone)]
+struct AppIssuer {
+    config: TrustedIssuer,
+    jwks: Arc<Jwks>,
+}
+
+impl TrustedIssuers {
+    /// Replaces the list. An app whose JWKS URL is unchanged keeps the keys it has fetched.
+    pub fn set(&self, issuers: Vec<TrustedIssuer>) {
+        let mut apps = self.apps.write().unwrap_or_else(|e| e.into_inner());
+        let mut next = HashMap::new();
+        for config in issuers {
+            let jwks = match apps.get(&config.issuer).filter(|a| a.config.jwks_url == config.jwks_url) {
+                Some(app) => app.jwks.clone(),
+                None => match Jwks::new(&config.jwks_url, self.ca.as_deref()) {
+                    Ok(jwks) => Arc::new(jwks),
+                    Err(e) => {
+                        tracing::warn!(app = %config.name, error = %e, "can't use a trusted issuer's JWKS URL");
+                        continue;
+                    }
+                },
+            };
+            next.insert(config.issuer.clone(), AppIssuer { config, jwks });
+        }
+        *apps = next;
+    }
+
+    /// Keeps each of `lists` current from `fetch` (the PDP's `ListTrustedIssuers`), forever. A
+    /// failed fetch keeps the lists in force.
+    pub async fn follow<F, Fut>(lists: Vec<TrustedIssuers>, mut fetch: F)
+    where
+        F: FnMut() -> Fut,
+        Fut: std::future::Future<Output = anyhow::Result<Vec<TrustedIssuer>>>,
+    {
+        let mut every = tokio::time::interval(REFRESH);
+        loop {
+            every.tick().await;
+            match fetch().await {
+                Ok(issuers) => lists.iter().for_each(|l| l.set(issuers.clone())),
+                Err(e) => {
+                    tracing::warn!(error = %e, "couldn't refresh the trusted token issuers; keeping the last list")
+                }
+            }
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.apps.read().unwrap_or_else(|e| e.into_inner()).is_empty()
+    }
+
+    fn get(&self, iss: &str) -> Option<AppIssuer> {
+        self.apps.read().unwrap_or_else(|e| e.into_inner()).get(iss).cloned()
+    }
+}
+
 pub struct Verifier {
     keys: Keys,
     issuer: String,
     audience: String,
     subject_claim: Option<String>,
     verified: verified::Verified,
+    apps: TrustedIssuers,
 }
 
 impl Verifier {
@@ -196,13 +273,63 @@ impl Verifier {
             }
         };
         let subject_claim = config.subject_claim.clone().filter(|c| c != "sub");
+        let ca = config.jwks_ca_file.as_ref().map(std::fs::read).transpose()?.map(Arc::from);
         Ok(Self {
             keys,
             issuer: config.issuer.clone(),
             audience: config.audience.clone(),
             subject_claim,
             verified: Default::default(),
+            apps: TrustedIssuers { apps: Arc::default(), ca },
         })
+    }
+
+    /// The apps this verifier trusts besides the IdP, to keep up to date from the PDP.
+    pub fn trusted_issuers(&self) -> TrustedIssuers {
+        self.apps.clone()
+    }
+
+    /// The app that signed this token, when one did rather than the IdP. Read before the
+    /// signature is checked, only to choose the keys to check it with.
+    fn app_for(&self, token: &str) -> Option<AppIssuer> {
+        if self.apps.is_empty() {
+            return None;
+        }
+        #[derive(Deserialize)]
+        struct Iss {
+            iss: String,
+        }
+        let payload = URL_SAFE_NO_PAD.decode(token.split('.').nth(1)?).ok()?;
+        let iss = serde_json::from_slice::<Iss>(&payload).ok()?.iss;
+        (iss != self.issuer).then(|| self.apps.get(&iss)).flatten()
+    }
+
+    /// A token an app signed, checked against its keys, `iss`, and `aud`.
+    async fn app_claims(&self, token: &str, app: &AppIssuer) -> Result<Claims, IdentityError> {
+        let invalid = |e: jsonwebtoken::errors::Error| IdentityError::Invalid(e.to_string());
+        let header = decode_header(token).map_err(invalid)?;
+        if !matches!(header.alg, Algorithm::RS256 | Algorithm::ES256) {
+            return Err(IdentityError::Invalid(format!("algorithm {:?} is not accepted", header.alg)));
+        }
+        let kid = header.kid.ok_or_else(|| IdentityError::Invalid("token has no key ID (kid)".into()))?;
+        let key = app.jwks.key(&kid).await.map_err(|e| IdentityError::Invalid(e.to_string()))?;
+        let mut validation = Validation::new(header.alg);
+        validation.set_issuer(&[&app.config.issuer]);
+        validation.set_audience(&[&app.config.audience]);
+        validation.set_required_spec_claims(&["exp", "iss", "aud", "sub"]);
+        Ok(decode::<Claims>(token, &key, &validation).map_err(invalid)?.claims)
+    }
+
+    /// The app a token it signed for itself names (`sub` is its name), for registering and
+    /// retiring its agents. Any other token is refused.
+    pub async fn app_token(&self, authorization: Option<&str>) -> Result<String, IdentityError> {
+        let token = authorization.and_then(|h| h.strip_prefix("Bearer ")).ok_or(IdentityError::Missing)?;
+        let app = self.app_for(token).ok_or_else(|| IdentityError::Invalid("not signed by a trusted app".into()))?;
+        let claims = self.app_claims(token, &app).await?;
+        if claims.act.is_some() || claims.sub != app.config.name {
+            return Err(IdentityError::Invalid(format!("not {}'s own token", app.config.name)));
+        }
+        Ok(app.config.name)
     }
 
     fn validation(&self, alg: Algorithm) -> Validation {
@@ -219,9 +346,13 @@ impl Verifier {
         registry: &R,
     ) -> Result<Principal, IdentityError> {
         let token = authorization.and_then(|h| h.strip_prefix("Bearer ")).ok_or(IdentityError::Missing)?;
+        // The cache holds only the IdP's tokens, so a hit skips looking for an app.
         let mut claims = match self.verified.get(token) {
             Some(claims) => claims,
             None => {
+                if let Some(app) = self.app_for(token) {
+                    return app_principal(self.app_claims(token, &app).await?, &app.config, registry);
+                }
                 let claims = self.verify(token).await?;
                 self.verified.insert(token, &claims);
                 claims
@@ -242,7 +373,7 @@ impl Verifier {
                 }
             }
         }
-        principal_from_claims(claims, registry)
+        principal_from_claims(claims, registry, acts_for_itself)
     }
 
     /// The token's claims, once its signature, issuer, audience, and expiry check out.
@@ -263,9 +394,34 @@ impl Verifier {
     }
 }
 
+/// An app may sign only for its own agents: a service account under its prefix, on its own or
+/// acting for a person, and never a person on their own.
+fn app_principal<R: ServiceAccounts + ?Sized>(
+    claims: Claims,
+    app: &TrustedIssuer,
+    registry: &R,
+) -> Result<Principal, IdentityError> {
+    let agent = claims.act.as_ref().map_or(&claims.sub, |a| &a.sub);
+    if claims.act.is_none() && claims.sub == app.name {
+        return Err(IdentityError::Invalid(format!("{}'s own token is only for registering its agents", app.name)));
+    }
+    if !app.may_sign_for(agent) {
+        return Err(IdentityError::Invalid(format!(
+            "{} signs tokens only for service accounts under {:?}, not {agent:?}",
+            app.name,
+            app.agent_prefix()
+        )));
+    }
+    let acts_for_itself = claims.act.is_none();
+    principal_from_claims(claims, registry, acts_for_itself)
+}
+
+/// `acts_for_itself`: a service account's own token, with no `act` (client credentials, or an
+/// app's agent).
 fn principal_from_claims<R: ServiceAccounts + ?Sized>(
     claims: Claims,
     registry: &R,
+    acts_for_itself: bool,
 ) -> Result<Principal, IdentityError> {
     let human = |id: &str, groups: &[String]| entity(entity_type::HUMAN, id, json!({}), groups);
     let expires_at =
@@ -289,18 +445,14 @@ fn principal_from_claims<R: ServiceAccounts + ?Sized>(
             entities: vec![service_account(&actor.sub)?, human(&claims.sub, &claims.groups)],
             expires_at,
         },
-        None if registry.service_account(&claims.sub).is_some()
-            || (registry.defers_to_pdp() && is_client_credentials(&claims)) =>
-        {
-            Principal {
-                subject: EntityRef::new(entity_type::SERVICE_ACCOUNT, &claims.sub),
-                on_behalf_of: None,
-                human_present: claims.awzy_human_present,
-                name: claims.name,
-                entities: vec![service_account(&claims.sub)?],
-                expires_at,
-            }
-        }
+        None if acts_for_itself => Principal {
+            subject: EntityRef::new(entity_type::SERVICE_ACCOUNT, &claims.sub),
+            on_behalf_of: None,
+            human_present: claims.awzy_human_present,
+            name: claims.name,
+            entities: vec![service_account(&claims.sub)?],
+            expires_at,
+        },
         None => Principal {
             subject: EntityRef::new(entity_type::HUMAN, &claims.sub),
             on_behalf_of: None,
@@ -349,7 +501,10 @@ mod tests {
         });
         let app = Router::new().route("/jwks", get(move || async move { Json(json!({ "keys": [jwk] })) }));
         let (base, ca) = crate::jwks::tests::serve_https(app).await;
-        let ca_file = std::env::temp_dir().join(format!("awzy-identity-test-ca-{}.pem", std::process::id()));
+        // One file per server: tests run in parallel, each with its own CA.
+        static SERVERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = SERVERS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let ca_file = std::env::temp_dir().join(format!("awzy-identity-test-ca-{}-{n}.pem", std::process::id()));
         std::fs::write(&ca_file, ca).unwrap();
         let pem = key.to_pkcs8_pem(LineEnding::LF).unwrap();
         (EncodingKey::from_ec_pem(pem.as_bytes()).unwrap(), format!("{base}/jwks"), ca_file.display().to_string())
@@ -461,5 +616,69 @@ mod tests {
             verifier.principal(Some(&bearer(human)), &DeferToPdp).await.unwrap().subject,
             EntityRef::new("Human", "bob")
         );
+    }
+
+    #[tokio::test]
+    async fn an_app_signs_tokens_only_for_its_own_agents() {
+        let (key, url, ca_file) = idp("k1").await;
+        let verifier = Verifier::new(&TokenConfig {
+            issuer: "https://idp.test".into(),
+            audience: "awzy".into(),
+            jwks_ca_file: Some(ca_file),
+            subject_claim: Some("email".into()),
+            key: TokenKey::JwksUrl(url.clone()),
+        })
+        .unwrap();
+        let bearer = |t: String| format!("Bearer {t}");
+        let exp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() + 300;
+        let crm = |sub: &str, extra: Value| {
+            let mut c = json!({ "iss": "https://crm.acme.example", "aud": "awzy-agents", "sub": sub, "exp": exp });
+            c.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            bearer(token(&key, "k1", c))
+        };
+        let agent = crm("acme-crm.renewals-bot", json!({}));
+        assert!(
+            matches!(verifier.principal(Some(&agent), &DeferToPdp).await, Err(IdentityError::Invalid(_))),
+            "not trusted until an admin registers the app"
+        );
+
+        verifier.trusted_issuers().set(vec![TrustedIssuer {
+            name: "acme-crm".into(),
+            issuer: "https://crm.acme.example".into(),
+            jwks_url: url,
+            audience: "awzy-agents".into(),
+        }]);
+        let own = verifier.principal(Some(&agent), &DeferToPdp).await.unwrap();
+        assert_eq!(own.subject, EntityRef::new("ServiceAccount", "acme-crm.renewals-bot"));
+        assert_eq!(own.on_behalf_of, None);
+        let delegated = crm("alice@acme.com", json!({ "act": { "sub": "acme-crm.assistant" } }));
+        let d = verifier.principal(Some(&delegated), &DeferToPdp).await.unwrap();
+        assert_eq!(d.actor().to_string(), "ServiceAccount::acme-crm.assistant for Human::alice@acme.com");
+
+        for refused in [
+            crm("alice@acme.com", json!({})),
+            crm("sales-genie", json!({})),
+            crm("alice@acme.com", json!({ "act": { "sub": "sales-genie" } })),
+            crm("acme-crm", json!({})),
+            crm("acme-crm.renewals-bot", json!({ "aud": "awzy" })),
+        ] {
+            assert!(
+                matches!(verifier.principal(Some(&refused), &DeferToPdp).await, Err(IdentityError::Invalid(_))),
+                "{refused}"
+            );
+        }
+        let registry: Vec<ServiceAccountConfig> = vec![];
+        assert!(matches!(
+            verifier.principal(Some(&agent), &registry).await,
+            Err(IdentityError::UnregisteredServiceAccount(_))
+        ));
+
+        assert_eq!(verifier.app_token(Some(&crm("acme-crm", json!({})))).await.unwrap(), "acme-crm");
+        assert!(verifier.app_token(Some(&agent)).await.is_err(), "an agent's token doesn't register agents");
+        let idp_token = bearer(token(&key, "k1", claims("acme-crm", json!({}))));
+        assert!(verifier.app_token(Some(&idp_token)).await.is_err());
+
+        verifier.trusted_issuers().set(vec![]);
+        assert!(verifier.principal(Some(&agent), &DeferToPdp).await.is_err(), "removed: no longer trusted");
     }
 }

@@ -3,7 +3,7 @@
 use async_graphql::Object;
 
 /// Who did something: a person, a service account or awzy service (perhaps acting for a person),
-/// a break-glass key, or corp portal staff.
+/// a break-glass key, corp portal staff, or an app registering its own agents.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Actor(pub awzy_model::Actor);
 
@@ -16,13 +16,13 @@ impl Actor {
 
 #[Object]
 impl Actor {
-    /// `Human`, `ServiceAccount`, `AwzyService`, `BreakGlassKey`, or `AwzyStaff`.
+    /// `Human`, `ServiceAccount`, `AwzyService`, `BreakGlassKey`, `AwzyStaff`, or `App`.
     #[graphql(name = "type")]
     async fn kind(&self) -> &str {
         &self.0.subject.kind
     }
 
-    /// A person's IdP ID, a service account ID, an awzy service name, a key fingerprint, or a staff user name.
+    /// A person's IdP ID, a service account ID, an awzy service name, a key fingerprint, a staff user name, or an app's name.
     async fn id(&self) -> &str {
         &self.0.subject.id
     }

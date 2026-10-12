@@ -1,5 +1,5 @@
 {
-  "checksum": "3452bd1fc86ececfb6f933986c1469bc656d5184b6a3641ec671768dfa5f7d50",
+  "checksum": "c3967e2c3666c4ac9faa02ad2ce380749e3a615ccc8fd46ae085fcb73781a44b",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -4333,6 +4333,10 @@
             "target": "anyhow"
           },
           {
+            "id": "base64 0.22.1",
+            "target": "base64"
+          },
+          {
             "id": "bytes 1.12.1",
             "target": "bytes"
           },
@@ -4393,10 +4397,6 @@
           {
             "id": "axum 0.8.9",
             "target": "axum"
-          },
-          {
-            "id": "base64 0.22.1",
-            "target": "base64"
           },
           {
             "id": "p256 0.13.2",
