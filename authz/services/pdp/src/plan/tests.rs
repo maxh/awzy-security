@@ -21,7 +21,7 @@ fn pdp(policies: &str) -> Pdp {
 }
 
 /// alice, in `groups`; bob; the agent `bot`, owned by alice; and the regions.
-fn people(groups: &[&str]) -> Vec<Value> {
+fn fixtures(groups: &[&str]) -> Vec<Value> {
     let parents: Vec<Value> = groups.iter().map(|g| json!({ "type": "Group", "id": g })).collect();
     let mut out = vec![
         json!({ "uid": { "type": "Human", "id": "alice" }, "attrs": {}, "parents": parents }),
@@ -51,7 +51,7 @@ fn request(delegated: bool, risk: i64) -> PlanRequest {
 }
 
 fn planned(pdp: &Pdp, req: &PlanRequest, groups: &[&str]) -> Planned {
-    pdp.plan(req, &pdp.entities(Value::Array(people(groups))).unwrap(), &Facts::default()).unwrap()
+    pdp.plan(req, &pdp.entities(Value::Array(fixtures(groups))).unwrap(), &Facts::default()).unwrap()
 }
 
 #[test]
@@ -135,7 +135,7 @@ fn an_unknown_type_is_refused() {
     let p = pdp("");
     let mut req = request(false, 0);
     req.resource_type = "Invoice".into();
-    let err = p.plan(&req, &p.entities(Value::Array(people(&[]))).unwrap(), &Facts::default()).unwrap_err();
+    let err = p.plan(&req, &p.entities(Value::Array(fixtures(&[]))).unwrap(), &Facts::default()).unwrap_err();
     assert!(err.to_string().contains("isn't an entity type"), "{err}");
 }
 
@@ -260,7 +260,7 @@ fn a_filter_never_matches_a_row_a_check_would_deny() {
         let plan = planned(&p, &req, &groups);
         for i in 0..12 {
             let customer = random_customer(&mut rng, i);
-            let mut all = people(&groups);
+            let mut all = fixtures(&groups);
             all.push(customer.clone());
             let entities = p.entities(Value::Array(all)).unwrap();
             let check = Check {
