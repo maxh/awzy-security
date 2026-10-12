@@ -264,7 +264,10 @@ mod tests {
             "azure": { "kind": "openai", "url": "https://acme.openai.azure.com/openai/v1", "api_key_env": "AWZY_LLM_KEY_AZURE" },
         }))
         .unwrap();
-        assert_eq!(c["gcp"], Connection::Vertex { project: "acme".into(), region: "global".into(), token_env: None, api_key_env: None });
+        assert_eq!(
+            c["gcp"],
+            Connection::Vertex { project: "acme".into(), region: "global".into(), token_env: None, api_key_env: None }
+        );
         assert!(matches!(&c["azure"], Connection::Openai { api_key_env: Some(k), .. } if k == "AWZY_LLM_KEY_AZURE"));
         assert!(serde_json::from_value::<Connections>(json!({ "x": { "kind": "carrier-pigeon" } })).is_err());
     }
