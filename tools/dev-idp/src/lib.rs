@@ -179,14 +179,13 @@ async fn app_token(
     Json(req): Json<AppTokenRequest>,
 ) -> Json<Value> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
-    let mut claims = json!({
+    // The agent acting for `sub`, when one is.
+    let act = req.act.map(|a| json!({ "sub": a }));
+    let claims = json!({
         "iss": format!("{}/apps/{name}", idp.0.issuer),
         "aud": req.audience.unwrap_or_else(|| "awzy-agents".into()),
-        "sub": req.sub, "iat": now, "exp": now + TOKEN_LIFETIME.as_secs(),
+        "sub": req.sub, "iat": now, "exp": now + TOKEN_LIFETIME.as_secs(), "act": act,
     });
-    if let Some(a) = req.act {
-        claims["act"] = json!({ "sub": a });
-    }
     let mut header = Header::new(Algorithm::ES256);
     header.kid = Some(KID.into());
     let token = encode(&header, &claims, &idp.0.encoding).expect("signing with a valid key");
