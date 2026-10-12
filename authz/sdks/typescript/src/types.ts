@@ -1,3 +1,5 @@
+import type { Filter } from "./filter.ts";
+
 /** A typed reference to an entity: `{ type: "Human", id: "alice" }`. */
 export interface EntityRef {
   type: string;
@@ -100,6 +102,44 @@ export interface DecisionNote {
   verdict?: Verdict;
   fallback?: Allowed["fallback"];
 }
+
+/** What a list or search asks: which rows of `resourceType` may this principal act on? */
+export interface PlanRequest {
+  authorization?: string;
+  principal?: Principal;
+  action: string;
+  /** The entity type the app lists, e.g. `Customer`. */
+  resourceType: string;
+  context?: Record<string, unknown>;
+  entities?: unknown[];
+  /** The first page's plan, to page through with the same filter. */
+  planQid?: string;
+}
+
+export type PlanOutcome = "always_allowed" | "always_denied" | "challenge" | "conditional";
+
+/** awzy's answer: what to show, as a filter, and what it rests on. */
+export interface Plan {
+  ok: true;
+  qid: string;
+  outcome: PlanOutcome;
+  filter: Filter;
+  /**
+   * The filter to apply now, with the mode applied: in monitor every row (`true`), else the
+   * plan's filter, or no row while a challenge is pending.
+   */
+  apply: Filter;
+  challenges: ChallengeKind[];
+  challengeCouldWiden: boolean;
+  /** Some rows must be checked one by one with {@link CheckResult}s. */
+  needsRowChecks: boolean;
+  attributes: string[];
+  mode: Mode;
+  maxAgeSecs: number;
+  pinned: boolean;
+}
+
+export type PlanResult = Plan | Unavailable | Unauthenticated;
 
 /** Tiers that never fail open, whatever the settings say. */
 export const ALWAYS_FAIL_CLOSED: readonly string[] = ["confidential", "crown_jewels"];
