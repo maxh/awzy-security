@@ -838,6 +838,7 @@ dependencies = [
  "awzy-kube",
  "awzy-llm",
  "awzy-model",
+ "awzy-model-routing",
  "awzy-pdp",
  "awzy-portal",
  "awzy-secrets-aws",
@@ -1170,6 +1171,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1191,6 +1193,21 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "uuid",
+]
+
+[[package]]
+name = "awzy-model-routing"
+version = "0.1.0"
+dependencies = [
+ "awzy-authz-proto",
+ "awzy-llm",
+ "awzy-service-auth",
+ "awzy-signing",
+ "p256",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1245,6 +1262,7 @@ dependencies = [
  "axum",
  "chrono",
  "p256",
+ "serde_json",
  "sqlx",
  "thiserror 2.0.21",
  "tokio",
@@ -1282,6 +1300,7 @@ dependencies = [
  "awzy-http",
  "awzy-llm",
  "awzy-model",
+ "awzy-model-routing",
  "awzy-server",
  "awzy-service-auth",
  "awzy-telemetry",

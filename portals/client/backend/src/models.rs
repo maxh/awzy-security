@@ -121,7 +121,11 @@ impl ModelsMutation {
     /// can't send prompts anywhere the install wasn't set up to reach. Like switching enforcement,
     /// policy can ask for a security key first: then nothing changes, and the payload names the
     /// challenge to pass.
-    async fn set_model_routing(&self, ctx: &Context<'_>, input: SetModelRoutingInput) -> Result<SetModelRoutingPayload> {
+    async fn set_model_routing(
+        &self,
+        ctx: &Context<'_>,
+        input: SetModelRoutingInput,
+    ) -> Result<SetModelRoutingPayload> {
         let viewer = require(ctx, Administer, PortalArea::Policies).await?;
         let routing: Routing = serde_json::from_value(input.routing.0)
             .map_err(|e| awzy_portal::ErrorCode::InvalidInput.error(format!("not a model routing: {e}")))?;
@@ -201,9 +205,17 @@ mod tests {
         let saved = testing::run(&schema, &alice, &set(routing.clone())).await;
         assert_eq!(saved["setModelRouting"]["modelRouting"]["version"], 1);
 
-        let read = testing::run(&schema, &alice, "{ modelRouting { version routing changedBy { id } connections { name kind } } }").await;
+        let read = testing::run(
+            &schema,
+            &alice,
+            "{ modelRouting { version routing changedBy { id } connections { name kind } } }",
+        )
+        .await;
         assert_eq!(read["modelRouting"]["routing"]["routes"]["awzy_bot"]["targets"][0]["weight"], 9);
         assert_eq!(read["modelRouting"]["changedBy"]["id"], "alice");
-        assert_eq!(read["modelRouting"]["connections"], json!([{ "name": "cloud", "kind": "vertex" }, { "name": "vllm", "kind": "openai" }]));
+        assert_eq!(
+            read["modelRouting"]["connections"],
+            json!([{ "name": "cloud", "kind": "vertex" }, { "name": "vllm", "kind": "openai" }])
+        );
     }
 }

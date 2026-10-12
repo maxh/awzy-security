@@ -292,9 +292,9 @@ pub(crate) mod tests {
         policy_service_server::{PolicyService, PolicyServiceServer},
         CreateDraftResponse, EnforcementSetting, GetActiveResponse, GetBundleResponse, GetEnforcementRequest,
         GetEnforcementResponse, GetModelRoutingRequest, GetModelRoutingResponse, GetOutageFallbackRequest,
-        GetOutageFallbackResponse, ListBundlesResponse, ModelRouting, SetModelRoutingRequest, SetModelRoutingResponse,
-        ListEnforcementChangesRequest, ListEnforcementChangesResponse, PublishResponse, SetEnforcementRequest,
-        SetEnforcementResponse, SetOutageFallbackRequest, SetOutageFallbackResponse,
+        GetOutageFallbackResponse, ListBundlesResponse, ListEnforcementChangesRequest, ListEnforcementChangesResponse,
+        ModelRouting, PublishResponse, SetEnforcementRequest, SetEnforcementResponse, SetModelRoutingRequest,
+        SetModelRoutingResponse, SetOutageFallbackRequest, SetOutageFallbackResponse,
     };
     use tonic::{Request, Response, Status};
 
@@ -424,10 +424,13 @@ pub(crate) mod tests {
             &self,
             _: Request<GetModelRoutingRequest>,
         ) -> Result<Response<GetModelRoutingResponse>, Status> {
-            let routing = self.2.lock().unwrap().last().cloned().unwrap_or(ModelRouting {
-                routing_json: "{}".into(),
-                ..Default::default()
-            });
+            let routing = self
+                .2
+                .lock()
+                .unwrap()
+                .last()
+                .cloned()
+                .unwrap_or(ModelRouting { routing_json: "{}".into(), ..Default::default() });
             Ok(Response::new(GetModelRoutingResponse { routing: Some(routing), unchanged: false }))
         }
         async fn set_model_routing(

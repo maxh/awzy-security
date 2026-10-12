@@ -779,6 +779,11 @@ enum InvestigationVerdict {
 	INCONCLUSIVE
 }
 
+"""
+A scalar that can represent any JSON value.
+"""
+scalar JSON
+
 scalar JSONObject
 
 scalar JSONString
@@ -794,6 +799,38 @@ input JustifyChallengeInput {
 input LiftContainmentInput {
 	containmentQid: Qid!
 	reason: String!
+}
+
+"""
+A model service this install can reach.
+"""
+type ModelConnection {
+	"""
+	What a model's `connection` names, e.g. `cloud`.
+	"""
+	name: String!
+	"""
+	bedrock, vertex, openai, or anthropic.
+	"""
+	kind: String!
+}
+
+type ModelRouting {
+	"""
+	0 when never set: each service uses the routing its deploy configuration gave it.
+	"""
+	version: Int!
+	"""
+	The catalog and the routes, as awzy_llm's Routing: `{ models: [{ name, connection, spec }],
+	routes: { awzy_bot: { targets: [{ model, weight }], fallback: [] }, … } }`.
+	"""
+	routing: JSON!
+	"""
+	The services this install can reach, which a routing may name.
+	"""
+	connections: [ModelConnection!]!
+	changedBy: Actor
+	changedAt: UtcTimestamp
 }
 
 type Mutation {
@@ -912,6 +949,13 @@ type Mutation {
 	payload names the challenge to pass before saving again.
 	"""
 	configureConnector(input: ConfigureConnectorInput!): ConfigureConnectorPayload!
+	"""
+	Replaces the model routing. It's checked against this install's connections first, so it
+	can't send prompts anywhere the install wasn't set up to reach. Like switching enforcement,
+	policy can ask for a security key first: then nothing changes, and the payload names the
+	challenge to pass.
+	"""
+	setModelRouting(input: SetModelRoutingInput!): SetModelRoutingPayload!
 }
 
 interface Node {
@@ -1353,6 +1397,10 @@ type Query {
 	administer the enforcement area.
 	"""
 	repairRuns: [RepairRun!]!
+	"""
+	Which models Awzy Bot and investigations use, and the services this install can reach.
+	"""
+	modelRouting: ModelRouting!
 }
 
 input RegisterServiceAccountInput {
@@ -1634,6 +1682,24 @@ type SetEnforcementModePayload {
 	"""
 	The security-key challenge to pass first, when the switch needs one: answer it, then switch
 	again within its grant.
+	"""
+	challengeQid: Qid
+}
+
+input SetModelRoutingInput {
+	"""
+	The whole catalog and every route, as `ModelRouting.routing` reads.
+	"""
+	routing: JSON!
+}
+
+type SetModelRoutingPayload {
+	"""
+	The new setting; null when a challenge must be passed first.
+	"""
+	modelRouting: ModelRouting
+	"""
+	The challenge to pass, then save again.
 	"""
 	challengeQid: Qid
 }

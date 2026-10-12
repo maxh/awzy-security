@@ -38,7 +38,10 @@ async fn main() -> anyhow::Result<()> {
         // The investigations route as set in the client portal and kept by awzy-policy (ADR 0114).
         if let Ok(addr) = std::env::var("AWZY_POLICY_ADDR") {
             let policy = awzy_authz_proto::policy::v1::policy_service_client::PolicyServiceClient::new(
-                awzy_service_auth::grpc_channel(tonic::transport::Channel::from_shared(addr)?.connect_lazy(), "awzy-policy"),
+                awzy_service_auth::grpc_channel(
+                    tonic::transport::Channel::from_shared(addr)?.connect_lazy(),
+                    "awzy-policy",
+                ),
             );
             let setting = std::sync::Arc::new(awzy_model_routing::RoutingSetting::new(router.clone()));
             tokio::spawn(setting.follow(policy, awzy_model_routing::verifier_from_env()?));

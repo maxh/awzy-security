@@ -159,7 +159,8 @@ mod tests {
     #[test]
     fn each_api_has_its_own_settings_and_a_typo_is_refused() {
         let gemini: ModelSpec =
-            serde_json::from_value(json!({ "api": "gemini", "model": "gemini-2.5-pro", "thinking_level": "low" })).unwrap();
+            serde_json::from_value(json!({ "api": "gemini", "model": "gemini-2.5-pro", "thinking_level": "low" }))
+                .unwrap();
         assert!(matches!(&gemini, ModelSpec::Gemini(s) if s.thinking_level == Some(ThinkingLevel::Low)));
         let converse: ModelSpec = serde_json::from_value(
             json!({ "api": "converse", "model_id": "us.anthropic.claude-opus-5-5", "cache_points": true }),
@@ -169,8 +170,14 @@ mod tests {
 
         // Another API's setting, or a misspelled one, isn't quietly ignored.
         assert!(serde_json::from_value::<ModelSpec>(json!({ "api": "gemini", "model": "g", "effort": "low" })).is_err());
-        assert!(serde_json::from_value::<ModelSpec>(json!({ "api": "openai_chat", "model": "m", "reasoning_efort": "low" })).is_err());
-        assert!(serde_json::from_value::<ModelSpec>(json!({ "api": "anthropic_messages", "model": "c", "effort": "extreme" })).is_err());
+        assert!(serde_json::from_value::<ModelSpec>(
+            json!({ "api": "openai_chat", "model": "m", "reasoning_efort": "low" })
+        )
+        .is_err());
+        assert!(serde_json::from_value::<ModelSpec>(
+            json!({ "api": "anthropic_messages", "model": "c", "effort": "extreme" })
+        )
+        .is_err());
     }
 
     #[test]
@@ -178,7 +185,8 @@ mod tests {
         let bedrock = Connection::Bedrock { region: "us-east-2".into() };
         let vertex = Connection::Vertex { project: "p".into(), region: "global".into(), token_env: None };
         let gemini: ModelSpec = serde_json::from_value(json!({ "api": "gemini", "model": "gemini-2.5-pro" })).unwrap();
-        let claude: ModelSpec = serde_json::from_value(json!({ "api": "anthropic_messages", "model": "claude-opus-5-5" })).unwrap();
+        let claude: ModelSpec =
+            serde_json::from_value(json!({ "api": "anthropic_messages", "model": "claude-opus-5-5" })).unwrap();
         assert!(gemini.offered_by(&vertex) && !gemini.offered_by(&bedrock));
         assert!(claude.offered_by(&vertex) && !claude.offered_by(&bedrock), "Claude on Bedrock is Converse");
         assert!(gemini.mismatch(&bedrock).contains("bedrock connection doesn't offer the gemini API"));

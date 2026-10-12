@@ -204,9 +204,9 @@ mod tests {
         policy_service_server::{PolicyService, PolicyServiceServer},
         CreateDraftRequest, CreateDraftResponse, EnforcementSetting, GetActiveResponse, GetBundleRequest,
         GetBundleResponse, GetEnforcementResponse, GetModelRoutingRequest, GetModelRoutingResponse,
-        GetOutageFallbackRequest, GetOutageFallbackResponse, SetModelRoutingRequest, SetModelRoutingResponse,
-        ListBundlesRequest, ListBundlesResponse, ListEnforcementChangesRequest, ListEnforcementChangesResponse,
-        PolicyBundle, PublishRequest, PublishResponse, SetEnforcementRequest, SetEnforcementResponse,
+        GetOutageFallbackRequest, GetOutageFallbackResponse, ListBundlesRequest, ListBundlesResponse,
+        ListEnforcementChangesRequest, ListEnforcementChangesResponse, PolicyBundle, PublishRequest, PublishResponse,
+        SetEnforcementRequest, SetEnforcementResponse, SetModelRoutingRequest, SetModelRoutingResponse,
         SetOutageFallbackRequest, SetOutageFallbackResponse,
     };
     use awzy_model::{Check, EntityRef, Verdict};

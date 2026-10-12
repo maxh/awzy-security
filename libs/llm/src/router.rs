@@ -87,11 +87,15 @@ impl Routing {
         }
         for (feature, route) in &self.routes {
             if route.targets.iter().all(|t| t.weight == 0) {
-                return Err(LlmError::NotConfigured(format!("route {feature:?} sends conversations nowhere: no target has weight")));
+                return Err(LlmError::NotConfigured(format!(
+                    "route {feature:?} sends conversations nowhere: no target has weight"
+                )));
             }
             for name in route.targets.iter().map(|t| &t.model).chain(&route.fallback) {
                 if !names.contains(name.as_str()) {
-                    return Err(LlmError::NotConfigured(format!("route {feature:?} names model {name:?}, which isn't in the catalog")));
+                    return Err(LlmError::NotConfigured(format!(
+                        "route {feature:?} names model {name:?}, which isn't in the catalog"
+                    )));
                 }
             }
         }
@@ -288,8 +292,7 @@ mod tests {
     #[tokio::test]
     async fn conversations_split_by_weight_and_a_new_routing_takes_over() {
         let router = ModelRouter::new(connections(), routing((3, 1))).await.unwrap();
-        let picks: Vec<String> =
-            (0..8).map(|_| router.conversation("awzy_bot").unwrap().model().to_string()).collect();
+        let picks: Vec<String> = (0..8).map(|_| router.conversation("awzy_bot").unwrap().model().to_string()).collect();
         assert_eq!(picks.iter().filter(|m| *m == "claude").count(), 6, "{picks:?}");
         assert_eq!(picks.iter().filter(|m| *m == "llama").count(), 2, "{picks:?}");
         assert_ne!(picks[..4].iter().filter(|m| *m == "llama").count(), 0, "spread out, not in a burst: {picks:?}");

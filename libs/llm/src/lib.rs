@@ -227,7 +227,8 @@ mod tests {
     #[test]
     fn params_merge_into_the_body_object_by_object() {
         let mut body = json!({ "max_tokens": 10, "generationConfig": { "maxOutputTokens": 10 } });
-        let params = json!({ "temperature": 0.2, "generationConfig": { "thinkingConfig": { "thinkingLevel": "low" } } });
+        let params =
+            json!({ "temperature": 0.2, "generationConfig": { "thinkingConfig": { "thinkingLevel": "low" } } });
         merge_params(&mut body, params.as_object().unwrap());
         assert_eq!(
             body,

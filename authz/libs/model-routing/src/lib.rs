@@ -89,7 +89,11 @@ impl RoutingSetting {
     }
 
     /// Follows awzy-policy's setting forever, asking every few seconds.
-    pub async fn follow(self: Arc<Self>, mut client: PolicyServiceClient<AuthChannel>, verifier: Option<Arc<BundleVerifier>>) {
+    pub async fn follow(
+        self: Arc<Self>,
+        mut client: PolicyServiceClient<AuthChannel>,
+        verifier: Option<Arc<BundleVerifier>>,
+    ) {
         loop {
             match client.get_model_routing(GetModelRoutingRequest { known_version: self.version() }).await {
                 Ok(res) => {
@@ -99,7 +103,9 @@ impl RoutingSetting {
                         match self.accept(wire, verifier.as_deref()) {
                             Ok(true) => tracing::info!(version, "model routing loaded"),
                             Ok(false) => {}
-                            Err(error) => tracing::error!(version, %error, "refused a model routing; keeping the one held"),
+                            Err(error) => {
+                                tracing::error!(version, %error, "refused a model routing; keeping the one held")
+                            }
                         }
                     }
                 }

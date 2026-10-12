@@ -9,11 +9,13 @@ use awzy_authz_proto::{
         policy_service_server::{PolicyService, PolicyServiceServer},
         BreakGlassRollbackRequest, BreakGlassRollbackResponse, BundleStatus as WireStatus, CreateDraftRequest,
         CreateDraftResponse, EnforcementSetting as WireSetting, GetActiveRequest, GetActiveResponse, GetBundleRequest,
-        GetBundleResponse, GetEnforcementRequest, GetEnforcementResponse, GetOutageFallbackRequest,
-        GetModelRoutingRequest, GetModelRoutingResponse, GetOutageFallbackResponse, ListBundlesRequest, ListBundlesResponse, ListEnforcementChangesRequest,
-        ListEnforcementChangesResponse, ListEnforcementSettingsRequest, ListEnforcementSettingsResponse,
-        ModelRouting as WireRouting, OutageFallback as WireFallback, PolicyBundle as WireBundle, PublishRequest, PublishResponse,
-        SetEnforcementRequest, SetEnforcementResponse, SetModelRoutingRequest, SetModelRoutingResponse, SetOutageFallbackRequest, SetOutageFallbackResponse,
+        GetBundleResponse, GetEnforcementRequest, GetEnforcementResponse, GetModelRoutingRequest,
+        GetModelRoutingResponse, GetOutageFallbackRequest, GetOutageFallbackResponse, ListBundlesRequest,
+        ListBundlesResponse, ListEnforcementChangesRequest, ListEnforcementChangesResponse,
+        ListEnforcementSettingsRequest, ListEnforcementSettingsResponse, ModelRouting as WireRouting,
+        OutageFallback as WireFallback, PolicyBundle as WireBundle, PublishRequest, PublishResponse,
+        SetEnforcementRequest, SetEnforcementResponse, SetModelRoutingRequest, SetModelRoutingResponse,
+        SetOutageFallbackRequest, SetOutageFallbackResponse,
     },
     prost_types::Timestamp,
 };
@@ -25,9 +27,8 @@ use tonic::{Request, Response, Status};
 use awzy_signing::{break_glass_payload, BundleVerifier};
 
 use crate::{
-    BreakGlassRequest, BundleStatus, EnforcementSetting, ModelRoutingSetting, OutageFallbackSetting, PolicyBundle, PolicyStore,
-    StoreError,
-    INSTALL_SCOPE,
+    BreakGlassRequest, BundleStatus, EnforcementSetting, ModelRoutingSetting, OutageFallbackSetting, PolicyBundle,
+    PolicyStore, StoreError, INSTALL_SCOPE,
 };
 
 /// Who may call which methods (ADR 0055). Each group's callers come from the chart, as
@@ -63,19 +64,18 @@ impl Access {
 
     fn guard(&self) -> PathGuard {
         let method = |m: &str| format!("/awzy.policy.v1.PolicyService/{m}");
-        let mut rules: Vec<(String, Rule)> =
-            [
-                "GetActive",
-                "GetEnforcement",
-                "ListBundles",
-                "GetBundle",
-                "ListEnforcementChanges",
-                "GetOutageFallback",
-                "GetModelRouting",
-            ]
-            .into_iter()
-                .map(|m| (method(m), Rule::Allow(self.readers.clone())))
-                .collect();
+        let mut rules: Vec<(String, Rule)> = [
+            "GetActive",
+            "GetEnforcement",
+            "ListBundles",
+            "GetBundle",
+            "ListEnforcementChanges",
+            "GetOutageFallback",
+            "GetModelRouting",
+        ]
+        .into_iter()
+        .map(|m| (method(m), Rule::Allow(self.readers.clone())))
+        .collect();
         rules.extend(
             ["CreateDraft", "Publish", "SetEnforcement", "SetOutageFallback", "SetModelRouting"]
                 .into_iter()
