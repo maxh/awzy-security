@@ -1,0 +1,33 @@
+name: sdks
+
+# Each client library's own linters (ADR 0114), as oxlint is for TypeScript. Their tests, the shared
+# conformance spec among them, run in Bazel with everything else.
+on:
+  pull_request:
+    paths:
+      - "authz/sdks/**"
+      - ".github/workflows/sdks.yml"
+  push:
+    branches: [main]
+    paths:
+      - "authz/sdks/**"
+      - ".github/workflows/sdks.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: authz/sdks/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[test]'
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy src
