@@ -1,8 +1,23 @@
 import { Section, StatusBadge } from "@awzy/ui";
-import { Alert, Button, Group, MultiSelect, NumberInput, Stack, Table, Text, TextInput, Textarea } from "@mantine/core";
+import {
+  Alert,
+  Button,
+  Group,
+  Modal,
+  MultiSelect,
+  NumberInput,
+  Select,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Textarea,
+} from "@mantine/core";
+import { IconLifebuoy } from "@tabler/icons-react";
 import { Suspense, useState } from "react";
 import { graphql, useLazyLoadQuery, useMutation } from "react-relay";
 
+import type { SupportSectionInstallsQuery } from "./__generated__/SupportSectionInstallsQuery.graphql";
 import type { SupportSectionQuery } from "./__generated__/SupportSectionQuery.graphql";
 import type { SupportSectionRequestMutation } from "./__generated__/SupportSectionRequestMutation.graphql";
 import type { SupportSectionSignInMutation } from "./__generated__/SupportSectionSignInMutation.graphql";
@@ -15,20 +30,20 @@ const AREAS = ["decisions", "policies", "enforcement", "directory", "challenges"
  * portal, read-only, for a while. They decide in their portal; once approved, sign in from here.
  */
 export function SupportSection({ installId }: { installId: string }) {
-  const [fetchKey, setFetchKey] = useState(0);
   return (
-    <Section
-      title="Support sessions"
-      description="Ask the client's admins to let you view parts of their portal, read-only, for a while. They approve or reject it in their portal, and everything you open there is recorded for them."
+    <Suspense
+      fallback={
+        <Section title="Support sessions">
+          <Text size="sm">Loading…</Text>
+        </Section>
+      }
     >
-      <Suspense fallback={<Text size="sm">Loading…</Text>}>
-        <Sessions installId={installId} fetchKey={fetchKey} onChanged={() => setFetchKey((k) => k + 1)} />
-      </Suspense>
-    </Section>
+      <Sessions installId={installId} />
+    </Suspense>
   );
 }
 
-function Sessions({ installId, fetchKey, onChanged }: { installId: string; fetchKey: number; onChanged: () => void }) {
+function Sessions({ installId }: { installId: string }) {
   const data = useLazyLoadQuery<SupportSectionQuery>(
     graphql`
       query SupportSectionQuery($id: ID!) {
@@ -51,7 +66,7 @@ function Sessions({ installId, fetchKey, onChanged }: { installId: string; fetch
       }
     `,
     { id: installId },
-    { fetchKey, fetchPolicy: "network-only" },
+    { fetchPolicy: "store-and-network" },
   );
   const sessions = data.node?.supportSessions ?? [];
   const [signIn, signingIn] = useMutation<SupportSectionSignInMutation>(graphql`
@@ -72,74 +87,158 @@ function Sessions({ installId, fetchKey, onChanged }: { installId: string; fetch
       onError: (e) => setError(e.message),
     });
   return (
-    <Stack gap="md">
-      <RequestForm installId={installId} lastPortal={sessions[0]?.portalUrl} onRequested={onChanged} />
-      {error && (
-        <Alert color="red" variant="light" withCloseButton onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-      {sessions.length > 0 && (
-        <Table>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Asked</Table.Th>
-              <Table.Th>Areas</Table.Th>
-              <Table.Th>Status</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {sessions.map((s) => {
-              const status = supportStatus(s.status);
-              return (
-                <Table.Tr key={s.id}>
-                  <Table.Td>
-                    <Text size="sm">
-                      {s.requestedBy}, {formatTime(s.requestedAt)}
-                    </Text>
-                    <Text size="xs" c="dimmed">
-                      {s.reason}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm">{s.areas.join(", ")}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
-                    <Text size="xs" c="dimmed">
-                      {s.status === "REQUESTED" && !s.delivered ? "not delivered yet" : ""}
-                      {s.status === "APPROVED" && s.expiresAt ? `until ${formatTime(s.expiresAt)}` : ""}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    {s.status === "APPROVED" && (
-                      <Group justify="flex-end">
-                        <Button size="xs" loading={signingIn} onClick={() => open(s.id)}>
-                          Sign in
-                        </Button>
-                      </Group>
-                    )}
-                  </Table.Td>
-                </Table.Tr>
-              );
-            })}
-          </Table.Tbody>
-        </Table>
-      )}
-    </Stack>
+    <Section
+      title="Support sessions"
+      description="Ask the client's admins to let you view parts of their portal, read-only, for a while. They approve or reject it in their portal, and everything you open there is recorded for them."
+      actions={<AskForSupportButton installId={installId} lastPortal={sessions[0]?.portalUrl} />}
+    >
+      <Stack gap="md">
+        {sessions.length === 0 && (
+          <Text size="sm" c="dimmed">
+            No support sessions for this install yet.
+          </Text>
+        )}
+        {error && (
+          <Alert color="red" variant="light" withCloseButton onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
+        {sessions.length > 0 && (
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Asked</Table.Th>
+                <Table.Th>Areas</Table.Th>
+                <Table.Th>Status</Table.Th>
+                <Table.Th />
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {sessions.map((s) => {
+                const status = supportStatus(s.status);
+                return (
+                  <Table.Tr key={s.id}>
+                    <Table.Td>
+                      <Text size="sm">
+                        {s.requestedBy}, {formatTime(s.requestedAt)}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        {s.reason}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm">{s.areas.join(", ")}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+                      <Text size="xs" c="dimmed">
+                        {s.status === "REQUESTED" && !s.delivered ? "not delivered yet" : ""}
+                        {s.status === "APPROVED" && s.expiresAt ? `until ${formatTime(s.expiresAt)}` : ""}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      {s.status === "APPROVED" && (
+                        <Group justify="flex-end">
+                          <Button size="xs" loading={signingIn} onClick={() => open(s.id)}>
+                            Sign in
+                          </Button>
+                        </Group>
+                      )}
+                    </Table.Td>
+                  </Table.Tr>
+                );
+              })}
+            </Table.Tbody>
+          </Table>
+        )}
+      </Stack>
+    </Section>
   );
 }
 
-function RequestForm({
+/**
+ * Opens the form to ask for a support session: for `installId`, or for an install picked in the
+ * form when there's none.
+ */
+export function AskForSupportButton({
   installId,
   lastPortal,
   onRequested,
 }: {
-  installId: string;
+  installId?: string;
+  lastPortal?: string;
+  onRequested?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button variant="default" leftSection={<IconLifebuoy size={16} />} onClick={() => setOpen(true)}>
+        Ask for support
+      </Button>
+      <Modal
+        opened={open}
+        onClose={() => setOpen(false)}
+        size="lg"
+        title={<Text fw={600}>Ask for a support session</Text>}
+      >
+        <Text size="sm" c="dimmed" mb="sm">
+          The client's admins approve or reject it in their portal. Once approved, you view the areas you asked for,
+          read-only, and everything you open is recorded for them.
+        </Text>
+        <Suspense fallback={<Text size="sm">Loading…</Text>}>
+          <RequestForm
+            installId={installId}
+            lastPortal={lastPortal}
+            onCancel={() => setOpen(false)}
+            onRequested={() => {
+              setOpen(false);
+              onRequested?.();
+            }}
+          />
+        </Suspense>
+      </Modal>
+    </>
+  );
+}
+
+function InstallSelect({ value, onChange }: { value: string | null; onChange: (id: string | null) => void }) {
+  const data = useLazyLoadQuery<SupportSectionInstallsQuery>(
+    graphql`
+      query SupportSectionInstallsQuery {
+        installs(first: 200) {
+          edges {
+            node {
+              id
+              client
+              environment
+            }
+          }
+        }
+      }
+    `,
+    {},
+  );
+  const options = data.installs.edges.map(({ node }) => ({
+    value: node.id,
+    label: `${node.client} / ${node.environment}`,
+  }));
+  return (
+    <Select label="Install" data={options} value={value} onChange={onChange} searchable placeholder="Which install" />
+  );
+}
+
+function RequestForm({
+  installId: given,
+  lastPortal,
+  onCancel,
+  onRequested,
+}: {
+  installId: string | undefined;
   lastPortal: string | undefined;
+  onCancel: () => void;
   onRequested: () => void;
 }) {
+  const [installId, setInstallId] = useState<string | null>(given ?? null);
   const [areas, setAreas] = useState<string[]>([]);
   const [reason, setReason] = useState("");
   const [minutes, setMinutes] = useState<number>(60);
@@ -149,10 +248,26 @@ function RequestForm({
     mutation SupportSectionRequestMutation($input: RequestSupportSessionInput!) {
       requestSupportSession(input: $input) {
         id
+        install {
+          id
+          supportSessions {
+            id
+            status
+            requestedBy
+            areas
+            reason
+            durationMinutes
+            portalUrl
+            requestedAt
+            expiresAt
+            delivered
+          }
+        }
       }
     }
   `);
-  const submit = () =>
+  const submit = () => {
+    if (!installId) return;
     request({
       variables: { input: { installQid: installId, areas, reason, durationMinutes: minutes, portalUrl } },
       onCompleted: (_, errors) => {
@@ -160,15 +275,14 @@ function RequestForm({
           setError(errors[0].message);
           return;
         }
-        setError(null);
-        setAreas([]);
-        setReason("");
         onRequested();
       },
       onError: (e) => setError(e.message),
     });
+  };
   return (
     <Stack gap="xs">
+      {!given && <InstallSelect value={installId} onChange={setInstallId} />}
       <Group grow align="flex-start">
         <MultiSelect label="Areas" data={AREAS} value={areas} onChange={setAreas} placeholder="What you need to see" />
         <NumberInput
@@ -194,7 +308,10 @@ function RequestForm({
         </Alert>
       )}
       <Group justify="flex-end">
-        <Button loading={requesting} disabled={areas.length === 0 || !reason.trim()} onClick={submit}>
+        <Button variant="default" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button loading={requesting} disabled={!installId || areas.length === 0 || !reason.trim()} onClick={submit}>
           Ask for a session
         </Button>
       </Group>

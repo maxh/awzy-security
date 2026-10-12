@@ -1,27 +1,30 @@
 import { EmptyState, PageHeader, PageLoader, StatusBadge } from "@awzy/ui";
 import { Alert, Anchor, Button, Group, Table, Text } from "@mantine/core";
 import { IconLifebuoy } from "@tabler/icons-react";
-import { getRouteApi, Link } from "@tanstack/react-router";
+import { getRouteApi, Link, useRouter } from "@tanstack/react-router";
 import { Suspense, useState } from "react";
 import { graphql, type PreloadedQuery, useMutation, usePreloadedQuery } from "react-relay";
 
 import type { SupportPageQuery } from "./__generated__/SupportPageQuery.graphql";
 import type { SupportPageSignInMutation } from "./__generated__/SupportPageSignInMutation.graphql";
 import { formatTime, supportStatus } from "./format";
+import { AskForSupportButton } from "./SupportSection";
 
 const route = getRouteApi("/support");
 
 /**
  * Every install's support sessions (ADR 0095), newest first: what's waiting on a client, what's
- * open to sign in to now, and what ended. Each install's page is where a session is asked for.
+ * open to sign in to now, and what ended. A session can be asked for here or on the install's page.
  */
 export function SupportPage() {
   const queryRef = route.useLoaderData();
+  const router = useRouter();
   return (
     <>
       <PageHeader
         title="Support"
-        description="Support sessions across installs: waiting on the client's admins, approved and open to sign in to, and past ones. Ask for one on the install's page."
+        description="Support sessions across installs: waiting on the client's admins, approved and open to sign in to, and past ones."
+        actions={<AskForSupportButton onRequested={() => void router.invalidate()} />}
       />
       <Suspense fallback={<PageLoader />}>
         <Sessions queryRef={queryRef} />
@@ -75,7 +78,7 @@ function Sessions({ queryRef }: { queryRef: PreloadedQuery<SupportPageQuery> }) 
       <EmptyState
         icon={<IconLifebuoy size={28} stroke={1.5} />}
         title="No support sessions yet"
-        description="Ask an install's admins for one from the install's page."
+        description="Ask an install's admins for one with Ask for support."
       />
     );
   }
