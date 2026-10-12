@@ -56,6 +56,18 @@ groups:
           summary: "{{ $labels.job }} refused {{ $labels.caller }} calling {{ $labels.route }} ({{ $labels.reason }})"
           description: "unlisted: no access rule names the method, so every caller is refused. not_allowed: the caller isn't in the route's group in the chart."
 
+      # A step of awzy-reasoner's runs (every 15 minutes) that failed every time for an hour. A
+      # failed step only waits for the next run, so this is the only sign: risk scores going
+      # stale, nobody contained, or an empty Investigations page.
+      - alert: AwzyReasonerStepFailing
+        expr: |
+          sum by (job, step) (increase(awzy_reasoner_steps_total{outcome="failed"}[1h])) > 0
+          unless sum by (job, step) (increase(awzy_reasoner_steps_total{outcome="ok"}[1h])) > 0
+        labels: { severity: ticket }
+        annotations:
+          summary: "awzy-reasoner's {{ $labels.step }} step has failed every run for an hour"
+          description: "awzy-reasoner's log says why, as a warning on each run."
+
   # The platform plan's freshness targets, as the PDP sees them.
   - name: awzy-freshness
     rules:

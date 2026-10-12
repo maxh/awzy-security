@@ -78,6 +78,18 @@ right. The alert names the route, the reason, and the caller.
 - `not_allowed`: the caller isn't in the route's group, usually a chart setting that names who may
   call what. Check that the chart and bootstrap come from the same release.
 
+
+### AwzyReasonerStepFailing (ticket)
+
+A step of awzy-reasoner's runs has failed every time for an hour. Each failed run is a warning in
+awzy-reasoner's log saying why.
+
+- `scoring`: risk scores aren't updated, so the PDPs decide on old ones. Usually ClickHouse or
+  awzy-context is unreachable.
+- `containments`: nobody is contained automatically. Usually awzy-challenge or awzy-policy is
+  unreachable.
+- `investigations`: nobody is investigated. Often the model: its service refused the install's
+  identity, or the routing names a model it doesn't offer.
 ### AwzyPdpContainmentFeedStale (page)
 
 A PDP hasn't heard awzy-challenge's containment feed for over 2 seconds. Until it recovers, the
