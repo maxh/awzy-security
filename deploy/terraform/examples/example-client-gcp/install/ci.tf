@@ -9,8 +9,9 @@ locals {
     # Pull requests and main plan, without refreshing, to list what merging changes.
     plan = {
       subjects = ["ref:refs/heads/main", "pull_request"]
-      # Reads the project, the state, and the install's credentials, which bootstrap's plan reads.
-      roles = ["roles/viewer", "roles/storage.objectViewer"]
+      # Reads the project, the state, the signing keys' public halves, and the install's
+      # credentials, which bootstrap's plan reads.
+      roles = ["roles/viewer", "roles/storage.objectViewer", "roles/cloudkms.publicKeyViewer"]
     }
     # Only the example-gcp environment, which waits for a person's approval, applies.
     terraform = {

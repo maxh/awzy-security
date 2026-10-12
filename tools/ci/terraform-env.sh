@@ -33,11 +33,14 @@ if [ -n "${CLOUDFLARE_TOKEN:-}" ]; then printf '%s' "$CLOUDFLARE_TOKEN" > "$cf_t
 export TF_VAR_cloudflare_token_file="$cf_token"
 
 # Twelve-digit numbers are account IDs (and Google Cloud project numbers); never print one, nor
-# a Google Cloud deployment's project or state bucket.
+# a Google Cloud deployment's project or state bucket, nor a long opaque token: Google's errors
+# carry IDs that encode the resource's full name.
 redact() {
   local names=()
   for v in "${TF_VAR_project:-}" "${TF_VAR_state_bucket:-}"; do [ -z "$v" ] || names+=(-e "s/$v/<redacted>/g"); done
-  sed -E -e 's/[0-9]{12}/<account>/g' ${names[@]+"${names[@]}"}
+  # An encoded ID mixes capitals and digits, which resource addresses never do.
+  perl -pe 's{(?<![\w+/=-])(?=[\w+/=-]*[A-Z])(?=[\w+/=-]*[0-9])[\w+/=-]{32,}}{<redacted>}g' |
+    sed -E -e 's/[0-9]{12}/<account>/g' ${names[@]+"${names[@]}"}
 }
 
 # What a saved plan would change, one `<actions>\t<address>` line each.
