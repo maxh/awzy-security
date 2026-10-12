@@ -34,6 +34,7 @@ export default defineConfig({
             "workflows/approvers",
             "workflows/agent-builders",
             "workflows/platform-team",
+            "workflows/auditors",
           ],
         },
         {
