@@ -166,6 +166,7 @@ mod tests {
             on_behalf_of_policies: vec![],
             policy_version: 0,
             context: "{}".into(),
+            resource_attributes_from: String::new(),
         }
     }
 

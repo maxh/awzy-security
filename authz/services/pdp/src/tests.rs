@@ -659,3 +659,51 @@ async fn http_evaluation() {
     assert_eq!(decision["verdict"], "allow");
     assert_eq!(decision["mode"], "monitor");
 }
+
+/// A bundle can add an app-owned type (ADR 0108), and a check on it is decided on the attributes
+/// the enforcement point sent: no awzy-context lookup, no `unclassified`.
+#[test]
+fn an_app_owned_type_is_decided_on_the_enforcement_points_attributes() {
+    let schema = format!(
+        "{DEFAULT_SCHEMA}\n@awzy(\"app\")\nentity Customer {{ tenant: String }};\n\
+         action view_customer appliesTo {{ principal: [Human, ServiceAccount], resource: [Customer], context: RequestContext }};"
+    );
+    let policies = format!(
+        "{DEFAULT_POLICIES}\n@id(\"acme-support-views-acme\")\n\
+         permit (principal in Group::\"security\", action == Action::\"view_customer\", resource is Customer)\n\
+         when {{ resource.tenant == \"acme\" }};"
+    );
+    let pdp = Pdp::new(&schema, &policies).unwrap();
+    assert!(pdp.is_app_type("Customer") && !pdp.is_app_type("Resource"));
+    let decide = |tenant: &str| {
+        let entities = pdp
+            .entities(json!([
+                { "uid": { "type": "Human", "id": "alice" }, "attrs": {}, "parents": [{ "type": "Group", "id": "security" }] },
+                { "uid": { "type": "Group", "id": "security" }, "attrs": {}, "parents": [] },
+                { "uid": { "type": "Customer", "id": "c-1" }, "attrs": { "tenant": tenant }, "parents": [] },
+            ]))
+            .unwrap();
+        let check = Check {
+            principal: EntityRef::new("Human", "alice"),
+            action: "view_customer".into(),
+            resource: EntityRef::new("Customer", "c-1"),
+            context: json!({ "risk_score": 0 }).as_object().unwrap().clone(),
+            on_behalf_of: None,
+            human_present: None,
+            always_enforced: false,
+        };
+        pdp.decide(&check, &entities).unwrap()
+    };
+    let allowed = decide("acme");
+    assert_eq!((allowed.verdict, allowed.policies), (Verdict::Allow, vec!["acme-support-views-acme".to_string()]));
+    assert_eq!(decide("globex").verdict, Verdict::Deny);
+}
+
+/// A bundle that adds a type without marking it app-owned is refused when it's validated, as
+/// awzy-policy does on publishing.
+#[test]
+fn an_unmarked_added_type_fails_validation() {
+    let schema = format!("{DEFAULT_SCHEMA}\nentity Customer;");
+    let err = validate(&schema, DEFAULT_POLICIES).unwrap_err().to_string();
+    assert!(err.contains("mark it @awzy(\"app\")"), "{err}");
+}

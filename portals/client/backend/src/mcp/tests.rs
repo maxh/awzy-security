@@ -131,6 +131,7 @@ fn explains_a_delegated_denial_by_the_persons_check() {
         on_behalf_of_policies: vec![],
         policy_version: 0,
         context: "{}".into(),
+        resource_attributes_from: "awzy-context".into(),
     };
     let own = vec![decisions::PolicySource { id: "security-team-read".into(), source: String::new() }];
     let s = explain_sentence(&row, &own);

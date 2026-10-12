@@ -2,9 +2,16 @@ import { Code, Divider, Group, Stack, Text } from "@mantine/core";
 import type { ReactNode } from "react";
 import { graphql, useFragment, useLazyLoadQuery } from "react-relay";
 
-import type { DecisionDetail_decision$key } from "./__generated__/DecisionDetail_decision.graphql";
+import type { AttributesFrom, DecisionDetail_decision$key } from "./__generated__/DecisionDetail_decision.graphql";
 import type { DecisionDetailQuery } from "./__generated__/DecisionDetailQuery.graphql";
 import { entityLabel, formatTime, Hidden, prettyObject, VerdictBadge } from "./format";
+
+/** Whom a decision trusted for its resource's attributes (ADR 0108). */
+const ATTRIBUTES_FROM: Record<Exclude<AttributesFrom, "%future added value">, string> = {
+  AWZY_CONTEXT: "awzy-context (your connectors and classification)",
+  ENFORCEMENT_POINT: "the app that asked (its own data)",
+  DEFAULT: "nowhere: unknown to awzy, so the default tier",
+};
 
 /** Explains one decision: what was asked, the verdict, and the policies that produced it. */
 export function DecisionDetail({ id }: { id: string }) {
@@ -56,6 +63,7 @@ function DecisionView({ decision }: { decision: DecisionDetail_decision$key }) {
         mode
         challenges
         policyVersion
+        resourceAttributesFrom
         context
         determiningPolicies {
           id
@@ -81,6 +89,14 @@ function DecisionView({ decision }: { decision: DecisionDetail_decision$key }) {
         <Field label="Person present" value={d.humanPresent ? "yes" : "no"} />
         <Field label="Action" value={d.action} />
         <Field label="Resource" value={entityLabel(d.resource)} />
+        {d.resourceAttributesFrom && (
+          <Field
+            label="Its attributes from"
+            value={
+              d.resourceAttributesFrom === "%future added value" ? "unknown" : ATTRIBUTES_FROM[d.resourceAttributesFrom]
+            }
+          />
+        )}
         <Field
           label="Policy bundle"
           value={d.policyVersion === 0 ? "built-in defaults" : `version ${d.policyVersion}`}

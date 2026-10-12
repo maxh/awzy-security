@@ -7,6 +7,7 @@
 //! the resource lookup ([`resources`]). With awzy-challenge, contained principals are denied
 //! ([`containments`]) and enforced challenges are opened and honored once passed ([`challenges`]).
 
+pub mod app_types;
 pub mod challenges;
 pub mod containments;
 mod decision_log;
@@ -92,6 +93,9 @@ pub struct Pdp {
     knows_support_areas: bool,
     parsed: prepared::ParsedEntities,
     prepared: prepared::PreparedPolicies,
+    /// The bundle's app-owned entity types (ADR 0108), whose attributes come from the
+    /// enforcement point.
+    app_types: std::collections::BTreeSet<String>,
 }
 
 /// The PDP every request reads. Policy sync swaps in a new one without blocking readers.
@@ -123,6 +127,8 @@ pub fn validate(schema: &str, policies: &str) -> anyhow::Result<()> {
 impl Pdp {
     /// Parses and strictly validates `policies` against `schema`.
     pub fn new(schema: &str, policies: &str) -> anyhow::Result<Self> {
+        // Every type a bundle adds is marked app-owned, and none of awzy's are (ADR 0108).
+        let app_types = app_types::app_types(schema)?;
         let (schema, _warnings) = Schema::from_cedarschema_str(schema)?;
         let policies = PolicySet::from_str(policies)?;
         let result = Validator::new(schema.clone()).validate(&policies, ValidationMode::Strict);
@@ -163,7 +169,13 @@ impl Pdp {
             knows_mcp_client,
             knows_support_areas,
             knows_automation,
+            app_types,
         })
+    }
+
+    /// Whether `kind` is one of the bundle's app-owned entity types (ADR 0108).
+    pub fn is_app_type(&self, kind: &str) -> bool {
+        self.app_types.contains(kind)
     }
 
     pub fn with_version(mut self, version: i64) -> Self {
@@ -511,12 +523,16 @@ impl AppState {
         };
         // Loaded after the lookup, which may wait on awzy-context, so a sync isn't held up.
         let pdp = self.pdp.load_full();
+        let attributes_from = match &assembled {
+            Some(replay::Assembled::Ready { attributes_from, .. }) => *attributes_from,
+            _ => awzy_model::AttributesFrom::EnforcementPoint,
+        };
         let mut decision = match assembled {
             // A contained principal, or a delegated request for a contained person, is denied
             // before any policy is evaluated. The containment IDs explain it.
             None => Decision { policies: contained, ..replay::unregistered() },
             Some(replay::Assembled::Unregistered) => replay::unregistered(),
-            Some(replay::Assembled::Ready { entities, assignees, risk, automation }) => {
+            Some(replay::Assembled::Ready { entities, assignees, risk, automation, .. }) => {
                 let parties = challenges::parties(req, &entities);
                 let entities = pdp.entities(entities)?;
                 let facts = Facts { assignees: assignees.as_deref(), risk: Some(&risk), automation: Some(&automation) };
@@ -532,7 +548,10 @@ impl AppState {
         };
         decision.mode = mode;
         if let Some(log) = &self.log {
-            log.record(DecisionRecord::new(req, &decision, pdp.version(), chrono::Utc::now()));
+            log.record(
+                DecisionRecord::new(req, &decision, pdp.version(), chrono::Utc::now())
+                    .with_attributes_from(attributes_from),
+            );
         }
         Ok(decision)
     }

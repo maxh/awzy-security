@@ -54,6 +54,48 @@ when { context has on_behalf_of && !context.human_present && context.risk_score 
 
 Every field, with its type and who sets it: [Domain model](/reference/domain-model/#request-context).
 
+## Your app's own data
+
+awzy knows your people, groups, and agents from your IdP, and your documents from its connectors.
+An app you build may have data of its own that awzy will never hold, such as customers, accounts,
+or orders, with attributes only the app knows. Declare those types in your bundle's schema and
+mark them `@awzy("app")`:
+
+```cedar
+@awzy("app")
+entity Customer {
+  tenant: String,
+  plan: String,
+};
+
+action view_customer appliesTo {
+  principal: [Human, ServiceAccount],
+  resource: [Customer],
+  context: RequestContext,
+};
+```
+
+```cedar
+@id("support-views-their-tenant")
+permit (principal in Group::"support", action == Action::"view_customer", resource is Customer)
+when { resource.tenant == "acme" };
+```
+
+For a type marked this way, awzy decides on the attributes your app sends with the check. It
+doesn't look the resource up, and doesn't treat it as unclassified. For awzy's own types it
+never trusts what's sent: people and agents come from your IdP, and a `Resource` from awzy's
+connectors.
+
+- Every type you add has to be marked `@awzy("app")`, or publishing fails. That way a typo in a
+  type's name can't quietly trust the app.
+- awzy's own types (`Human`, `Group`, `ServiceAccount`, `Resource`, `McpServer`, `McpTool`,
+  `PortalArea`, `PortalField`) can't be marked.
+- Give your type a `sensitivity` attribute (`public`, `internal`, `confidential`, or
+  `crown_jewels`) and the base policies that read a tier apply to it too, such as agents acting
+  on their own never touching crown jewels.
+- Each decision says where its resource's attributes came from: the client portal's decision page
+  shows it as **Its attributes from**.
+
 ## Publishing
 
 Write a draft in the client portal's Policies page (or ask Awzy Bot for one), run a dry run to

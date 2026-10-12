@@ -19,6 +19,7 @@ const MIGRATIONS: &[(u32, &str, &str)] = &[
     (6, "human_policy_ids", include_str!("../migrations/0006_human_policy_ids.sql")),
     (7, "principal", include_str!("../migrations/0007_principal.sql")),
     (8, "by_resource", include_str!("../migrations/0008_by_resource.sql")),
+    (9, "attributes_from", include_str!("../migrations/0009_attributes_from.sql")),
 ];
 
 /// The tables whose rows expire after the install's retention.

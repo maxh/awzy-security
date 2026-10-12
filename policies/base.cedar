@@ -1,11 +1,14 @@
 // The static floor. Clients add their own bundles through awzy-policy.
+//
+// Policies that read `resource.sensitivity` without naming the resource's type test `has` first,
+// so a client's app-owned types (ADR 0108) needn't declare it; one that does gets these tiers too.
 
 @id("security-team-read")
 permit (principal in Group::"security", action == Action::"read", resource);
 
 @id("engineering-read-internal")
 permit (principal in Group::"engineering", action == Action::"read", resource)
-when { resource.sensitivity == "public" || resource.sensitivity == "internal" };
+when { resource has sensitivity && (resource.sensitivity == "public" || resource.sensitivity == "internal") };
 
 // Resources from connectors (ADR 0061): their owner and whoever they're shared with, including
 // through their folders, read them; owners and writers change them.
@@ -132,7 +135,7 @@ unless { context has approving_for && principal.owner != context.approving_for }
 // Crown jewels need a person's approval, whatever a client's policies let agents approve.
 @id("crown-jewels-need-a-human-to-approve")
 forbid (principal is ServiceAccount, action == Action::"approve", resource)
-when { resource.sensitivity == "crown_jewels" };
+when { resource has sensitivity && resource.sensitivity == "crown_jewels" };
 
 // Deprovisioned in the IdP: no access, whatever their token says (ADR 0031).
 @id("deactivated-humans")
@@ -156,7 +159,7 @@ when { resource.sensitivity == "crown_jewels" && context.risk_score > 40 };
 // AI acting on its own authority never touches crown jewels.
 @id("unattended-ai-no-crown-jewels")
 forbid (principal is ServiceAccount, action, resource)
-when { principal.ai && !(context has on_behalf_of) && resource.sensitivity == "crown_jewels" };
+when { principal.ai && !(context has on_behalf_of) && resource has sensitivity && resource.sensitivity == "crown_jewels" };
 
 // Software working with a person's own credentials, such as a coding agent signed in as them, is
 // that person to awzy (ADR 0085). When awzy-reasoner scores someone's requests as an agent's, their
@@ -170,7 +173,7 @@ forbid (
   resource
 )
 when {
-  context has automation_score && context.automation_score > 80 &&
+  context has automation_score && context.automation_score > 80 && resource has sensitivity &&
   (resource.sensitivity == "confidential" || resource.sensitivity == "crown_jewels")
 };
 

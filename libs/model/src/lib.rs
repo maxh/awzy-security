@@ -305,6 +305,41 @@ pub struct DecisionRecord {
     pub policy_version: i64,
     /// The request context as JSON text.
     pub context: String,
+    /// Where the resource's attributes came from (ADR 0108): `awzy-context`,
+    /// `enforcement-point`, or `default`. Empty in records from before it was kept.
+    #[serde(default)]
+    pub resource_attributes_from: String,
+}
+
+/// Where a decision's resource attributes came from (ADR 0108), so an explanation says whom it
+/// trusted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AttributesFrom {
+    /// awzy-context's resource, which replaced anything the enforcement point sent (ADR 0044).
+    AwzyContext,
+    /// The enforcement point: an app-owned type, or a type awzy-context doesn't hold.
+    #[default]
+    EnforcementPoint,
+    /// Neither knew the resource: the default tier, marked `unclassified`.
+    Default,
+}
+
+impl AttributesFrom {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AttributesFrom::AwzyContext => "awzy-context",
+            AttributesFrom::EnforcementPoint => "enforcement-point",
+            AttributesFrom::Default => "default",
+        }
+    }
+
+    /// From a decision record's text; anything else (an older record's empty) is None.
+    pub fn parse(s: &str) -> Option<Self> {
+        [AttributesFrom::AwzyContext, AttributesFrom::EnforcementPoint, AttributesFrom::Default]
+            .into_iter()
+            .find(|a| a.as_str() == s)
+    }
 }
 
 impl DecisionRecord {
@@ -339,7 +374,14 @@ impl DecisionRecord {
             on_behalf_of_policies,
             policy_version,
             context: Value::Object(req.context.clone()).to_string(),
+            resource_attributes_from: String::new(),
         }
+    }
+
+    /// The same record, saying where its resource's attributes came from (ADR 0108).
+    pub fn with_attributes_from(mut self, from: AttributesFrom) -> Self {
+        self.resource_attributes_from = from.as_str().to_string();
+        self
     }
 }
 

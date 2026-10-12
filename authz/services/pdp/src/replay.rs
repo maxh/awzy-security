@@ -26,6 +26,8 @@ pub(crate) enum Assembled {
         risk: std::collections::HashMap<String, i64>,
         /// And their automation scores (ADR 0085).
         automation: std::collections::HashMap<String, i64>,
+        /// Where the resource's attributes came from (ADR 0108).
+        attributes_from: awzy_model::AttributesFrom,
     },
 }
 
@@ -45,7 +47,13 @@ pub(crate) async fn assemble(
     let merged = resources.merge(entities, &req.resource).await?;
     let risk = principals.risk_of(&who);
     let automation = principals.automation_of(&who);
-    Ok(Assembled::Ready { entities: merged.entities, assignees: merged.assignees, risk, automation })
+    Ok(Assembled::Ready {
+        entities: merged.entities,
+        assignees: merged.assignees,
+        risk,
+        automation,
+        attributes_from: merged.from,
+    })
 }
 
 /// The decision for a service account awzy-context doesn't know.
@@ -63,7 +71,7 @@ pub(crate) fn unregistered() -> Decision {
 fn evaluate(pdp: &Pdp, req: &Check, assembled: &Assembled) -> anyhow::Result<Decision> {
     match assembled {
         Assembled::Unregistered => Ok(unregistered()),
-        Assembled::Ready { entities, assignees, risk, automation } => {
+        Assembled::Ready { entities, assignees, risk, automation, .. } => {
             let facts =
                 crate::Facts { assignees: assignees.as_deref(), risk: Some(risk), automation: Some(automation) };
             pdp.decide_with(req, &pdp.entities(entities.clone())?, &facts, &Default::default())
