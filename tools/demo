@@ -347,7 +347,7 @@ partner() {
       AWZY_TEST_APP_NAME=$app AWZY_TEST_APP_ISSUER=$idp/apps/$app AWZY_TEST_APP_JWKS_URL=$idp/apps/$app/jwks \
       AWZY_TEST_APP_AUDIENCE=awzy-agents AWZY_TEST_AGENT_TOKEN="$token" AWZY_TEST_AGENT=$agent AWZY_TEST_HUMAN="$human" \
       AWZY_TEST_INTAKE_URL=http://127.0.0.1:$INTAKE AWZY_TEST_INTAKE_TOKEN=$intake_token \
-      AWZY_TEST_SYSTEM="$app-$language" bazel run -q "$lib" 2>"$state/logs/partner-$language.log" || failed=1
+      AWZY_TEST_SYSTEM="$app-$language" bazel run --noshow_progress "$lib" 2>"$state/logs/partner-$language.log" || failed=1
   done
 
   # Each library's plan results reached the events log as listed accesses, linked to their plans.
