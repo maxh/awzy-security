@@ -7,8 +7,11 @@ agents, deployed single-tenant inside each client's cloud (AWS or Google Cloud; 
 
 **Try it:** [aws.demo.awzysecurity.com](https://aws.demo.awzysecurity.com), a live install with a
 synthetic 200-person company. Sign in as any sample person (no password) and look around; it's
-read-only, so changes are turned off. Or run it
-on your machine: `tools/demo up` ([below](#run-it-locally)).
+read-only, so changes are turned off. Or run it on your machine: `tools/demo up`
+([below](#run-it-locally)).
+
+**Read about it:** [docs.awzysecurity.com](https://docs.awzysecurity.com), from the concepts to
+installing it in your own cloud.
 
 ## What it does
 
