@@ -127,3 +127,62 @@ pub struct EntityUid {
     pub kind: String,
     pub id: String,
 }
+
+/// Who an investigation is about.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InvestigationPrincipal {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub id: String,
+}
+
+/// Something an investigation's finding rests on, and why.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Cited {
+    pub id: String,
+    #[serde(default)]
+    pub why: String,
+}
+
+/// One of awzy-reasoner's investigations, as awzy-context keeps it (ADR 0071).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Investigation {
+    pub qid: String,
+    pub principal: InvestigationPrincipal,
+    pub trigger: String,
+    pub floor: i32,
+    pub status: String,
+    pub verdict: String,
+    pub risk: i32,
+    pub summary: String,
+    #[serde(default)]
+    pub evidence: Vec<Cited>,
+    pub containment: String,
+    #[serde(default)]
+    pub notes: Vec<String>,
+    pub model: String,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub started_at: DateTime<Utc>,
+    pub finished_at: DateTime<Utc>,
+    /// Who closed it (an actor's typed text, ADR 0060), when, and why; null while open.
+    pub closed_by: Option<String>,
+    pub closed_at: Option<DateTime<Utc>>,
+    pub close_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InvestigationOne {
+    pub investigation: Investigation,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InvestigationList {
+    pub investigations: Vec<Investigation>,
+}
+
+/// Closing an investigation once a person has reviewed it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CloseInvestigation {
+    pub reason: String,
+}

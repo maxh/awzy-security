@@ -81,7 +81,8 @@ impl ClientPortalMcp {
             return Err(ErrorData::invalid_params(format!("status is needs_review, done, or closed, not {s:?}"), None));
         }
         let limit = p.limit.unwrap_or(20).min(200) as i32;
-        let list = crate::investigations::list(self.context()?, p.status.as_deref(), limit).await.map_err(internal)?;
+        let list =
+            crate::investigations::list(self.context_api()?, p.status.as_deref(), limit).await.map_err(internal)?;
         Ok(Json(InvestigationList { investigations: list.iter().map(crate::investigations::to_json).collect() }))
     }
 
@@ -96,7 +97,7 @@ impl ClientPortalMcp {
     ) -> Result<Json<InvestigationOut>, ErrorData> {
         let viewer = self.allow(&parts, PortalAction::View, PortalArea::Investigations).await?;
         self.record(&viewer, "get_investigation");
-        let found = crate::investigations::get(self.context()?, &p.investigation_qid).await.map_err(internal)?;
+        let found = crate::investigations::get(self.context_api()?, &p.investigation_qid).await.map_err(internal)?;
         Ok(Json(InvestigationOut { investigation: found.as_ref().map(crate::investigations::to_json) }))
     }
 
@@ -473,6 +474,13 @@ impl ClientPortalMcp {
             .ok_or_else(|| ErrorData::internal_error("ClickHouse is not configured (AWZY_CLICKHOUSE_URL)", None))
     }
 
+    fn context_api(&self) -> Result<&awzy_context_api::ContextApi, ErrorData> {
+        self.services
+            .context_api
+            .as_ref()
+            .ok_or_else(|| ErrorData::internal_error("awzy-context is not configured (AWZY_CONTEXT_ADDR)", None))
+    }
+
     fn context(&self) -> Result<&crate::directory::ContextClient, ErrorData> {
         self.services
             .context
@@ -512,7 +520,7 @@ pub(crate) fn principal_from_snapshot(snapshot: &serde_json::Value, kind: &str, 
     PrincipalOut { entity, groups, risk_score }
 }
 
-fn internal(e: anyhow::Error) -> ErrorData {
+fn internal(e: impl std::fmt::Display) -> ErrorData {
     ErrorData::internal_error(e.to_string(), None)
 }
 
