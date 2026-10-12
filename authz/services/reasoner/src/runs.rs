@@ -103,6 +103,9 @@ pub fn record(f: &Flagged, model: &str, started_at: DateTime<Utc>, run: &Run) ->
 #[derive(Debug, clickhouse::Row, serde::Deserialize)]
 struct DecisionRow {
     id: String,
+    // Selected as at_text: an alias named `at` would stand for the column in WHERE, comparing a
+    // string with a time.
+    #[serde(rename = "at_text")]
     at: String,
     on_behalf_of_type: String,
     on_behalf_of_id: String,
@@ -116,6 +119,9 @@ struct DecisionRow {
 #[derive(Debug, clickhouse::Row, serde::Deserialize)]
 struct EventRow {
     id: String,
+    // Selected as at_text: an alias named `at` would stand for the column in WHERE, comparing a
+    // string with a time.
+    #[serde(rename = "at_text")]
     at: String,
     source: String,
     system: String,
@@ -126,7 +132,7 @@ struct EventRow {
 }
 
 const DECISIONS: &str = "
-SELECT toString(id) AS id, toString(at) AS at, on_behalf_of_type, on_behalf_of_id, action, resource_type,
+SELECT toString(id) AS id, toString(at) AS at_text, on_behalf_of_type, on_behalf_of_id, action, resource_type,
        resource_id, verdict, mode
 FROM decisions
 WHERE principal_type = ? AND principal_id = ?
@@ -136,7 +142,7 @@ LIMIT ?";
 
 // The principal's own events, and its agents' on its behalf.
 const EVENTS: &str = "
-SELECT toString(id) AS id, toString(at) AS at, source, system, action, resource_type, resource_id, outcome
+SELECT toString(id) AS id, toString(at) AS at_text, source, system, action, resource_type, resource_id, outcome
 FROM events
 WHERE ((principal_type = ? AND principal_id = ?) OR (on_behalf_of_type = ? AND on_behalf_of_id = ?))
   AND at > fromUnixTimestamp64Milli(?, 'UTC') AND at <= fromUnixTimestamp64Milli(?, 'UTC')
@@ -416,5 +422,66 @@ mod tests {
     fn long_text_is_cut_at_a_character() {
         assert_eq!(truncate("héllo", 2), "hé…");
         assert_eq!(truncate("hi", 5), "hi");
+    }
+
+    /// With --config=local-stack: the case's queries run against ClickHouse and find the day's rows.
+    #[tokio::test]
+    async fn the_cases_queries_read_the_last_day_from_clickhouse() {
+        let Ok(url) = std::env::var("AWZY_TEST_CLICKHOUSE_URL") else {
+            eprintln!("skipping: AWZY_TEST_CLICKHOUSE_URL is not set");
+            return;
+        };
+        let database = format!("test_{}", uuid::Uuid::now_v7().simple());
+        let admin = clickhouse::Client::default().with_url(&url).with_user("awzy").with_password("awzy");
+        admin.query(&format!("CREATE DATABASE {database}")).execute().await.unwrap();
+        let ch = admin.clone().with_database(&database);
+        let settings = awzy_clickhouse::Settings {
+            kafka_brokers: "localhost:1".into(),
+            decisions_topic: format!("unused.{database}"),
+            events_topic: format!("unused-events.{database}"),
+            plans_topic: format!("unused-plans.{database}"),
+            consumer_group: database.clone(),
+        };
+        awzy_clickhouse::migrate(&ch, &settings).await.unwrap();
+
+        let as_of = Utc::now();
+        let (now, end, start) = (
+            as_of.timestamp_millis() - 1000,
+            as_of.timestamp_millis(),
+            (as_of - chrono::Duration::days(1)).timestamp_millis(),
+        );
+        ch.query(&format!(
+            "INSERT INTO decisions (id, at, principal_type, principal_id, resource_type, resource_id, verdict) VALUES
+             (generateUUIDv4(), fromUnixTimestamp64Milli({now}, 'UTC'), 'Human', 'sam', 'Resource', 'payments', 'deny')"
+        ))
+        .execute()
+        .await
+        .unwrap();
+        ch.query(&format!(
+            "INSERT INTO events (id, at, principal_type, principal_id, resource_type, resource_id) VALUES
+             (generateUUIDv4(), fromUnixTimestamp64Milli({now}, 'UTC'), 'Human', 'sam', 'Resource', 'holdings')"
+        ))
+        .execute()
+        .await
+        .unwrap();
+
+        let decisions: Vec<DecisionRow> =
+            ch.query(DECISIONS).bind("Human").bind("sam").bind(start).bind(end).bind(10).fetch_all().await.unwrap();
+        let events: Vec<EventRow> = ch
+            .query(EVENTS)
+            .bind("Human")
+            .bind("sam")
+            .bind("Human")
+            .bind("sam")
+            .bind(start)
+            .bind(end)
+            .bind(10)
+            .fetch_all()
+            .await
+            .unwrap();
+        admin.query(&format!("DROP DATABASE {database}")).execute().await.unwrap();
+        assert_eq!((decisions.len(), decisions[0].resource_id.as_str()), (1, "payments"));
+        assert_eq!((events.len(), events[0].resource_id.as_str()), (1, "holdings"));
+        assert!(!decisions[0].at.is_empty());
     }
 }
