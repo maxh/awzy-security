@@ -71,3 +71,14 @@ variable "grafana_admin_user_ids" {
   type        = list(string)
   default     = []
 }
+
+variable "vertex_project" {
+  description = "The Google Cloud project whose Vertex AI runs investigations' model (the Google Cloud demo's)"
+  type        = string
+}
+
+variable "vertex_api_key" {
+  description = "An API key bound to a service account in vertex_project that may only call models (roles/aiplatform.user)"
+  type        = string
+  sensitive   = true
+}
