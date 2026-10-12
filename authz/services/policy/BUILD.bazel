@@ -11,7 +11,8 @@ awzy_service(
     # An admin runs break-glass in awzy-policy's pod (kubectl exec), so it ships with it.
     image_binaries = ["awzy-break-glass"],
     # Embedded by sqlx::migrate!.
-    compile_data = glob(["migrations/*.sql"]),
+    # The tests check every method in policy.proto has an access rule.
+    compile_data = glob(["migrations/*.sql"]) + ["//authz/libs/proto:protos"],
     visibility = ["//tools:client_side"],
     deps = [
         "//authz/libs/proto",
