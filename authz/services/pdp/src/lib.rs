@@ -340,7 +340,9 @@ impl Pdp {
                 match kinds {
                     // And only in front of something policy would otherwise allow: passing a
                     // challenge on a request nothing permits would still end in a deny.
-                    Some(kinds) if !kinds.is_empty() && self.allowed_without_challenges(&req.action, &request, entities) => {
+                    Some(kinds)
+                        if !kinds.is_empty() && self.allowed_without_challenges(&req.action, &request, entities) =>
+                    {
                         Verdict::Challenge { challenges: kinds.into_iter().collect() }
                     }
                     _ => Verdict::Deny,

@@ -34,7 +34,8 @@ pub(crate) struct ParsedEntities {
 
 impl ParsedEntities {
     pub(crate) fn new(schema: &Schema) -> anyhow::Result<Self> {
-        let actions = if groups_actions(schema)? { schema.action_entities()?.into_iter().collect() } else { Vec::new() };
+        let actions =
+            if groups_actions(schema)? { schema.action_entities()?.into_iter().collect() } else { Vec::new() };
         Ok(Self { parsed: RwLock::default(), assembled: RwLock::default(), actions })
     }
 
