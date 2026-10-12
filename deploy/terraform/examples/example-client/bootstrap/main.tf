@@ -148,7 +148,10 @@ module "bootstrap" {
   demo_data     = true
   demo_activity = true
   mcp_gateway   = { upstreams = [] }
-  tracing       = local.otlp_endpoint == null ? null : { otlp_endpoint = local.otlp_endpoint }
+  # awzy-reasoner investigates the people the scenarios flag (ADR 0071), with Claude on Bedrock.
+  investigations = true
+  llm_model      = { api = "converse", model_id = "us.anthropic.claude-opus-5-5", cache_points = true }
+  tracing        = local.otlp_endpoint == null ? null : { otlp_endpoint = local.otlp_endpoint }
 }
 
 variable "chart_version" {

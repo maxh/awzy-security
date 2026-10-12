@@ -20,7 +20,10 @@ Set the model in the API it speaks, in that API's own terms, with `llm_model`:
 
 **On AWS:** any model on Amazon Bedrock, through Bedrock's Converse API. First request access to
 the model in the install account's Bedrock console, in the install's region. Some models are
-reached through a cross-region inference profile, an ID starting `us.`:
+reached through a cross-region inference profile, an ID starting `us.`. Bedrock serves those
+from other regions, so if a service control policy denies requests outside the install's region,
+exempt calls through such a profile: add `"ArnNotLike": { "bedrock:InferenceProfileArn":
+"arn:aws:bedrock:*:*:inference-profile/us.*" }` to the deny statement's conditions.
 
 ```hcl
 llm_model = { api = "converse", model_id = "us.anthropic.claude-opus-5-5", cache_points = true }
@@ -32,7 +35,7 @@ first in the project's Vertex AI Model Garden. Requests go to Vertex AI's `globa
 keep them in one region, set the cloud layer's `model_region` (for example `us-east5`).
 
 ```hcl
-llm_model = { api = "gemini", model = "gemini-2.5-pro", thinking_level = "low" }
+llm_model = { api = "gemini", model = "gemini-2.5-pro" }
 # or
 llm_model = { api = "anthropic_messages", model = "claude-opus-5-5" }
 ```

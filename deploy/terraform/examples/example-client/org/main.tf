@@ -50,8 +50,13 @@ resource "aws_organizations_policy" "region_lock" {
         "organizations:*", "route53:*", "route53domains:*", "sso:*", "sts:*", "support:*",
         "trustedadvisor:*", "waf:*", "wafv2:*",
       ]
-      Resource  = "*"
-      Condition = { StringNotEquals = { "aws:RequestedRegion" = [var.region] } }
+      Resource = "*"
+      Condition = {
+        StringNotEquals = { "aws:RequestedRegion" = [var.region] }
+        # Bedrock serves Claude through cross-region inference profiles: a call to one in this
+        # region runs the model in another, which is allowed only through the profile.
+        ArnNotLike = { "bedrock:InferenceProfileArn" = "arn:aws:bedrock:*:*:inference-profile/us.*" }
+      }
     }]
   })
 }

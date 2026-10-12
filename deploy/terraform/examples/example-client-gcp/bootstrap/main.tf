@@ -112,6 +112,9 @@ module "bootstrap" {
   demo_data     = true
   demo_activity = true
   mcp_gateway   = { upstreams = [] }
+  # Investigations, with Gemini on Vertex AI (ADR 0071, 0114).
+  investigations = true
+  llm_model      = { api = "gemini", model = "gemini-2.5-pro" }
 }
 
 output "scim" {
