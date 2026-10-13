@@ -12,6 +12,20 @@ metadata:
 spec:
   podSelector: {}
   policyTypes: [Ingress]
+---
+# The metrics port, and only it, from anywhere: a managed scraper (Amazon Managed Prometheus's)
+# connects from the cluster's subnets, not from a pod, and holds no token. The port serves counts
+# and latencies alone (ADR 0068, 0123).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: metrics
+  namespace: {{ $ns }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - ports: [{ port: metrics, protocol: TCP }]
 {{- end }}
 ---
 # Enforcement points call the PDP from anywhere in the cluster.

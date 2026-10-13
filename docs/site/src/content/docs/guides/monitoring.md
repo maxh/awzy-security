@@ -3,7 +3,8 @@ title: Monitoring and alerts
 description: What awzy's dashboard and alerts watch, and what to do when each alert fires.
 ---
 
-Every awzy service serves Prometheus metrics at `/metrics`. awzy ships one Grafana dashboard and a
+Every awzy service serves Prometheus metrics at `/metrics` on its `metrics` port (9090), which the
+install's network policies let any scraper reach. awzy ships one Grafana dashboard and a
 set of alert rules for them, in
 [deploy/observability](https://github.com/maxh/awzy-security/tree/main/deploy/observability).
 On AWS, the `aws/monitoring` module runs Amazon Managed Prometheus with a scraper for the cluster

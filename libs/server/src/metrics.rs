@@ -215,6 +215,11 @@ impl Requests {
 static REQUESTS: LazyLock<Requests> = LazyLock::new(Requests::default);
 
 /// Adds `/metrics` and times every route already on `app`. Call it last, so every route is timed.
+/// `/metrics` and nothing else, for the metrics port (ADR 0123).
+pub fn routes() -> Router {
+    Router::new().route("/metrics", get(metrics))
+}
+
 pub fn with_metrics(app: Router) -> Router {
     app.route_layer(axum::middleware::from_fn(track)).route("/metrics", get(metrics))
 }
@@ -305,6 +310,17 @@ mod tests {
         assert!(out.contains("x_seconds_bucket{a=\"b\",le=\"0.1\"} 2\n"), "{out}");
         assert!(out.contains("x_seconds_bucket{a=\"b\",le=\"+Inf\"} 3\n"), "{out}");
         assert!(out.contains("x_seconds_count{a=\"b\"} 3\n"), "{out}");
+    }
+
+    #[tokio::test]
+    async fn the_metrics_port_serves_metrics_and_nothing_else() {
+        let app = routes();
+        let res = app.clone().oneshot(Request::get("/metrics").body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        for path in ["/healthz", "/v1/access/evaluation", "/debug/profile"] {
+            let res = app.clone().oneshot(Request::get(path).body(Body::empty()).unwrap()).await.unwrap();
+            assert_eq!(res.status(), StatusCode::NOT_FOUND, "{path} isn't on the metrics port");
+        }
     }
 
     #[tokio::test]
