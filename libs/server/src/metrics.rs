@@ -9,7 +9,7 @@ use std::{
     collections::HashMap,
     fmt::Write,
     sync::{
-        atomic::{AtomicU64, Ordering::Relaxed},
+        atomic::{AtomicI64, AtomicU64, Ordering::Relaxed},
         Arc, LazyLock, Mutex, RwLock,
     },
     time::{Duration, Instant},
@@ -112,20 +112,26 @@ impl Counter {
 /// the seconds since, and the failures since the process started.
 pub struct LastSuccess {
     started: Instant,
-    /// Milliseconds after `started`, plus one; 0 means never.
-    at_ms: AtomicU64,
+    /// Milliseconds after `started`, negative for a success before it (one a peer passed on);
+    /// `i64::MIN` means never.
+    at_ms: AtomicI64,
     failures: Counter,
 }
 
 impl Default for LastSuccess {
     fn default() -> Self {
-        Self { started: Instant::now(), at_ms: AtomicU64::new(0), failures: Counter::new() }
+        Self { started: Instant::now(), at_ms: AtomicI64::new(i64::MIN), failures: Counter::new() }
     }
 }
 
 impl LastSuccess {
     pub fn succeeded(&self) {
-        self.at_ms.store(self.started.elapsed().as_millis() as u64 + 1, Relaxed);
+        self.succeeded_ago(Duration::ZERO);
+    }
+
+    /// A success `age` ago, as when the state came from a peer that had it that long.
+    pub fn succeeded_ago(&self, age: Duration) {
+        self.at_ms.store(millis(self.started.elapsed()).saturating_sub(millis(age)), Relaxed);
     }
 
     pub fn failed(&self) {
@@ -134,14 +140,17 @@ impl LastSuccess {
 
     /// Seconds since the last success, or since the process started if it never succeeded.
     pub fn age(&self) -> Duration {
-        let at = Duration::from_millis(self.at_ms.load(Relaxed).saturating_sub(1));
-        self.started.elapsed().saturating_sub(at)
+        let at = match self.at_ms.load(Relaxed) {
+            i64::MIN => 0,
+            at => at,
+        };
+        Duration::from_millis(u64::try_from(millis(self.started.elapsed()).saturating_sub(at)).unwrap_or(0))
     }
 
     /// `<name>_age_seconds` and `<name>_failures_total`. Nothing until the loop has run once, so
     /// a sync a deployment doesn't use never looks stale.
     pub fn render(&self, out: &mut String, name: &str, help: &str) {
-        if self.at_ms.load(Relaxed) == 0 && self.failures.get() == 0 {
+        if self.at_ms.load(Relaxed) == i64::MIN && self.failures.get() == 0 {
             return;
         }
         let _ = writeln!(
@@ -153,6 +162,10 @@ impl LastSuccess {
             writeln!(out, "# HELP {name}_failures_total Times {help} failed.\n# TYPE {name}_failures_total counter");
         let _ = writeln!(out, "{name}_failures_total {}", self.failures.get());
     }
+}
+
+fn millis(d: Duration) -> i64 {
+    i64::try_from(d.as_millis()).unwrap_or(i64::MAX)
 }
 
 /// Past this many route, method, and status combinations, new ones count as route `other`, so
@@ -321,6 +334,14 @@ mod tests {
         s.render(&mut out, "awzy_x_sync", "the sync");
         assert!(out.contains("awzy_x_sync_failures_total 1\n"), "{out}");
         assert!(out.contains("awzy_x_sync_age_seconds 0."), "{out}");
+    }
+
+    #[test]
+    fn a_success_passed_on_keeps_its_age() {
+        let s = LastSuccess::default();
+        s.succeeded_ago(Duration::from_secs(90));
+        assert!(s.age() >= Duration::from_secs(90), "older than this process: {:?}", s.age());
+        assert!(s.age() < Duration::from_secs(91));
     }
 
     #[test]

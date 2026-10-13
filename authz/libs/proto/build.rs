@@ -6,7 +6,12 @@ use std::{env, path::PathBuf};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
     let fds = protox::compile(
-        ["awzy/authz/v1/authz.proto", "awzy/challenge/v1/challenge.proto", "awzy/policy/v1/policy.proto"],
+        [
+            "awzy/authz/v1/authz.proto",
+            "awzy/challenge/v1/challenge.proto",
+            "awzy/pdp/v1/peer.proto",
+            "awzy/policy/v1/policy.proto",
+        ],
         [&root],
     )?;
     tonic_prost_build::configure().compile_fds(fds)?;

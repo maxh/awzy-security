@@ -14,6 +14,7 @@ mod decision_log;
 mod enforcement;
 mod grpc;
 pub mod metrics;
+pub mod peer;
 pub mod plan;
 mod prepared;
 pub mod principals;
@@ -111,6 +112,9 @@ pub struct Pdp {
     /// The bundle's app-owned entity types (ADR 0108), whose attributes come from the
     /// enforcement point.
     app_types: std::collections::BTreeSet<String>,
+    /// The bundle as awzy-policy signed it, for a starting peer to verify (ADR 0119). None for
+    /// the built-in defaults.
+    signed: Option<Arc<awzy_authz_proto::policy::v1::PolicyBundle>>,
 }
 
 /// The PDP every request reads. Policy sync swaps in a new one without blocking readers.
@@ -190,6 +194,7 @@ impl Pdp {
             knows_support_areas,
             knows_automation,
             app_types,
+            signed: None,
         })
     }
 
@@ -205,6 +210,16 @@ impl Pdp {
 
     pub fn version(&self) -> i64 {
         self.version
+    }
+
+    pub fn with_signed(mut self, bundle: awzy_authz_proto::policy::v1::PolicyBundle) -> Self {
+        self.signed = Some(Arc::new(bundle));
+        self
+    }
+
+    /// The bundle in force as awzy-policy signed it, if it came from awzy-policy.
+    pub fn signed(&self) -> Option<Arc<awzy_authz_proto::policy::v1::PolicyBundle>> {
+        self.signed.clone()
     }
 
     pub fn with_defaults() -> anyhow::Result<Self> {
@@ -663,6 +678,8 @@ pub fn router(state: AppState) -> Router {
         .with_state(state.clone())
         .merge(grpc::router(state.clone()))
         .route_layer(axum::middleware::from_fn_with_state(guard, awzy_service_auth::require))
+        // Only the install's backend, under its own guard (ADR 0119).
+        .merge(peer::router(state))
 }
 
 async fn evaluate(

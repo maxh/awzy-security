@@ -9,6 +9,7 @@ use std::{
     },
 };
 
+use awzy_authz_proto::policy::v1::EnforcementSetting;
 use awzy_model::{EnforcementMode, EntityRef};
 
 /// An action's or a tool's mode, and when it was set (Unix seconds; `i64::MIN` when unsigned).
@@ -27,6 +28,15 @@ pub struct Enforcement {
     changed_at: AtomicI64,
     /// Modes of actions and tools that have been switched, by scope (`action:write`).
     scoped: RwLock<HashMap<String, ScopedMode>>,
+    /// The settings in force as awzy-policy signed them, for a starting peer (ADR 0119).
+    signed: RwLock<Signed>,
+}
+
+/// The install's setting and each scope's, as awzy-policy sent them.
+#[derive(Debug, Default, Clone)]
+pub struct Signed {
+    pub install: Option<EnforcementSetting>,
+    pub scoped: HashMap<String, EnforcementSetting>,
 }
 
 impl Enforcement {
@@ -37,6 +47,7 @@ impl Enforcement {
             synced: AtomicBool::new(true),
             changed_at: AtomicI64::new(i64::MIN),
             scoped: RwLock::default(),
+            signed: RwLock::default(),
         }
     }
 
@@ -48,6 +59,7 @@ impl Enforcement {
             synced: AtomicBool::new(false),
             changed_at: AtomicI64::new(i64::MIN),
             scoped: RwLock::default(),
+            signed: RwLock::default(),
         }
     }
 
@@ -112,6 +124,18 @@ impl Enforcement {
 
     pub fn is_ready(&self) -> bool {
         self.synced.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn signed(&self) -> Signed {
+        self.signed.read().unwrap_or_else(PoisonError::into_inner).clone()
+    }
+
+    pub(crate) fn set_signed_install(&self, setting: EnforcementSetting) {
+        self.signed.write().unwrap_or_else(PoisonError::into_inner).install = Some(setting);
+    }
+
+    pub(crate) fn set_signed_scoped(&self, scoped: HashMap<String, EnforcementSetting>) {
+        self.signed.write().unwrap_or_else(PoisonError::into_inner).scoped = scoped;
     }
 }
 
