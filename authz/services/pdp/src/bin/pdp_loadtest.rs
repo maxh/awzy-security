@@ -3,12 +3,21 @@
 //! delegated (two Cedar evaluations), and prints throughput and latency percentiles. Each client
 //! has its own connection.
 //!
+//! With a fourth argument, a rate in checks per second, it's open loop: checks are sent on a fixed
+//! schedule however slowly the PDP answers, spread over the clients' connections, as independent
+//! enforcement points send them. Without it, each client waits for its answer before the next
+//! check, so a slow PDP is sent less, and the latencies understate the tail (coordinated
+//! omission). Open loop measures each check from when it was due, and prints a line a minute, so
+//! a run long enough to use up burstable nodes' CPU credits shows when latency changes.
+//!
 //! Entities are sent inline, as enforcement points do until awzy-context exists.
 //!
 //! In a cluster it runs from the PDP's image and sends the pod's service token for `awzy-pdp`
 //! (ADR 0054), mounted as awzy's workloads mount theirs; without one it sends none.
 
 use std::time::{Duration, Instant};
+
+use tokio::sync::mpsc;
 
 use awzy_authz_proto::{
     authz::v1::{authorizer_client::AuthorizerClient, CheckRequest, Entity, EntityRef},
@@ -72,6 +81,7 @@ async fn main() -> anyhow::Result<()> {
     let endpoint = args.get(1).cloned().unwrap_or_else(|| "http://127.0.0.1:8082".into());
     let clients: usize = args.get(2).map(|s| s.parse()).transpose()?.unwrap_or(16);
     let seconds: u64 = args.get(3).map(|s| s.parse()).transpose()?.unwrap_or(10);
+    let rate: Option<f64> = args.get(4).map(|s| s.parse()).transpose()?;
 
     // One connection per client, as separate enforcement points have: a Service spreads
     // connections across PDP pods, not requests, so one shared connection would load one pod.
@@ -85,6 +95,41 @@ async fn main() -> anyhow::Result<()> {
         client.clone().check(request(i)).await?;
     }
 
+    let (all, errors) = match rate {
+        Some(rate) => open_loop(connections, rate, seconds).await?,
+        None => closed_loop(connections, seconds).await?,
+    };
+    if all.is_empty() {
+        anyhow::bail!("no successful checks ({errors} errors)");
+    }
+    match rate {
+        Some(rate) => println!(
+            "endpoint {endpoint}, open loop at {rate:.0}/s over {clients} connections, {seconds}s, 1 in 3 delegated (two Cedar checks); latency from when each check was due"
+        ),
+        None => println!("endpoint {endpoint}, {clients} clients, {seconds}s, 1 in 3 delegated (two Cedar checks)"),
+    }
+    println!("checks   {} ok, {errors} errors, {:.0}/s", all.len(), all.len() as f64 / seconds as f64);
+    for (label, p) in [("p50", 0.50), ("p95", 0.95), ("p99", 0.99), ("p99.9", 0.999)] {
+        println!("{label:8} {:.2} ms", percentile(&all, p).as_secs_f64() * 1000.0);
+    }
+    println!("max      {:.2} ms", all.last().copied().unwrap_or_default().as_secs_f64() * 1000.0);
+    Ok(())
+}
+
+type Client = AuthorizerClient<awzy_service_auth::AuthChannel>;
+
+/// Retried once like an enforcement point does, so a rollout counts what they'd see.
+async fn check(client: &Client, i: usize) -> bool {
+    let ask = || {
+        let mut client = client.clone();
+        async move { client.check(request(i)).await }
+    };
+    awzy_service_auth::retry_once_if_unanswered(ask).await.is_ok()
+}
+
+/// Each client sends its next check when the last is answered. Sorted latencies, and errors.
+async fn closed_loop(connections: Vec<Client>, seconds: u64) -> anyhow::Result<(Vec<Duration>, usize)> {
+    let clients = connections.len();
     let deadline = Instant::now() + Duration::from_secs(seconds);
     let mut workers = Vec::new();
     for (w, client) in connections.into_iter().enumerate() {
@@ -94,14 +139,10 @@ async fn main() -> anyhow::Result<()> {
             let mut i = w;
             while Instant::now() < deadline {
                 let start = Instant::now();
-                // Retried once like an enforcement point does, so a rollout counts what they'd see.
-                let ask = || {
-                    let mut client = client.clone();
-                    async move { client.check(request(i)).await }
-                };
-                match awzy_service_auth::retry_once_if_unanswered(ask).await {
-                    Ok(_) => latencies.push(start.elapsed()),
-                    Err(_) => errors += 1,
+                if check(&client, i).await {
+                    latencies.push(start.elapsed());
+                } else {
+                    errors += 1;
                 }
                 i += clients;
             }
@@ -116,14 +157,79 @@ async fn main() -> anyhow::Result<()> {
         errors += e;
     }
     all.sort();
-    if all.is_empty() {
-        anyhow::bail!("no successful checks ({errors} errors)");
+    Ok((all, errors))
+}
+
+/// Checks are due every `1 / rate` seconds whatever the PDP does, and each is timed from when it
+/// was due, so time spent queued behind a slow PDP counts. Sorted latencies, and errors.
+async fn open_loop(connections: Vec<Client>, rate: f64, seconds: u64) -> anyhow::Result<(Vec<Duration>, usize)> {
+    anyhow::ensure!(rate > 0.0, "the rate is in checks per second, above 0");
+    let (tx, mut rx) = mpsc::unbounded_channel::<Option<Duration>>();
+    let start = Instant::now();
+    let total = (rate * seconds as f64) as usize;
+    let sender = tokio::spawn(async move {
+        for i in 0..total {
+            let due = start + Duration::from_secs_f64(i as f64 / rate);
+            // Timers tick in milliseconds: checks that fall due within one tick go out together,
+            // each still timed from its own due time.
+            tokio::time::sleep_until(due.into()).await;
+            let client = connections[i % connections.len()].clone();
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                let ok = check(&client, i).await;
+                let _ = tx.send(ok.then(|| due.elapsed()));
+            });
+        }
+    });
+
+    // A line a minute: the checks answered in it, each timed from when it was due.
+    let mut all = Vec::with_capacity(total);
+    let mut window = Vec::new();
+    let (mut errors, mut window_errors) = (0usize, 0usize);
+    let mut window_end = start + Duration::from_secs(60);
+    println!("minute   checks/s  errors    p50 ms    p99 ms  p99.9 ms    max ms");
+    let mut minute = 1;
+    while let Some(latency) = rx.recv().await {
+        while Instant::now() >= window_end {
+            report_minute(&mut window, &mut window_errors, minute, 60.0);
+            window_end += Duration::from_secs(60);
+            minute += 1;
+        }
+        match latency {
+            Some(l) => {
+                window.push(l);
+                all.push(l);
+            }
+            None => {
+                window_errors += 1;
+                errors += 1;
+            }
+        }
+        if all.len() + errors == total {
+            break;
+        }
     }
-    println!("endpoint {endpoint}, {clients} clients, {seconds}s, 1 in 3 delegated (two Cedar checks)");
-    println!("checks   {} ok, {errors} errors, {:.0}/s", all.len(), all.len() as f64 / seconds as f64);
-    for (label, p) in [("p50", 0.50), ("p95", 0.95), ("p99", 0.99), ("p99.9", 0.999)] {
-        println!("{label:8} {:.2} ms", percentile(&all, p).as_secs_f64() * 1000.0);
+    // The last minute is usually part of one.
+    let last = 60.0 - window_end.saturating_duration_since(Instant::now()).as_secs_f64();
+    report_minute(&mut window, &mut window_errors, minute, last.max(1.0));
+    sender.await?;
+    all.sort();
+    Ok((all, errors))
+}
+
+/// Prints one minute's line and starts the next.
+fn report_minute(window: &mut Vec<Duration>, errors: &mut usize, minute: u64, seconds: f64) {
+    window.sort();
+    if let Some(max) = window.last() {
+        println!(
+            "{minute:6} {:10.0} {errors:7} {:9.2} {:9.2} {:9.2} {:9.2}",
+            window.len() as f64 / seconds,
+            percentile(window, 0.50).as_secs_f64() * 1000.0,
+            percentile(window, 0.99).as_secs_f64() * 1000.0,
+            percentile(window, 0.999).as_secs_f64() * 1000.0,
+            max.as_secs_f64() * 1000.0,
+        );
     }
-    println!("max      {:.2} ms", all.last().copied().unwrap_or_default().as_secs_f64() * 1000.0);
-    Ok(())
+    window.clear();
+    *errors = 0;
 }
