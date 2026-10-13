@@ -49,7 +49,7 @@ variable "deletion_protection" {
 }
 
 variable "model_region" {
-  description = "Where Awzy Bot and investigations call Claude on Vertex AI (ADR 0114): global, which routes to any region with capacity, or a region that offers Claude (e.g. us-east5) to keep requests in it"
+  description = "Where Awzy Bot and investigations call Claude on Vertex AI (ADR 0120): global, which routes to any region with capacity, or a region that offers Claude (e.g. us-east5) to keep requests in it"
   type        = string
   default     = "global"
 }

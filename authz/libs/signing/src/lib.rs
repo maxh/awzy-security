@@ -79,7 +79,7 @@ pub fn fallback_payload(version: i64, changed_by: &str, changed_at_unix: i64, co
     format!("awzy.fallback.v1\n{version}\n{changed_by}\n{changed_at_unix}\n{content}\n").into_bytes()
 }
 
-/// The bytes a model routing setting signs (ADR 0114): its version, who set it and when, in Unix
+/// The bytes a model routing setting signs (ADR 0120): its version, who set it and when, in Unix
 /// seconds, and the SHA-256 of its JSON as stored. The version lets a service refuse an older
 /// routing offered as the current one.
 pub fn model_routing_payload(version: i64, changed_by: &str, changed_at_unix: i64, routing_json: &str) -> Vec<u8> {

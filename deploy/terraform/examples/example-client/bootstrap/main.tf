@@ -154,7 +154,7 @@ module "bootstrap" {
   # awzy-reasoner investigates the people the scenarios flag (ADR 0071), and Awzy Bot answers
   # (ADR 0048). This account can't use Bedrock's models yet, so with Gemini on the Google Cloud
   # demo's Vertex AI, through an API key bound to a service account that may only call models
-  # (ADR 0114): Pro to investigate, Flash to chat. The read-only demo limits the bot's turns.
+  # (ADR 0120): Pro to investigate, Flash to chat. The read-only demo limits the bot's turns.
   investigations  = true
   awzy_bot        = true
   llm_connections = { vertex = { kind = "vertex", project = var.vertex_project, api_key_env = "AWZY_LLM_KEY_VERTEX" } }

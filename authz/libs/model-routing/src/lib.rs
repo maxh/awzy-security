@@ -1,4 +1,4 @@
-//! The model routing setting from awzy-policy (ADR 0114), taken by a service's [`ModelRouter`]:
+//! The model routing setting from awzy-policy (ADR 0120), taken by a service's [`ModelRouter`]:
 //! the client portal for Awzy Bot, awzy-reasoner for investigations. A routing is used only when
 //! it's newer than the one held, signed by the install's key, and names only the connections and
 //! APIs this service has; otherwise the one held stays, and the refusal is logged.

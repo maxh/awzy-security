@@ -1,4 +1,4 @@
-//! The model routing setting (ADR 0114): which models Awzy Bot and investigations use, kept and
+//! The model routing setting (ADR 0120): which models Awzy Bot and investigations use, kept and
 //! signed like the outage fallback. awzy-policy holds it as the JSON the portal checked against
 //! the install's connections; it only makes sure it's a JSON object.
 

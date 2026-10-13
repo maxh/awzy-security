@@ -25,7 +25,7 @@ terraform {
 
 locals {
   c = var.install_contract
-  # What the install's models can reach, and the routing to start with (ADR 0114): llm_routing,
+  # What the install's models can reach, and the routing to start with (ADR 0120): llm_routing,
   # or llm_model on the cloud's own service for both features.
   # Without conditionals between differently shaped values, which OpenTofu refuses: the routing
   # travels as JSON ("" for none), and the connections are filtered rather than chosen.
@@ -217,7 +217,7 @@ resource "kubernetes_secret_v1" "policy_verify" {
 }
 
 # The same public key for the client portal, which takes Awzy Bot's model routing only as
-# awzy-policy signed it (ADR 0114).
+# awzy-policy signed it (ADR 0120).
 resource "kubernetes_secret_v1" "policy_verify_portal" {
   metadata {
     name      = "awzy-policy-verify"
@@ -226,7 +226,7 @@ resource "kubernetes_secret_v1" "policy_verify_portal" {
   data = { "verify.pem" = local.c.policy_signing.public_key_pem }
 }
 
-# API keys for model services beyond the cloud's own (ADR 0114), for the portal (Awzy Bot) and
+# API keys for model services beyond the cloud's own (ADR 0120), for the portal (Awzy Bot) and
 # awzy-reasoner (investigations).
 resource "kubernetes_secret_v1" "llm_keys" {
   for_each = length(nonsensitive(keys(var.llm_api_keys))) == 0 ? toset([]) : toset(["portal", "system"])

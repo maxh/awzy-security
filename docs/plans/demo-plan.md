@@ -133,7 +133,7 @@ checked request every ~10 s (≈300/s) and about 20% of agents make ~2 tool call
 | Sustained load | 1,500 checks/s for 30 minutes, PDP p99 under 10 ms, client-side |
 | Burst | 5,000 checks/s for 1 minute, p99 under 25 ms, no errors |
 | Breaking point | Raise load until p99 passes 50 ms or errors appear; record where |
-| Resource lookups | Cache misses p99 under 3 ms (Valkey); hit rate over 90% with skewed access (a few hot documents, a long tail) |
+| Resource lookups | Cache misses p99 under 3 ms (awzy-context); hit rate over 90% with skewed access (a few hot documents, a long tail) |
 | PDP memory | 10,000 people and 500 agents: under 512 MB per pod, startup under 30 s; 100,000 people measured, not pass/fail |
 | Ingest | 1,500 decisions/s and 3,000 events/s into ClickHouse, consumer lag under 60 s |
 | Connector load | 1,000,000 resources into awzy-context in under 2 hours |
@@ -173,8 +173,8 @@ Each step is usable on its own and shows up in the demo:
    accounts, sent over SCIM and the service-account API. The Directory page shows Larkspur.
 2. **Resources in awzy-context**: the model, storage, and API, and the `synthetic` connector
    writing resources and work items.
-3. **Resources at decision time**: the PDP loads resource entities by ID (Valkey with a local
-   cache); the gateway sends IDs, not attributes.
+3. **Resources at decision time**: the PDP loads resource entities by ID (from awzy-context, with a
+   local cache; ADR 0044); the gateway sends IDs, not attributes.
 4. **Classification and work assignments**: metadata-first sensitivity, and a work-assignment
    attribute policies can use.
 5. **Activity**: the MCP driver and intake events; monitor mode fills with real decisions.

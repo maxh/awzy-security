@@ -30,7 +30,7 @@ use crate::{
     Services,
 };
 
-/// Awzy Bot's route in the install's model routing (ADR 0114).
+/// Awzy Bot's route in the install's model routing (ADR 0120).
 pub const FEATURE: &str = "awzy_bot";
 
 /// Where Awzy Bot's conversations get their model: the install's router, a scripted model in tests.

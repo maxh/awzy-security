@@ -112,7 +112,7 @@ module "bootstrap" {
   demo_data     = true
   demo_activity = true
   mcp_gateway   = { upstreams = [] }
-  # Investigations and Awzy Bot, with Gemini on Vertex AI (ADR 0071, 0048, 0114): Pro to
+  # Investigations and Awzy Bot, with Gemini on Vertex AI (ADR 0071, 0048, 0120): Pro to
   # investigate, Flash to chat, which answers in seconds. The read-only demo limits the bot's turns.
   investigations = true
   awzy_bot       = true

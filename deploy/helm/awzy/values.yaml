@@ -161,7 +161,7 @@ reporter:
     requests: { cpu: 10m, memory: 32Mi }
     limits: { memory: 64Mi }
 
-# Models for Awzy Bot and investigations (ADR 0114). Bootstrap sets these.
+# Models for Awzy Bot and investigations (ADR 0120). Bootstrap sets these.
 models:
   # What the install can reach, by name: { kind: bedrock, region }, { kind: vertex, project,
   # region }, { kind: openai, url, api_key_env }, or { kind: anthropic, api_key_env }. A route can

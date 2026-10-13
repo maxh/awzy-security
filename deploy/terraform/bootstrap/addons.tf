@@ -195,7 +195,7 @@ resource "helm_release" "config" {
         hostname  = var.ingress.hostname
         awzyBot   = { enabled = var.awzy_bot && local.llm_routing_json != "" }
       }
-      # What the models can reach, and the routing to start with (ADR 0114).
+      # What the models can reach, and the routing to start with (ADR 0120).
       models = {
         connections = local.llm_connections
         routing     = local.llm_routing_json == "" ? null : jsondecode(local.llm_routing_json)

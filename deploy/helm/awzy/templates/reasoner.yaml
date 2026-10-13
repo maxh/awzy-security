@@ -26,7 +26,7 @@
 {{- end }}{{- end }}
 {{- $volumes := list -}}
 {{- $mounts := list -}}
-{{- /* Investigations' model routing comes signed from awzy-policy (ADR 0114). */ -}}
+{{- /* Investigations' model routing comes signed from awzy-policy (ADR 0120). */ -}}
 {{- if $inv.enabled }}
 {{- $env = append $env (dict "name" "AWZY_POLICY_VERIFY_KEY_FILE" "value" "/var/run/secrets/awzy/policy-verify/verify.pem") }}
 {{- $volumes = append $volumes (dict "name" "policy-verify" "secret" (dict "secretName" (required "policy.verifyKeySecret is required" .Values.policy.verifyKeySecret))) }}
