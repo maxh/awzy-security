@@ -41,6 +41,12 @@ use crate::{
 };
 
 const MAX_BODY: usize = 4 * 1024 * 1024;
+/// A check that takes this long to fail, as one does when the PDP's Service has no ready pods and
+/// connections hang, pauses checks for `PDP_PAUSE`: calls in the pause go straight to the outage
+/// rules instead of each waiting the same timeout (#353). A quick failure doesn't pause, so a
+/// refused call is asked again at once.
+const SLOW_FAILURE: std::time::Duration = std::time::Duration::from_millis(250);
+const PDP_PAUSE: std::time::Duration = std::time::Duration::from_secs(1);
 const REQUEST_HEADERS: &[&str] = &["content-type", "accept", "mcp-session-id", "mcp-protocol-version", "last-event-id"];
 const RESPONSE_HEADERS: &[&str] = &["content-type", "mcp-session-id", "cache-control"];
 
@@ -55,6 +61,8 @@ struct Inner {
     /// The last mode the PDP reported. If the PDP becomes unreachable, a monitoring install
     /// keeps allowing; an enforcing one (or one never heard from) falls back to `outage`.
     last_seen_monitor: AtomicBool,
+    /// Until when tool calls skip the PDP, after a check was slow to fail.
+    pdp_paused_until: std::sync::Mutex<Option<std::time::Instant>>,
     /// When the PDP last allowed each (caller, tool), for replaying during an outage.
     allows: AllowCache,
     /// Who is contained, so an outage never replays an allow for them (ADR 0030).
@@ -219,12 +227,22 @@ impl GatewayState {
             pdp: pdp.into(),
             upstream,
             last_seen_monitor: AtomicBool::new(false),
+            pdp_paused_until: std::sync::Mutex::new(None),
             allows,
             containments,
             fallback: Arc::new(Fallback::awaiting()),
             sessions: SessionClients::default(),
             activity: awzy_activity::ActivityLog::off(),
         })))
+    }
+
+    fn pdp_paused(&self) -> bool {
+        let until = *self.0.pdp_paused_until.lock().unwrap_or_else(|e| e.into_inner());
+        until.is_some_and(|until| std::time::Instant::now() < until)
+    }
+
+    fn pause_pdp(&self) {
+        *self.0.pdp_paused_until.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now() + PDP_PAUSE);
     }
 
     /// Records each forwarded tool call in awzy-intake (ADR 0084). Call before sharing the state.
@@ -463,7 +481,15 @@ async fn check(
         let (mut pdp, req) = (state.0.pdp.next(), req.clone());
         async move { pdp.check(req).await }
     };
-    match awzy_service_auth::retry_once_if_unanswered(ask).await {
+    let started = std::time::Instant::now();
+    let result = match state.pdp_paused() {
+        true => Err(tonic::Status::unavailable("awzy-pdp didn't answer a moment ago")),
+        false => awzy_service_auth::retry_once_if_unanswered(ask).await,
+    };
+    if result.is_err() && started.elapsed() >= SLOW_FAILURE {
+        state.pause_pdp();
+    }
+    match result {
         Ok(res) => {
             let res = res.into_inner();
             // UNSPECIFIED counts as enforce: never skip enforcement by accident.

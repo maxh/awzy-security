@@ -90,19 +90,33 @@ async fn gateway_with_containments(
     upstream_url: String,
     containments: Arc<Containments>,
 ) -> (Router, Arc<AtomicBool>, GatewayState) {
+    let (app, down, _, state) = gateway_with_slow_outage(mode, upstream_url, containments).await;
+    (app, down, state)
+}
+
+/// As above, and how long the switched-off PDP takes to answer, in milliseconds: an outage
+/// whose calls wait before they fail.
+async fn gateway_with_slow_outage(
+    mode: awzy_model::EnforcementMode,
+    upstream_url: String,
+    containments: Arc<Containments>,
+) -> (Router, Arc<AtomicBool>, Arc<std::sync::atomic::AtomicU64>, GatewayState) {
     std::env::set_var(SECRET_ENV, SECRET);
     let enforcement = Arc::new(awzy_pdp::Enforcement::fixed(mode));
     let down = Arc::new(AtomicBool::new(false));
     let switch = down.clone();
+    let delay = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let wait = delay.clone();
     let pdp_app = awzy_pdp::router(
         awzy_pdp::AppState::new(awzy_pdp::shared(awzy_pdp::Pdp::with_defaults().unwrap()))
             .with_enforcement(enforcement)
             .with_resources(Arc::new(awzy_pdp::resources::Resources::from_context(start_context().await))),
     )
     .layer(axum::middleware::from_fn(move |req: Request<Body>, next: axum::middleware::Next| {
-        let down = switch.clone();
+        let (down, wait) = (switch.clone(), wait.clone());
         async move {
             if down.load(Ordering::Acquire) {
+                tokio::time::sleep(std::time::Duration::from_millis(wait.load(Ordering::Acquire))).await;
                 return axum::response::IntoResponse::into_response(StatusCode::SERVICE_UNAVAILABLE);
             }
             next.run(req).await
@@ -141,7 +155,7 @@ async fn gateway_with_containments(
     let state = GatewayState::with_containments(config, pdp, containments)
         .unwrap()
         .with_fallback(Arc::new(Fallback::fixed(drive_tiers())));
-    (router(state.clone()), down, state)
+    (router(state.clone()), down, delay, state)
 }
 
 /// What the client portal would set for the test's drive: three tools by name, the rest of
@@ -365,6 +379,39 @@ async fn outage_replays_only_recent_allows_for_listed_fail_open_tools() {
         vec!["read_file", "delete_file", "list_files", "read_file"],
         "during the outage only alice's replayed read reached the upstream"
     );
+}
+
+#[tokio::test]
+async fn a_slow_outage_costs_one_wait_then_calls_fall_back_at_once() {
+    let seen = Upstream::default();
+    let (app, pdp_down, delay, _) = gateway_with_slow_outage(
+        awzy_model::EnforcementMode::Enforce,
+        start_upstream(seen.clone()).await,
+        Arc::new(Containments::none()),
+    )
+    .await;
+    let alice = token("alice", None, &["security"]);
+    call(&app, Some(&alice), "read_file").await;
+
+    delay.store(400, Ordering::Release);
+    pdp_down.store(true, Ordering::Release);
+    let first = std::time::Instant::now();
+    let (_, replayed) = call(&app, Some(&alice), "read_file").await;
+    assert_eq!(replayed["result"]["content"][0]["text"], "ran read_file");
+    assert!(first.elapsed() >= std::time::Duration::from_millis(400), "the first call waits for the PDP");
+
+    let next = std::time::Instant::now();
+    for _ in 0..5 {
+        let (_, replayed) = call(&app, Some(&alice), "read_file").await;
+        assert_eq!(replayed["result"]["content"][0]["text"], "ran read_file", "the outage rules still apply");
+    }
+    assert!(next.elapsed() < std::time::Duration::from_millis(300), "the next ones don't wait, for a second");
+
+    // Back after the pause: the PDP is asked again.
+    pdp_down.store(false, Ordering::Release);
+    tokio::time::sleep(PDP_PAUSE).await;
+    let (_, ok) = call(&app, Some(&alice), "delete_file").await;
+    assert_eq!(ok["result"]["content"][0]["text"], "ran delete_file", "decided by the PDP, not the fallback");
 }
 
 /// The drill from the platform plan's Phase 3: an outage never replays an allow for an
