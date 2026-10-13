@@ -30,8 +30,7 @@ impl PlanLog {
     pub fn start_kafka(brokers: awzy_kafka::Brokers, topic: String) -> Arc<Self> {
         let (tx, rx) = mpsc::channel(BUFFER);
         tokio::spawn(async move {
-            let partition =
-                crate::decision_log::until_connected("plans", || connect_partition(&brokers, &topic)).await;
+            let partition = crate::decision_log::until_connected("plans", || connect_partition(&brokers, &topic)).await;
             send(rx, partition).await;
         });
         Arc::new(Self { tx })

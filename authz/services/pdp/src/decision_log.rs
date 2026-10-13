@@ -77,23 +77,14 @@ async fn connect_partitions(brokers: &awzy_kafka::Brokers, topic: &str) -> anyho
     // Metadata for a new topic can lag its creation; wait until every partition shows up.
     let mut partitions = Default::default();
     for _ in 0..50 {
-        partitions = client
-            .list_topics()
-            .await?
-            .into_iter()
-            .find(|t| t.name == topic)
-            .map(|t| t.partitions)
-            .unwrap_or_default();
+        partitions =
+            client.list_topics().await?.into_iter().find(|t| t.name == topic).map(|t| t.partitions).unwrap_or_default();
         if partitions.len() >= expected {
             break;
         }
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
-    anyhow::ensure!(
-        partitions.len() >= expected,
-        "topic {topic} has {} partitions after waiting",
-        partitions.len()
-    );
+    anyhow::ensure!(partitions.len() >= expected, "topic {topic} has {} partitions after waiting", partitions.len());
     let mut clients = Vec::with_capacity(partitions.len());
     for p in partitions {
         clients.push(client.partition_client(topic.to_string(), p, UnknownTopicHandling::Retry).await?);
