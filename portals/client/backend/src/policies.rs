@@ -356,9 +356,8 @@ pub(crate) mod tests {
         CreateDraftResponse, EnforcementSetting, GetActiveResponse, GetBundleResponse, GetEnforcementRequest,
         GetEnforcementResponse, GetModelRoutingRequest, GetModelRoutingResponse, GetOutageFallbackRequest,
         GetOutageFallbackResponse, ListBreakGlassRollbacksResponse, ListBundlesResponse, ListEnforcementChangesRequest,
-        ListEnforcementChangesResponse,
-        ModelRouting, PublishResponse, SetEnforcementRequest, SetEnforcementResponse, SetModelRoutingRequest,
-        SetModelRoutingResponse, SetOutageFallbackRequest, SetOutageFallbackResponse,
+        ListEnforcementChangesResponse, ModelRouting, PublishResponse, SetEnforcementRequest, SetEnforcementResponse,
+        SetModelRoutingRequest, SetModelRoutingResponse, SetOutageFallbackRequest, SetOutageFallbackResponse,
     };
     use tonic::{Request, Response, Status};
 

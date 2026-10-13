@@ -60,7 +60,8 @@ mod tests {
         let Some(store) = test_store().await else { return };
         let good = store.create_draft(awzy_pdp::DEFAULT_SCHEMA, awzy_pdp::DEFAULT_POLICIES, "alice").await.unwrap();
         let good = store.publish(good.id, "alice").await.unwrap();
-        let bad = store.create_draft(awzy_pdp::DEFAULT_SCHEMA, "forbid (principal, action, resource);", "bob").await.unwrap();
+        let bad =
+            store.create_draft(awzy_pdp::DEFAULT_SCHEMA, "forbid (principal, action, resource);", "bob").await.unwrap();
         let bad = store.publish(bad.id, "bob").await.unwrap();
         assert!(store.break_glass_events(50).await.unwrap().is_empty());
 
