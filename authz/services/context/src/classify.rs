@@ -134,7 +134,10 @@ mod tests {
             "in the Payroll folder"
         );
         let found = &march.classification.as_ref().unwrap().data_types;
-        assert_eq!((found[0].by.as_str(), found[0].reason.as_str()), ("metadata", "in a folder about \"payroll\" (Payroll)"));
+        assert_eq!(
+            (found[0].by.as_str(), found[0].reason.as_str()),
+            ("metadata", "in a folder about \"payroll\" (Payroll)")
+        );
 
         let misc = get("synthetic:doc:misc").await;
         assert_eq!(misc.classification.as_ref().unwrap().sensitivity, None, "nothing decides it");

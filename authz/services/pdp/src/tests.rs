@@ -70,11 +70,11 @@ fn a_policy_can_decide_on_the_kind_of_data_a_resource_holds() {
         forbid (principal, action == Action::"read", resource)
         when { resource has data_types && resource.data_types.contains("customer_personal") };
     "#;
-    let doc = |id: &str, types: &[&str]| {
-        json!({ "uid": { "type": "Resource", "id": id }, "attrs": { "sensitivity": "confidential", "data_types": types }, "parents": [] })
-    };
+    let doc = |id: &str, types: &[&str]| json!({ "uid": { "type": "Resource", "id": id }, "attrs": { "sensitivity": "confidential", "data_types": types }, "parents": [] });
     let pdp = Pdp::new(DEFAULT_SCHEMA, policies).unwrap();
-    let entities = pdp.entities(json!([doc("holdings", &["customer_personal", "financial"]), doc("budget", &["financial"])])).unwrap();
+    let entities = pdp
+        .entities(json!([doc("holdings", &["customer_personal", "financial"]), doc("budget", &["financial"])]))
+        .unwrap();
     let challenged = Verdict::Challenge { challenges: Challenges::of(ChallengeKind::Justification) };
     assert_eq!(pdp.decide(&read("bob", "holdings", 1), &entities).unwrap().verdict, challenged);
     assert_eq!(pdp.decide(&read("bob", "budget", 1), &entities).unwrap().verdict, Verdict::Allow);

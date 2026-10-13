@@ -160,7 +160,11 @@ impl LookupQuery {
             Some(c) => c
                 .data_types
                 .iter()
-                .map(|d| ResourceDataType { data_type: d.data_type.clone(), by: d.by.clone(), reason: d.reason.clone() })
+                .map(|d| ResourceDataType {
+                    data_type: d.data_type.clone(),
+                    by: d.by.clone(),
+                    reason: d.reason.clone(),
+                })
                 .collect(),
             None => r
                 .sent_data_types()
