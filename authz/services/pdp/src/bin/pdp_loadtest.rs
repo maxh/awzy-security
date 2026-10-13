@@ -64,10 +64,8 @@ fn known_resources() -> &'static [String] {
 /// Request `i` of the mix: humans and a delegated service account, across sensitivities.
 fn request(i: usize) -> CheckRequest {
     let resources = [("design-doc", "internal"), ("q3-strategy", "confidential"), ("board-deck", "crown_jewels")];
-    let mut entities = vec![
-        entity("Human", "alice", json!({}), &["security"]),
-        entity("Human", "bob", json!({}), &["engineering"]),
-    ];
+    let mut entities =
+        vec![entity("Human", "alice", json!({}), &["security"]), entity("Human", "bob", json!({}), &["engineering"])];
     let known = known_resources();
     let res_id = match known.is_empty() {
         true => {
