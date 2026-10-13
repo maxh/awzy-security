@@ -45,8 +45,12 @@ async fn main() -> anyhow::Result<()> {
             Ok(text) => awzy_pdp::resources::StaleLimits::parse(&text)?,
             Err(_) => awzy_pdp::resources::StaleLimits::default(),
         };
-        let resources =
-            Arc::new(awzy_pdp::resources::Resources::from_context(endpoint.clone()).with_stale_limits(limits));
+        let mut resources = awzy_pdp::resources::Resources::from_context(endpoint.clone()).with_stale_limits(limits);
+        // A resource this PDP hasn't cached can come from a running PDP while awzy-context is down.
+        if let Ok(peers) = std::env::var("AWZY_PDP_PEER_ADDR") {
+            resources = resources.with_peers(peers);
+        }
+        let resources = Arc::new(resources);
         state = state.with_principals(principals.clone()).with_resources(resources.clone());
         // Both wait on awzy-context for changes rather than polling (ADR 0077).
         tokio::spawn(awzy_pdp::principals::sync_principals(principals, endpoint, Duration::from_secs(5)));

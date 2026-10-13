@@ -12,6 +12,9 @@ service PdpPeerService {
   // Everything this PDP decides from, as its sources sent it, each with its age. An input the
   // PDP hasn't loaded, or doesn't use, is unset.
   rpc GetState(GetStateRequest) returns (GetStateResponse);
+  // One resource this PDP has cached, for a PDP whose own cache lacks it while awzy-context
+  // can't be reached. Only an entry within its sensitivity tier's limit is passed on.
+  rpc GetResource(GetResourceRequest) returns (GetResourceResponse);
 }
 
 message GetStateRequest {}
@@ -46,4 +49,20 @@ message ContainmentsState {
   repeated awzy.challenge.v1.Containment active = 2;
   // Since the feed was last heard from.
   uint64 age_ms = 3;
+}
+
+message GetResourceRequest {
+  // The resource's ID in the client's systems, as checks name it.
+  string resource_id = 1;
+}
+
+message GetResourceResponse {
+  // False when this PDP has nothing usable cached for the resource.
+  bool cached = 1;
+  // False when awzy-context didn't know the resource.
+  bool known = 2;
+  // awzy-context's /v1/resources/{id}/entities body, when known.
+  bytes entities_json = 3;
+  // Since this PDP loaded it from awzy-context.
+  uint64 age_ms = 4;
 }
