@@ -142,23 +142,23 @@ export function Approval({
           </Text>
         )}
         {!readOnly && (
-        <Group gap="xs" align="flex-end">
-          <TextInput
-            size="xs"
-            placeholder="Note (optional)"
-            value={note}
-            onChange={(e) => setNote(e.currentTarget.value)}
-            style={{ flex: "1 1 200px" }}
-          />
-          <Group gap="xs" wrap="nowrap">
-            <Button size="xs" color="teal" loading={isSaving} onClick={() => decide(true)}>
-              Approve
-            </Button>
-            <Button size="xs" color="red" variant="light" loading={isSaving} onClick={() => decide(false)}>
-              Reject
-            </Button>
+          <Group gap="xs" align="flex-end">
+            <TextInput
+              size="xs"
+              placeholder="Note (optional)"
+              value={note}
+              onChange={(e) => setNote(e.currentTarget.value)}
+              style={{ flex: "1 1 200px" }}
+            />
+            <Group gap="xs" wrap="nowrap">
+              <Button size="xs" color="teal" loading={isSaving} onClick={() => decide(true)}>
+                Approve
+              </Button>
+              <Button size="xs" color="red" variant="light" loading={isSaving} onClick={() => decide(false)}>
+                Reject
+              </Button>
+            </Group>
           </Group>
-        </Group>
         )}
         {error && (
           <Text size="sm" c="red">
@@ -272,18 +272,24 @@ function Containments({
                     {c.createdAt ? `, ${formatTime(c.createdAt)}` : ""}
                   </Table.Td>
                   {!readOnly && (
-                  <Table.Td>
-                    <Group gap="xs" wrap="nowrap">
-                      {c.monitor && (
-                        <Button size="xs" color="red" variant="light" loading={isContaining} onClick={() => confirm(c)}>
-                          Contain
+                    <Table.Td>
+                      <Group gap="xs" wrap="nowrap">
+                        {c.monitor && (
+                          <Button
+                            size="xs"
+                            color="red"
+                            variant="light"
+                            loading={isContaining}
+                            onClick={() => confirm(c)}
+                          >
+                            Contain
+                          </Button>
+                        )}
+                        <Button size="xs" variant="light" onClick={() => setLifting(c)}>
+                          {c.monitor ? "Dismiss" : "Lift"}
                         </Button>
-                      )}
-                      <Button size="xs" variant="light" onClick={() => setLifting(c)}>
-                        {c.monitor ? "Dismiss" : "Lift"}
-                      </Button>
-                    </Group>
-                  </Table.Td>
+                      </Group>
+                    </Table.Td>
                   )}
                 </Table.Tr>
               ))}
@@ -292,27 +298,27 @@ function Containments({
         </Table.ScrollContainer>
       )}
       {!readOnly && (
-      <Group align="flex-end">
-        <Select
-          label="Contain"
-          data={["ServiceAccount", "Human"]}
-          value={type}
-          onChange={setType}
-          allowDeselect={false}
-          w={170}
-        />
-        <TextInput label="ID" placeholder="sales-genie" value={id} onChange={(e) => setId(e.currentTarget.value)} />
-        <TextInput
-          label="Reason"
-          placeholder="What you saw"
-          style={{ flex: 1 }}
-          value={reason}
-          onChange={(e) => setReason(e.currentTarget.value)}
-        />
-        <Button color="red" loading={isContaining} disabled={!id.trim() || !reason.trim()} onClick={submit}>
-          Contain
-        </Button>
-      </Group>
+        <Group align="flex-end">
+          <Select
+            label="Contain"
+            data={["ServiceAccount", "Human"]}
+            value={type}
+            onChange={setType}
+            allowDeselect={false}
+            w={170}
+          />
+          <TextInput label="ID" placeholder="sales-genie" value={id} onChange={(e) => setId(e.currentTarget.value)} />
+          <TextInput
+            label="Reason"
+            placeholder="What you saw"
+            style={{ flex: 1 }}
+            value={reason}
+            onChange={(e) => setReason(e.currentTarget.value)}
+          />
+          <Button color="red" loading={isContaining} disabled={!id.trim() || !reason.trim()} onClick={submit}>
+            Contain
+          </Button>
+        </Group>
       )}
       {error && (
         <Alert color="red" title="Not done">

@@ -292,7 +292,9 @@ pub(crate) async fn require_to_see_all(
     match authorize(services, &viewer, Surface::Portal, PortalAction::Audit, area).await {
         Ok(()) => Ok((viewer, PortalAction::Audit)),
         Err(AccessError::Denied { .. } | AccessError::Challenged { .. }) => {
-            authorize(services, &viewer, Surface::Portal, PortalAction::Administer, area).await.map_err(|e| e.extend())?;
+            authorize(services, &viewer, Surface::Portal, PortalAction::Administer, area)
+                .await
+                .map_err(|e| e.extend())?;
             Ok((viewer, PortalAction::Administer))
         }
         Err(e) => Err(e.extend()),

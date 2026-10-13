@@ -299,12 +299,12 @@ Live updates: the Challenges page's challenges and containments.
 type ClientPortalSubscription {
 	"""
 	Challenges as they're opened or change: the signed-in person's own, or every one for those
-	who administer challenges.
+	who audit or administer challenges.
 	"""
 	challengeUpdated: Challenge!
 	"""
-	Every active containment, whenever one is added or lifted. For those who administer
-	challenges.
+	Every active containment, whenever one is added or lifted. For those who audit or
+	administer challenges.
 	"""
 	containmentsChanged: [Containment!]!
 }
@@ -1463,6 +1463,11 @@ enum PortalAction {
 	Change what an area controls: publish policy, switch enforcement.
 	"""
 	ADMINISTER
+	"""
+	See everything in an area and change nothing (ADR 0121): every challenge and containment,
+	where `view` shows only your own.
+	"""
+	AUDIT
 }
 
 enum PortalArea {
@@ -1474,7 +1479,8 @@ enum PortalArea {
 	"""
 	DIRECTORY
 	"""
-	`view`: answer your own challenges. `administer`: every challenge, and containments.
+	`view`: answer your own challenges. `audit`: see every challenge and containment.
+	`administer`: approve requests, and contain and lift principals.
 	"""
 	CHALLENGES
 	"""
@@ -1630,7 +1636,7 @@ type Query {
 	"""
 	challengesToApprove(after: String, first: Int): ChallengeConnection!
 	"""
-	Every challenge, newest first. For those who administer challenges.
+	Every challenge, newest first. For those who audit or administer challenges.
 	"""
 	challenges(status: ChallengeStatus, after: String, first: Int): ChallengeConnection!
 	"""
@@ -1640,7 +1646,7 @@ type Query {
 	"""
 	containmentReview(days: Int! = 30): ContainmentReview
 	"""
-	Containments, newest first. For those who administer challenges.
+	Containments, newest first. For those who audit or administer challenges.
 	"""
 	containments(activeOnly: Boolean! = true, after: String, first: Int): ContainmentConnection!
 	"""

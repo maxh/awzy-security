@@ -43,7 +43,8 @@ async fn setup_with(policies: &str) -> Option<(crate::ClientPortalSchema, Challe
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let channel = Channel::from_shared(format!("http://{addr}")).unwrap().connect().await.unwrap();
     let challenge = ChallengeClient::new(awzy_service_auth::grpc_channel(channel, "awzy-challenge"));
-    let services = Services { pdp: Some(pdp_with(policies).await), challenge: Some(challenge.clone()), ..Default::default() };
+    let services =
+        Services { pdp: Some(pdp_with(policies).await), challenge: Some(challenge.clone()), ..Default::default() };
     Some((crate::schema_with(services), challenge))
 }
 
