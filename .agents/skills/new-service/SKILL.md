@@ -10,6 +10,9 @@ A service is a library crate plus a binary and an image, made by the `awzy_servi
 template, and put it with the area that owns it (`authz/services/`, `portals/<client|corp>/`;
 ADR 0011, 0040). Something that runs once per release and exits goes in `authz/jobs/`, and anything only for
 demo installs and tests in `authz/demo/` (ADR 0063).
+First ask whether the job could live in an existing service instead. Every service is one more
+thing a client's team operates in an account awzy can't sign in to: pods to keep ready, an alert,
+and a section in the docs site's troubleshooting guide saying what fails without it.
 A significant new service usually deserves an ADR first (see the write-adr skill).
 
 1. **Crate.** `authz/services/<name>/Cargo.toml` with `name = "awzy-<name>"`, workspace `version`,
@@ -38,6 +41,7 @@ A significant new service usually deserves an ADR first (see the write-adr skill
    values in `values.yaml` and `values-example.yaml`, then
    `helm lint --strict deploy/helm/awzy -f deploy/helm/awzy/values-example.yaml`.
 9. **Docs.** The layout table in `README.md`, and how to run it locally in `DEVELOPMENT.md` if
-   it has its own setup.
+   it has its own setup. For clients: its row in the docs site's `reference/services.md`, and its
+   section in `guides/troubleshooting.md` (what fails without it, its alerts, what to do).
 10. **Check.** `bazel test //authz/services/<name>/...`, `bazel build //authz/services/<name>:image_index`, and
     the lint-fix skill.

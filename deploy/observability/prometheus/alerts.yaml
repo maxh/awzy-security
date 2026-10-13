@@ -8,6 +8,7 @@ groups:
         for: 5m
         labels: { severity: page }
         annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzyservicedown-page"
           summary: "{{ $labels.job }} hasn't answered a scrape for 5 minutes"
 
       - alert: AwzyServiceNotReady
@@ -15,6 +16,7 @@ groups:
         for: 5m
         labels: { severity: page }
         annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzyservicenotready-page"
           summary: "{{ $labels.job }} is up but not ready to take traffic"
           description: "A PDP stays not ready until it has loaded a signed bundle and the enforcement mode."
 
@@ -24,6 +26,7 @@ groups:
         for: 10m
         labels: { severity: page }
         annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzypdpchecklatencyhigh-page"
           summary: "PDP check p99 is {{ $value | humanizeDuration }}, over the 10 ms target"
 
       - alert: AwzyPdpCheckErrors
@@ -34,6 +37,7 @@ groups:
         for: 5m
         labels: { severity: page }
         annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzypdpcheckerrors-page"
           summary: "{{ $value | humanizePercentage }} of PDP checks are failing"
 
       - alert: AwzyServerErrors
@@ -44,6 +48,7 @@ groups:
         for: 10m
         labels: { severity: ticket }
         annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzyservererrors-ticket"
           summary: "{{ $labels.job }} answers {{ $value | humanizePercentage }} of requests with a 5xx"
 
       # One awzy service refusing another: a caller missing from a group in the chart, or a method
@@ -53,6 +58,7 @@ groups:
         expr: sum by (job, route, reason, caller) (increase(awzy_service_calls_refused_total{reason!="unauthenticated"}[15m])) > 0
         labels: { severity: ticket }
         annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzyservicecallrefused-ticket"
           summary: "{{ $labels.job }} refused {{ $labels.caller }} calling {{ $labels.route }} ({{ $labels.reason }})"
           description: "unlisted: no access rule names the method, so every caller is refused. not_allowed: the caller isn't in the route's group in the chart."
 
@@ -65,6 +71,7 @@ groups:
           unless sum by (job, step) (increase(awzy_reasoner_steps_total{outcome="ok"}[1h])) > 0
         labels: { severity: ticket }
         annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzyreasonerstepfailing-ticket"
           summary: "awzy-reasoner's {{ $labels.step }} step has failed every run for an hour"
           description: "awzy-reasoner's log says why, as a warning on each run."
 
@@ -76,6 +83,7 @@ groups:
         for: 1m
         labels: { severity: page }
         annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzypdpcontainmentfeedstale-page"
           summary: "A PDP hasn't heard the containment feed for {{ $value | humanizeDuration }} (target: 2 s)"
           description: "Until it recovers, the PDP asks awzy-challenge on every check, which counts against the 10 ms budget."
 
@@ -84,6 +92,7 @@ groups:
         for: 2m
         labels: { severity: page }
         annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzypdppolicysyncstale-page"
           summary: "A PDP last synced policy {{ $value | humanizeDuration }} ago (target: a published bundle live within 60 s)"
 
       - alert: AwzyPdpPrincipalsSyncStale
@@ -91,6 +100,7 @@ groups:
         for: 2m
         labels: { severity: page }
         annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzypdpprincipalssyncstale-page"
           summary: "A PDP last synced principals {{ $value | humanizeDuration }} ago (target: attribute changes within 60 s)"
 
       - alert: AwzyPdpResourceFeedStale
@@ -98,6 +108,7 @@ groups:
         for: 2m
         labels: { severity: ticket }
         annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzypdpresourcefeedstale-ticket"
           summary: "A PDP hasn't heard awzy-context's resource change log for {{ $value | humanizeDuration }}"
           description: "Cached resources fall back to expiring after 30 s until it recovers."
 
@@ -106,6 +117,7 @@ groups:
         for: 5m
         labels: { severity: ticket }
         annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzypdpservingstaleresources-ticket"
           summary: "PDPs are deciding on cached resources because awzy-context can't be reached"
 
       - alert: AwzyGatewayCantReachPdp
@@ -113,6 +125,7 @@ groups:
         for: 1m
         labels: { severity: page }
         annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzygatewaycantreachpdp-page"
           summary: "awzy-gateway can't reach awzy-pdp; tool calls are replayed or denied (ADR 0030)"
 
 
@@ -123,6 +136,7 @@ groups:
         for: 30m
         labels: { severity: ticket }
         annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzyreleasenotsynced-ticket"
           summary: "The install's release hasn't synced for 30 minutes: it's running an older release than its channel names"
           description: "Check `kubectl -n awzy-ops get application awzy`: a sync error, or a release waiting for a newer bootstrap (ADR 0098)."
 
@@ -131,4 +145,5 @@ groups:
         for: 15m
         labels: { severity: page }
         annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzyreleaseunhealthy-page"
           summary: "The install's release is {{ $labels.health_status }}: something it runs is failing or missing"
