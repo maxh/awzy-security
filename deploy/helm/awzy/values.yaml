@@ -216,6 +216,14 @@ challenge:
   slack:
     tokenSecret: ""
     securityChannel: ""
+  # Email (ADR 0122), beside Slack or instead of it: people at the email their IdP provisioned,
+  # and the security team at its address. Off until all three are set: a Secret in the system
+  # namespace with key "url", the SMTP relay's URL with its credentials (smtps://user:password@host:465,
+  # or smtp://user:password@host:587?tls=required); the sender; and the security team's address.
+  email:
+    relaySecret: ""
+    from: ""
+    securityAddress: ""
   resources:
     requests: { cpu: 100m, memory: 128Mi }
     limits: { memory: 256Mi }

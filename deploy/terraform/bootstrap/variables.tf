@@ -134,6 +134,17 @@ variable "slack" {
   sensitive = true
 }
 
+variable "email" {
+  description = "Notifications by email (ADR 0122), beside Slack or instead of it: your SMTP relay's URL with its credentials (smtps://user:password@host:465, or smtp://user:password@host:587?tls=required), the sender, and the security team's address. Null leaves them off"
+  type = object({
+    relay_url        = string
+    from             = string
+    security_address = string
+  })
+  default   = null
+  sensitive = true
+}
+
 variable "mcp_gateway" {
   description = "awzy-gateway, the MCP proxy agents call (ADR 0019): its public hostname (null keeps it in-cluster; it needs a DNS record to the load balancer), and the MCP servers it fronts as the chart's mcpGateway.upstreams. Each tool's tier, and which tiers fail open while the PDP is unreachable, are set in the client portal (ADR 0089). Null leaves it off"
   type = object({

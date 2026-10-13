@@ -16,13 +16,25 @@ Design: [ADR 0054](../../../docs/adr/0054-challenges-and-containments-over-grpc.
 - **Containments** revoke a principal's access until a person lifts them. Every PDP follows
   `WatchContainments` (the whole list on change, with a heartbeat every 500 ms) and denies
   contained principals without evaluating policy.
+- **Notifications** tell people what's waiting for them, in the client's Slack
+  ([ADR 0073](../../../docs/adr/0073-awzy-challenge-tells-people-whats-waiting-for-them.md)) and
+  by email through their SMTP relay
+  ([ADR 0122](../../../docs/adr/0122-email-notifications-through-the-clients-smtp-relay.md)).
+  Each is recorded once per channel and sent by a worker, with retries.
 - Durable state in Postgres (`AWZY_POSTGRES_URL`). Not ready until the containment list has
   loaded.
 
 | Setting | Default | |
 | --- | --- | --- |
+| `AWZY_CHALLENGE_CONTEXT_ADDR` | unset | awzy-context, for people's emails |
+| `AWZY_CHALLENGE_EMAIL_FROM` | unset | The sender, e.g. `awzy <awzy@example.com>` |
+| `AWZY_CHALLENGE_EMAIL_RELAY_URL` | unset | `smtps://user:password@host:465` or `smtp://…:587?tls=required`; unset turns email off |
+| `AWZY_CHALLENGE_EMAIL_SECURITY_ADDRESS` | unset | The security team's address |
 | `AWZY_CHALLENGE_GRANT_SECS` | 900 | How long a passed challenge allows its request |
 | `AWZY_CHALLENGE_PENDING_SECS` | 86400 | How long a challenge waits, and a rejection blocks |
+| `AWZY_CHALLENGE_PORTAL_URL` | unset | The client portal's public URL, for links; required with Slack or email |
+| `AWZY_CHALLENGE_SLACK_SECURITY_CHANNEL` | unset | The security team's channel ID |
+| `AWZY_CHALLENGE_SLACK_TOKEN` | unset | The Slack app's bot token; unset turns Slack off |
 | `AWZY_CHALLENGE_WEBAUTHN_ORIGINS` | unset | The portal's origins, comma-separated, e.g. `https://portal.example.com` |
 | `AWZY_CHALLENGE_WEBAUTHN_RP_ID` | unset | The portal's hostname; unset turns security keys off |
 | `AWZY_PDP_ADDR` | unset | The PDP that decides who may approve; unset refuses approvals |
@@ -32,7 +44,7 @@ Not yet:
 - Biometric checks
 - The LLM check of a justification against the resource; it can't pass a challenge alone on
   high-sensitivity resources, which also need a security key or an approval
-- Prompts over Slack, Teams, or email
+- Notifications in Teams
 - Lifting a containment by challenge
 - Valkey for grants and the feed
 

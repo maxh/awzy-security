@@ -21,8 +21,9 @@ description: What awzy can and can't see, and how releases reach your install.
   people, resources, decisions, or policies. How the heartbeat compares with your own monitoring
   is in [Monitoring and alerts](/guides/monitoring/#what-awzy-sees-and-what-you-see).
 - **Your own services, only when you turn them on.** Awzy Bot and investigations send prompts,
-  including decisions and document text, to the model service in your own cloud account. Slack
-  notifications send short messages naming the request to your own Slack workspace. Connectors
+  including decisions and document text, to the model service in your own cloud account. Notifications
+  send short messages naming the request to your own Slack workspace or through your own mail
+  relay. Connectors
   read your Google Drive and Jira. Each is off until you turn it on; see
   [optional features](/guides/optional-features/).
 - **Services authenticate to each other.** Inside the install, every call between awzy's

@@ -1,11 +1,11 @@
 ---
 title: Turning on optional features
-description: Awzy Bot, investigations, and Slack notifications, each off until you turn it on.
+description: Awzy Bot, investigations, and notifications in Slack or by email, each off until you turn it on.
 ---
 
 Three features reach outside your cluster, so each is off until you turn it on. All of them use
-services in your own accounts: your cloud's model service and your own Slack. Nothing goes
-through awzy.
+services in your own accounts: your cloud's model service, and your own Slack or mail relay.
+Nothing goes through awzy.
 
 Each is a variable in the cluster layer's Terraform (`deploy/terraform/bootstrap`), applied as in
 [Installing awzy](/guides/install/), step 5.
@@ -107,12 +107,17 @@ Turn on [automated containments](/concepts/challenges-and-containment/#automated
 separately, on the Enforcement page, once you trust what they'd do. Until then, a containment an
 investigation recommends is only recorded.
 
-## Slack notifications
+## Notifications
 
-People get a direct message when something waits for them: a reason or a security key to give,
-or an approval to make. Requesters hear when their request is decided. Your security team's
-channel hears about approvals, containments, and every break-glass rollback. Messages link into the client portal, and never
-include document contents or the evidence behind a containment.
+People are told when something waits for them: a reason or a security key to give, or an
+approval to make. Requesters hear when their request is decided. Your security team hears about
+approvals, containments, and every break-glass rollback. Messages link into the client portal,
+and never include document contents or the evidence behind a containment. Send them through
+Slack, email, or both: with both, each message goes out on each.
+
+### In Slack
+
+People get a direct message, and the security team a post in its channel.
 
 1. **Create a Slack app** in your workspace (api.slack.com/apps). Give its bot token the
    `chat:write` and `users:read.email` scopes, install it, and copy the bot token (`xoxb-…`).
@@ -127,10 +132,32 @@ include document contents or the evidence behind a containment.
    }
    ```
 
-   Keep the token out of version control, for example in a `.tfvars` file you don't commit. It's
-   stored as a Kubernetes Secret in the `awzy-system` namespace.
+### By email
 
-awzy finds people in Slack by email: the primary email your IdP provisions for them over SCIM
-(else their work email), or their user name when it is an email address. Someone with neither
-doesn't get direct messages; the security team's channel still does. Links use
-the client portal's public URL, so set its hostname first.
+For people and teams without Slack. awzy sends plain-text email through an SMTP relay you
+provide, such as your mail provider's, or Amazon SES's SMTP interface on AWS.
+
+1. **Get the relay's address and credentials,** and the sender address it lets you send from.
+   The connection must be encrypted: TLS from the start (`smtps://`, usually port 465), or
+   STARTTLS (`smtp://` with `?tls=required`, usually port 587).
+2. **Pick the security team's address,** a mailbox or a list.
+3. **Set the variable:**
+
+   ```hcl
+   email = {
+     relay_url        = "smtps://USERNAME:PASSWORD@smtp.example.com:465"
+     from             = "awzy <awzy@example.com>"
+     security_address = "security-team@example.com"
+   }
+   ```
+
+   Percent-encode any special characters in the user name or password.
+
+Keep the Slack token and the relay's credentials out of version control, for example in a
+`.tfvars` file you don't commit. Each is stored as a Kubernetes Secret in the `awzy-system`
+namespace.
+
+awzy finds people by email: the primary email your IdP provisions for them over SCIM (else their
+work email), or their user name when it is an email address. Someone with neither isn't messaged
+directly; the security team still is. Links use the client portal's public URL, so set its
+hostname first.

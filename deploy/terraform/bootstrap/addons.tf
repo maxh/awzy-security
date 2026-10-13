@@ -216,6 +216,11 @@ resource "helm_release" "config" {
           tokenSecret     = "awzy-slack-token"
           securityChannel = nonsensitive(var.slack.security_channel)
         }
+        email = var.email == null ? { relaySecret = "", from = "", securityAddress = "" } : {
+          relaySecret     = "awzy-email-relay"
+          from            = nonsensitive(var.email.from)
+          securityAddress = nonsensitive(var.email.security_address)
+        }
       }
       gateway = { name = "awzy", namespace = local.namespaces.ops }
       mcpGateway = {

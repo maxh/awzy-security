@@ -61,6 +61,8 @@ aws-smithy-http-client = { version = "1", default-features = false, features = [
 anyhow = "1.0"
 argon2 = "0.5"
 base64 = "0.22"
+# Email notifications through the client's SMTP relay (ADR 0122); rustls on ring, like everything else here.
+lettre = { version = "0.11", default-features = false, features = ["builder", "hostname", "ring", "smtp-transport", "tokio1", "tokio1-rustls", "webpki-roots"] }
 proptest = "1"
 rcgen = { version = "0.13", default-features = false, features = ["pem", "ring"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }

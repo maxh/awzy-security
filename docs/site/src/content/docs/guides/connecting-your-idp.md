@@ -152,6 +152,6 @@ Someone in more than one team group is on the smallest. Without the setting nobo
 
 ## Notifications
 
-awzy messages people in Slack by email: the primary email your IdP provisions for them, else
+awzy finds people in Slack, or emails them, by their email: the primary email your IdP provisions for them, else
 their work email, else their user name when it's an address. Provisioning emails, which Okta and
 Entra do by default, reaches everyone. See [optional features](/guides/optional-features/).

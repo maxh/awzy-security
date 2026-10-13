@@ -35,8 +35,8 @@ Leave **automated containments** in monitor for longer, and switch them separate
 - **Approvals.** On the Challenges page, under *Waiting for approval*, approve or reject requests,
   with a note. You see every request; resource owners see, and approve, the ones for what they
   own. With
-  [Slack connected](/guides/optional-features/#slack-notifications), each request reaches your
-  team's channel with a link.
+  [notifications](/guides/optional-features/#notifications) on, each request reaches your team's
+  Slack channel or email address with a link.
 - **Containments.** Contain a principal yourself when you see something wrong, and lift a
   containment once you've reviewed it, with what you found. Review awzy-reasoner's
   *Would contain* records: contain the person, or dismiss the record.

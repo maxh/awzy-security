@@ -17,15 +17,15 @@ saying what's needed, such as:
 What to do:
 
 1. **Open the challenge.** It's on the client portal's **Challenges** page, under *Waiting for
-   you*. If your company has [Slack connected](/guides/optional-features/#slack-notifications), a
-   direct message links to it.
+   you*. If your company has [notifications](/guides/optional-features/#notifications) on, a
+   message in Slack or by email links to it.
 2. **Answer it:**
    - **Justification:** say why you need the access. It's recorded with the request, for the
      security team to review.
    - **Security key:** touch your security key. No agent can do this for you, which is the point:
      it proves a person is there.
 3. **Wait for approval, if it asks for one.** Someone else, such as the data's owner or the
-   security team, approves or rejects it. With Slack connected, you're told which.
+   security team, approves or rejects it. With notifications on, you're told which.
 4. **Retry.** Ask your agent to make the same request again. A passed challenge holds for a short
    while, for that exact request.
 
