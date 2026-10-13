@@ -66,7 +66,7 @@ awzy-reporter each read it as their own read-only user.
 
 - **Your cloud's model service** (Bedrock on AWS): Awzy Bot in the client portal, and
   investigations in awzy-reasoner.
-- **Your Slack:** awzy-challenge's notifications.
+- **Your Slack and your mail relay:** awzy-challenge's notifications.
 - **Your Google Drive and Jira:** awzy-connectors reads them.
 
 ## The services
@@ -149,7 +149,7 @@ Challenges, containments, security keys, and notifications.
     `RemoveSecurityKey`, `ResetSecurityKey`, `BeginVerification`, `FinishVerification`: security
     keys (WebAuthn), through the client portal.
 - **Stores:** Postgres `awzy_challenge`. Notifications are recorded first and sent by a worker to
-  your Slack, with retries.
+  your Slack and by email, each with its own retries.
 - **Calls:** awzy-pdp, to check that an approver may approve.
 
 ### awzy-intake

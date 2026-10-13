@@ -26,8 +26,8 @@ Nobody approves their own request, or one made for them by an agent.
 
 1. **Find the request.** It's on the client portal's **Challenges** page, under *Waiting for your
    approval*, which lists the requests you may approve. With
-   [Slack connected](/guides/optional-features/#slack-notifications), owners get a direct message
-   and the security team's channel gets a post, each with a link that opens the request.
+   [notifications](/guides/optional-features/#notifications) on, owners get a message in Slack or
+   by email, and so does the security team, each with a link that opens the request.
 2. **Look at what's asked:** who is asking, whether an agent is asking for them, the action, and the
    resource. A justification, if the request needed one, appears with it.
 3. **Decide,** with a note:

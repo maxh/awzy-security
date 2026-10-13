@@ -103,7 +103,7 @@ What's waiting for people. See [Challenges and containment](/concepts/challenges
   only your sign-in; changing them later needs a key you already have. Admins can reset someone's
   keys when one is lost.
 
-When your install connects Slack, people get a message when something waits for them here, with
+When your install has notifications on (Slack or email), people get a message when something waits for them here, with
 a link.
 
 ### Investigations

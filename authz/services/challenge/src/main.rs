@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
-use awzy_challenge::{approvals::Approvals, keys::SecurityKeys, ChallengeStore, Feed, Lifetimes};
+use awzy_challenge::{approvals::Approvals, keys::SecurityKeys, notify::Channel, ChallengeStore, Feed, Lifetimes};
 use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
@@ -23,25 +23,44 @@ async fn main() -> anyhow::Result<()> {
     let mut store = ChallengeStore::new(pool.clone(), lifetimes);
     let mut worker = None;
 
-    // Telling people what's waiting for them, in the client's Slack (ADR 0073).
-    match std::env::var("AWZY_CHALLENGE_SLACK_TOKEN") {
+    // Telling people what's waiting for them: in the client's Slack (ADR 0073), and by email
+    // through their SMTP relay (ADR 0122).
+    let slack = match std::env::var("AWZY_CHALLENGE_SLACK_TOKEN") {
         Ok(token) if !token.is_empty() => {
             let channel = std::env::var("AWZY_CHALLENGE_SLACK_SECURITY_CHANNEL")
                 .context("AWZY_CHALLENGE_SLACK_SECURITY_CHANNEL is required with AWZY_CHALLENGE_SLACK_TOKEN")?;
-            let portal_url = std::env::var("AWZY_CHALLENGE_PORTAL_URL")
-                .context("AWZY_CHALLENGE_PORTAL_URL is required with AWZY_CHALLENGE_SLACK_TOKEN")?;
             let api = std::env::var("AWZY_CHALLENGE_SLACK_API").unwrap_or_else(|_| "https://slack.com/api".into());
-            let slack = awzy_challenge::slack::Slack::new(&api, &token, &channel);
-            // A person's SCIM email, for those whose userName isn't one (#65).
-            let contacts = std::env::var("AWZY_CHALLENGE_CONTEXT_ADDR")
-                .ok()
-                .filter(|a| !a.is_empty())
-                .map(|a| awzy_context_api::ContextApi::new(&a, awzy_service_auth::TokenSource::from_env()));
-            worker = Some(awzy_challenge::notify::Worker { pool, slack, portal_url, contacts });
-            tracing::info!("telling people what's waiting for them in Slack");
-            store = store.with_notifications();
+            Some(awzy_challenge::slack::Slack::new(&api, &token, &channel))
         }
-        _ => tracing::warn!("AWZY_CHALLENGE_SLACK_TOKEN is not set; nobody is told about challenges"),
+        _ => None,
+    };
+    let email = match std::env::var("AWZY_CHALLENGE_EMAIL_RELAY_URL") {
+        Ok(relay) if !relay.is_empty() => {
+            let from = std::env::var("AWZY_CHALLENGE_EMAIL_FROM")
+                .context("AWZY_CHALLENGE_EMAIL_FROM is required with AWZY_CHALLENGE_EMAIL_RELAY_URL")?;
+            let security = std::env::var("AWZY_CHALLENGE_EMAIL_SECURITY_ADDRESS")
+                .context("AWZY_CHALLENGE_EMAIL_SECURITY_ADDRESS is required with AWZY_CHALLENGE_EMAIL_RELAY_URL")?;
+            Some(awzy_challenge::email::Email::new(&relay, &from, &security)?)
+        }
+        _ => None,
+    };
+    let channels: Vec<Channel> =
+        [slack.as_ref().map(|_| Channel::Slack), email.as_ref().map(|_| Channel::Email)].into_iter().flatten().collect();
+    if channels.is_empty() {
+        tracing::warn!(
+            "neither AWZY_CHALLENGE_SLACK_TOKEN nor AWZY_CHALLENGE_EMAIL_RELAY_URL is set; nobody is told about challenges"
+        );
+    } else {
+        let portal_url = std::env::var("AWZY_CHALLENGE_PORTAL_URL")
+            .context("AWZY_CHALLENGE_PORTAL_URL is required for Slack or email notifications")?;
+        // A person's SCIM email, for those whose userName isn't one (#65).
+        let contacts = std::env::var("AWZY_CHALLENGE_CONTEXT_ADDR")
+            .ok()
+            .filter(|a| !a.is_empty())
+            .map(|a| awzy_context_api::ContextApi::new(&a, awzy_service_auth::TokenSource::from_env()));
+        tracing::info!(?channels, "telling people what's waiting for them");
+        worker = Some(awzy_challenge::notify::Worker { pool, slack, email, portal_url, contacts });
+        store = store.with_notifications(channels);
     }
     let store = Arc::new(store);
     store.migrate_on_start().await?;

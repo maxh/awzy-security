@@ -143,6 +143,16 @@ resource "kubernetes_secret_v1" "slack_token" {
   data = { token = var.slack.token }
 }
 
+# awzy-challenge's SMTP relay URL, credentials included, for email notifications (ADR 0122).
+resource "kubernetes_secret_v1" "email_relay" {
+  count = var.email == null ? 0 : 1
+  metadata {
+    name      = "awzy-email-relay"
+    namespace = kubernetes_namespace_v1.awzy["system"].metadata[0].name
+  }
+  data = { url = var.email.relay_url }
+}
+
 # Sources send events to awzy-intake with this token. Read it from the `intake` output.
 resource "random_password" "intake" {
   count   = var.intake == null ? 0 : 1

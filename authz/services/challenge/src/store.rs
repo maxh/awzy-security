@@ -216,18 +216,19 @@ fn bind_request<'q>(
 pub struct ChallengeStore {
     pool: PgPool,
     lifetimes: Lifetimes,
-    /// Whether to record notifications (ADR 0073): only when a channel is configured.
-    pub(crate) notify: bool,
+    /// The channels to record notifications for (ADR 0073, 0122); none when none is configured.
+    pub(crate) channels: Vec<crate::notify::Channel>,
 }
 
 impl ChallengeStore {
     pub fn new(pool: PgPool, lifetimes: Lifetimes) -> Self {
-        Self { pool, lifetimes, notify: false }
+        Self { pool, lifetimes, channels: Vec::new() }
     }
 
-    /// Records what to tell people as challenges and containments happen (ADR 0073).
-    pub fn with_notifications(mut self) -> Self {
-        self.notify = true;
+    /// Records what to tell people as challenges and containments happen, for each of `channels`
+    /// (ADR 0073, 0122).
+    pub fn with_notifications(mut self, channels: Vec<crate::notify::Channel>) -> Self {
+        self.channels = channels;
         self
     }
 
