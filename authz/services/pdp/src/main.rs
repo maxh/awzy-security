@@ -11,13 +11,14 @@ async fn main() -> anyhow::Result<()> {
     let pdp = awzy_pdp::shared(awzy_pdp::Pdp::with_defaults()?);
     // Deciding needs a service token from a workload in the cluster (ADR 0055).
     let mut state = AppState::new(pdp.clone()).with_service_auth(awzy_service_auth::Verifier::from_env("awzy-pdp")?);
+    let mut verifier = None;
 
     match std::env::var("AWZY_POLICY_ADDR") {
         Ok(endpoint) => {
             let enforcement = Arc::new(Enforcement::awaiting_sync());
             state = state.with_enforcement(enforcement.clone());
             // One or more public keys, so a new signing key is trusted before it signs (ADR 0092).
-            let verifier = match std::env::var("AWZY_POLICY_VERIFY_KEY_FILE") {
+            verifier = match std::env::var("AWZY_POLICY_VERIFY_KEY_FILE") {
                 Ok(path) => {
                     Some(Arc::new(awzy_signing::BundleVerifier::from_pem_bundle(&std::fs::read_to_string(&path)?)?))
                 }
@@ -26,7 +27,8 @@ async fn main() -> anyhow::Result<()> {
                     None
                 }
             };
-            tokio::spawn(awzy_pdp::sync_policies(pdp, enforcement, verifier, endpoint, Duration::from_secs(10)));
+            let every = Duration::from_secs(10);
+            tokio::spawn(awzy_pdp::sync_policies(pdp, enforcement, verifier.clone(), endpoint, every));
         }
         Err(_) => {
             tracing::warn!("AWZY_POLICY_ADDR is not set; built-in default policies, monitor mode");
@@ -48,7 +50,13 @@ async fn main() -> anyhow::Result<()> {
     // Containments and challenges (ADR 0054). Without it, challenge verdicts carry no
     // challenge to answer and no one is contained.
     if let Ok(endpoint) = std::env::var("AWZY_CHALLENGE_ADDR") {
-        let containments = Arc::new(awzy_pdp::containments::Containments::from_challenge(&endpoint)?);
+        // How long the last list stands in when awzy-challenge can't be reached (ADR 0119).
+        let max_stale = match std::env::var("AWZY_PDP_CONTAINMENTS_MAX_STALE_SECS") {
+            Ok(secs) => Duration::from_secs(secs.parse()?),
+            Err(_) => awzy_pdp::containments::DEFAULT_MAX_STALE,
+        };
+        let containments =
+            Arc::new(awzy_pdp::containments::Containments::from_challenge(&endpoint)?.with_max_stale(max_stale));
         let resolver = Arc::new(awzy_pdp::challenges::ChallengeResolver::from_challenge(&endpoint)?);
         awzy_server::metrics::register(containments.clone());
         state = state.with_challenges(containments.clone(), resolver);
@@ -68,6 +76,15 @@ async fn main() -> anyhow::Result<()> {
     }
 
     awzy_server::metrics::register(state.metrics.clone());
+
+    // A PDP starting while its sources are down takes what it's missing from a running one
+    // (ADR 0119): the headless Service that lists ready PDPs, as `host:port`.
+    match std::env::var("AWZY_PDP_PEER_ADDR") {
+        Ok(peers) => {
+            tokio::spawn(awzy_pdp::peer::start_from_peers(state.clone(), verifier, peers));
+        }
+        Err(_) => tracing::info!("AWZY_PDP_PEER_ADDR is not set; a PDP starts only from its sources"),
+    }
 
     // Not ready until the first sync loads the bundle and mode; checks are refused until then too.
     let ready = state.clone();

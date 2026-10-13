@@ -9,7 +9,7 @@ use std::{sync::Arc, time::Duration};
 
 use awzy_authz_proto::policy::v1::{
     policy_service_client::PolicyServiceClient, EnforcementSetting, GetActiveRequest, GetEnforcementRequest,
-    ListEnforcementSettingsRequest,
+    ListEnforcementSettingsRequest, PolicyBundle,
 };
 use awzy_model::EnforcementMode;
 use tonic::transport::Channel;
@@ -82,31 +82,7 @@ pub async fn sync_waiting(
     let res = client.get_active(GetActiveRequest { known_version, wait_seconds }).await?.into_inner();
     let loaded = match res.bundle.filter(|_| !res.unchanged) {
         Some(bundle) => {
-            // Versions only go up, break-glass included (it republishes as a new version), so an
-            // older one is a signed bundle replayed from the database (ADR 0080).
-            anyhow::ensure!(
-                bundle.version > known_version,
-                "refusing policy bundle {} (version {}): older than version {known_version}, in force",
-                bundle.qid,
-                bundle.version
-            );
-            if let Some(verifier) = verifier {
-                verifier
-                    .verify(
-                        &bundle.qid,
-                        bundle.version,
-                        &bundle.schema,
-                        &bundle.policies,
-                        &bundle.signature,
-                        &bundle.signing_key_id,
-                    )
-                    .map_err(|e| {
-                        anyhow::anyhow!("refusing policy bundle {} (version {}): {e}", bundle.qid, bundle.version)
-                    })?;
-            }
-            let next = Pdp::new(&bundle.schema, &bundle.policies)?.with_version(bundle.version);
-            pdp.store(Arc::new(next));
-            tracing::info!(version = bundle.version, id = %bundle.qid, "loaded policy bundle");
+            apply_bundle(pdp, verifier, bundle)?;
             true
         }
         None => false,
@@ -119,6 +95,53 @@ pub async fn sync_waiting(
         .into_inner()
         .setting
         .ok_or_else(|| anyhow::anyhow!("awzy-policy returned no enforcement setting"))?;
+    apply_setting(enforcement, verifier, setting)?;
+    let settings = client.list_enforcement_settings(ListEnforcementSettingsRequest {}).await?.into_inner().settings;
+    apply_scoped(enforcement, verifier, settings);
+    Ok(loaded)
+}
+
+/// Loads `bundle` in place of the one in force: from awzy-policy, or as a peer passed it on
+/// (ADR 0119), so either way it must be newer and, with a verifier, signed by a trusted key.
+pub(crate) fn apply_bundle(
+    pdp: &SharedPdp,
+    verifier: Option<&BundleVerifier>,
+    bundle: PolicyBundle,
+) -> anyhow::Result<()> {
+    let known_version = pdp.load().version();
+    // Versions only go up, break-glass included (it republishes as a new version), so an
+    // older one is a signed bundle replayed from the database (ADR 0080).
+    anyhow::ensure!(
+        bundle.version > known_version,
+        "refusing policy bundle {} (version {}): older than version {known_version}, in force",
+        bundle.qid,
+        bundle.version
+    );
+    if let Some(verifier) = verifier {
+        verifier
+            .verify(
+                &bundle.qid,
+                bundle.version,
+                &bundle.schema,
+                &bundle.policies,
+                &bundle.signature,
+                &bundle.signing_key_id,
+            )
+            .map_err(|e| anyhow::anyhow!("refusing policy bundle {} (version {}): {e}", bundle.qid, bundle.version))?;
+    }
+    let (version, qid) = (bundle.version, bundle.qid.clone());
+    let next = Pdp::new(&bundle.schema, &bundle.policies)?.with_version(version).with_signed(bundle);
+    pdp.store(Arc::new(next));
+    tracing::info!(version, id = %qid, "loaded policy bundle");
+    Ok(())
+}
+
+/// Applies the install's enforcement mode, which makes the PDP ready.
+pub(crate) fn apply_setting(
+    enforcement: &Enforcement,
+    verifier: Option<&BundleVerifier>,
+    setting: EnforcementSetting,
+) -> anyhow::Result<()> {
     let mode = EnforcementMode::from(setting.mode());
     if let Some(verifier) = verifier {
         verify_setting(verifier, enforcement, &setting, mode)?;
@@ -126,45 +149,55 @@ pub async fn sync_waiting(
     if enforcement.synced(mode) {
         tracing::info!(mode = mode.as_str(), changed_by = %setting.changed_by, "enforcement mode");
     }
-    sync_scoped(enforcement, verifier, client).await?;
-    Ok(loaded)
+    enforcement.set_signed_install(setting);
+    Ok(())
 }
 
 /// The modes actions and tools have of their own (ADR 0109), each verified as the install's is.
 /// One that fails verification keeps the mode in force for its scope.
-async fn sync_scoped(
+pub(crate) fn apply_scoped(
     enforcement: &Enforcement,
     verifier: Option<&BundleVerifier>,
-    client: &mut PolicyServiceClient<AuthChannel>,
-) -> anyhow::Result<()> {
-    let settings = client.list_enforcement_settings(ListEnforcementSettingsRequest {}).await?.into_inner().settings;
+    settings: Vec<EnforcementSetting>,
+) {
     let current = enforcement.scoped();
+    let mut kept_signed = enforcement.signed().scoped;
     let mut next = std::collections::HashMap::new();
+    let mut signed = std::collections::HashMap::new();
     for setting in settings {
         let mode = EnforcementMode::from(setting.mode());
         let at = setting.changed_at.as_ref().map_or(i64::MIN, |t| t.seconds);
         if let Some(verifier) = verifier {
             let payload = awzy_signing::enforcement_payload(&setting.scope, mode.as_str(), &setting.changed_by, at);
             let older = current.get(&setting.scope).is_some_and(|c| c.changed_at > at);
-            if let Err(error) = verifier.verify_payload(&payload, &setting.signature, &setting.signing_key_id) {
-                tracing::error!(scope = %setting.scope, %error, "refusing a scoped enforcement mode; keeping the one in force");
+            let refused = match verifier.verify_payload(&payload, &setting.signature, &setting.signing_key_id) {
+                Err(error) => {
+                    tracing::error!(scope = %setting.scope, %error, "refusing a scoped enforcement mode; keeping the one in force");
+                    true
+                }
+                Ok(()) if older => {
+                    tracing::error!(scope = %setting.scope, at, "refusing a scoped enforcement mode older than the one in force");
+                    true
+                }
+                Ok(()) => false,
+            };
+            if refused {
                 if let Some(kept) = current.get(&setting.scope) {
-                    next.insert(setting.scope, *kept);
+                    next.insert(setting.scope.clone(), *kept);
+                    if let Some(kept) = kept_signed.remove(&setting.scope) {
+                        signed.insert(setting.scope, kept);
+                    }
                 }
                 continue;
             }
-            if older {
-                tracing::error!(scope = %setting.scope, at, "refusing a scoped enforcement mode older than the one in force");
-                next.insert(setting.scope.clone(), current[&setting.scope]);
-                continue;
-            }
         }
-        next.insert(setting.scope, ScopedMode { mode, changed_at: at });
+        next.insert(setting.scope.clone(), ScopedMode { mode, changed_at: at });
+        signed.insert(setting.scope.clone(), setting);
     }
     for scope in enforcement.set_scoped(next) {
         tracing::info!(%scope, "scoped enforcement mode changed");
     }
-    Ok(())
+    enforcement.set_signed_scoped(signed);
 }
 
 /// Applies a mode only if awzy-policy signed it and it's no older than the one in force (ADR

@@ -47,9 +47,12 @@ their logs. A pod that won't start after an upgrade usually says why in its firs
 
 ### AwzyServiceNotReady (page)
 
-A service runs but isn't ready, so it gets no traffic. A PDP stays not ready until it has loaded a
-signed policy bundle and the enforcement mode: check that awzy-policy is ready, and look for
-signature errors in the PDP's log.
+A service runs but isn't ready, so it gets no traffic. A PDP stays not ready until it has a signed
+policy bundle and the enforcement mode, the principals, and the containment list. It gets them
+from awzy-policy, awzy-context, and awzy-challenge, or, when those can't be reached, from a PDP
+that's already running. So a new PDP that stays not ready usually means a source is down and no
+other PDP is running: check that awzy-policy is ready, and look for signature errors in the PDP's
+log.
 
 ### AwzyPdpCheckLatencyHigh (page)
 
@@ -93,7 +96,10 @@ awzy-reasoner's log saying why.
 ### AwzyPdpContainmentFeedStale (page)
 
 A PDP hasn't heard awzy-challenge's containment feed for over 2 seconds. Until it recovers, the
-PDP asks awzy-challenge on every check, which counts against the 10 ms budget. Check that
+PDP asks awzy-challenge on every check, which counts against the 10 ms budget. If awzy-challenge
+can't answer either, the PDP decides on the last list it heard for up to 5 minutes
+(`pdp.containmentsMaxStaleSeconds`), so a restart or a database failover doesn't fail checks, and
+after that fails them. A containment added meanwhile doesn't reach that PDP. Check that
 awzy-challenge is ready and that the PDP can reach it.
 
 ### AwzyPdpPolicySyncStale (page)

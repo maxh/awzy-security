@@ -2,14 +2,16 @@
 //!
 //! The PDP follows `WatchContainments` and keeps the active list in memory, so a normal check
 //! makes no network call for it. The feed sends a heartbeat every half second; if none has
-//! arrived for [`STALE_AFTER`], each check asks awzy-challenge directly until the feed recovers,
-//! and a check it can't answer fails as unavailable rather than missing a containment.
+//! arrived for [`STALE_AFTER`], each check asks awzy-challenge directly until the feed recovers.
+//! When awzy-challenge can't answer either, the last list stands in for up to `max_stale` after
+//! the feed was last heard (ADR 0119), long enough to ride out a restart or a database failover.
+//! Past that a check fails as unavailable rather than missing a containment.
 
 use awzy_service_auth::{grpc_channel, AuthChannel};
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering},
         Arc,
     },
     time::{Duration, Instant},
@@ -17,7 +19,7 @@ use std::{
 
 use arc_swap::ArcSwap;
 use awzy_authz_proto::challenge::v1::{
-    challenge_service_client::ChallengeServiceClient, ListContainmentsRequest, WatchContainmentsRequest,
+    challenge_service_client::ChallengeServiceClient, Containment, ListContainmentsRequest, WatchContainmentsRequest,
 };
 use awzy_model::EntityRef;
 use tonic::transport::Channel;
@@ -28,19 +30,39 @@ pub const STALE_AFTER: Duration = Duration::from_secs(2);
 /// How long a direct lookup may take while the feed is stale.
 const LOOKUP_TIMEOUT: Duration = Duration::from_millis(250);
 
+/// How long the last list stands in after the feed was last heard, when awzy-challenge can't be
+/// asked either. Longer than a managed Postgres failover (ADR 0119).
+pub const DEFAULT_MAX_STALE: Duration = Duration::from_secs(300);
+
+/// After a direct lookup fails, checks use the last list without asking for this long, so an
+/// outage doesn't add the lookup timeout to every check.
+const PAUSE_AFTER_FAILED_LOOKUP: Duration = Duration::from_secs(1);
+
 fn key(r: &EntityRef) -> String {
     format!("{}::{}", r.kind, r.id)
 }
 
-pub struct Containments {
+/// The active list, as awzy-challenge sent it, so a starting peer can be given it unchanged.
+#[derive(Default)]
+struct Active {
+    version: i64,
+    list: Vec<Containment>,
     /// `Type::id` to the containment's QID.
-    active: ArcSwap<HashMap<String, String>>,
+    by_principal: HashMap<String, String>,
+}
+
+pub struct Containments {
+    active: ArcSwap<Active>,
     /// None without awzy-challenge: then nobody is contained and it's always ready.
     client: Option<ChallengeServiceClient<AuthChannel>>,
     loaded: AtomicBool,
     started: Instant,
-    /// Milliseconds after `started` when the feed was last heard from.
-    heard_at_ms: AtomicU64,
+    /// Milliseconds after `started` when the feed was last heard from; negative for a list a
+    /// peer had before this PDP started.
+    heard_at_ms: AtomicI64,
+    /// Milliseconds after `started` before which a stale feed doesn't ask awzy-challenge.
+    lookups_paused_until_ms: AtomicI64,
+    max_stale: Duration,
     /// Moves with each list, so a cached query plan is dropped when anyone is contained or
     /// lifted (ADR 0113).
     epoch: AtomicU64,
@@ -59,13 +81,26 @@ impl Containments {
 
     fn new(client: Option<ChallengeServiceClient<AuthChannel>>) -> Self {
         Self {
-            active: ArcSwap::from_pointee(HashMap::new()),
+            active: ArcSwap::from_pointee(Active::default()),
             loaded: AtomicBool::new(client.is_none()),
             client,
             started: Instant::now(),
-            heard_at_ms: AtomicU64::new(0),
+            heard_at_ms: AtomicI64::new(0),
+            lookups_paused_until_ms: AtomicI64::new(0),
+            max_stale: DEFAULT_MAX_STALE,
             epoch: AtomicU64::new(0),
         }
+    }
+
+    /// How long the last list stands in when neither the feed nor awzy-challenge answers.
+    pub fn with_max_stale(mut self, max_stale: Duration) -> Self {
+        self.max_stale = max_stale;
+        self
+    }
+
+    /// Whether this PDP follows awzy-challenge at all.
+    pub fn is_configured(&self) -> bool {
+        self.client.is_some()
     }
 
     pub fn is_ready(&self) -> bool {
@@ -79,28 +114,99 @@ impl Containments {
 
     /// Replaces the list: `(principal, containment QID)` pairs.
     pub fn load(&self, active: impl IntoIterator<Item = (EntityRef, String)>) {
-        self.active.store(Arc::new(active.into_iter().map(|(who, id)| (key(&who), id)).collect()));
+        let list = active
+            .into_iter()
+            .map(|(who, qid)| Containment { qid, principal: Some(who.into()), ..Default::default() })
+            .collect();
+        self.load_list(0, list, Duration::ZERO);
+    }
+
+    /// Replaces the list with one heard `age` ago: from the feed, or from a peer (ADR 0119).
+    pub fn load_list(&self, version: i64, list: Vec<Containment>, age: Duration) {
+        let by_principal = list
+            .iter()
+            .filter_map(|c| {
+                let who: EntityRef = c.principal.clone()?.into();
+                Some((key(&who), c.qid.clone()))
+            })
+            .collect();
+        self.active.store(Arc::new(Active { version, list, by_principal }));
         self.epoch.fetch_add(1, Ordering::AcqRel);
-        self.heard();
+        self.heard_ago(age);
         self.loaded.store(true, Ordering::Release);
     }
 
+    /// The list in force, its version, and how long since the feed was heard, for a starting
+    /// peer. None before the first list, or without awzy-challenge.
+    pub fn held(&self) -> Option<(i64, Vec<Containment>, Duration)> {
+        if self.client.is_none() || !self.is_ready() {
+            return None;
+        }
+        let active = self.active.load();
+        Some((active.version, active.list.clone(), self.age()))
+    }
+
+    fn now_ms(&self) -> i64 {
+        i64::try_from(self.started.elapsed().as_millis()).unwrap_or(i64::MAX)
+    }
+
     fn heard(&self) {
-        self.heard_at_ms.store(self.started.elapsed().as_millis() as u64, Ordering::Release);
+        self.heard_ago(Duration::ZERO);
+    }
+
+    fn heard_ago(&self, age: Duration) {
+        let age = i64::try_from(age.as_millis()).unwrap_or(i64::MAX);
+        self.heard_at_ms.store(self.now_ms().saturating_sub(age), Ordering::Release);
+    }
+
+    /// Since the feed was last heard from.
+    fn age(&self) -> Duration {
+        let ms = self.now_ms().saturating_sub(self.heard_at_ms.load(Ordering::Acquire));
+        Duration::from_millis(u64::try_from(ms).unwrap_or(0))
     }
 
     fn is_fresh(&self) -> bool {
-        let heard = Duration::from_millis(self.heard_at_ms.load(Ordering::Acquire));
-        self.started.elapsed().saturating_sub(heard) <= STALE_AFTER
+        self.age() <= STALE_AFTER
+    }
+
+    fn in_list(&self, who: &[&EntityRef]) -> Vec<String> {
+        let active = self.active.load();
+        who.iter().filter_map(|w| active.by_principal.get(&key(w)).cloned()).collect()
     }
 
     /// The containment QIDs of any of `who` that are contained.
     pub async fn find(&self, who: &[&EntityRef]) -> anyhow::Result<Vec<String>> {
         let Some(client) = &self.client else { return Ok(vec![]) };
         if self.is_fresh() {
-            let active = self.active.load();
-            return Ok(who.iter().filter_map(|w| active.get(&key(w)).cloned()).collect());
+            return Ok(self.in_list(who));
         }
+        if self.now_ms() >= self.lookups_paused_until_ms.load(Ordering::Acquire) {
+            match self.look_up(client, who).await {
+                Ok(found) => return Ok(found),
+                Err(error) => {
+                    // At most once per pause, so an outage doesn't flood the log.
+                    tracing::warn!(%error, "the containment feed is stale and awzy-challenge didn't answer");
+                    let pause = i64::try_from(PAUSE_AFTER_FAILED_LOOKUP.as_millis()).unwrap_or(i64::MAX);
+                    self.lookups_paused_until_ms.store(self.now_ms().saturating_add(pause), Ordering::Release);
+                }
+            }
+        }
+        let age = self.age();
+        anyhow::ensure!(
+            age <= self.max_stale,
+            "the containment feed hasn't been heard for {}s and awzy-challenge can't be reached",
+            age.as_secs()
+        );
+        crate::metrics::CONTAINMENTS_STALE_SERVED.inc();
+        Ok(self.in_list(who))
+    }
+
+    /// Asks awzy-challenge about each of `who`, while the feed is stale.
+    async fn look_up(
+        &self,
+        client: &ChallengeServiceClient<AuthChannel>,
+        who: &[&EntityRef],
+    ) -> anyhow::Result<Vec<String>> {
         let mut found = Vec::new();
         for w in who {
             let res = tokio::time::timeout(
@@ -136,7 +242,7 @@ impl Containments {
         while let Some(msg) = stream.message().await? {
             if msg.changed {
                 let count = msg.active.len();
-                self.load(msg.active.into_iter().filter_map(|c| Some((c.principal?.into(), c.qid))));
+                self.load_list(msg.version, msg.active, Duration::ZERO);
                 tracing::info!(version = msg.version, active = count, "loaded containments");
             } else {
                 self.heard();
@@ -153,8 +259,7 @@ impl awzy_server::metrics::Source for Containments {
         if self.client.is_none() {
             return;
         }
-        let heard = Duration::from_millis(self.heard_at_ms.load(Ordering::Acquire));
-        let age = self.started.elapsed().saturating_sub(heard);
+        let age = self.age();
         out.push_str(
             "# HELP awzy_pdp_containment_feed_age_seconds Seconds since the containment feed was last heard from.\n",
         );
@@ -162,7 +267,7 @@ impl awzy_server::metrics::Source for Containments {
         out.push_str(&format!("awzy_pdp_containment_feed_age_seconds {:.3}\n", age.as_secs_f64()));
         out.push_str("# HELP awzy_pdp_containments_active Principals contained right now.\n");
         out.push_str("# TYPE awzy_pdp_containments_active gauge\n");
-        out.push_str(&format!("awzy_pdp_containments_active {}\n", self.active.load().len()));
+        out.push_str(&format!("awzy_pdp_containments_active {}\n", self.active.load().list.len()));
     }
 }
 
@@ -189,12 +294,38 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_stale_list_is_not_trusted() {
+    async fn a_stale_list_stands_in_while_awzy_challenge_cannot_answer() {
         let c = Containments::from_challenge("http://127.0.0.1:9").unwrap();
+        c.load([(EntityRef::new("Human", "mallory"), "containment_1".to_string())]);
+        c.heard_ago(STALE_AFTER + Duration::from_secs(1));
+        // Nothing listens on port 9, so the direct lookup fails and the last list answers.
+        let found = c.find(&[&EntityRef::new("Human", "mallory")]).await.unwrap();
+        assert_eq!(found, ["containment_1"]);
+    }
+
+    #[tokio::test]
+    async fn past_its_limit_a_stale_list_fails_the_check() {
+        let c = Containments::from_challenge("http://127.0.0.1:9").unwrap().with_max_stale(Duration::from_secs(10));
         c.load([]);
-        c.heard_at_ms.store(0, Ordering::Release);
-        tokio::time::sleep(STALE_AFTER + Duration::from_millis(50)).await;
-        // Nothing listens on port 9, so the direct lookup fails instead of answering "no one".
-        assert!(c.find(&[&EntityRef::new("Human", "alice")]).await.is_err());
+        c.heard_ago(Duration::from_secs(11));
+        assert!(c.find(&[&EntityRef::new("Human", "alice")]).await.is_err(), "never \"not contained\"");
+    }
+
+    #[tokio::test]
+    async fn a_list_from_a_peer_keeps_its_age() {
+        let c = Containments::from_challenge("http://127.0.0.1:9").unwrap();
+        assert!(c.held().is_none(), "nothing to pass on before the first list");
+        let mallory = EntityRef::new("Human", "mallory");
+        let list = vec![Containment {
+            qid: "containment_2".into(),
+            principal: Some(mallory.clone().into()),
+            ..Default::default()
+        }];
+        c.load_list(4, list, Duration::from_secs(30));
+        assert!(c.is_ready());
+        let (version, held, age) = c.held().unwrap();
+        assert_eq!((version, held.len()), (4, 1));
+        assert!(age >= Duration::from_secs(30), "the peer's age carries over: {age:?}");
+        assert_eq!(c.find(&[&mallory]).await.unwrap(), ["containment_2"]);
     }
 }

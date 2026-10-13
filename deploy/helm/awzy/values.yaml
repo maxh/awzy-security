@@ -84,6 +84,9 @@ pdp:
   # Service spreads connections, not requests, so this is how enforcement points' checks reach
   # PDPs the autoscaler adds. 0 keeps connections open.
   maxConnectionAgeSeconds: 60
+  # How long a PDP decides on its last containment list when neither the feed nor awzy-challenge
+  # answers, longer than a database failover; then checks fail as unavailable (ADR 0119).
+  containmentsMaxStaleSeconds: 300
   resources:
     requests: { cpu: 250m, memory: 256Mi }
     limits: { memory: 512Mi }

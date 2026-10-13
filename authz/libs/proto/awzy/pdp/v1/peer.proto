@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+// What one PDP passes another (ADR 0119). A PDP that starts while awzy-policy, awzy-context, or
+// awzy-challenge can't be reached takes what it's missing from a running PDP. Internal to an
+// install: enforcement points use awzy.authz.v1, and this API may change between releases.
+package awzy.pdp.v1;
+
+import "awzy/challenge/v1/challenge.proto";
+import "awzy/policy/v1/policy.proto";
+
+service PdpPeerService {
+  // Everything this PDP decides from, as its sources sent it, each with its age. An input the
+  // PDP hasn't loaded, or doesn't use, is unset.
+  rpc GetState(GetStateRequest) returns (GetStateResponse);
+}
+
+message GetStateRequest {}
+
+message GetStateResponse {
+  PolicyState policy = 1;
+  PrincipalsState principals = 2;
+  ContainmentsState containments = 3;
+}
+
+// The bundle and enforcement modes in force, signed as awzy-policy sent them. The PDP that
+// receives them verifies them as if awzy-policy had.
+message PolicyState {
+  awzy.policy.v1.PolicyBundle bundle = 1;
+  awzy.policy.v1.EnforcementSetting install = 2;
+  repeated awzy.policy.v1.EnforcementSetting scoped = 3;
+  // Since awzy-policy last answered, across every PDP it passed through. A duration, not a
+  // time, so node clocks don't matter.
+  uint64 age_ms = 4;
+}
+
+// The principals snapshot, as awzy-context's /v1/principals body.
+message PrincipalsState {
+  int64 version = 1;
+  bytes snapshot_json = 2;
+  uint64 age_ms = 3;
+}
+
+// The active containments, as awzy-challenge's feed sent them.
+message ContainmentsState {
+  int64 version = 1;
+  repeated awzy.challenge.v1.Containment active = 2;
+  // Since the feed was last heard from.
+  uint64 age_ms = 3;
+}

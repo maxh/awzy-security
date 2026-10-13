@@ -35,6 +35,26 @@ fn uid_key(uid: &Value) -> Option<String> {
     Some(key(uid["type"].as_str()?, uid["id"].as_str()?))
 }
 
+/// awzy-context's `/v1/principals` body, which a PDP also passes on to a starting peer (ADR 0119).
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct SnapshotBody {
+    pub version: i64,
+    #[serde(default)]
+    pub unchanged: bool,
+    /// Absent only when `unchanged`.
+    #[serde(default)]
+    pub entities: Option<Vec<Value>>,
+    /// Absent from an awzy-context older than ADR 0056: no scores.
+    #[serde(default)]
+    pub risk: HashMap<String, i64>,
+    /// Absent from one older than ADR 0085.
+    #[serde(default)]
+    pub automation: HashMap<String, i64>,
+    /// Absent from one older than ADR 0110: none.
+    #[serde(default)]
+    pub token_issuers: Vec<awzy_model::TrustedIssuer>,
+}
+
 #[derive(Default)]
 struct Snapshot {
     version: i64,
@@ -144,6 +164,36 @@ impl Principals {
         self.loaded.store(true, Ordering::Release);
     }
 
+    /// Loads a snapshot body from awzy-context or a peer. Returns false if it was `unchanged`.
+    pub fn apply(&self, body: SnapshotBody) -> anyhow::Result<bool> {
+        if body.unchanged {
+            return Ok(false);
+        }
+        let entities = body.entities.ok_or_else(|| anyhow::anyhow!("no entities in the principals snapshot"))?;
+        let count = entities.len();
+        self.load_with_scores(body.version, entities, body.risk, body.automation);
+        self.set_trusted_issuers(body.token_issuers);
+        tracing::info!(version = body.version, entities = count, "loaded principals");
+        Ok(true)
+    }
+
+    /// The snapshot in force as a body, for a starting peer. None before the first snapshot, or
+    /// without awzy-context.
+    pub fn held(&self) -> Option<SnapshotBody> {
+        if !self.configured || !self.is_ready() {
+            return None;
+        }
+        let snapshot = self.snapshot.load();
+        Some(SnapshotBody {
+            version: snapshot.version,
+            unchanged: false,
+            entities: Some(snapshot.entities.values().cloned().collect()),
+            risk: snapshot.risk.clone(),
+            automation: snapshot.automation.clone(),
+            token_issuers: self.trusted_issuers().as_ref().clone(),
+        })
+    }
+
     /// The request's entities with each known principal, and its groups up the hierarchy,
     /// taken from the snapshot instead.
     pub fn merge(&self, request: Value, principals: &[&EntityRef]) -> Value {
@@ -242,30 +292,8 @@ pub async fn sync_waiting(
     let limit = Duration::from_secs(10) + wait.unwrap_or_default();
     let res = tokio::time::timeout(limit, client.request(context_get(&url, tokens)?)).await??;
     anyhow::ensure!(res.status().is_success(), "{url} returned {}", res.status());
-    let body: Value = serde_json::from_slice(&res.into_body().collect().await?.to_bytes())?;
-    let version = body["version"].as_i64().ok_or_else(|| anyhow::anyhow!("no version in the principals snapshot"))?;
-    if body["unchanged"] == true {
-        return Ok(false);
-    }
-    let entities = body["entities"]
-        .as_array()
-        .cloned()
-        .ok_or_else(|| anyhow::anyhow!("no entities in the principals snapshot"))?;
-    let count = entities.len();
-    // Absent from an awzy-context older than ADR 0056: no scores.
-    let scores = |field: &str| -> HashMap<String, i64> {
-        body[field].as_object().into_iter().flatten().filter_map(|(k, v)| Some((k.clone(), v.as_i64()?))).collect()
-    };
-    // Either is absent from an awzy-context older than it: no scores.
-    principals.load_with_scores(version, entities, scores("risk"), scores("automation"));
-    // Absent from an awzy-context older than ADR 0110: none.
-    let issuers = match body.get("token_issuers") {
-        Some(list) => serde_json::from_value(list.clone())?,
-        None => vec![],
-    };
-    principals.set_trusted_issuers(issuers);
-    tracing::info!(version, entities = count, "loaded principals from awzy-context");
-    Ok(true)
+    let body: SnapshotBody = serde_json::from_slice(&res.into_body().collect().await?.to_bytes())?;
+    principals.apply(body)
 }
 
 #[cfg(test)]
@@ -273,6 +301,26 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn a_snapshot_passed_to_a_peer_loads_the_same() {
+        let p = Principals::awaiting_sync();
+        assert!(p.held().is_none(), "nothing to pass on before the first snapshot");
+        let body: SnapshotBody = serde_json::from_value(json!({
+            "version": 9,
+            "entities": [{ "uid": { "type": "Human", "id": "bob" }, "attrs": {}, "parents": [] }],
+            "risk": { "Human::bob": 70 },
+        }))
+        .unwrap();
+        assert!(p.apply(body).unwrap());
+
+        let peer = Principals::awaiting_sync();
+        let passed = serde_json::to_vec(&p.held().unwrap()).unwrap();
+        assert!(peer.apply(serde_json::from_slice(&passed).unwrap()).unwrap());
+        assert_eq!(peer.version(), 9);
+        let bob = EntityRef::new("Human", "bob");
+        assert_eq!(peer.risk_of(&[&bob]), HashMap::from([("Human::bob".to_string(), 70)]));
+    }
 
     #[test]
     fn principals_and_their_groups_come_from_the_snapshot() {

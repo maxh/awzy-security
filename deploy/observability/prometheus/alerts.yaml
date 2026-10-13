@@ -16,7 +16,7 @@ groups:
         labels: { severity: page }
         annotations:
           summary: "{{ $labels.job }} is up but not ready to take traffic"
-          description: "A PDP stays not ready until it has loaded a signed bundle and the enforcement mode."
+          description: "A PDP stays not ready until it has a signed bundle and the enforcement mode, from awzy-policy or from a running PDP."
 
       - alert: AwzyPdpCheckLatencyHigh
         expr: |
@@ -77,7 +77,7 @@ groups:
         labels: { severity: page }
         annotations:
           summary: "A PDP hasn't heard the containment feed for {{ $value | humanizeDuration }} (target: 2 s)"
-          description: "Until it recovers, the PDP asks awzy-challenge on every check, which counts against the 10 ms budget."
+          description: "Until it recovers, the PDP asks awzy-challenge on every check. If awzy-challenge can't answer, the PDP uses its last list for up to 5 minutes, then fails checks."
 
       - alert: AwzyPdpPolicySyncStale
         expr: awzy_pdp_policy_sync_age_seconds > 60

@@ -2,6 +2,7 @@
 //! - `awzy.authz.v1`: the decision API enforcement points call.
 //! - `awzy.policy.v1`: versioned policy bundles.
 //! - `awzy.challenge.v1`: challenges and containments.
+//! - `awzy.pdp.v1`: what a running PDP passes a starting one.
 
 pub mod authz {
     pub mod v1 {
@@ -12,6 +13,12 @@ pub mod authz {
 pub mod challenge {
     pub mod v1 {
         tonic::include_proto!("awzy.challenge.v1");
+    }
+}
+
+pub mod pdp {
+    pub mod v1 {
+        tonic::include_proto!("awzy.pdp.v1");
     }
 }
 

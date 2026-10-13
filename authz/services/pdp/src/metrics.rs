@@ -88,6 +88,10 @@ pub static RESOURCE_CACHE_HITS: Counter = Counter::new();
 pub static RESOURCE_FETCHES: Counter = Counter::new();
 pub static RESOURCE_STALE_SERVED: Counter = Counter::new();
 
+/// Checks that used the last containment list because neither the feed nor awzy-challenge
+/// answered (ADR 0119).
+pub static CONTAINMENTS_STALE_SERVED: Counter = Counter::new();
+
 /// The freshness targets (platform plan): when the bundle and mode, and the principals snapshot,
 /// were last synced. A sync that finds nothing new still counts: the PDP is as fresh as it can be.
 pub static POLICY_SYNC: LazyLock<LastSuccess> = LazyLock::new(LastSuccess::default);
@@ -106,6 +110,9 @@ fn render_freshness(out: &mut String) {
     {
         let _ = writeln!(out, "awzy_pdp_resource_lookups_total{{served=\"{served}\"}} {}", n.get());
     }
+    out.push_str("# HELP awzy_pdp_containments_stale_served_total Checks that used the last containment list because awzy-challenge couldn't be reached.\n");
+    out.push_str("# TYPE awzy_pdp_containments_stale_served_total counter\n");
+    let _ = writeln!(out, "awzy_pdp_containments_stale_served_total {}", CONTAINMENTS_STALE_SERVED.get());
     POLICY_SYNC.render(out, "awzy_pdp_policy_sync", "syncing the bundle and enforcement mode from awzy-policy");
     PRINCIPALS_SYNC.render(out, "awzy_pdp_principals_sync", "syncing principals from awzy-context");
     RESOURCE_FEED.render(out, "awzy_pdp_resource_feed", "awzy-context's resource change log");
