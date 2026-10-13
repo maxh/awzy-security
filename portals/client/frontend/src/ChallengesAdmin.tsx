@@ -11,8 +11,19 @@ import { ResetKeys } from "./SecurityKeys";
 import { LINKED, linkedChallenge, requestLabel } from "./challengeLabels";
 import { entityLabel, formatTime } from "./format";
 
-/** Approvals and containments, for those who administer challenges. */
-export function Admin({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => void }) {
+/**
+ * Approvals and containments, for those who administer challenges, or, read-only, for those who
+ * audit them: every record, and no way to change one.
+ */
+export function Admin({
+  fetchKey,
+  onChanged,
+  readOnly,
+}: {
+  fetchKey: number;
+  onChanged: () => void;
+  readOnly: boolean;
+}) {
   const data = useLazyLoadQuery<ChallengesAdminQuery>(
     graphql`
       query ChallengesAdminQuery {
@@ -70,13 +81,13 @@ export function Admin({ fetchKey, onChanged }: { fetchKey: number; onChanged: ()
         ) : (
           <Stack gap="sm">
             {approvals.map((c) => (
-              <Approval key={c.id} challenge={c} onChanged={onChanged} />
+              <Approval key={c.id} challenge={c} onChanged={onChanged} readOnly={readOnly} />
             ))}
           </Stack>
         )}
       </Stack>
-      <Containments containments={data.containments.nodes} onChanged={onChanged} />
-      <ResetKeys />
+      <Containments containments={data.containments.nodes} onChanged={onChanged} readOnly={readOnly} />
+      {!readOnly && <ResetKeys />}
     </Stack>
   );
 }
@@ -84,7 +95,16 @@ export function Admin({ fetchKey, onChanged }: { fetchKey: number; onChanged: ()
 type AdminPending = ChallengesAdminQuery["response"]["pending"]["nodes"][number];
 type ToApprove = ChallengesPageQuery["response"]["toApprove"]["nodes"][number];
 
-export function Approval({ challenge: c, onChanged }: { challenge: AdminPending | ToApprove; onChanged: () => void }) {
+export function Approval({
+  challenge: c,
+  onChanged,
+  readOnly = false,
+}: {
+  challenge: AdminPending | ToApprove;
+  onChanged: () => void;
+  /** Shown to an auditor: the request, without approving or rejecting it. */
+  readOnly?: boolean;
+}) {
   const [commit, isSaving] = useMutation<ChallengesAdminDecideMutation>(graphql`
     mutation ChallengesAdminDecideMutation($input: DecideChallengeInput!) {
       decideChallenge(input: $input) {
@@ -121,6 +141,7 @@ export function Approval({ challenge: c, onChanged }: { challenge: AdminPending 
             “{c.justification}”
           </Text>
         )}
+        {!readOnly && (
         <Group gap="xs" align="flex-end">
           <TextInput
             size="xs"
@@ -138,6 +159,7 @@ export function Approval({ challenge: c, onChanged }: { challenge: AdminPending 
             </Button>
           </Group>
         </Group>
+        )}
         {error && (
           <Text size="sm" c="red">
             {error}
@@ -153,9 +175,11 @@ type ContainmentRow = ChallengesAdminQuery["response"]["containments"]["nodes"][
 function Containments({
   containments,
   onChanged,
+  readOnly,
 }: {
   containments: ReadonlyArray<ContainmentRow>;
   onChanged: () => void;
+  readOnly: boolean;
 }) {
   const [contain, isContaining] = useMutation<ChallengesAdminContainMutation>(graphql`
     mutation ChallengesAdminContainMutation($input: ContainPrincipalInput!) {
@@ -247,6 +271,7 @@ function Containments({
                     {c.createdBy?.label}
                     {c.createdAt ? `, ${formatTime(c.createdAt)}` : ""}
                   </Table.Td>
+                  {!readOnly && (
                   <Table.Td>
                     <Group gap="xs" wrap="nowrap">
                       {c.monitor && (
@@ -259,12 +284,14 @@ function Containments({
                       </Button>
                     </Group>
                   </Table.Td>
+                  )}
                 </Table.Tr>
               ))}
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>
       )}
+      {!readOnly && (
       <Group align="flex-end">
         <Select
           label="Contain"
@@ -286,6 +313,7 @@ function Containments({
           Contain
         </Button>
       </Group>
+      )}
       {error && (
         <Alert color="red" title="Not done">
           {error}

@@ -54,8 +54,8 @@ What runs today, in a line per area. The area's README has the detail and the de
 | [awzy-intake](../../authz/services/intake/) | App events and AWS CloudTrail into one event schema on Kafka | Other clouds' audit logs, DLP signals, agent traces |
 | [awzy-reasoner](../../authz/services/reasoner/) | Risk and automation scores every 15 minutes, automated containments in their own mode, investigations on its flags | Looking after an action, skipping challenges for routine sessions |
 | Decision log | PDP to Kafka to ClickHouse, with backups to the install's bucket | The object-storage cold tier |
-| [Client portal](../../portals/client/) | Decisions, Policies with dry-run, Enforcement, Challenges, Investigations, Directory, Connectors, Status; MCP; Awzy Bot on any model ([ADR 0120](../adr/0120-any-model-on-any-service-routed-at-runtime.md)); every operation checked by the PDP | Audit exports, a read-only audit role |
-| [Corp portal](../../portals/corp/) | Install registry, heartbeats and fleet health, Slack alerts, read-only MCP | Support sessions, staff sign-in through awzy's IdP |
+| [Client portal](../../portals/client/) | Decisions, Policies with dry-run, Enforcement, Challenges, Investigations, Directory, Connectors, Status; MCP; Awzy Bot on any model ([ADR 0120](../adr/0120-any-model-on-any-service-routed-at-runtime.md)); decision exports and a read-only audit permission ([ADR 0121](../adr/0121-audit-sees-everything-in-a-portal-area-and-changes-nothing.md)); every operation checked by the PDP | Restore and Keeper recovery Jobs ([#141](https://github.com/maxh/awzy-security/issues/141)) |
+| [Corp portal](../../portals/corp/) | Install registry, heartbeats and fleet health, Slack alerts, read-only MCP, support sessions the client approves | Staff sign-in through awzy's IdP |
 | Build and release | Bazel; every merge publishes signed images, SBOMs, and the chart to the `fast` channel | arm64 images, a `stable` channel |
 | Client installs | The AWS and Google Cloud example installs run end to end as the public demos ([deployment plan](deployment-plan.md)) | Azure, a design partner's own install |
 

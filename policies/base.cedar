@@ -52,11 +52,11 @@ permit (principal in Group::"security", action == Action::"call", resource is Mc
 @id("it-calls-any-tool")
 permit (principal in Group::"it", action == Action::"call", resource is McpTool);
 
-// The client portal (ADR 0020): the security team runs it.
+// The client portal (ADR 0020): the security team runs it, and sees everything in it (ADR 0121).
 @id("security-team-runs-the-portal")
 permit (
   principal in Group::"security",
-  action in [Action::"view", Action::"administer"],
+  action in [Action::"view", Action::"audit", Action::"administer"],
   resource is PortalArea
 );
 
@@ -111,8 +111,8 @@ forbid (principal, action, resource)
 when { context has support_areas }
 unless { action == Action::"view" };
 
-// Everyone answers the challenges sent to them in the client portal. Seeing every challenge and
-// containing principals is `administer`, the security team's above.
+// Everyone answers the challenges sent to them in the client portal. Seeing every challenge is
+// `audit` (ADR 0121), and containing principals `administer`, both the security team's above.
 @id("humans-answer-their-challenges")
 permit (principal is Human, action == Action::"view", resource == PortalArea::"challenges");
 
