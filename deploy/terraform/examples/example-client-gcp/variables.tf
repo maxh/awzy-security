@@ -46,3 +46,9 @@ variable "github_oidc_subject_repo" {
   type        = string
   default     = null
 }
+
+variable "alert_emails" {
+  description = "Who the install's alerts reach (monitoring), by email. Without any, incidents still open in Cloud Monitoring"
+  type        = list(string)
+  default     = []
+}

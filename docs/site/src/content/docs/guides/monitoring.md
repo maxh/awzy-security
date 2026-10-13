@@ -8,7 +8,9 @@ install's network policies let any scraper reach. awzy ships one Grafana dashboa
 set of alert rules for them, in
 [deploy/observability](https://github.com/maxh/awzy-security/tree/main/deploy/observability).
 On AWS, the `aws/monitoring` module runs Amazon Managed Prometheus with a scraper for the cluster
-and loads the alert rules, and the `grafana` module loads the dashboard into any Grafana. You can
+and loads the alert rules, and the `grafana` module loads the dashboard into any Grafana. On
+Google Cloud, the `gcp/monitoring` module has Managed Service for Prometheus scrape the cluster
+and makes each alert rule a Cloud Monitoring alert policy, with the same query and wait. You can
 use your own Prometheus and Grafana instead: load the same files.
 
 ## Traces

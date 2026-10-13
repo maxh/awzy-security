@@ -34,7 +34,7 @@ case $deployment in
   example-gcp)
     env_dir=deploy/terraform/examples/example-client-gcp
     title="The example client's Terraform (Google Cloud)"
-    modules=(examples/example-client-gcp/install examples/example-client-gcp/bootstrap)
+    modules=(examples/example-client-gcp/install examples/example-client-gcp/bootstrap examples/example-client-gcp/monitoring)
     ;;
   *) echo "$usage" >&2; exit 2 ;;
 esac
