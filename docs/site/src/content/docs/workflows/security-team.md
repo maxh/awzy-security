@@ -51,13 +51,17 @@ Leave **automated containments** in monitor for longer, and switch them separate
 
 ## Changing who can do what
 
-The portal's own access is policy too: `view` and `administer` on each portal area. To let
-auditors read decisions and change nothing, for example:
+The portal's own access is policy too: `view`, `audit`, and `administer` on each portal area.
+`audit` sees everything in an area and changes nothing, such as every challenge and containment.
+To let auditors read decisions and change nothing, for example:
 
 ```cedar
 permit (principal in Group::"auditors", action == Action::"view",
         resource == PortalArea::"decisions");
 ```
+
+To let them see everything in the portal, every challenge and containment included, and still
+change nothing, see [external auditors](/workflows/auditors/#getting-read-only-access).
 
 Within an area, a few sensitive fields are checked on their own: a decision's request context, a
 person's attributes and risk score, a resource's sharing, and a challenge's justification.

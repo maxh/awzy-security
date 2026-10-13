@@ -29,7 +29,7 @@ use awzy_portal::{connection::page, Actor, Qid, UtcTimestamp};
 use chrono::{DateTime, Utc};
 
 use crate::{
-    access::{authorize, require, PortalAction, PortalArea, Surface, Viewer},
+    access::{authorize, require, require_to_see_all, PortalAction, PortalArea, Surface, Viewer},
     decisions::EntityRef,
     Services,
 };
@@ -248,18 +248,18 @@ impl Containment {
     }
 }
 
-/// For `node(id)`: the challenge, if the viewer is the person it was sent to or administers
-/// challenges.
-/// One containment, for `node(id)`. For those who administer challenges. awzy-challenge has no
-/// lookup by ID, so this looks through the most recent ones, lifted included.
+/// One containment, for `node(id)`. For those who audit or administer challenges. awzy-challenge
+/// has no lookup by ID, so this looks through the most recent ones, lifted included.
 pub(crate) async fn containment_by_id(ctx: &Context<'_>, id: ContainmentId) -> Result<Option<Containment>> {
-    require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
+    require_to_see_all(ctx, PortalArea::Challenges).await?;
     let req = ListContainmentsRequest { active_only: false, principal: None, limit: 500, include_monitor: true };
     let list = client(ctx)?.list_containments(req).await.map_err(grpc)?.into_inner().containments;
     let qid = id.to_string();
     Ok(list.into_iter().find(|c| c.qid == qid).map(Containment))
 }
 
+/// For `node(id)`: the challenge, if the viewer is the person it was sent to, may approve it, or
+/// audits or administers challenges.
 pub(crate) async fn get_by_id(ctx: &Context<'_>, id: ChallengeId) -> Result<Option<Challenge>> {
     let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
     let res = client(ctx)?.get_challenge(GetChallengeRequest { challenge_qid: id.to_string() }).await;
@@ -271,7 +271,7 @@ pub(crate) async fn get_by_id(ctx: &Context<'_>, id: ChallengeId) -> Result<Opti
     let Some(c) = c else { return Ok(None) };
     let answers_it = c.answerer_id == viewer.subject.id && viewer.subject.kind == entity_type::HUMAN;
     if !answers_it && !may_approve(ctx.data::<Services>()?, &viewer, &c).await {
-        require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
+        require_to_see_all(ctx, PortalArea::Challenges).await?;
     }
     Ok(Some(Challenge(c)))
 }
@@ -356,7 +356,7 @@ impl ChallengeQuery {
         page(mine, key, after, first)
     }
 
-    /// Every challenge, newest first. For those who administer challenges.
+    /// Every challenge, newest first. For those who audit or administer challenges.
     async fn challenges(
         &self,
         ctx: &Context<'_>,
@@ -364,7 +364,7 @@ impl ChallengeQuery {
         after: Option<String>,
         first: Option<i32>,
     ) -> Result<Connection<String, Challenge>> {
-        require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
+        require_to_see_all(ctx, PortalArea::Challenges).await?;
         page(list(ctx, String::new(), status, LISTED).await?, |c| c.0.qid.clone(), after, first)
     }
 
@@ -391,7 +391,7 @@ impl ChallengeQuery {
         }
     }
 
-    /// Containments, newest first. For those who administer challenges.
+    /// Containments, newest first. For those who audit or administer challenges.
     async fn containments(
         &self,
         ctx: &Context<'_>,
@@ -399,7 +399,7 @@ impl ChallengeQuery {
         after: Option<String>,
         first: Option<i32>,
     ) -> Result<Connection<String, Containment>> {
-        require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
+        require_to_see_all(ctx, PortalArea::Challenges).await?;
         let req = ListContainmentsRequest { active_only, principal: None, limit: LISTED, include_monitor: true };
         let list = client(ctx)?.list_containments(req).await.map_err(grpc)?.into_inner().containments;
         page(list.into_iter().map(Containment).collect(), |c| c.0.qid.clone(), after, first)
@@ -546,33 +546,37 @@ pub struct ChallengeSubscription;
 #[Subscription]
 impl ChallengeSubscription {
     /// Challenges as they're opened or change: the signed-in person's own, or every one for those
-    /// who administer challenges.
+    /// who audit or administer challenges.
     async fn challenge_updated(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = Challenge>> {
         let viewer = require(ctx, PortalAction::View, PortalArea::Challenges).await?;
         let services = ctx.data::<Services>()?;
-        let every = authorize(services, &viewer, Surface::Portal, PortalAction::Administer, PortalArea::Challenges)
-            .await
-            .is_ok();
-        let answerer_id = if every { String::new() } else { answering_human(&viewer)? };
+        // Which action shows every challenge, if either does, so the feed is rechecked with it.
+        let mut every = None;
+        for action in [PortalAction::Audit, PortalAction::Administer] {
+            if authorize(services, &viewer, Surface::Portal, action, PortalArea::Challenges).await.is_ok() {
+                every = Some(action);
+                break;
+            }
+        }
+        let answerer_id = if every.is_some() { String::new() } else { answering_human(&viewer)? };
         let stream = client(ctx)?.watch_challenges(WatchChallengesRequest { answerer_id }).await.map_err(grpc)?;
         let stream = StreamExt::filter_map(stream.into_inner(), |m| async move {
             // A heartbeat carries no challenge; a broken stream ends the subscription.
             m.ok()?.challenge.map(Challenge)
         });
-        let action = if every { PortalAction::Administer } else { PortalAction::View };
-        Ok(while_allowed(services.clone(), viewer, action, stream))
+        Ok(while_allowed(services.clone(), viewer, every.unwrap_or(PortalAction::View), stream))
     }
 
-    /// Every active containment, whenever one is added or lifted. For those who administer
-    /// challenges.
+    /// Every active containment, whenever one is added or lifted. For those who audit or
+    /// administer challenges.
     async fn containments_changed(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = Vec<Containment>>> {
-        let viewer = require(ctx, PortalAction::Administer, PortalArea::Challenges).await?;
+        let (viewer, allowed) = require_to_see_all(ctx, PortalArea::Challenges).await?;
         let stream = client(ctx)?.watch_containments(WatchContainmentsRequest {}).await.map_err(grpc)?;
         let stream = StreamExt::filter_map(stream.into_inner(), |m| async move {
             let m = m.ok()?;
             m.changed.then(|| m.active.into_iter().map(Containment).collect())
         });
-        Ok(while_allowed(ctx.data::<Services>()?.clone(), viewer, PortalAction::Administer, stream))
+        Ok(while_allowed(ctx.data::<Services>()?.clone(), viewer, allowed, stream))
     }
 }
 

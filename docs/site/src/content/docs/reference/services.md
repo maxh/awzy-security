@@ -199,7 +199,7 @@ what each page does.
     Bot;
   - `/mcp`: an MCP endpoint for your own agents, with read-only tools and policy drafts.
 
-  Every operation is checked with the PDP as `view` or `administer` on a portal area. Sign-in is
+  Every operation is checked with the PDP as `view`, `audit`, or `administer` on a portal area. Sign-in is
   through your IdP.
 - **Stores:** nothing of its own.
 - **Reads:** decisions from ClickHouse. Everything else comes from the services above.

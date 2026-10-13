@@ -95,7 +95,8 @@ const route = getRouteApi("/challenges");
 export function ChallengesPage() {
   const queryRef = route.useLoaderData();
   const router = useRouter();
-  // Only for the admin section's query, which loads only for those who administer challenges.
+  // Only for the admin section's query, which loads only for those who audit or administer
+  // challenges.
   const [fetchKey, setFetchKey] = useState(0);
   // Kept outside Suspense so the refetch after submitting doesn't clear it.
   const [answered, setAnswered] = useState<Answered | null>(null);
@@ -129,8 +130,8 @@ export function ChallengesPage() {
 /**
  * Refreshes the page when a challenge opens or changes, or a containment is added or lifted, so
  * no one has to reload to see a request approved. A burst of changes refreshes once. Containments
- * are only for those who administer challenges; for anyone else that subscription is refused,
- * which is fine.
+ * are only for those who audit or administer challenges; for anyone else that subscription is
+ * refused, which is fine.
  */
 function useLive(refresh: () => void) {
   const latest = useRef(refresh);
@@ -212,6 +213,7 @@ function Challenges({
     graphql`
       query ChallengesPageQuery {
         canAdminister: viewerCan(action: ADMINISTER, area: CHALLENGES)
+        canAudit: viewerCan(action: AUDIT, area: CHALLENGES)
         pending: myChallenges(status: PENDING, first: 100) {
           nodes {
             id
@@ -374,9 +376,9 @@ function Challenges({
 
       <SecurityKeys keys={data.mySecurityKeys} onChanged={onChanged} />
 
-      {data.canAdminister && (
+      {(data.canAdminister || data.canAudit) && (
         <Suspense fallback={<Loading />}>
-          <Admin fetchKey={fetchKey} onChanged={onChanged} />
+          <Admin fetchKey={fetchKey} onChanged={onChanged} readOnly={!data.canAdminister} />
         </Suspense>
       )}
     </Stack>

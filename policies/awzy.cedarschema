@@ -134,6 +134,14 @@ action administer appliesTo {
   context: RequestContext,
 };
 
+// Seeing everything in an area and changing nothing (ADR 0121): every challenge and containment,
+// where `view` shows only your own. For auditors.
+action audit appliesTo {
+  principal: [Human, ServiceAccount],
+  resource: [PortalArea],
+  context: RequestContext,
+};
+
 // Switching an enforcement mode, either way, on top of `administer` on the enforcement area:
 // asked only when someone switches, so policy can challenge the switch itself.
 action switch_enforcement appliesTo {

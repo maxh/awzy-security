@@ -7,10 +7,15 @@ use sqlx::postgres::{PgConnectOptions, PgPool, PgPoolOptions};
 use tonic::transport::Channel;
 
 use super::*;
-use crate::testing::{human, pdp, pdp_endpoint, run, run_err};
+use crate::testing::{human, pdp_endpoint, pdp_with, run, run_err};
 
 /// The schema with a PDP and an awzy-challenge in a fresh Postgres schema.
 async fn setup() -> Option<(crate::ClientPortalSchema, ChallengeClient)> {
+    setup_with(awzy_pdp::DEFAULT_POLICIES).await
+}
+
+/// [`setup`], with the portal's PDP under `policies`.
+async fn setup_with(policies: &str) -> Option<(crate::ClientPortalSchema, ChallengeClient)> {
     let Ok(url) = std::env::var("AWZY_TEST_POSTGRES_URL") else {
         eprintln!("skipping: AWZY_TEST_POSTGRES_URL is not set");
         return None;
@@ -38,7 +43,8 @@ async fn setup() -> Option<(crate::ClientPortalSchema, ChallengeClient)> {
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let channel = Channel::from_shared(format!("http://{addr}")).unwrap().connect().await.unwrap();
     let challenge = ChallengeClient::new(awzy_service_auth::grpc_channel(channel, "awzy-challenge"));
-    let services = Services { pdp: Some(pdp().await), challenge: Some(challenge.clone()), ..Default::default() };
+    let services =
+        Services { pdp: Some(pdp_with(policies).await), challenge: Some(challenge.clone()), ..Default::default() };
     Some((crate::schema_with(services), challenge))
 }
 
@@ -129,6 +135,39 @@ async fn approvals_and_containments_are_for_those_policy_allows() {
     );
     assert_eq!(run(&schema, &alice, lift).await["liftContainment"]["containment"]["liftedBy"]["id"], json!("alice"));
     assert_eq!(run(&schema, &alice, "{ containments { nodes { id } } }").await["containments"]["nodes"], json!([]));
+}
+
+#[tokio::test]
+async fn an_auditor_sees_every_challenge_and_containment_and_changes_nothing() {
+    let auditors = format!(
+        "{}\npermit (principal in Group::\"auditors\", action in [Action::\"view\", Action::\"audit\"], resource is PortalArea);",
+        awzy_pdp::DEFAULT_POLICIES
+    );
+    let Some((schema, mut client)) = setup_with(&auditors).await else { return };
+    let id = open(&mut client, "bob", WireKind::Approval).await;
+    let (alice, dana) = (human("alice", "security"), human("dana", "auditors"));
+    let contain = r#"mutation { containPrincipal(input: { principal: { type: "ServiceAccount", id: "sales-genie" },
+        reason: "bulk export of the pipeline" }) { containment { id } } }"#;
+    let c = run(&schema, &alice, contain).await["containPrincipal"]["containment"]["id"].clone();
+
+    let seen = run(&schema, &dana, "{ challenges { nodes { id } } containments { nodes { id } } }").await;
+    assert_eq!(seen["challenges"]["nodes"], json!([{ "id": id }]));
+    assert_eq!(seen["containments"]["nodes"], json!([{ "id": c }]));
+    let node = format!(r#"{{ challenge: node(id: "{id}") {{ id }} containment: node(id: {c}) {{ id }} }}"#);
+    let by_id = run(&schema, &dana, node.as_str()).await;
+    assert_eq!((&by_id["challenge"]["id"], &by_id["containment"]["id"]), (&json!(id), &c));
+    let can = run(&schema, &dana, "{ audit: viewerCan(action: AUDIT, area: CHALLENGES) administer: viewerCan(action: ADMINISTER, area: CHALLENGES) }").await;
+    assert_eq!(can, json!({ "audit": true, "administer": false }));
+
+    let decide = format!(
+        r#"mutation {{ decideChallenge(input: {{ challengeQid: "{id}", approve: true, note: "ok" }}) {{ challenge {{ status }} }} }}"#
+    );
+    assert!(run_err(&schema, &dana, decide.as_str()).await.contains("doesn't let dana approve"));
+    assert!(run_err(&schema, &dana, contain).await.contains("may not administer challenges"));
+    let lift = format!(
+        r#"mutation {{ liftContainment(input: {{ containmentQid: {c}, reason: "reviewed" }}) {{ containment {{ id }} }} }}"#
+    );
+    assert!(run_err(&schema, &dana, lift).await.contains("may not administer challenges"));
 }
 
 #[tokio::test]

@@ -11,8 +11,19 @@ import { ResetKeys } from "./SecurityKeys";
 import { LINKED, linkedChallenge, requestLabel } from "./challengeLabels";
 import { entityLabel, formatTime } from "./format";
 
-/** Approvals and containments, for those who administer challenges. */
-export function Admin({ fetchKey, onChanged }: { fetchKey: number; onChanged: () => void }) {
+/**
+ * Approvals and containments, for those who administer challenges, or, read-only, for those who
+ * audit them: every record, and no way to change one.
+ */
+export function Admin({
+  fetchKey,
+  onChanged,
+  readOnly,
+}: {
+  fetchKey: number;
+  onChanged: () => void;
+  readOnly: boolean;
+}) {
   const data = useLazyLoadQuery<ChallengesAdminQuery>(
     graphql`
       query ChallengesAdminQuery {
@@ -70,13 +81,13 @@ export function Admin({ fetchKey, onChanged }: { fetchKey: number; onChanged: ()
         ) : (
           <Stack gap="sm">
             {approvals.map((c) => (
-              <Approval key={c.id} challenge={c} onChanged={onChanged} />
+              <Approval key={c.id} challenge={c} onChanged={onChanged} readOnly={readOnly} />
             ))}
           </Stack>
         )}
       </Stack>
-      <Containments containments={data.containments.nodes} onChanged={onChanged} />
-      <ResetKeys />
+      <Containments containments={data.containments.nodes} onChanged={onChanged} readOnly={readOnly} />
+      {!readOnly && <ResetKeys />}
     </Stack>
   );
 }
@@ -84,7 +95,16 @@ export function Admin({ fetchKey, onChanged }: { fetchKey: number; onChanged: ()
 type AdminPending = ChallengesAdminQuery["response"]["pending"]["nodes"][number];
 type ToApprove = ChallengesPageQuery["response"]["toApprove"]["nodes"][number];
 
-export function Approval({ challenge: c, onChanged }: { challenge: AdminPending | ToApprove; onChanged: () => void }) {
+export function Approval({
+  challenge: c,
+  onChanged,
+  readOnly = false,
+}: {
+  challenge: AdminPending | ToApprove;
+  onChanged: () => void;
+  /** Shown to an auditor: the request, without approving or rejecting it. */
+  readOnly?: boolean;
+}) {
   const [commit, isSaving] = useMutation<ChallengesAdminDecideMutation>(graphql`
     mutation ChallengesAdminDecideMutation($input: DecideChallengeInput!) {
       decideChallenge(input: $input) {
@@ -121,23 +141,25 @@ export function Approval({ challenge: c, onChanged }: { challenge: AdminPending 
             “{c.justification}”
           </Text>
         )}
-        <Group gap="xs" align="flex-end">
-          <TextInput
-            size="xs"
-            placeholder="Note (optional)"
-            value={note}
-            onChange={(e) => setNote(e.currentTarget.value)}
-            style={{ flex: "1 1 200px" }}
-          />
-          <Group gap="xs" wrap="nowrap">
-            <Button size="xs" color="teal" loading={isSaving} onClick={() => decide(true)}>
-              Approve
-            </Button>
-            <Button size="xs" color="red" variant="light" loading={isSaving} onClick={() => decide(false)}>
-              Reject
-            </Button>
+        {!readOnly && (
+          <Group gap="xs" align="flex-end">
+            <TextInput
+              size="xs"
+              placeholder="Note (optional)"
+              value={note}
+              onChange={(e) => setNote(e.currentTarget.value)}
+              style={{ flex: "1 1 200px" }}
+            />
+            <Group gap="xs" wrap="nowrap">
+              <Button size="xs" color="teal" loading={isSaving} onClick={() => decide(true)}>
+                Approve
+              </Button>
+              <Button size="xs" color="red" variant="light" loading={isSaving} onClick={() => decide(false)}>
+                Reject
+              </Button>
+            </Group>
           </Group>
-        </Group>
+        )}
         {error && (
           <Text size="sm" c="red">
             {error}
@@ -153,9 +175,11 @@ type ContainmentRow = ChallengesAdminQuery["response"]["containments"]["nodes"][
 function Containments({
   containments,
   onChanged,
+  readOnly,
 }: {
   containments: ReadonlyArray<ContainmentRow>;
   onChanged: () => void;
+  readOnly: boolean;
 }) {
   const [contain, isContaining] = useMutation<ChallengesAdminContainMutation>(graphql`
     mutation ChallengesAdminContainMutation($input: ContainPrincipalInput!) {
@@ -247,45 +271,55 @@ function Containments({
                     {c.createdBy?.label}
                     {c.createdAt ? `, ${formatTime(c.createdAt)}` : ""}
                   </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs" wrap="nowrap">
-                      {c.monitor && (
-                        <Button size="xs" color="red" variant="light" loading={isContaining} onClick={() => confirm(c)}>
-                          Contain
+                  {!readOnly && (
+                    <Table.Td>
+                      <Group gap="xs" wrap="nowrap">
+                        {c.monitor && (
+                          <Button
+                            size="xs"
+                            color="red"
+                            variant="light"
+                            loading={isContaining}
+                            onClick={() => confirm(c)}
+                          >
+                            Contain
+                          </Button>
+                        )}
+                        <Button size="xs" variant="light" onClick={() => setLifting(c)}>
+                          {c.monitor ? "Dismiss" : "Lift"}
                         </Button>
-                      )}
-                      <Button size="xs" variant="light" onClick={() => setLifting(c)}>
-                        {c.monitor ? "Dismiss" : "Lift"}
-                      </Button>
-                    </Group>
-                  </Table.Td>
+                      </Group>
+                    </Table.Td>
+                  )}
                 </Table.Tr>
               ))}
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>
       )}
-      <Group align="flex-end">
-        <Select
-          label="Contain"
-          data={["ServiceAccount", "Human"]}
-          value={type}
-          onChange={setType}
-          allowDeselect={false}
-          w={170}
-        />
-        <TextInput label="ID" placeholder="sales-genie" value={id} onChange={(e) => setId(e.currentTarget.value)} />
-        <TextInput
-          label="Reason"
-          placeholder="What you saw"
-          style={{ flex: 1 }}
-          value={reason}
-          onChange={(e) => setReason(e.currentTarget.value)}
-        />
-        <Button color="red" loading={isContaining} disabled={!id.trim() || !reason.trim()} onClick={submit}>
-          Contain
-        </Button>
-      </Group>
+      {!readOnly && (
+        <Group align="flex-end">
+          <Select
+            label="Contain"
+            data={["ServiceAccount", "Human"]}
+            value={type}
+            onChange={setType}
+            allowDeselect={false}
+            w={170}
+          />
+          <TextInput label="ID" placeholder="sales-genie" value={id} onChange={(e) => setId(e.currentTarget.value)} />
+          <TextInput
+            label="Reason"
+            placeholder="What you saw"
+            style={{ flex: 1 }}
+            value={reason}
+            onChange={(e) => setReason(e.currentTarget.value)}
+          />
+          <Button color="red" loading={isContaining} disabled={!id.trim() || !reason.trim()} onClick={submit}>
+            Contain
+          </Button>
+        </Group>
+      )}
       {error && (
         <Alert color="red" title="Not done">
           {error}

@@ -37,8 +37,8 @@ attributes include what it inherits from the folders above it, and every attribu
 optional in the schema may be missing, so test it with `has` first. Every field a check's context
 carries is listed in [API conventions](/reference/api-conventions/#request-context).
 
-**Actions** are `read` and `write` on a `Resource`, `call` on an `McpTool`, `view` and
-`administer` on a `PortalArea`, `view` on a `PortalField`, `switch_enforcement` for switching an enforcement mode (asked
+**Actions** are `read` and `write` on a `Resource`, `call` on an `McpTool`, `view`, `audit`
+(everything in it, changing nothing), and `administer` on a `PortalArea`, `view` on a `PortalField`, `switch_enforcement` for switching an enforcement mode (asked
 besides `administer` on `enforcement`, so policy can challenge the switch itself), and `approve`
 for approving someone else's challenged request, by a person or an agent you name in a policy.
 
