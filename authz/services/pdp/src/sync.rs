@@ -340,6 +340,12 @@ mod tests {
         ) -> Result<Response<ListEnforcementChangesResponse>, Status> {
             Err(Status::unimplemented("fake"))
         }
+        async fn list_break_glass_rollbacks(
+            &self,
+            _: Request<awzy_authz_proto::policy::v1::ListBreakGlassRollbacksRequest>,
+        ) -> Result<Response<awzy_authz_proto::policy::v1::ListBreakGlassRollbacksResponse>, Status> {
+            Err(Status::unimplemented("fake"))
+        }
     }
 
     #[tokio::test]

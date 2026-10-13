@@ -3,8 +3,9 @@
 use async_graphql::{connection::Connection, Context, Enum, InputObject, Object, Result, SimpleObject, ID};
 use awzy_authz_proto::{
     policy::v1::{
-        get_bundle_request::Key, BundleStatus, CreateDraftRequest, GetActiveRequest, GetBundleRequest,
-        ListBundlesRequest, PolicyBundle as WireBundle, PublishRequest,
+        get_bundle_request::Key, BreakGlassRollback as WireBreakGlass, BundleStatus, CreateDraftRequest,
+        GetActiveRequest, GetBundleRequest, ListBreakGlassRollbacksRequest, ListBundlesRequest,
+        PolicyBundle as WireBundle, PublishRequest,
     },
     prost_types::Timestamp,
 };
@@ -172,6 +173,62 @@ impl PolicyQuery {
         let bundles = list(policy_client(ctx)?, MAX_PAGE as i32).await?;
         page(bundles.into_iter().map(PolicyBundle).collect(), |b| b.0.qid.clone(), after, first)
     }
+
+    /// Every break-glass rollback, newest first: who signed it, why, and what it restored.
+    async fn break_glass_rollbacks(
+        &self,
+        ctx: &Context<'_>,
+        after: Option<String>,
+        first: Option<i32>,
+    ) -> Result<Connection<String, BreakGlassRollback>> {
+        require(ctx, View, PortalArea::Policies).await?;
+        let req = ListBreakGlassRollbacksRequest { limit: MAX_PAGE as i32 };
+        let rollbacks = policy_client(ctx)?.list_break_glass_rollbacks(req).await?.into_inner().rollbacks;
+        page(rollbacks.into_iter().map(BreakGlassRollback).collect(), |r| r.0.bundle_qid.clone(), after, first)
+    }
+}
+
+/// A break-glass rollback: an earlier bundle republished with a key enrolled at install, for when a
+/// bad bundle locks admins out of the portal. Recorded by awzy-policy as it was made.
+pub struct BreakGlassRollback(WireBreakGlass);
+
+#[Object]
+impl BreakGlassRollback {
+    /// The enrolled key that signed it: `sha256:<fingerprint>`, as `awzy-break-glass` prints it.
+    async fn key_id(&self) -> &str {
+        &self.0.key_id
+    }
+
+    /// Why, as the signed request gave it.
+    async fn reason(&self) -> &str {
+        &self.0.reason
+    }
+
+    /// When the signed request says it was made.
+    async fn requested_at(&self) -> Option<UtcTimestamp> {
+        self.0.requested_at.as_ref().and_then(to_datetime)
+    }
+
+    /// When awzy-policy carried it out.
+    async fn recorded_at(&self) -> Option<UtcTimestamp> {
+        self.0.recorded_at.as_ref().and_then(to_datetime)
+    }
+
+    /// The version it restored.
+    async fn restored_version(&self) -> i64 {
+        self.0.restored_version
+    }
+
+    /// The version that was active before, if any.
+    async fn replaced_version(&self) -> Option<i64> {
+        (self.0.replaced_version > 0).then_some(self.0.replaced_version)
+    }
+
+    /// The bundle it published, a copy of the restored version. Null if awzy-policy no longer has it.
+    async fn bundle(&self, ctx: &Context<'_>) -> Result<Option<PolicyBundle>> {
+        let id: PolicyBundleId = self.0.bundle_qid.parse()?;
+        Ok(get(policy_client(ctx)?, id).await?.map(PolicyBundle))
+    }
 }
 
 #[derive(InputObject)]
@@ -298,7 +355,8 @@ pub(crate) mod tests {
         policy_service_server::{PolicyService, PolicyServiceServer},
         CreateDraftResponse, EnforcementSetting, GetActiveResponse, GetBundleResponse, GetEnforcementRequest,
         GetEnforcementResponse, GetModelRoutingRequest, GetModelRoutingResponse, GetOutageFallbackRequest,
-        GetOutageFallbackResponse, ListBundlesResponse, ListEnforcementChangesRequest, ListEnforcementChangesResponse,
+        GetOutageFallbackResponse, ListBreakGlassRollbacksResponse, ListBundlesResponse, ListEnforcementChangesRequest,
+        ListEnforcementChangesResponse,
         ModelRouting, PublishResponse, SetEnforcementRequest, SetEnforcementResponse, SetModelRoutingRequest,
         SetModelRoutingResponse, SetOutageFallbackRequest, SetOutageFallbackResponse,
     };
@@ -308,12 +366,14 @@ pub(crate) mod tests {
     use crate::{testing, Services};
 
     /// In-memory awzy-policy: validates with the real PDP loader, versions from 1, keeps
-    /// enforcement switches newest first, and the model routing's versions.
+    /// enforcement switches newest first, the model routing's versions, and the break-glass
+    /// rollbacks a test records.
     #[derive(Default, Clone)]
     pub(crate) struct FakePolicy(
         Arc<Mutex<Vec<WireBundle>>>,
         Arc<Mutex<Vec<EnforcementSetting>>>,
         Arc<Mutex<Vec<ModelRouting>>>,
+        Arc<Mutex<Vec<WireBreakGlass>>>,
     );
 
     #[tonic::async_trait]
@@ -460,6 +520,58 @@ pub(crate) mod tests {
         ) -> Result<Response<ListEnforcementChangesResponse>, Status> {
             Ok(Response::new(ListEnforcementChangesResponse { changes: self.1.lock().unwrap().clone() }))
         }
+        async fn list_break_glass_rollbacks(
+            &self,
+            _: Request<awzy_authz_proto::policy::v1::ListBreakGlassRollbacksRequest>,
+        ) -> Result<Response<ListBreakGlassRollbacksResponse>, Status> {
+            Ok(Response::new(ListBreakGlassRollbacksResponse { rollbacks: self.3.lock().unwrap().clone() }))
+        }
+    }
+
+    #[tokio::test]
+    async fn the_policies_page_lists_break_glass_rollbacks_with_the_bundle_each_published() {
+        let fake = FakePolicy::default();
+        let restored = WireBundle {
+            qid: PolicyBundleId::new().to_string(),
+            version: 3,
+            status: BundleStatus::Active.into(),
+            ..Default::default()
+        };
+        fake.0.lock().unwrap().push(restored.clone());
+        fake.3.lock().unwrap().push(WireBreakGlass {
+            key_id: "sha256:admin".into(),
+            reason: "forbid-all locked us out".into(),
+            restored_version: 1,
+            replaced_version: 2,
+            bundle_qid: restored.qid.clone(),
+            ..Default::default()
+        });
+        let schema = crate::schema_with(Services {
+            policy: Some(serve_fake_policy(fake).await),
+            pdp: Some(testing::pdp().await),
+            ..Default::default()
+        });
+        let alice = testing::human("alice", "security");
+        let listed = testing::run(
+            &schema,
+            &alice,
+            "{ breakGlassRollbacks { nodes { keyId reason restoredVersion replacedVersion bundle { id version } } } }",
+        )
+        .await;
+        assert_eq!(
+            listed["breakGlassRollbacks"]["nodes"],
+            serde_json::json!([{
+                "keyId": "sha256:admin",
+                "reason": "forbid-all locked us out",
+                "restoredVersion": 1,
+                "replacedVersion": 2,
+                "bundle": { "id": restored.qid, "version": 3 },
+            }])
+        );
+        let bob = testing::human("bob", "engineering");
+        assert!(testing::run_err(&schema, &bob, "{ breakGlassRollbacks { nodes { keyId } } }")
+            .await
+            .contains("may not view policies"));
     }
 
     pub(crate) async fn serve_fake_policy(fake: FakePolicy) -> PolicyServiceClient<awzy_service_auth::AuthChannel> {

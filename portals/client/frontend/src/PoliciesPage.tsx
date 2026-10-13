@@ -97,6 +97,20 @@ function Policies({ queryRef, onChanged }: { queryRef: PreloadedQuery<PoliciesPa
             label
           }
         }
+        breakGlassRollbacks(first: 20) {
+          nodes {
+            keyId
+            reason
+            requestedAt
+            recordedAt
+            restoredVersion
+            replacedVersion
+            bundle {
+              id
+              version
+            }
+          }
+        }
         ...PoliciesPage_bundles
       }
     `,
@@ -219,7 +233,7 @@ function Policies({ queryRef, onChanged }: { queryRef: PreloadedQuery<PoliciesPa
               {policyBundles.edges.map(({ node: b }) => {
                 const status = STATUS[b.status] ?? { label: b.status.toLowerCase(), tone: "neutral" as Tone };
                 return (
-                  <Table.Tr key={b.id}>
+                  <Table.Tr key={b.id} id={b.id}>
                     <Table.Td fw={600}>v{b.version}</Table.Td>
                     <Table.Td>
                       <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
@@ -259,6 +273,8 @@ function Policies({ queryRef, onChanged }: { queryRef: PreloadedQuery<PoliciesPa
         <ShowMore hasMore={hasNext} loading={isLoadingNext} onMore={() => loadNext(20)} />
       </Section>
 
+      <BreakGlassRollbacks rollbacks={data.breakGlassRollbacks.nodes} />
+
       {data.canPublish ? (
         <Editor
           key={active?.id ?? "none"}
@@ -281,6 +297,62 @@ function Policies({ queryRef, onChanged }: { queryRef: PreloadedQuery<PoliciesPa
         {dryRun && <DryRunReport draftQid={dryRun.id} />}
       </Modal>
     </Stack>
+  );
+}
+
+type Rollback = PoliciesPageQuery["response"]["breakGlassRollbacks"]["nodes"][number];
+
+/**
+ * Every break-glass rollback: an earlier bundle republished with a key enrolled at install, when a
+ * bad bundle locked admins out. Each is signed, so the key and reason are what its holder sent.
+ */
+function BreakGlassRollbacks({ rollbacks }: { rollbacks: ReadonlyArray<Rollback> }) {
+  return (
+    <Section
+      title="Break-glass rollbacks"
+      description="Earlier bundles republished with an emergency key enrolled at install, bypassing the portal and the IdP. Each reaches the security team as it happens."
+      flush
+    >
+      {rollbacks.length === 0 ? (
+        <Text size="sm" c="dimmed" p="md">
+          No break-glass rollback has been made.
+        </Text>
+      ) : (
+        <Table.ScrollContainer minWidth={720}>
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>When</Table.Th>
+                <Table.Th>Restored</Table.Th>
+                <Table.Th>Reason</Table.Th>
+                <Table.Th>Key</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {rollbacks.map((r) => (
+                <Table.Tr key={r.bundle?.id ?? `${r.recordedAt ?? ""}-${r.keyId}`}>
+                  <Table.Td style={{ whiteSpace: "nowrap" }}>{r.recordedAt ? formatTime(r.recordedAt) : ""}</Table.Td>
+                  <Table.Td style={{ whiteSpace: "nowrap" }}>
+                    v{r.restoredVersion}
+                    {r.replacedVersion !== null && r.replacedVersion !== undefined ? ` over v${r.replacedVersion}` : ""}
+                    {r.bundle && (
+                      <Text span size="xs" c="dimmed">
+                        {", published as "}
+                        <a href={`#${r.bundle.id}`}>v{r.bundle.version}</a>
+                      </Text>
+                    )}
+                  </Table.Td>
+                  <Table.Td>{r.reason}</Table.Td>
+                  <Table.Td ff="monospace" fz="xs">
+                    {r.keyId}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+      )}
+    </Section>
   );
 }
 
