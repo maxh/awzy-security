@@ -1,5 +1,6 @@
 //! Sends every plan to Kafka, where ClickHouse keeps it in `plans` (ADR 0113), as the decision log
-//! does for decisions: fire-and-forget, batched, dropped and counted when Kafka can't keep up.
+//! does for decisions: fire-and-forget, batched, dropped and counted (`awzy_pdp_plans_dropped_total`)
+//! when Kafka can't keep up.
 
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
@@ -40,6 +41,7 @@ impl PlanLog {
 
     pub fn record(&self, record: PlanRecord) {
         if self.tx.try_send(record).is_err() {
+            crate::metrics::PLANS_DROPPED_BUFFER_FULL.inc();
             tracing::warn!("plan log buffer full; dropping a plan record");
         }
     }
@@ -66,7 +68,10 @@ async fn send(mut rx: mpsc::Receiver<PlanRecord>, partition: PartitionClient) {
                     tracing::warn!(%error, attempt, "producing plan records failed; retrying");
                     tokio::time::sleep(Duration::from_millis(200 * u64::from(attempt))).await;
                 }
-                Err(error) => tracing::error!(%error, count = records.len(), "dropping plan records after retries"),
+                Err(error) => {
+                    crate::metrics::PLANS_DROPPED_PRODUCE_FAILED.inc_by(records.len() as u64);
+                    tracing::error!(%error, count = records.len(), "dropping plan records after retries");
+                }
             }
         }
     }

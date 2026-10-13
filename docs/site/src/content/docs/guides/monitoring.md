@@ -22,7 +22,7 @@ the awzy-context and awzy-challenge calls it made. Traces stay in your account. 
 ## The dashboard
 
 `awzy-operator` shows each service's readiness and release, the PDP's checks, latency, Cedar time,
-and resource cache, the freshness targets (containment feed, policy and principal syncs),
+resource cache, and dropped decision records, the freshness targets (containment feed, policy and principal syncs),
 awzy-gateway's outcomes and PDP outages, and every service's requests.
 
 ## Alerts
@@ -123,6 +123,23 @@ after 30 seconds until it recovers, so decisions stay current but cost more. Che
 
 PDPs are deciding on cached resources because awzy-context can't be reached. Decisions still use
 the last known resource, which may be out of date. Check awzy-context and Postgres.
+
+### AwzyPdpDroppingDecisions (page)
+
+PDPs dropped decision records before they reached Kafka, so the audit trail and the client
+portal are missing those decisions. Decisions themselves weren't affected: a PDP drops a record
+rather than make a check wait. The alert's `reason` says where:
+
+- `buffer_full`: Kafka has been too slow or unreachable for long enough to fill the PDP's buffer.
+- `produce_failed`: Kafka refused a batch after every retry.
+
+Check Kafka's brokers and the PDP's log, which names the error. Records already dropped can't be
+recovered.
+
+### AwzyPdpDroppingPlans (ticket)
+
+The same for the query plans PDPs make for filtered lists and searches. The plans were still
+returned to their callers; only their record is missing.
 
 ### AwzyGatewayCantReachPdp (page)
 

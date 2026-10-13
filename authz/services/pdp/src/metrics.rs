@@ -92,6 +92,13 @@ pub static RESOURCE_STALE_SERVED: Counter = Counter::new();
 /// answered (ADR 0119).
 pub static CONTAINMENTS_STALE_SERVED: Counter = Counter::new();
 
+/// Records that never reached Kafka, so the audit trail is missing them: dropped because the
+/// buffer was full, or because producing failed after every retry.
+pub static DECISIONS_DROPPED_BUFFER_FULL: Counter = Counter::new();
+pub static DECISIONS_DROPPED_PRODUCE_FAILED: Counter = Counter::new();
+pub static PLANS_DROPPED_BUFFER_FULL: Counter = Counter::new();
+pub static PLANS_DROPPED_PRODUCE_FAILED: Counter = Counter::new();
+
 /// The freshness targets (platform plan): when the bundle and mode, and the principals snapshot,
 /// were last synced. A sync that finds nothing new still counts: the PDP is as fresh as it can be.
 pub static POLICY_SYNC: LazyLock<LastSuccess> = LazyLock::new(LastSuccess::default);
@@ -113,6 +120,20 @@ fn render_freshness(out: &mut String) {
     out.push_str("# HELP awzy_pdp_containments_stale_served_total Checks that used the last containment list because awzy-challenge couldn't be reached.\n");
     out.push_str("# TYPE awzy_pdp_containments_stale_served_total counter\n");
     let _ = writeln!(out, "awzy_pdp_containments_stale_served_total {}", CONTAINMENTS_STALE_SERVED.get());
+    for (name, records, buffer_full, produce_failed) in [
+        (
+            "awzy_pdp_decisions_dropped_total",
+            "Decision",
+            &DECISIONS_DROPPED_BUFFER_FULL,
+            &DECISIONS_DROPPED_PRODUCE_FAILED,
+        ),
+        ("awzy_pdp_plans_dropped_total", "Plan", &PLANS_DROPPED_BUFFER_FULL, &PLANS_DROPPED_PRODUCE_FAILED),
+    ] {
+        let _ = writeln!(out, "# HELP {name} {records} records that never reached Kafka, by why.");
+        let _ = writeln!(out, "# TYPE {name} counter");
+        let _ = writeln!(out, "{name}{{reason=\"buffer_full\"}} {}", buffer_full.get());
+        let _ = writeln!(out, "{name}{{reason=\"produce_failed\"}} {}", produce_failed.get());
+    }
     POLICY_SYNC.render(out, "awzy_pdp_policy_sync", "syncing the bundle and enforcement mode from awzy-policy");
     PRINCIPALS_SYNC.render(out, "awzy_pdp_principals_sync", "syncing principals from awzy-context");
     RESOURCE_FEED.render(out, "awzy_pdp_resource_feed", "awzy-context's resource change log");
@@ -144,6 +165,20 @@ mod tests {
             "awzy_pdp_check_duration_seconds_count 4",
         ] {
             assert!(text.contains(line), "missing {line:?} in\n{text}");
+        }
+    }
+
+    #[test]
+    fn dropped_records_are_exported_by_reason() {
+        let mut text = String::new();
+        render_freshness(&mut text);
+        for series in [
+            r#"awzy_pdp_decisions_dropped_total{reason="buffer_full"} "#,
+            r#"awzy_pdp_decisions_dropped_total{reason="produce_failed"} "#,
+            r#"awzy_pdp_plans_dropped_total{reason="buffer_full"} "#,
+            r#"awzy_pdp_plans_dropped_total{reason="produce_failed"} "#,
+        ] {
+            assert!(text.contains(series), "missing {series:?} in\n{text}");
         }
     }
 }
