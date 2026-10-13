@@ -44,8 +44,10 @@ async fn main() -> anyhow::Result<()> {
         }
         _ => None,
     };
-    let channels: Vec<Channel> =
-        [slack.as_ref().map(|_| Channel::Slack), email.as_ref().map(|_| Channel::Email)].into_iter().flatten().collect();
+    let channels: Vec<Channel> = [slack.as_ref().map(|_| Channel::Slack), email.as_ref().map(|_| Channel::Email)]
+        .into_iter()
+        .flatten()
+        .collect();
     if channels.is_empty() {
         tracing::warn!(
             "neither AWZY_CHALLENGE_SLACK_TOKEN nor AWZY_CHALLENGE_EMAIL_RELAY_URL is set; nobody is told about challenges"

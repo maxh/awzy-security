@@ -164,14 +164,16 @@ impl ChallengeStore {
     /// One row for each channel, so a channel that's failing retries without resending the others.
     async fn record(&self, to: &Recipient, notice: &Notice) -> Result<(), StoreError> {
         for channel in &self.channels {
-            sqlx::query("INSERT INTO notifications (id, channel, kind, recipient, details) VALUES ($1, $2, $3, $4, $5)")
-                .bind(Uuid::now_v7())
-                .bind(channel.as_str())
-                .bind(notice.kind())
-                .bind(to.to_text())
-                .bind(Json(notice))
-                .execute(self.pool())
-                .await?;
+            sqlx::query(
+                "INSERT INTO notifications (id, channel, kind, recipient, details) VALUES ($1, $2, $3, $4, $5)",
+            )
+            .bind(Uuid::now_v7())
+            .bind(channel.as_str())
+            .bind(notice.kind())
+            .bind(to.to_text())
+            .bind(Json(notice))
+            .execute(self.pool())
+            .await?;
         }
         Ok(())
     }
@@ -577,7 +579,14 @@ mod tests {
                 .unwrap();
         assert_eq!(
             recipients,
-            vec!["email human:nora", "email human:priya", "email security", "slack human:nora", "slack human:priya", "slack security"]
+            vec![
+                "email human:nora",
+                "email human:priya",
+                "email security",
+                "slack human:nora",
+                "slack human:priya",
+                "slack security"
+            ]
         );
     }
 }

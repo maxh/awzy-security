@@ -141,7 +141,11 @@ mod tests {
         let (relay, taken) = fake_relay().await;
         let email = Email::new(&relay, "awzy <awzy@larkspur.example>", "security@larkspur.example").unwrap();
         email
-            .to_human("nora@larkspur.example", "awzy needs a reason", "awzy needs a reason. Answer it: https://p/challenges")
+            .to_human(
+                "nora@larkspur.example",
+                "awzy needs a reason",
+                "awzy needs a reason. Answer it: https://p/challenges",
+            )
             .await
             .unwrap();
         email.to_security("awzy asks for an approval", "Review it: https://p/challenges").await.unwrap();
