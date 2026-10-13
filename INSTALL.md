@@ -245,8 +245,9 @@ name in bootstrap's `tracing`. On AWS, two more modules watch them for you:
 - [`deploy/terraform/grafana`](deploy/terraform/grafana): awzy's dashboards and data sources, in
   that workspace or any Grafana of yours. Apply it after the first, with the `grafana` output.
 
-You can use your own monitoring instead: scrape each awzy pod's `/metrics` (port `http`), load
-[`deploy/observability`](deploy/observability)'s alert rules and dashboards into it, and point
+You can use your own monitoring instead: scrape each awzy pod's `/metrics` on its `metrics` port
+(9090), which the install's network policies let any scraper reach; load
+[`deploy/observability`](deploy/observability)'s alert rules and dashboards into it; and point
 `tracing.otlp_endpoint` at your own OpenTelemetry collector (OTLP over gRPC).
 
 ## Operating an install

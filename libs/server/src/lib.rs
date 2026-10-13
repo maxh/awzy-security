@@ -60,7 +60,8 @@ pub fn with_readiness(app: Router, ready: Readiness) -> Router {
 }
 
 /// Serves `app` on `AWZY_LISTEN_ADDR` (default `0.0.0.0:8080`) until SIGTERM or Ctrl-C, with the
-/// health routes and `/metrics` (ADR 0068).
+/// health routes and `/metrics` (ADR 0068), and `/metrics` alone on `AWZY_METRICS_ADDR` when it's
+/// set (ADR 0124).
 pub async fn serve(service: &'static str, app: Router) -> anyhow::Result<()> {
     serve_with_readiness(service, app, Arc::new(|| true)).await
 }
@@ -85,6 +86,18 @@ pub async fn serve_with_readiness(service: &'static str, app: Router, ready: Rea
         .map(Duration::from_secs);
     let listener = TcpListener::bind(addr).await?;
     tracing::info!(service, %addr, "listening");
+    // A scraper from outside the cluster's pods, such as a managed Prometheus, is let in to this
+    // port alone, so the network policy admits it without opening the service's API (ADR 0124).
+    if let Ok(metrics_addr) = std::env::var("AWZY_METRICS_ADDR") {
+        let metrics_addr: SocketAddr = metrics_addr.parse()?;
+        let metrics_listener = TcpListener::bind(metrics_addr).await?;
+        tracing::info!(service, addr = %metrics_addr, "serving metrics");
+        tokio::spawn(async move {
+            if let Err(error) = axum::serve(metrics_listener, metrics::routes()).await {
+                tracing::error!(%error, "the metrics listener stopped");
+            }
+        });
+    }
     let stopping = Arc::new(AtomicBool::new(false));
     let ready = draining(ready, stopping.clone());
     metrics::register(Arc::new(metrics::Readiness(ready.clone())));

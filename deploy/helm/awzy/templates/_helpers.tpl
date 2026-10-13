@@ -113,8 +113,11 @@ spec:
           {{- end }}
           ports:
             - { name: http, containerPort: 8080 }
+            # /metrics alone, for scrapers the network policy can't name (ADR 0124).
+            - { name: metrics, containerPort: 9090 }
           env:
             - { name: AWZY_LOG_FORMAT, value: {{ $root.Values.logFormat | quote }} }
+            - { name: AWZY_METRICS_ADDR, value: "0.0.0.0:9090" }
             # Not ready on SIGTERM, but serving this long while traffic moves elsewhere.
             - { name: AWZY_SHUTDOWN_DELAY_SECS, value: {{ $root.Values.shutdownDelaySeconds | quote }} }
             # The commit this chart was released from (appVersion, set by publish-chart.sh).
