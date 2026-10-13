@@ -24,9 +24,10 @@
 # is off for the run, so neither self-heal nor a new release undoes the outage, and is put back
 # as it was at the end, even on failure.
 set -euo pipefail
-# A Mac that sleeps mid-run holds the dependency away for as long as it sleeps: stay awake.
+# A Mac that sleeps mid-run holds the dependency away for as long as it sleeps: stay awake. -i
+# alone still let an idle Mac drop into maintenance sleep for 6 minutes; -s stops that on AC.
 if [[ $(uname) == Darwin && -z ${AWZY_TEST_GAMEDAY_AWAKE:-} ]] && command -v caffeinate >/dev/null; then
-  AWZY_TEST_GAMEDAY_AWAKE=1 exec caffeinate -i bash "$0" "$@"
+  AWZY_TEST_GAMEDAY_AWAKE=1 exec caffeinate -dims bash "$0" "$@"
 fi
 
 ctx=${1:?kube context}
