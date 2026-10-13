@@ -264,7 +264,18 @@ mod tests {
 
         let client = brokers.connect().await.unwrap();
         let partition = partition_for(&record("alice"), TOPIC_PARTITIONS as usize) as i32;
-        let reader = client.partition_client(topic, partition, UnknownTopicHandling::Retry).await.unwrap();
+        // The log creates the topic in the background, and a partition's metadata can lag the rest.
+        let mut reader = None;
+        for _ in 0..50 {
+            match client.partition_client(topic.clone(), partition, UnknownTopicHandling::Retry).await {
+                Ok(r) => {
+                    reader = Some(r);
+                    break;
+                }
+                Err(_) => tokio::time::sleep(Duration::from_millis(200)).await,
+            }
+        }
+        let reader = reader.expect("the topic's partitions appear within 10 s");
         let mut seen = Vec::new();
         for _ in 0..50 {
             let (records, _) = reader.fetch_records(seen.len() as i64, 1..1_000_000, 200).await.unwrap();
