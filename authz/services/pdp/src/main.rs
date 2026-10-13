@@ -40,7 +40,13 @@ async fn main() -> anyhow::Result<()> {
     // it, enforcement points' entities are used as they are.
     if let Ok(endpoint) = std::env::var("AWZY_CONTEXT_ADDR") {
         let principals = Arc::new(awzy_pdp::principals::Principals::awaiting_sync());
-        let resources = Arc::new(awzy_pdp::resources::Resources::from_context(endpoint.clone()));
+        // How long a cached resource stands in while awzy-context is down, by tier (ADR 0119).
+        let limits = match std::env::var("AWZY_PDP_RESOURCES_MAX_STALE_SECS") {
+            Ok(text) => awzy_pdp::resources::StaleLimits::parse(&text)?,
+            Err(_) => awzy_pdp::resources::StaleLimits::default(),
+        };
+        let resources =
+            Arc::new(awzy_pdp::resources::Resources::from_context(endpoint.clone()).with_stale_limits(limits));
         state = state.with_principals(principals.clone()).with_resources(resources.clone());
         // Both wait on awzy-context for changes rather than polling (ADR 0077).
         tokio::spawn(awzy_pdp::principals::sync_principals(principals, endpoint, Duration::from_secs(5)));
