@@ -11,6 +11,9 @@ awzy_service(
     ],
     # The load test runs in the cluster from the published image, so it measures what ships (#94).
     image_binaries = ["pdp_loadtest"],
+    # Over a hundred tests, including the plan's randomized ones, come close to a minute on a
+    # busy CI runner, and timed out there twice.
+    test_size = "medium",
     deps = [
         "//libs/http",
         "//authz/libs/kafka",
