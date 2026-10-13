@@ -46,20 +46,20 @@ scenario at a time per install. Two installs can run at once.
 - **The load pod needs the registry's pull secret** (`awzy-registry`), as awzy's own pods have.
 - **A pod with no controller stops `kubectl drain`,** and the load pod is one. The drain now
   skips it by label, but on EKS the load pod was still evicted, and that run has no timeline.
-  Next time, keep the load pod off the node being drained.
+  Next time, keep the load pod off the node being drained (#402).
 - **Scaling a Service to zero doesn't refuse connections.** On both GKE and EKS a connection to
   a Service with no endpoints hangs until the caller's timeout. So "the service is down" tests
   timeouts, not refused connections, and every timeout on the hot path shows up.
 - **Stopping Strimzi's operator to keep a broker down makes the outage longer.** After the
   operator restarted it took 5 minutes to recreate the broker, so a planned 4-minute outage
-  lasted 9½. Plan for it, or take Kafka away another way.
+  lasted 9½, and a PDP can't start meanwhile (#400). Plan for it, or take Kafka away another way.
 - **There's no Aurora replica in the example install,** so the `postgres` scenario reboots the
   writer. A failover needs a replica first.
-- **Neither install evaluates the alert rules,** and the GCP one doesn't scrape awzy's metrics,
+- **Neither install evaluates the alert rules,** and the GCP one doesn't scrape awzy's metrics (#401),
   so which alerts fire is worked out from the sampled metrics against the rules in
   `deploy/observability/prometheus/alerts.yaml`.
 - **Use resources awzy-context knows.** `pdp_loadtest` checks three resources it doesn't, which
   get the shortest stale limit, so every check fails 5 minutes into an awzy-context outage.
-  Real resources mostly last longer.
+  Real resources mostly last longer (#402).
 - **Leave headroom for the load pod.** It requests 250m CPU, and on the AWS `small` install that
   is part of why evicted pods had nowhere to go.
