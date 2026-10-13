@@ -423,11 +423,8 @@ impl Resources {
     /// Caches what a peer had for `id`, as old as it was there, and returns it if it's within
     /// its tier's limit.
     fn load_from_peer(&self, id: &str, known: bool, json: &[u8], age: Duration) -> Option<Option<Arc<Loaded>>> {
-        let entities = if known {
-            Some(Arc::new(Loaded::from(serde_json::from_slice::<EntitiesBody>(json).ok()?)))
-        } else {
-            None
-        };
+        let entities =
+            if known { Some(Arc::new(Loaded::from(serde_json::from_slice::<EntitiesBody>(json).ok()?))) } else { None };
         // An age from before this machine booted is too old for any tier.
         let at = Instant::now().checked_sub(age)?;
         let cached = Cached { at, entities };
@@ -594,8 +591,8 @@ mod tests {
         let (url, _) = context().await;
         let running = Resources::new(Some(url), TTL, UNKNOWN_TTL);
         running.merge(json!([]), &resource("drive:plans/fy27")).await.unwrap();
-        let state = crate::AppState::new(crate::shared(crate::Pdp::with_defaults().unwrap()))
-            .with_resources(Arc::new(running));
+        let state =
+            crate::AppState::new(crate::shared(crate::Pdp::with_defaults().unwrap())).with_resources(Arc::new(running));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let peer = listener.local_addr().unwrap().to_string();
         let app = crate::router(state);
