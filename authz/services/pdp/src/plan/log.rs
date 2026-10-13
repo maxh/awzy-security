@@ -25,18 +25,15 @@ pub struct PlanLog {
 }
 
 impl PlanLog {
-    /// Connects, creates the topic if it does not exist, and starts the background sender.
-    pub async fn connect_kafka(brokers: &awzy_kafka::Brokers, topic: &str) -> anyhow::Result<Arc<Self>> {
-        let client = brokers.connect().await?;
-        match client.controller_client()?.create_topic(topic, PARTITIONS, 1, 5_000).await {
-            Ok(()) => tracing::info!(topic, "created plans topic"),
-            Err(KafkaError::ServerError { protocol_error: ProtocolError::TopicAlreadyExists, .. }) => {}
-            Err(e) => return Err(e.into()),
-        }
-        let partition = client.partition_client(topic.to_string(), 0, UnknownTopicHandling::Retry).await?;
+    /// Starts at once, creating the topic if it does not exist and connecting in the background,
+    /// as the decision log does (#400).
+    pub fn start_kafka(brokers: awzy_kafka::Brokers, topic: String) -> Arc<Self> {
         let (tx, rx) = mpsc::channel(BUFFER);
-        tokio::spawn(send(rx, partition));
-        Ok(Arc::new(Self { tx }))
+        tokio::spawn(async move {
+            let partition = crate::decision_log::until_connected("plans", || connect_partition(&brokers, &topic)).await;
+            send(rx, partition).await;
+        });
+        Arc::new(Self { tx })
     }
 
     pub fn record(&self, record: PlanRecord) {
@@ -45,6 +42,17 @@ impl PlanLog {
             tracing::warn!("plan log buffer full; dropping a plan record");
         }
     }
+}
+
+/// The topic's one partition client, creating the topic if it does not exist.
+async fn connect_partition(brokers: &awzy_kafka::Brokers, topic: &str) -> anyhow::Result<PartitionClient> {
+    let client = brokers.connect().await?;
+    match client.controller_client()?.create_topic(topic, PARTITIONS, 1, 5_000).await {
+        Ok(()) => tracing::info!(topic, "created plans topic"),
+        Err(KafkaError::ServerError { protocol_error: ProtocolError::TopicAlreadyExists, .. }) => {}
+        Err(e) => return Err(e.into()),
+    }
+    Ok(client.partition_client(topic.to_string(), 0, UnknownTopicHandling::Retry).await?)
 }
 
 async fn send(mut rx: mpsc::Receiver<PlanRecord>, partition: PartitionClient) {

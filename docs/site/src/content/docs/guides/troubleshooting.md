@@ -159,11 +159,12 @@ decision path waits for it.
 
 **When it fails:** decisions are still made. Each PDP holds decision records in memory while Kafka
 is away (about 20,000 per pod) and sends them when it's back; past that, records are dropped and
-counted, so the audit trail has a gap. awzy-intake answers senders with an error, so they retry
+counted, so the audit trail has a gap. A PDP that starts while Kafka is away serves checks too,
+holding its records the same way, so pods can still be replaced and added. awzy-intake answers senders with an error, so they retry
 later and nothing they sent is lost. The portal's Decisions page and awzy-reasoner fall behind.
 
 **Alerts:** your cloud's alarms for the cluster (MSK on AWS), and Kafka lag on the dashboard.
-`AwzyServerErrors` from awzy-intake.
+`AwzyServerErrors` from awzy-intake, and `AwzyPdpDroppingDecisions` once a PDP's buffer is full.
 
 **What to do:** check the cluster in your cloud's console: brokers down, storage full, or
 connections refused. Once it's back, ClickHouse catches up from the topics on its own. Kafka keeps
