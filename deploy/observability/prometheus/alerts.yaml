@@ -126,6 +126,7 @@ groups:
         expr: sum(increase(awzy_pdp_decisions_dropped_total[5m])) > 0
         labels: { severity: page }
         annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzypdpdroppingdecisions-page"
           summary: "PDPs dropped {{ $value | humanize }} decision records in 5 minutes; the audit trail is missing them"
           description: "reason=buffer_full: Kafka is slow or down. reason=produce_failed: Kafka refused the records after every retry. The PDP's log says why."
 
@@ -133,6 +134,7 @@ groups:
         expr: sum(increase(awzy_pdp_plans_dropped_total[5m])) > 0
         labels: { severity: ticket }
         annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzypdpdroppingplans-ticket"
           summary: "PDPs dropped {{ $value | humanize }} query plan records in 5 minutes"
 
       - alert: AwzyGatewayCantReachPdp
