@@ -69,7 +69,7 @@ static OPTIONAL_ATTRS: std::sync::LazyLock<Vec<(&'static str, &'static str, serd
         vec![
             (RESOURCE, "unclassified", serde_json::json!(true)),
             // The kinds of data it holds (ADR 0123).
-            (RESOURCE, "data_types", serde_json::json!(["probe"])),
+            (RESOURCE, "data_types", serde_json::json!([text.clone()])),
             (RESOURCE, "owner", human.clone()),
             (RESOURCE, "shared_humans", serde_json::json!([human.clone()])),
             (RESOURCE, "shared_groups", serde_json::json!([group.clone()])),
