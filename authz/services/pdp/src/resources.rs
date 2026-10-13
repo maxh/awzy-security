@@ -15,9 +15,11 @@
 //! 0077), including every one under a changed folder. While that feed is heard from, entries
 //! live longer; when it isn't, they expire as they did before it.
 //!
-//! If awzy-context can't be reached and nothing is cached, the check fails and the enforcement
-//! point uses its fallback (ADR 0030): deciding a crown-jewel document as "internal" because
-//! awzy-context was down would be worse.
+//! If awzy-context can't be reached, an expired entry is still used, but only for as long as its
+//! sensitivity tier allows (ADR 0119): a stale attribute matters more on a sensitive resource.
+//! Past that, or with nothing cached, the check fails and the enforcement point uses its fallback
+//! (ADR 0030): deciding a crown-jewel document as "internal" because awzy-context was down would
+//! be worse.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -30,6 +32,7 @@ use std::{
 
 use awzy_model::{entity_type, AttributesFrom, EntityRef};
 use http_body_util::BodyExt;
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 /// The tier a resource awzy-context doesn't know gets. Matches awzy-context's default for one
@@ -51,6 +54,43 @@ const UNKNOWN_TTL: Duration = Duration::from_secs(5);
 const CAPACITY: usize = 100_000;
 const TIMEOUT: Duration = Duration::from_secs(1);
 
+/// How long an expired entry may still be used while awzy-context can't be reached, by the
+/// resource's sensitivity tier (ADR 0119). A tier not listed, and a resource awzy-context didn't
+/// know, get the shortest.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StaleLimits(HashMap<String, Duration>);
+
+impl Default for StaleLimits {
+    fn default() -> Self {
+        let mins = |m: u64| Duration::from_secs(m * 60);
+        Self(HashMap::from([
+            ("public".into(), mins(60)),
+            ("internal".into(), mins(60)),
+            ("confidential".into(), mins(15)),
+            ("crown_jewels".into(), mins(5)),
+        ]))
+    }
+}
+
+impl StaleLimits {
+    /// `tier=seconds` pairs, comma-separated (`AWZY_PDP_RESOURCES_MAX_STALE_SECS`), over the
+    /// defaults.
+    pub fn parse(text: &str) -> anyhow::Result<Self> {
+        let mut limits = Self::default();
+        for pair in text.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+            let (tier, secs) = pair.split_once('=').ok_or_else(|| anyhow::anyhow!("{pair:?} isn't tier=seconds"))?;
+            anyhow::ensure!(awzy_model::TIERS.contains(&tier), "{tier:?} isn't a sensitivity tier");
+            limits.0.insert(tier.to_string(), Duration::from_secs(secs.parse()?));
+        }
+        Ok(limits)
+    }
+
+    fn of(&self, loaded: Option<&Loaded>) -> Duration {
+        let shortest = self.0.values().min().copied().unwrap_or_default();
+        loaded.and_then(|l| l.tier.as_ref()).and_then(|t| self.0.get(t)).copied().unwrap_or(shortest)
+    }
+}
+
 /// `GET /v1/resources/{id}/entities` from awzy-context.
 #[derive(serde::Deserialize)]
 struct EntitiesBody {
@@ -70,6 +110,19 @@ struct WorkLink {
     assignees: Vec<String>,
 }
 
+/// Just the resource's tier, from its entity.
+#[derive(serde::Deserialize, Default)]
+struct TierOf {
+    #[serde(default)]
+    attrs: TierAttrs,
+}
+
+#[derive(serde::Deserialize, Default)]
+struct TierAttrs {
+    #[serde(default)]
+    sensitivity: Option<String>,
+}
+
 /// What awzy-context says about a resource.
 pub struct Loaded {
     /// The resource and its ancestors, nearest first.
@@ -78,6 +131,8 @@ pub struct Loaded {
     pub assignees: Arc<HashSet<String>>,
     /// Each open work item that links it, by ID, with who is on it (ADR 0118).
     pub work: Arc<HashMap<String, HashSet<String>>>,
+    /// The resource's sensitivity tier, which decides how long it may be used stale.
+    pub tier: Option<String>,
 }
 
 /// The request's entities after the lookup, and, for a `Resource` checked with awzy-context,
@@ -112,6 +167,7 @@ pub struct Resources {
     cache: RwLock<HashMap<String, Cached>>,
     ttl: Duration,
     unknown_ttl: Duration,
+    stale_limits: StaleLimits,
     started: Instant,
     /// Milliseconds after `started`, plus one, when the change log last answered; 0: never.
     feed_heard_ms: AtomicU64,
@@ -135,9 +191,20 @@ impl Resources {
             cache: RwLock::default(),
             ttl,
             unknown_ttl,
+            stale_limits: StaleLimits::default(),
             started: Instant::now(),
             feed_heard_ms: AtomicU64::new(0),
         }
+    }
+
+    pub fn with_stale_limits(mut self, limits: StaleLimits) -> Self {
+        self.stale_limits = limits;
+        self
+    }
+
+    /// Whether an expired entry may still stand in while awzy-context can't be reached.
+    fn usable_stale(&self, c: &Cached) -> bool {
+        c.at.elapsed() <= self.stale_limits.of(c.entities.as_deref())
     }
 
     /// How long a loaded resource is used: longer while the change log is heard from.
@@ -249,8 +316,8 @@ impl Resources {
                     crate::metrics::RESOURCE_CACHE_HITS.inc();
                     return Ok(c.entities.clone());
                 }
-                Some(c) => Some(c.entities.clone()),
-                None => None,
+                Some(c) if self.usable_stale(c) => Some(c.entities.clone()),
+                _ => None,
             }
         };
         match self.fetch(endpoint, id).await {
@@ -280,7 +347,11 @@ impl Resources {
                 let body: EntitiesBody = serde_json::from_slice(&res.into_body().collect().await?.to_bytes())
                     .map_err(|e| anyhow::anyhow!("no entities for resource {id}: {e}"))?;
                 let work = body.work.into_iter().map(|w| (w.id, w.assignees.into_iter().collect())).collect();
+                // The resource itself comes first.
+                let tier =
+                    body.entities.first().and_then(|e| TierOf::deserialize(e).ok()).and_then(|t| t.attrs.sensitivity);
                 Ok(Some(Arc::new(Loaded {
+                    tier,
                     entities: body.entities,
                     assignees: Arc::new(body.assignees.into_iter().collect()),
                     work: Arc::new(work),
@@ -293,7 +364,11 @@ impl Resources {
     fn store(&self, id: &str, entities: Option<Arc<Loaded>>) {
         let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
         if cache.len() >= CAPACITY && !cache.contains_key(id) {
-            cache.retain(|_, c| c.fresh(self.ttl(), self.unknown_ttl));
+            // What can't stand in during an outage goes first, then what's merely expired.
+            cache.retain(|_, c| self.usable_stale(c));
+            if cache.len() >= CAPACITY {
+                cache.retain(|_, c| c.fresh(self.ttl(), self.unknown_ttl));
+            }
             if cache.len() >= CAPACITY {
                 cache.clear();
             }
@@ -315,7 +390,7 @@ mod tests {
         let r = Resources::new(Some("http://context".into()), TTL, UNKNOWN_TTL);
         let loaded = |ids: &[&str]| {
             let entities = ids.iter().map(|id| json!({ "uid": { "type": "Resource", "id": id } })).collect();
-            Some(Arc::new(Loaded { entities, assignees: Arc::default(), work: Arc::default() }))
+            Some(Arc::new(Loaded { entities, assignees: Arc::default(), work: Arc::default(), tier: None }))
         };
         r.store("doc", loaded(&["doc", "folder"]));
         r.store("folder", loaded(&["folder"]));
@@ -409,6 +484,44 @@ mod tests {
         down.store("drive:plans/fy27", r.cache.read().unwrap()["drive:plans/fy27"].entities.clone());
         let merged = down.merge(json!([]), &resource("drive:plans/fy27")).await.unwrap();
         assert_eq!(merged.entities[0]["attrs"]["sensitivity"], "crown_jewels", "an expired entry beats no answer");
+    }
+
+    #[tokio::test]
+    async fn a_stale_resource_stands_in_only_as_long_as_its_tier_allows() {
+        let (url, _) = context().await;
+        let r = Resources::new(Some(url), Duration::ZERO, Duration::ZERO);
+        r.merge(json!([]), &resource("drive:plans/fy27")).await.unwrap();
+        let cached = r.cache.read().unwrap()["drive:plans/fy27"].entities.clone();
+        assert_eq!(cached.as_ref().unwrap().tier.as_deref(), Some("crown_jewels"));
+
+        let limits = StaleLimits::parse("crown_jewels=0").unwrap();
+        let down =
+            Resources::new(Some("http://127.0.0.1:1".into()), Duration::ZERO, Duration::ZERO).with_stale_limits(limits);
+        down.store("drive:plans/fy27", cached.clone());
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        assert!(down.merge(json!([]), &resource("drive:plans/fy27")).await.is_err(), "past its tier's limit");
+
+        let lenient = Resources::new(Some("http://127.0.0.1:1".into()), Duration::ZERO, Duration::ZERO);
+        lenient.store("drive:plans/fy27", cached);
+        assert!(lenient.merge(json!([]), &resource("drive:plans/fy27")).await.is_ok(), "within 5 minutes");
+    }
+
+    #[test]
+    fn stale_limits_are_set_by_tier() {
+        let limits = StaleLimits::parse("confidential=60, public=7200").unwrap();
+        let loaded = |tier: &str| Loaded {
+            entities: vec![],
+            assignees: Arc::default(),
+            work: Arc::default(),
+            tier: Some(tier.into()),
+        };
+        assert_eq!(limits.of(Some(&loaded("confidential"))), Duration::from_secs(60));
+        assert_eq!(limits.of(Some(&loaded("public"))), Duration::from_secs(7200));
+        assert_eq!(limits.of(Some(&loaded("crown_jewels"))), Duration::from_secs(300), "the default stays");
+        assert_eq!(limits.of(Some(&loaded("secret"))), Duration::from_secs(60), "an unknown tier gets the shortest");
+        assert_eq!(limits.of(None), Duration::from_secs(60), "so does a resource awzy-context didn't know");
+        assert!(StaleLimits::parse("top_secret=1").is_err());
+        assert!(StaleLimits::parse("public").is_err());
     }
 
     #[tokio::test]

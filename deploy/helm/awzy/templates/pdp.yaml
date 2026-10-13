@@ -1,4 +1,8 @@
 {{- $sys := .Values.namespaces.system -}}
+{{- $resourcesMaxStale := list -}}
+{{- range $tier, $secs := .Values.pdp.resourcesMaxStaleSeconds }}
+{{- $resourcesMaxStale = append $resourcesMaxStale (printf "%s=%v" $tier $secs) -}}
+{{- end }}
 # Applies only bundles and mode changes awzy-policy signed (ADR 0080). A PDP that starts while
 # awzy-policy, awzy-context, or awzy-challenge is down takes what it's missing from a running PDP
 # (ADR 0119), which only the backend may ask.
@@ -12,6 +16,7 @@
     (dict "name" "AWZY_PDP_CONTAINMENTS_MAX_STALE_SECS" "value" (toString .Values.pdp.containmentsMaxStaleSeconds))
     (dict "name" "AWZY_PDP_PEERS" "value" (printf "%s/awzy" $sys))
     (dict "name" "AWZY_PDP_PEER_ADDR" "value" (printf "awzy-pdp-peers.%s.svc:8080" $sys))
+    (dict "name" "AWZY_PDP_RESOURCES_MAX_STALE_SECS" "value" (join "," $resourcesMaxStale))
     (dict "name" "AWZY_POLICY_ADDR" "value" (printf "http://awzy-policy.%s.svc:8080" $sys))
     (dict "name" "AWZY_POLICY_VERIFY_KEY_FILE" "value" "/var/run/secrets/awzy/policy-verify/verify.pem")
     (dict "name" "AWZY_CONTEXT_ADDR" "value" (printf "http://awzy-context.%s.svc:8080" $sys))

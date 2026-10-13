@@ -122,7 +122,10 @@ after 30 seconds until it recovers, so decisions stay current but cost more. Che
 ### AwzyPdpServingStaleResources (ticket)
 
 PDPs are deciding on cached resources because awzy-context can't be reached. Decisions still use
-the last known resource, which may be out of date. Check awzy-context and Postgres.
+the last known resource, which may be out of date, but only for as long as its sensitivity tier
+allows (`pdp.resourcesMaxStaleSeconds`: an hour for public and internal, 15 minutes for
+confidential, 5 for crown jewels). After that, and for any resource not cached, checks fail and
+enforcement points use their outage fallback. Check awzy-context and Postgres.
 
 ### AwzyPdpDroppingDecisions (page)
 

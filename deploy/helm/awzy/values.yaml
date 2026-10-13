@@ -87,6 +87,13 @@ pdp:
   # How long a PDP decides on its last containment list when neither the feed nor awzy-challenge
   # answers, longer than a database failover; then checks fail as unavailable (ADR 0119).
   containmentsMaxStaleSeconds: 300
+  # How long a PDP decides on a cached resource while awzy-context can't be reached, by its
+  # sensitivity tier; past it, checks on that resource fail as unavailable (ADR 0119).
+  resourcesMaxStaleSeconds:
+    public: 3600
+    internal: 3600
+    confidential: 900
+    crown_jewels: 300
   resources:
     requests: { cpu: 250m, memory: 256Mi }
     limits: { memory: 512Mi }
