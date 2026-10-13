@@ -28,8 +28,8 @@ kubectl -n awzy-system logs <pod> --previous   # what the last crash said
   it needs. Each release migrates the databases in a Job before the services roll, named
   `<service>-migrate`. Check that it ran:
   `kubectl -n awzy-system get jobs` and `kubectl -n awzy-system logs job/<service>-migrate`.
-- **One service not ready usually holds up another.** The PDP waits on awzy-policy, awzy-context,
-  and awzy-challenge, so fix those first.
+- **One service not ready usually holds up another.** A starting PDP needs awzy-policy,
+  awzy-context, and awzy-challenge, or a running PDP to copy from, so fix those first.
 - **Did it start with an upgrade?** If the trouble began when a new release rolled out, rolling
   back is usually faster than finding the cause; see
   [rolling back](/guides/upgrading/#rolling-back).
@@ -49,10 +49,12 @@ do what their client library is configured to do.
 
 **What to do:**
 
-- **Not ready:** it hasn't yet loaded the published policy from awzy-policy, the directory from
-  awzy-context, and the containment list from awzy-challenge. If those three are ready and the PDP
-  stays not ready, look in its log for errors reaching them, or for a policy bundle it refused
-  because its signature didn't verify.
+- **Not ready:** it hasn't yet loaded the published policy, the directory, and the containment
+  list. It takes each from its source (awzy-policy, awzy-context, awzy-challenge), or, when a
+  source doesn't answer within 5 seconds, from a running PDP, still verifying the policy's
+  signature. So a PDP stays not ready only when a source is down and no other PDP is running. If
+  the sources are ready, look in its log for errors reaching them, or for a policy bundle it
+  refused because its signature didn't verify.
 - **Slow:** compare Cedar time with the total on the dashboard. If Cedar time is low, the PDP is
   waiting on CPU or on a stale feed. The PDP autoscales on CPU up to
   `pdp.autoscaling.maxReplicas` (4 by default); raise that, or `pdp.resources`, in your values, or
@@ -79,8 +81,8 @@ the network between the two (a NetworkPolicy, or a PDP Service with no ready end
 Keeps, signs, and serves policy bundles, enforcement modes, and the outage fallback.
 
 **When it fails:** the portal can't show or publish policies, nobody can switch enforcement modes,
-and a PDP that restarts can't load policy, so it stays not ready. Running PDPs keep deciding on the
-policy they have.
+and a PDP that starts takes policy from a running one. Running PDPs keep deciding on the policy they
+have.
 
 **Alerts:** `AwzyServiceDown` or `AwzyServiceNotReady` (job `awzy-policy`), then
 `AwzyPdpPolicySyncStale` from every PDP.
@@ -95,7 +97,7 @@ Keeps what awzy knows about your organization: people and groups from your IdP, 
 resources and work items from connectors, and risk scores.
 
 **When it fails:** SCIM provisioning from your IdP fails until it's back (your IdP retries), the
-portal's Directory page is empty, and a PDP that restarts can't load the directory. Running PDPs
+portal's Directory page is empty, and a PDP that starts takes the directory from a running one. Running PDPs
 keep their directory, and decide on resources they've cached, but a resource they haven't seen
 fails its check.
 
@@ -111,13 +113,15 @@ matters now, contain them in the client portal, which reaches every PDP within s
 Keeps challenges, containments, and security keys, and pushes the containment list to every PDP.
 
 **When it fails:** nobody can answer a challenge or contain someone, and the portal's Challenges
-page can't load. The PDPs keep the containment list they have, and once its feed has been quiet for
-2 seconds they ask awzy-challenge on each check; with no answer, those checks fail and enforcement
-points follow their outage behavior. A challenge verdict stays a challenge: a request is never
+page can't load. Once its feed has been quiet for 2 seconds, the PDPs ask awzy-challenge directly;
+with no answer, they decide on the last containment list they had. That list stands in for up to 5
+minutes after the feed was last heard (`pdp.containmentsMaxStaleSeconds`), which covers a database
+failover. Past that, checks fail and enforcement points follow their outage behavior: a PDP never
+decides someone isn't contained on a list it can't trust. A challenge verdict stays a challenge: a request is never
 allowed for want of an answer.
 
 **Alerts:** `AwzyServiceDown` or `AwzyServiceNotReady` (job `awzy-challenge`),
-`AwzyPdpContainmentFeedStale`, then `AwzyPdpCheckErrors`.
+`AwzyPdpContainmentFeedStale`, then, after 5 minutes, `AwzyPdpCheckErrors`.
 
 **What to do:** it's not ready until it has connected to Postgres and loaded the containment list,
 so a PDP never starts with an empty one by mistake. Check its log for Postgres errors. If
@@ -129,8 +133,10 @@ Your managed Postgres holds three databases: awzy-policy's, awzy-context's, and 
 
 **When it fails:** all three of those services lose their store at once. Running PDPs keep
 deciding on what they hold in memory (policy, directory, cached resources, the last containment
-list), but nothing can change: no publishes, no SCIM changes, no new challenges or containments.
-After a failover, the services reconnect on their own.
+list, for up to 5 minutes), but nothing can change: no publishes, no SCIM changes, no new
+challenges or containments. After a failover, the services reconnect on their own. If Postgres is
+still down after 5 minutes, checks start failing on the stale containment list, and enforcement
+points follow their outage behavior.
 
 **Alerts:** `AwzyServiceNotReady` or `AwzyServerErrors` from awzy-policy, awzy-context, and
 awzy-challenge together, then the PDP freshness alerts. Your cloud's own alarms for the database
