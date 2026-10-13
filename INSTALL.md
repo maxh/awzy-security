@@ -245,6 +245,11 @@ name in bootstrap's `tracing`. On AWS, two more modules watch them for you:
 - [`deploy/terraform/grafana`](deploy/terraform/grafana): awzy's dashboards and data sources, in
   that workspace or any Grafana of yours. Apply it after the first, with the `grafana` output.
 
+On Google Cloud, [`deploy/terraform/gcp/monitoring`](deploy/terraform/gcp/monitoring) has Google
+Cloud Managed Service for Prometheus, which GKE already runs, scrape every awzy service, and turns
+awzy's alert rules into Cloud Monitoring alert policies that email the `alert_emails` you give it.
+Apply it after bootstrap, with a Kubernetes provider for the cluster.
+
 You can use your own monitoring instead: scrape each awzy pod's `/metrics` on its `metrics` port
 (9090), which the install's network policies let any scraper reach; load
 [`deploy/observability`](deploy/observability)'s alert rules and dashboards into it; and point

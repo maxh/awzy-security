@@ -48,6 +48,7 @@ jobs:
               - "deploy/terraform/examples/example-client/bootstrap/**"
               - "deploy/terraform/examples/example-client/variables.tf"
               - "deploy/terraform/aws/**"
+              - "deploy/observability/prometheus/**"
               - "deploy/terraform/bootstrap/**"
               - "deploy/release/*.pub"
               - "tools/ci/terraform-*.sh"
@@ -55,8 +56,10 @@ jobs:
             example-gcp:
               - "deploy/terraform/examples/example-client-gcp/install/**"
               - "deploy/terraform/examples/example-client-gcp/bootstrap/**"
+              - "deploy/terraform/examples/example-client-gcp/monitoring/**"
               - "deploy/terraform/examples/example-client-gcp/variables.tf"
               - "deploy/terraform/gcp/**"
+              - "deploy/observability/prometheus/**"
               - "deploy/terraform/bootstrap/**"
               - "deploy/release/*.pub"
               - "tools/ci/terraform-*.sh"

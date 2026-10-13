@@ -34,7 +34,7 @@ case $deployment in
   example-gcp)
     env_dir=deploy/terraform/examples/example-client-gcp
     title="The example client's Terraform (Google Cloud)"
-    modules=(examples/example-client-gcp/install examples/example-client-gcp/bootstrap)
+    modules=(examples/example-client-gcp/install examples/example-client-gcp/bootstrap examples/example-client-gcp/monitoring)
     ;;
   *) echo "$usage" >&2; exit 2 ;;
 esac
@@ -44,8 +44,17 @@ source tools/ci/terraform-env.sh
 
 status=0
 report=""
+# To tell which modules this pull request adds (below); the checkout has only its own commit.
+[ "$mode" = plan ] && git fetch -q --depth=1 origin main:refs/remotes/origin/main 2>/dev/null || true
 for module in "${modules[@]}"; do
   dir=deploy/terraform/$module
+  # A module this pull request adds has no state yet, and the plan roles can't create it: plan it
+  # against an empty local state, so every resource shows as created. Its first apply, after
+  # merge, makes the real state.
+  if [ "$mode" = plan ] && ! git cat-file -e "origin/main:$dir/main.tf" 2>/dev/null; then
+    printf 'terraform {\n  backend "local" {}\n}\n' > "$dir/ci_backend_override.tf"
+    echo "$module: new, planned against an empty state"
+  fi
   if ! (cd "$dir" && tofu init -input=false >/dev/null 2>init.err); then
     echo "$module: init failed"
     redact < "$dir/init.err" | tail -20
