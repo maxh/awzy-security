@@ -59,9 +59,16 @@ spec:
       terminationGracePeriodSeconds: {{ add $root.Values.shutdownDelaySeconds 20 }}
       {{- if gt (int .values.replicas) 1 }}
       topologySpreadConstraints:
+        {{- /* `spreadRequired`: never two more on one node than another, so one node can't hold
+        every pod. Cordoned and tainted nodes don't count, so a drain still moves pods. */}}
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
+          {{- if .values.spreadRequired }}
+          whenUnsatisfiable: DoNotSchedule
+          nodeTaintsPolicy: Honor
+          {{- else }}
           whenUnsatisfiable: ScheduleAnyway
+          {{- end }}
           labelSelector:
             matchLabels: {{- include "awzy.selector" . | nindent 14 }}
         - maxSkew: 1
