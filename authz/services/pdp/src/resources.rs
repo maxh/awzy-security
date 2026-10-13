@@ -91,8 +91,8 @@ impl StaleLimits {
     }
 }
 
-/// `GET /v1/resources/{id}/entities` from awzy-context.
-#[derive(serde::Deserialize)]
+/// `GET /v1/resources/{id}/entities` from awzy-context, which a PDP also passes to a peer.
+#[derive(serde::Deserialize, serde::Serialize)]
 struct EntitiesBody {
     entities: Vec<Value>,
     /// Absent from an awzy-context older than ADR 0046: no one is known to be assigned.
@@ -103,7 +103,7 @@ struct EntitiesBody {
     work: Vec<WorkLink>,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 struct WorkLink {
     id: String,
     #[serde(default)]
@@ -133,6 +133,34 @@ pub struct Loaded {
     pub work: Arc<HashMap<String, HashSet<String>>>,
     /// The resource's sensitivity tier, which decides how long it may be used stale.
     pub tier: Option<String>,
+}
+
+impl From<EntitiesBody> for Loaded {
+    fn from(body: EntitiesBody) -> Self {
+        let work = body.work.into_iter().map(|w| (w.id, w.assignees.into_iter().collect())).collect();
+        // The resource itself comes first.
+        let tier = body.entities.first().and_then(|e| TierOf::deserialize(e).ok()).and_then(|t| t.attrs.sensitivity);
+        Loaded {
+            tier,
+            entities: body.entities,
+            assignees: Arc::new(body.assignees.into_iter().collect()),
+            work: Arc::new(work),
+        }
+    }
+}
+
+impl From<&Loaded> for EntitiesBody {
+    fn from(loaded: &Loaded) -> Self {
+        EntitiesBody {
+            entities: loaded.entities.clone(),
+            assignees: loaded.assignees.iter().cloned().collect(),
+            work: loaded
+                .work
+                .iter()
+                .map(|(id, assignees)| WorkLink { id: id.clone(), assignees: assignees.iter().cloned().collect() })
+                .collect(),
+        }
+    }
 }
 
 /// The request's entities after the lookup, and, for a `Resource` checked with awzy-context,
@@ -170,6 +198,9 @@ pub struct Resources {
     ttl: Duration,
     unknown_ttl: Duration,
     stale_limits: StaleLimits,
+    /// The headless Service listing the running PDPs, asked for a resource this cache lacks while
+    /// awzy-context can't be reached (ADR 0119).
+    peers: Option<String>,
     started: Instant,
     /// Milliseconds after `started`, plus one, when the change log last answered; 0: never.
     feed_heard_ms: AtomicU64,
@@ -194,9 +225,15 @@ impl Resources {
             ttl,
             unknown_ttl,
             stale_limits: StaleLimits::default(),
+            peers: None,
             started: Instant::now(),
             feed_heard_ms: AtomicU64::new(0),
         }
+    }
+
+    pub fn with_peers(mut self, peers: String) -> Self {
+        self.peers = Some(peers);
+        self
     }
 
     pub fn with_stale_limits(mut self, limits: StaleLimits) -> Self {
@@ -336,14 +373,23 @@ impl Resources {
                 self.store(id, entities.clone());
                 Ok((entities, false))
             }
-            Err(error) => match stale {
-                Some(entities) => {
-                    crate::metrics::RESOURCE_STALE_SERVED.inc();
-                    tracing::warn!(%error, resource = id, "awzy-context unreachable; using the cached resource");
-                    Ok((entities, true))
+            Err(error) => {
+                let stale = match (stale, &self.peers) {
+                    (Some(entities), _) => Some(entities),
+                    (None, Some(peers)) => crate::peer::ask_for_resource(peers, id)
+                        .await
+                        .and_then(|(known, json, age)| self.load_from_peer(id, known, &json, age)),
+                    (None, None) => None,
+                };
+                match stale {
+                    Some(entities) => {
+                        crate::metrics::RESOURCE_STALE_SERVED.inc();
+                        tracing::warn!(%error, resource = id, "awzy-context unreachable; using a cached resource");
+                        Ok((entities, true))
+                    }
+                    None => Err(error),
                 }
-                None => Err(error),
-            },
+            }
         }
     }
 
@@ -356,22 +402,45 @@ impl Resources {
             200 => {
                 let body: EntitiesBody = serde_json::from_slice(&res.into_body().collect().await?.to_bytes())
                     .map_err(|e| anyhow::anyhow!("no entities for resource {id}: {e}"))?;
-                let work = body.work.into_iter().map(|w| (w.id, w.assignees.into_iter().collect())).collect();
-                // The resource itself comes first.
-                let tier =
-                    body.entities.first().and_then(|e| TierOf::deserialize(e).ok()).and_then(|t| t.attrs.sensitivity);
-                Ok(Some(Arc::new(Loaded {
-                    tier,
-                    entities: body.entities,
-                    assignees: Arc::new(body.assignees.into_iter().collect()),
-                    work: Arc::new(work),
-                })))
+                Ok(Some(Arc::new(Loaded::from(body))))
             }
             status => anyhow::bail!("{url} returned {status}"),
         }
     }
 
+    /// A cached entry a peer may use (ADR 0119): whether awzy-context knew the resource, its
+    /// entities as awzy-context's JSON body, and its age. None if nothing usable is cached.
+    pub fn held(&self, id: &str) -> Option<(bool, Vec<u8>, Duration)> {
+        let cache = self.cache.read().unwrap_or_else(|e| e.into_inner());
+        let c = cache.get(id).filter(|c| c.fresh(self.ttl(), self.unknown_ttl) || self.usable_stale(c))?;
+        let json = match &c.entities {
+            Some(loaded) => serde_json::to_vec(&EntitiesBody::from(loaded.as_ref())).ok()?,
+            None => Vec::new(),
+        };
+        Some((c.entities.is_some(), json, c.at.elapsed()))
+    }
+
+    /// Caches what a peer had for `id`, as old as it was there, and returns it if it's within
+    /// its tier's limit.
+    fn load_from_peer(&self, id: &str, known: bool, json: &[u8], age: Duration) -> Option<Option<Arc<Loaded>>> {
+        let entities =
+            if known { Some(Arc::new(Loaded::from(serde_json::from_slice::<EntitiesBody>(json).ok()?))) } else { None };
+        // An age from before this machine booted is too old for any tier.
+        let at = Instant::now().checked_sub(age)?;
+        let cached = Cached { at, entities };
+        if !self.usable_stale(&cached) {
+            return None;
+        }
+        let entities = cached.entities.clone();
+        self.store_cached(id, cached);
+        Some(entities)
+    }
+
     fn store(&self, id: &str, entities: Option<Arc<Loaded>>) {
+        self.store_cached(id, Cached { at: Instant::now(), entities });
+    }
+
+    fn store_cached(&self, id: &str, cached: Cached) {
         let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
         if cache.len() >= CAPACITY && !cache.contains_key(id) {
             // What can't stand in during an outage goes first, then what's merely expired.
@@ -383,7 +452,7 @@ impl Resources {
                 cache.clear();
             }
         }
-        cache.insert(id.to_string(), Cached { at: Instant::now(), entities });
+        cache.insert(id.to_string(), cached);
     }
 }
 
@@ -515,6 +584,28 @@ mod tests {
         let lenient = Resources::new(Some("http://127.0.0.1:1".into()), Duration::ZERO, Duration::ZERO);
         lenient.store("drive:plans/fy27", cached);
         assert!(lenient.merge(json!([]), &resource("drive:plans/fy27")).await.is_ok(), "within 5 minutes");
+    }
+
+    #[tokio::test]
+    async fn a_resource_this_cache_lacks_comes_from_a_peer_while_awzy_context_is_down() {
+        let (url, _) = context().await;
+        let running = Resources::new(Some(url), TTL, UNKNOWN_TTL);
+        running.merge(json!([]), &resource("drive:plans/fy27")).await.unwrap();
+        let state =
+            crate::AppState::new(crate::shared(crate::Pdp::with_defaults().unwrap())).with_resources(Arc::new(running));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let peer = listener.local_addr().unwrap().to_string();
+        let app = crate::router(state);
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let starting = Resources::new(Some("http://127.0.0.1:1".into()), TTL, UNKNOWN_TTL).with_peers(peer);
+        let merged = starting.merge(json!([]), &resource("drive:plans/fy27")).await.unwrap();
+        assert_eq!(merged.entities[0]["attrs"]["sensitivity"], "crown_jewels");
+        assert!(starting.cache.read().unwrap().contains_key("drive:plans/fy27"), "and it's cached for the next check");
+        assert!(
+            starting.merge(json!([]), &resource("drive:elsewhere")).await.is_err(),
+            "a resource no peer has still fails closed"
+        );
     }
 
     #[test]

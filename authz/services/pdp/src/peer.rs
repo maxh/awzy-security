@@ -13,7 +13,8 @@ use std::time::Duration;
 use awzy_authz_proto::pdp::v1::{
     pdp_peer_service_client::PdpPeerServiceClient,
     pdp_peer_service_server::{PdpPeerService, PdpPeerServiceServer},
-    ContainmentsState, GetStateRequest, GetStateResponse, PolicyState, PrincipalsState,
+    ContainmentsState, GetResourceRequest, GetResourceResponse, GetStateRequest, GetStateResponse, PolicyState,
+    PrincipalsState,
 };
 use awzy_service_auth::{grpc_channel, Allowed};
 use awzy_signing::BundleVerifier;
@@ -29,6 +30,8 @@ const MOST_PEERS: usize = 5;
 const PEER_TIMEOUT: Duration = Duration::from_secs(5);
 /// A principals snapshot grows with headcount, past gRPC's 4 MB default.
 const MAX_STATE_BYTES: usize = 256 << 20;
+/// How long a check waits on each peer for a resource: it's already past awzy-context's timeout.
+const RESOURCE_TIMEOUT: Duration = Duration::from_millis(250);
 
 fn millis(d: Duration) -> u64 {
     u64::try_from(d.as_millis()).unwrap_or(u64::MAX)
@@ -40,6 +43,20 @@ struct Service(AppState);
 impl PdpPeerService for Service {
     async fn get_state(&self, _: Request<GetStateRequest>) -> Result<Response<GetStateResponse>, Status> {
         state_of(&self.0).map(Response::new).map_err(|e| Status::internal(e.to_string()))
+    }
+
+    async fn get_resource(
+        &self,
+        request: Request<GetResourceRequest>,
+    ) -> Result<Response<GetResourceResponse>, Status> {
+        let id = request.into_inner().resource_id;
+        let res = match self.0.resources.held(&id) {
+            Some((known, entities_json, age)) => {
+                GetResourceResponse { cached: true, known, entities_json, age_ms: millis(age) }
+            }
+            None => GetResourceResponse::default(),
+        };
+        Ok(Response::new(res))
     }
 }
 
@@ -128,6 +145,29 @@ async fn ask_peers(peers: &str) -> Vec<GetStateResponse> {
         }
     }
     answers
+}
+
+/// What the first of the PDPs behind `peers` that has resource `id` cached says about it:
+/// whether awzy-context knew it, its entities as JSON, and its age.
+pub(crate) async fn ask_for_resource(peers: &str, id: &str) -> Option<(bool, Vec<u8>, Duration)> {
+    let addrs: Vec<_> = tokio::net::lookup_host(peers).await.ok()?.take(MOST_PEERS).collect();
+    for addr in addrs {
+        let ask = async {
+            let channel = Channel::from_shared(format!("http://{addr}"))?.connect().await?;
+            let mut client = PdpPeerServiceClient::new(grpc_channel(channel, "awzy-pdp"));
+            let req = GetResourceRequest { resource_id: id.to_string() };
+            anyhow::Ok(client.get_resource(req).await?.into_inner())
+        };
+        match tokio::time::timeout(RESOURCE_TIMEOUT, ask).await {
+            Ok(Ok(res)) if res.cached => {
+                return Some((res.known, res.entities_json, Duration::from_millis(res.age_ms)));
+            }
+            Ok(Ok(_)) => {}
+            Ok(Err(error)) => tracing::debug!(%error, %addr, "a peer couldn't be asked for a resource"),
+            Err(_) => tracing::debug!(%addr, "a peer didn't answer for a resource in time"),
+        }
+    }
+    None
 }
 
 /// Loads the newest of each input this PDP is still missing from the peers' answers. Returns
