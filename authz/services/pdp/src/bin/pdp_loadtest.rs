@@ -127,7 +127,11 @@ impl Timeline {
         (at.duration_since(self.started).as_millis() / self.every.as_millis().max(1)) as u64
     }
 
-    fn record(&self, result: &Result<tonic::Response<awzy_authz_proto::authz::v1::CheckResponse>, tonic::Status>, latency: Duration) {
+    fn record(
+        &self,
+        result: &Result<tonic::Response<awzy_authz_proto::authz::v1::CheckResponse>, tonic::Status>,
+        latency: Duration,
+    ) {
         let index = self.index(Instant::now());
         let mut intervals = self.intervals.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let interval = intervals.entry(index).or_default();
@@ -180,9 +184,8 @@ async fn main() -> anyhow::Result<()> {
 
     let started = Instant::now();
     let deadline = started + Duration::from_secs(seconds);
-    let timeline = every.map(|every| {
-        Arc::new(Timeline { every: Duration::from_secs(every), started, intervals: Mutex::default() })
-    });
+    let timeline = every
+        .map(|every| Arc::new(Timeline { every: Duration::from_secs(every), started, intervals: Mutex::default() }));
     let reporter = timeline.clone().map(|timeline| tokio::spawn(timeline.report(deadline)));
     let mut workers = Vec::new();
     for (w, client) in connections.into_iter().enumerate() {
@@ -199,9 +202,11 @@ async fn main() -> anyhow::Result<()> {
                     async move { client.check(request(i)).await }
                 };
                 let result = match timeline {
-                    Some(_) => tokio::time::timeout(TIMELINE_CHECK_TIMEOUT, awzy_service_auth::retry_once_if_unanswered(ask))
-                        .await
-                        .unwrap_or_else(|_| Err(tonic::Status::deadline_exceeded("no answer within a second"))),
+                    Some(_) => {
+                        tokio::time::timeout(TIMELINE_CHECK_TIMEOUT, awzy_service_auth::retry_once_if_unanswered(ask))
+                            .await
+                            .unwrap_or_else(|_| Err(tonic::Status::deadline_exceeded("no answer within a second")))
+                    }
                     None => awzy_service_auth::retry_once_if_unanswered(ask).await,
                 };
                 if let Some(timeline) = &timeline {
