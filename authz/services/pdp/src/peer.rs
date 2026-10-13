@@ -75,10 +75,11 @@ pub fn state_of(state: &AppState) -> anyhow::Result<GetStateResponse> {
         }),
         None => None,
     };
-    let containments = state
-        .containments
-        .held()
-        .map(|(version, active, age)| ContainmentsState { version, active, age_ms: millis(age) });
+    let containments = state.containments.held().map(|(version, active, age)| ContainmentsState {
+        version,
+        active,
+        age_ms: millis(age),
+    });
     Ok(GetStateResponse { policy, principals, containments })
 }
 
@@ -116,8 +117,8 @@ async fn ask_peers(peers: &str) -> Vec<GetStateResponse> {
     for addr in addrs {
         let ask = async {
             let channel = Channel::from_shared(format!("http://{addr}"))?.connect().await?;
-            let mut client = PdpPeerServiceClient::new(grpc_channel(channel, "awzy-pdp"))
-                .max_decoding_message_size(MAX_STATE_BYTES);
+            let mut client =
+                PdpPeerServiceClient::new(grpc_channel(channel, "awzy-pdp")).max_decoding_message_size(MAX_STATE_BYTES);
             anyhow::Ok(client.get_state(GetStateRequest {}).await?.into_inner())
         };
         match tokio::time::timeout(PEER_TIMEOUT, ask).await {
