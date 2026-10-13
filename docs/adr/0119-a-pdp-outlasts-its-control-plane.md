@@ -48,7 +48,7 @@ without its source:
   awzy-challenge can be up while one PDP's feed is cut. When the feed is stale the PDP still asks
   awzy-challenge directly, as before. If that fails, it uses the last list, and for the next
   second it doesn't ask again, so an outage doesn't add 250 ms to every check. After
-  `AWZY_PDP_CONTAINMENTS_MAX_STALE` (5 minutes by default, past a failover) checks fail as
+  `AWZY_PDP_CONTAINMENTS_MAX_STALE_SECS` (5 minutes by default, past a failover) checks fail as
   unavailable, never as "not contained."
 - **Resources have a limit by tier**, since a stale attribute matters more on a sensitive
   resource: `public` and `internal` 60 minutes, `confidential` 15, `crown_jewels` 5 (chart
