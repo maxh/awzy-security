@@ -78,8 +78,7 @@ impl StaleLimits {
     pub fn parse(text: &str) -> anyhow::Result<Self> {
         let mut limits = Self::default();
         for pair in text.split(',').map(str::trim).filter(|p| !p.is_empty()) {
-            let (tier, secs) =
-                pair.split_once('=').ok_or_else(|| anyhow::anyhow!("{pair:?} isn't tier=seconds"))?;
+            let (tier, secs) = pair.split_once('=').ok_or_else(|| anyhow::anyhow!("{pair:?} isn't tier=seconds"))?;
             anyhow::ensure!(awzy_model::TIERS.contains(&tier), "{tier:?} isn't a sensitivity tier");
             limits.0.insert(tier.to_string(), Duration::from_secs(secs.parse()?));
         }
@@ -496,8 +495,8 @@ mod tests {
         assert_eq!(cached.as_ref().unwrap().tier.as_deref(), Some("crown_jewels"));
 
         let limits = StaleLimits::parse("crown_jewels=0").unwrap();
-        let down = Resources::new(Some("http://127.0.0.1:1".into()), Duration::ZERO, Duration::ZERO)
-            .with_stale_limits(limits);
+        let down =
+            Resources::new(Some("http://127.0.0.1:1".into()), Duration::ZERO, Duration::ZERO).with_stale_limits(limits);
         down.store("drive:plans/fy27", cached.clone());
         tokio::time::sleep(Duration::from_millis(5)).await;
         assert!(down.merge(json!([]), &resource("drive:plans/fy27")).await.is_err(), "past its tier's limit");
