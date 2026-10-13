@@ -15,6 +15,8 @@
 #                               (AWZY_TEST_AURORA_CLUSTER) where there is one
 #   node                        the node running the most PDPs drained
 #   cold                        awzy-context away, then every PDP restarted: the cold start
+#   pdp                         every PDP scaled to zero, with the demo's activity job sending
+#                               tool calls through awzy-gateway, which falls back (ADR 0030)
 #
 # Load: open loop at AWZY_TEST_GAMEDAY_RATE checks/s (default 200) over 8 connections, a line a
 # second, on AWZY_TEST_LOADTEST_RESOURCES (resource IDs awzy-context knows) if set. Timeline: 60 s of load, the dependency away, one PDP pod deleted 30 s into it so its replacement
@@ -75,6 +77,11 @@ sample() {
         metrics "${pod#pod/}" 2>&1 |
           grep -E '^awzy_(ready|pdp_(.*_age_seconds|.*dropped_total|check_errors_total|containments_stale_served_total|resource_lookups_total))' || true
       done
+      # What the gateway did with tool calls: decided by the PDP, or by the outage rules.
+      for pod in $(k -n "$sys" get pod -l app.kubernetes.io/name=awzy-gateway -o name 2>/dev/null); do
+        echo "-- ${pod#pod/}"
+        metrics "${pod#pod/}" 2>&1 | grep -E '^awzy_gateway_' || true
+      done
     } >>"$out/samples.log"
     sleep 5
   done
@@ -114,6 +121,10 @@ take_away() {
   case $scenario in
     context | challenge | policy) k -n "$sys" scale deploy "awzy-$scenario" --replicas=0 >/dev/null ;;
     cold) k -n "$sys" scale deploy awzy-context --replicas=0 >/dev/null ;;
+    pdp)
+      # Replicas at zero also stop the autoscaler, which would otherwise bring them back.
+      k -n "$sys" scale deploy awzy-pdp --replicas=0 >/dev/null
+      ;;
     kafka)
       k -n kafka scale deploy strimzi-cluster-operator --replicas=0 >/dev/null
       k -n kafka wait --for=delete pod -l name=strimzi-cluster-operator --timeout=120s >/dev/null || true
@@ -146,6 +157,7 @@ bring_back() {
   case $scenario in
     context | challenge | policy) k -n "$sys" scale deploy "awzy-$scenario" --replicas="$replicas" >/dev/null ;;
     cold) k -n "$sys" scale deploy awzy-context --replicas="$replicas" >/dev/null ;;
+    pdp) k -n "$sys" scale deploy awzy-pdp --replicas="$replicas" >/dev/null ;;
     kafka) k -n kafka scale deploy strimzi-cluster-operator --replicas=1 >/dev/null ;;
     kafka-broker | postgres) ;;
     node) k uncordon "$(cat "$out/node")" >/dev/null ;;
@@ -156,6 +168,7 @@ restore() {
   bring_back || true
   argo_resume || true
   k -n "$sys" delete pod gameday-load --ignore-not-found --wait=false >/dev/null || true
+  [[ -n ${activity_job:-} ]] && k -n "$sys" delete job "$activity_job" --wait=false >/dev/null 2>&1 || true
   [[ -n ${sampler:-} ]] && kill "$sampler" 2>/dev/null || true
 }
 trap restore EXIT
@@ -163,6 +176,7 @@ trap restore EXIT
 case $scenario in
   context | challenge | policy) replicas=$(k -n "$sys" get deploy "awzy-$scenario" -o jsonpath='{.spec.replicas}') ;;
   cold) replicas=$(k -n "$sys" get deploy awzy-context -o jsonpath='{.spec.replicas}') ;;
+  pdp) replicas=$(k -n "$sys" get deploy awzy-pdp -o jsonpath='{.spec.replicas}') ;;
 esac
 
 # A rollout still under way would land in the measurements.
@@ -175,12 +189,20 @@ note "automated sync off; load starting ($scenario, ${away}s away)"
 start_load $((60 + away + 120 + 30))
 sample &
 sampler=$!
+if [[ $scenario == pdp ]]; then
+  # Tool calls through the gateway from the start, so it has recent allows to replay.
+  activity_job=gameday-activity-$(date +%s)
+  k -n "$sys" create job "$activity_job" --from=cronjob/awzy-activity >/dev/null
+  note "started $activity_job"
+fi
 sleep 60
 
 note "taking $scenario away"
 take_away
 sleep 30
-if [[ $scenario == cold ]]; then
+if [[ $scenario == pdp ]]; then
+  : # every PDP is already gone
+elif [[ $scenario == cold ]]; then
   note "restarting every PDP"
   k -n "$sys" delete pod -l app.kubernetes.io/name=awzy-pdp --wait=false >/dev/null
 else
