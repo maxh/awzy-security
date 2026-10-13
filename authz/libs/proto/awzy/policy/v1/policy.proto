@@ -39,6 +39,8 @@ service PolicyService {
   // a signature from a key enrolled at install time, not by the IdP or the PDP, so it works when
   // either is what's broken. Every use is recorded.
   rpc BreakGlassRollback(BreakGlassRollbackRequest) returns (BreakGlassRollbackResponse);
+  // Every break-glass rollback, newest first, for the portal's Policies page and auditors.
+  rpc ListBreakGlassRollbacks(ListBreakGlassRollbacksRequest) returns (ListBreakGlassRollbacksResponse);
 }
 
 enum BundleStatus {
@@ -218,6 +220,33 @@ message BreakGlassRollbackResponse {
   int64 restored_version = 2;
   // The version that was active before; 0 if none.
   int64 replaced_version = 3;
+}
+
+message ListBreakGlassRollbacksRequest {
+  // Defaults to 50, at most 500.
+  int32 limit = 1;
+}
+
+message ListBreakGlassRollbacksResponse {
+  repeated BreakGlassRollback rollbacks = 1;
+}
+
+// One break-glass rollback, as recorded when it was made.
+message BreakGlassRollback {
+  // The enrolled key that signed it: `sha256:<fingerprint>`.
+  string key_id = 1;
+  // Why, as signed.
+  string reason = 2;
+  // When the signed request says it was made.
+  google.protobuf.Timestamp requested_at = 3;
+  // When awzy-policy carried it out.
+  google.protobuf.Timestamp recorded_at = 4;
+  // The version it restored.
+  int64 restored_version = 5;
+  // The version that was active before; 0 if none.
+  int64 replaced_version = 6;
+  // The bundle it published: a copy of the restored version.
+  string bundle_qid = 7 [(awzy.authz.v1.qid) = "policy_bundle"];
 }
 
 // An outage fallback setting (ADR 0089). awzy-gateway uses its tiers for every check, and its

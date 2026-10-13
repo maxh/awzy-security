@@ -104,6 +104,66 @@ input BeginSecurityKeyRegistrationInput {
 	authorization: AssertionInput
 }
 
+type BreakGlassRollback {
+	"""
+	The enrolled key that signed it: `sha256:<fingerprint>`, as `awzy-break-glass` prints it.
+	"""
+	keyId: String!
+	"""
+	Why, as the signed request gave it.
+	"""
+	reason: String!
+	"""
+	When the signed request says it was made.
+	"""
+	requestedAt: UtcTimestamp
+	"""
+	When awzy-policy carried it out.
+	"""
+	recordedAt: UtcTimestamp
+	"""
+	The version it restored.
+	"""
+	restoredVersion: Int!
+	"""
+	The version that was active before, if any.
+	"""
+	replacedVersion: Int
+	"""
+	The bundle it published, a copy of the restored version. Null if awzy-policy no longer has it.
+	"""
+	bundle: PolicyBundle
+}
+
+type BreakGlassRollbackConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [BreakGlassRollbackEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [BreakGlassRollback!]!
+}
+
+"""
+An edge in a connection.
+"""
+type BreakGlassRollbackEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: BreakGlassRollback!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
 type Challenge implements Node {
 	"""
 	QID: challenge_<uuid>.
@@ -1510,6 +1570,10 @@ type Query {
 	Newest first.
 	"""
 	policyBundles(after: String, first: Int): PolicyBundleConnection!
+	"""
+	Every break-glass rollback, newest first: who signed it, why, and what it restored.
+	"""
+	breakGlassRollbacks(after: String, first: Int): BreakGlassRollbackConnection!
 	"""
 	Decisions newest first. Cursors are opaque.
 	"""

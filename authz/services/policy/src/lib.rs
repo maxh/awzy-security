@@ -11,6 +11,6 @@ mod store;
 
 pub use grpc::{router, Access, BreakGlassReporter};
 pub use store::{
-    BreakGlassOutcome, BreakGlassRequest, BundleStatus, EnforcementSetting, ModelRoutingSetting, OutageFallbackSetting,
-    PolicyBundle, PolicyStore, StoreError, AUTOMATED_CONTAINMENTS_SCOPE, INSTALL_SCOPE,
+    BreakGlassEvent, BreakGlassOutcome, BreakGlassRequest, BundleStatus, EnforcementSetting, ModelRoutingSetting,
+    OutageFallbackSetting, PolicyBundle, PolicyStore, StoreError, AUTOMATED_CONTAINMENTS_SCOPE, INSTALL_SCOPE,
 };
