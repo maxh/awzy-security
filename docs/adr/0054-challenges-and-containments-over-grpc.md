@@ -1,6 +1,6 @@
 # 0054. awzy-challenge serves challenges and the containment feed over gRPC; Valkey waits
 
-- Status: Accepted; amended by [0065](0065-agents-approve-people-verify.md) (service accounts may approve)
+- Status: Accepted; amended by [0065](0065-agents-approve-people-verify.md) (service accounts may approve) and [0119](0119-a-pdp-outlasts-its-control-plane.md) (the last containment list serves for a bounded time)
 - Date: 2026-10-09
 - Implements part of: [0003](0003-one-pdp-for-every-access-path.md) (the PDP's challenge verdict
   gets a service behind it)

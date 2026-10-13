@@ -1,6 +1,6 @@
 # 0044. The PDP loads resources by ID from awzy-context, with a local cache; Valkey waits
 
-- Status: Accepted
+- Status: Accepted; amended by [0119](0119-a-pdp-outlasts-its-control-plane.md) (stale resources have a limit by tier)
 - Date: 2026-10-09
 - Implements part of: [0039](0039-synthetic-organization-for-demo-and-tests.md) (demo plan step 3)
 
