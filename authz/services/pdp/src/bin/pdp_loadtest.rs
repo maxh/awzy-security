@@ -15,7 +15,10 @@
 //! gRPC code. In open loop a check unanswered after 2 seconds counts as an error, as the gateway
 //! gives up on it then.
 //!
-//! Entities are sent inline, as enforcement points do until awzy-context exists.
+//! Entities are sent inline, as enforcement points do until awzy-context exists. With
+//! `AWZY_TEST_LOADTEST_RESOURCES` (comma-separated resource IDs awzy-context knows), checks name
+//! those instead and send no entity for them, so the PDP decides on awzy-context's attributes and
+//! stale limits, as for a real install's resources (#402).
 //!
 //! In a cluster it runs from the PDP's image and sends the pod's service token for `awzy-pdp`
 //! (ADR 0054), mounted as awzy's workloads mount theirs; without one it sends none.
@@ -44,15 +47,36 @@ fn entity(kind: &str, id: &str, attrs: serde_json::Value, groups: &[&str]) -> En
     }
 }
 
+/// Resource IDs from `AWZY_TEST_LOADTEST_RESOURCES`, if set.
+fn known_resources() -> &'static [String] {
+    static KNOWN: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    KNOWN.get_or_init(|| {
+        std::env::var("AWZY_TEST_LOADTEST_RESOURCES")
+            .unwrap_or_default()
+            .split(',')
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .map(str::to_string)
+            .collect()
+    })
+}
+
 /// Request `i` of the mix: humans and a delegated service account, across sensitivities.
 fn request(i: usize) -> CheckRequest {
     let resources = [("design-doc", "internal"), ("q3-strategy", "confidential"), ("board-deck", "crown_jewels")];
-    let (res_id, sensitivity) = resources[i % resources.len()];
     let mut entities = vec![
         entity("Human", "alice", json!({}), &["security"]),
         entity("Human", "bob", json!({}), &["engineering"]),
-        entity("Resource", res_id, json!({ "sensitivity": sensitivity }), &[]),
     ];
+    let known = known_resources();
+    let res_id = match known.is_empty() {
+        true => {
+            let (id, sensitivity) = resources[i % resources.len()];
+            entities.push(entity("Resource", id, json!({ "sensitivity": sensitivity }), &[]));
+            id
+        }
+        false => known[i % known.len()].as_str(),
+    };
     let delegated = i.is_multiple_of(3);
     let (principal, on_behalf_of) = if delegated {
         entities.push(entity(
