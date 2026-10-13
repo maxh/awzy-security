@@ -44,6 +44,42 @@ Enforcement points are built for it. awzy-gateway replays a recent allow for too
 set to fail open in its configuration, and denies the rest, never replaying an allow for someone
 contained before the outage. Confidential and crown-jewel tools always fail closed.
 
+## Rolling back
+
+When a release misbehaves, return to the one before it, then find out why. Rolling back is a pin:
+
+1. **Ask awzy to pin your install** to the previous version in the corp portal, so the registry
+   serves it again.
+2. **Set `chart_version`** to that version in bootstrap, and apply bootstrap. Argo CD rolls the
+   services back the same way it rolled them forward, one pod at a time, so decisions keep
+   flowing.
+3. **Check it** as below, with `/version` reporting the version you returned to.
+4. **Leave the pin** until a fixed release is out, then unset `chart_version` to follow your
+   channel again.
+
+A version you can't pin to shows in Argo CD as `ComparisonError … not found`.
+
+### Across a database migration
+
+Rolling back one release is always safe, migrations included. Releases only add to a schema, and
+a service starts against a newer schema than it knows, so the version you return to works with
+the schema the newer one left. Nothing is migrated back, and nothing needs to be.
+
+Something is removed from a schema only two releases after awzy stops using it. So going back
+further than one release can reach a version that expects something that's since been removed. It
+fails to start, its log names what's missing, and the release before it is still running. Roll
+back one release at a time, and ask awzy support before going back more than one.
+
+If an upgrade's migration Job itself failed, there's nothing to roll back: the upgrade stopped
+before any service was replaced. Its log (`kubectl -n awzy-system logs job/<service>-migrate`)
+says why; tell awzy support, and pin the version you're on until a fixed release is out.
+
+### A release that needs a newer bootstrap
+
+A release can need a newer bootstrap than your install has applied. Until you apply it, Argo CD
+installs nothing and keeps the release you have running (`AwzyReleaseNotSynced`). Rolling back
+never needs this: an older release works with a bootstrap newer than it asks for.
+
 ## Checking an upgrade
 
 - `kubectl -n awzy-ops get application awzy` is `Synced` and `Healthy`.

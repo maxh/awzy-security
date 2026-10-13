@@ -168,6 +168,9 @@ jobs:
       # Each ADR has its own number, so a citation names one decision.
       - name: ADR numbers are unique
         run: tools/ci/check-adr-numbers.sh
+      # Every alert links the section of the docs that says what to do about it.
+      - name: Alerts link their runbooks
+        run: tools/ci/check-alert-runbooks.sh
       # What the code-quality pass removed stays removed, and what's left only shrinks (#221 to
       # #227).
       - name: Code quality ratchets

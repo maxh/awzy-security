@@ -28,7 +28,9 @@ awzy-gateway's outcomes and PDP outages, and every service's requests.
 ## Alerts
 
 Alerts labeled `page` mean decisions are wrong, late, or missing now. `ticket` alerts can wait for
-working hours. Every install starts in `monitor` mode, where decisions are recorded but nothing is
+working hours. Each alert's `runbook_url` links its section below. For what a failing
+service or data store stops doing, and how to bring it back, see
+[troubleshooting](/guides/troubleshooting/). Every install starts in `monitor` mode, where decisions are recorded but nothing is
 blocked, so most pages there affect the audit trail, not access.
 
 The first checks are the same for every alert:
