@@ -11,6 +11,9 @@ const CALLBACK_PATH = "/auth/callback";
 const SUPPORT_PATH = "/support/sign-in";
 const SUPPORT_TOKEN = "awzy-support-token";
 
+/** Set while a sign-in started over after a stale callback, so a second failure stops there. */
+const RETRIED_SIGN_IN = "awzy-sign-in-retried";
+
 export type Session = {
   /** Who is signed in, for the sidebar. */
   profile: { sub: string; name?: string; email?: string };
@@ -55,7 +58,23 @@ export async function signIn(): Promise<Session> {
   };
 
   if (window.location.pathname === CALLBACK_PATH) {
-    const user = await manager.signinRedirectCallback();
+    let user;
+    try {
+      user = await manager.signinRedirectCallback();
+    } catch (error) {
+      // A callback whose sign-in this tab already finished or never started: the back button to
+      // the IdP's page, then signing in (as someone else) from it. Its state is gone, so the
+      // code can't be trusted; start a fresh sign-in, once, rather than fail.
+      window.history.replaceState(null, "", "/");
+      if (window.sessionStorage.getItem(RETRIED_SIGN_IN) === null) {
+        window.sessionStorage.setItem(RETRIED_SIGN_IN, "1");
+        signInAgain();
+        return new Promise(() => {});
+      }
+      window.sessionStorage.removeItem(RETRIED_SIGN_IN);
+      throw error;
+    }
+    window.sessionStorage.removeItem(RETRIED_SIGN_IN);
     const state: unknown = user.state;
     const returnTo = isRecord(state) && typeof state.returnTo === "string" ? state.returnTo : "/";
     window.history.replaceState(null, "", returnTo.startsWith("/") ? returnTo : "/");
