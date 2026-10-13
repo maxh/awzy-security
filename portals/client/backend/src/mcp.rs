@@ -103,7 +103,7 @@ impl ClientPortalMcp {
 
     #[tool(
         name = "search_decisions",
-        description = "Search authorization decisions, newest first. Filter by principal, resource, verdict, and time (last 24 hours by default, at most 30 days)."
+        description = "Search authorization decisions, newest first. Filter by principal, resource, verdict, and time (the last 24 hours by default; a window of at most 30 days, ending at `until`)."
     )]
     async fn search_decisions(
         &self,
@@ -113,6 +113,7 @@ impl ClientPortalMcp {
         let viewer = self.allow(&parts, PortalAction::View, PortalArea::Decisions).await?;
         self.record(&viewer, "search_decisions");
         let since = p.since.as_deref().map(parse_time).transpose()?;
+        let until = p.until.as_deref().map(parse_time).transpose()?;
         let page = decisions::search(
             self.clickhouse()?,
             SearchParams {
@@ -121,6 +122,7 @@ impl ClientPortalMcp {
                 verdict: p.verdict,
                 mode: p.mode.map(Into::into),
                 since,
+                until,
                 after: None,
                 limit: p.limit.unwrap_or(20) as usize,
             },

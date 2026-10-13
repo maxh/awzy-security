@@ -16,8 +16,10 @@ pub struct SearchDecisionsParams {
     pub verdict: Option<Verdict>,
     /// monitor: decisions that were only recorded (a deny is a "would deny"); enforce: applied.
     pub mode: Option<ModeParam>,
-    /// RFC 3339 timestamp. Defaults to 24 hours ago; at most 30 days ago.
+    /// RFC 3339 timestamp. Defaults to 24 hours before `until`; at most 30 days before it.
     pub since: Option<String>,
+    /// RFC 3339 timestamp: only decisions before it. Defaults to now.
+    pub until: Option<String>,
     /// How many to return, newest first. Defaults to 20, at most 200.
     pub limit: Option<u32>,
 }

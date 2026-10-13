@@ -179,7 +179,7 @@ impl Tool for BotTool {
         let (name, description, input_schema) = match self.kind {
             Kind::SearchDecisions => (
                 "search_decisions",
-                "Search authorization decisions, newest first. Filter by principal, resource, verdict, and time (last 24 hours by default, at most 30 days).",
+                "Search authorization decisions, newest first. Filter by principal, resource, verdict, and time (the last 24 hours by default; a window of at most 30 days, ending at `until`).",
                 schema_of::<SearchDecisionsParams>(),
             ),
             Kind::ExplainDecision => (
@@ -224,14 +224,13 @@ impl BotTool {
             Kind::SearchDecisions => {
                 self.allow(PortalAction::View, PortalArea::Decisions).await?;
                 let p: SearchDecisionsParams = parse(input)?;
-                let since = match p.since.as_deref() {
-                    Some(s) => Some(
-                        chrono::DateTime::parse_from_rfc3339(s)
-                            .map_err(|_| ToolOutcome::Error(format!("{s:?} is not an RFC 3339 time")))?
-                            .with_timezone(&chrono::Utc),
-                    ),
-                    None => None,
+                let time = |t: Option<&str>| match t {
+                    Some(s) => chrono::DateTime::parse_from_rfc3339(s)
+                        .map(|t| Some(t.with_timezone(&chrono::Utc)))
+                        .map_err(|_| ToolOutcome::Error(format!("{s:?} is not an RFC 3339 time"))),
+                    None => Ok(None),
                 };
+                let (since, until) = (time(p.since.as_deref())?, time(p.until.as_deref())?);
                 let ch = services.clickhouse.as_ref().ok_or_else(|| missing("the decision log"))?;
                 let page = decisions::search(
                     ch,
@@ -241,6 +240,7 @@ impl BotTool {
                         verdict: p.verdict,
                         mode: p.mode.map(Into::into),
                         since,
+                        until,
                         after: None,
                         limit: p.limit.unwrap_or(20) as usize,
                     },

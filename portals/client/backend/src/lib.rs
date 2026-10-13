@@ -15,6 +15,7 @@ mod challenges;
 mod connector_config;
 mod connectors;
 mod containment_review;
+mod decision_export;
 mod decisions;
 mod diagnostics;
 pub mod directory;
@@ -199,6 +200,7 @@ pub struct ClientPortalQuery(
     node::NodeQuery,
     policies::PolicyQuery,
     decisions::DecisionQuery,
+    decision_export::DecisionExportQuery,
     enforcement::EnforcementQuery,
     directory::DirectoryQuery,
     issuers::TokenIssuerQuery,
