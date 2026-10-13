@@ -16,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
     };
     let mut services = awzy_client_portal::Services::from_env()?;
     services.bot = awzy_client_portal::awzy_bot::model_from_env().await;
-    // Awzy Bot's model routing, as set here and kept by awzy-policy (ADR 0114).
+    // Awzy Bot's model routing, as set here and kept by awzy-policy (ADR 0120).
     if let (Some(router), Some(policy)) = (services.bot.as_ref().and_then(|b| b.router()), services.policy.clone()) {
         let verifier = awzy_model_routing::verifier_from_env()?;
         let setting = std::sync::Arc::new(awzy_model_routing::RoutingSetting::new(router));

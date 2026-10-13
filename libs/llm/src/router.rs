@@ -1,4 +1,4 @@
-//! Which model each conversation goes to (ADR 0114): a catalog of models on the install's
+//! Which model each conversation goes to (ADR 0120): a catalog of models on the install's
 //! connections, and a route per feature that splits conversations between them by weight, with
 //! models to fall back on when one is busy, down, or not set up. The routing is a runtime setting
 //! (awzy-policy keeps it, the portal edits it) that a router takes in without restarting.

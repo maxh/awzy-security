@@ -10,7 +10,7 @@ This plan uses two standard authorization terms. A **policy decision point (PDP)
 
 So awzy-authz is a small fleet of services deployed together in one Kubernetes cluster per client, with its data stores in the same cloud account. Client data never leaves that account. The vendor side runs only build, release, and fleet health.
 
-To run the same product on AWS, Google Cloud, and Azure, Kubernetes is the shared platform and awzy's services are identical on all three. awzy cannot log in to a client install, so it should operate as little stateful software there as it can. Postgres, Kafka, and Valkey default to each cloud's managed service. Only ClickHouse runs in the cluster, because the product depends on its specific features. Cloud-specific pieces (object storage, key management, workload identity, LLM provider, private networking, and the managed data services) sit behind small Rust traits and Terraform modules with one adapter per cloud.
+To run the same product on AWS, Google Cloud, and Azure, Kubernetes is the shared platform and awzy's services are identical on all three. awzy cannot log in to a client install, so it should operate as little stateful software there as it can. Postgres and Kafka default to each cloud's managed service, as Valkey will if the hot path comes to need a shared cache. Only ClickHouse runs in the cluster, because the product depends on its specific features. Cloud-specific pieces (object storage, key management, workload identity, LLM provider, private networking, and the managed data services) sit behind small Rust traits and Terraform modules with one adapter per cloud.
 
 Development and the first design partners are on AWS. Google Cloud has a cloud layer and an example install too ([ADR 0107](../adr/0107-google-cloud-install-with-kafka-in-the-cluster.md)), so portability is tested on a second cloud from early on. Azure is built when a design partner needs it (Phase 5).
 
@@ -27,7 +27,7 @@ One line per decision, for readers who won't read the whole plan. Details are in
 | Identity | enforcement points validate IdP tokens; agents act through token exchange that names the agent and its human ([Principal identity](#principal-identity)) | Decided |
 | Principals | `Human` and `ServiceAccount` (any non-human identity, including AI agents). Delegation is per request; a service account acting for a person gets at most what that person could do ([ADR 0016](../adr/0016-human-and-serviceaccount-principals.md)) | Decided |
 | Rollout | Every install, policy set, and automated containment starts in monitor mode ([Enforcement modes](#enforcement-modes)) | Decided |
-| Data stores | Managed Postgres, Kafka, and Valkey; ClickHouse in the cluster ([Data layer](#data-layer)) | Decided |
+| Data stores | Managed Postgres and Kafka; ClickHouse in the cluster; Valkey only when scale needs a shared cache ([Data layer](#data-layer)) | Decided |
 | Who operates ClickHouse | Client with runbooks, or ClickHouse Cloud BYOC ([Operating model](#operating-model)) | Open |
 | Clouds | AWS and Google Cloud (ADR 0107); Azure when a design partner needs it | Decided |
 | Install | A per-cloud Terraform module for infrastructure, then a cloud-agnostic bootstrap module that installs Argo CD; Argo CD pulls the OCI Helm chart from a release channel ([Clouds and accounts](#clouds-and-accounts)) | Decided |
@@ -45,7 +45,7 @@ What runs today in `github.com/maxh/awzy-security`, tested with `bazel test //..
 | Area | State |
 | --- | --- |
 | awzy-pdp | Cedar evaluation with `@challenge` annotations turning a deny into a challenge. `Human` and `ServiceAccount` principals; delegated requests get a second check as the person ([ADR 0016](../adr/0016-human-and-serviceaccount-principals.md)). gRPC `awzy.authz.v1.Authorizer/Check` and AuthZEN-style HTTP on one port. Loads the active bundle and the enforcement mode from awzy-policy without a restart, and refuses checks until it has. Logs every decision, with its mode, to Kafka |
-| awzy-policy | Versioned bundles in Postgres; strict validation before a draft is stored; publish supersedes the active bundle. The install's enforcement mode, with an append-only history of switches. Bundles signed at publish (ECDSA P-256, `authz/libs/signing`); PDPs given a verify key refuse unsigned or altered bundles and stay not-ready. Break-glass rollback signed by admin keys enrolled at install (`awzy-break-glass`), independent of the IdP, PDP, and portal; every rollback reaches the security team, and publishing warns before a draft would lock admins out of the portal. Not yet: KMS-backed signing, policy-set modes |
+| awzy-policy | Versioned bundles in Postgres; strict validation before a draft is stored; publish supersedes the active bundle. The install's enforcement mode, with an append-only history of switches. Bundles signed at publish (ECDSA P-256, `authz/libs/signing`); PDPs given a verify key refuse unsigned or altered bundles and stay not-ready. Break-glass rollback signed by admin keys enrolled at install (`awzy-break-glass`), independent of the IdP, PDP, and portal; every rollback reaches the security team, and publishing warns before a draft would lock admins out of the portal. Signed with the install's KMS key on AWS and Google Cloud, the private key never leaving KMS ([ADR 0092](../adr/0092-awzy-policy-signs-with-the-installs-kms-key.md)). Not yet: policy-set modes |
 | Decision log | PDP to Kafka (`awzy.decisions.v1`, partitioned by principal) to ClickHouse through a Kafka-engine table and a materialized view. Migrations by `awzy-clickhouse-migrate` |
 | awzy-intake | App events in awzy's own schema and AWS CloudTrail log files, normalized into one event schema and acknowledged once on Kafka (`awzy.events.v1`), then into ClickHouse's `events` table the same way as decisions. CloudTrail sessions of IAM Identity Center and other people roles are recorded as the person ([ADR 0086](../adr/0086-cloudtrail-sessions-of-people-roles-are-the-person.md)). Not yet: mapping other roles to service accounts, other clouds' audit logs, DLP and agent traces |
 | Client portal | GraphQL: decision search (Relay connection over ClickHouse), explain-decision with the source of the determining policies, policy drafts and publish, and a dry-run of any draft against the last week's requests ([ADR 0049](../adr/0049-policy-dry-run-replays-recent-requests.md)). Pages: Decisions with an explain drawer, Policies with an editor, Enforcement with would-deny rates and the monitor/enforce switch, Challenges where anyone answers the challenges sent to them and the security team approves requests and contains or lifts principals, Investigations where the security team reads awzy-reasoner's findings and closes them once reviewed ([ADR 0071](../adr/0071-investigations-run-on-the-reasoners-flags-and-are-kept-in-awzy-context.md)). MCP at `/mcp` with fourteen tools. Awzy Bot on the Policies page explains decisions and drafts policies with Claude on the install's own Bedrock, its tools checked as the signed-in person; off by default ([ADR 0048](../adr/0048-awzy-bot-on-the-installs-own-model-service.md)). Sign-in through the client's IdP (OIDC with PKCE in the browser, bearer tokens for MCP); every portal and MCP operation checked with the PDP as `view` or `administer` on a `PortalArea`, applied even in monitor mode ([ADR 0020](../adr/0020-the-portal-is-authorized-by-the-pdp.md)); changes attributed to the signed-in person or agent |
@@ -57,7 +57,7 @@ What runs today in `github.com/maxh/awzy-security`, tested with `bazel test //..
 | awzy-challenge | Challenges and containments in Postgres, over gRPC ([ADR 0054](../adr/0054-challenges-and-containments-over-grpc.md)). The PDP opens a challenge on an enforced challenge verdict, honors it once passed (the exact request, for 15 minutes), and returns its ID to the enforcement point. Justification by the person responsible; approval by someone else whom the PDP allows to `approve`, a person or an agent a client policy names, never for its own owner or on crown jewels ([ADR 0065](../adr/0065-agents-approve-people-verify.md)); a rejection denies. Containments with a human lift, pushed to every PDP over a gRPC stream with a heartbeat; a contained principal is denied before policy. Answered on the client portal's Challenges page. Verification by security key: WebAuthn, ES256 only, checked by awzy's own narrow verifier; a first key enrolls on the person's sign-in, later changes need a key they have ([ADR 0059](../adr/0059-security-keys-for-verification-challenges.md)). People are told what's waiting for them in the client's own Slack, with links into the client portal: the answerer about a justification or security key, the resource's owner and the security team about an approval, the answerer about the decision, and the security team about containments; recorded first and sent with retries ([ADR 0073](../adr/0073-awzy-challenge-tells-people-whats-waiting-for-them.md)). Not yet: biometric, the LLM justification check, email and Teams prompts, lift by challenge, Valkey |
 | awzy-reasoner | Deterministic risk scores every 15 minutes from ClickHouse's decisions and events, written to awzy-context and picked up by the PDPs with the principals snapshot ([ADR 0056](../adr/0056-awzy-scores-principals-risk-and-the-pdp-uses-it.md)): the last day against the principal's own month and its team's day, denials, and resources neither it nor its team had opened in a month ([ADR 0064](../adr/0064-unfamiliar-territory-raises-risk-and-high-risk-operations-need-a-key.md)). Base policies challenge everything above 80, and high-risk operations (`crown_jewels` tools) above 40 with a security key. Automated containments: a person whose risk is elevated, who had a challenge rejected, and who tried to move data out in the same day is contained, under its own `automated-containments` mode, which starts in monitor ([ADR 0066](../adr/0066-the-reasoner-contains-people-automatically-in-its-own-mode.md)). Investigations: a model's findings checked in code, gated in CI against a model that follows every injection, and measured against Bedrock on demand ([ADR 0067](../adr/0067-investigations-are-checked-findings-measured-against-a-compromised-model.md)). Investigations run on the reasoner's flags (an elevated score or a rejected challenge), at most once a day per principal and within a monthly token budget, on cases built from ClickHouse, awzy-challenge, and awzy-context, and are kept in awzy-context; off until the client turns them on ([ADR 0071](../adr/0071-investigations-run-on-the-reasoners-flags-and-are-kept-in-awzy-context.md)). An automation score for people whose requests look like software ([ADR 0085](../adr/0085-an-automation-score-for-people-whose-requests-look-like-software.md)). Not yet: the lifted-on-review measure |
 | awzy-connectors | Google Drive: every shared drive its member account can see, with its files, folders, and sharing, as resources in awzy-context. Full crawl on start, then each drive's change feed; members by group name through the Admin directory; only the client's own domain counts as everyone, and outside shares are counted. Metadata only, read-only scopes ([ADR 0069](../adr/0069-google-drive-connector-reads-shared-drive-metadata.md)). Jira: issues as work items, assignees by email, linked to the Drive files they cite, so `context.assigned` has real work behind it ([ADR 0070](../adr/0070-jira-connector-writes-open-issues-as-work-items.md)). Not yet: My Drives, Drive Labels, content excerpts, keyless credentials, watchers and other trackers |
-| Client install on AWS | The example client's cloud layer and bootstrap are applied; not yet checked end to end (the [deployment plan](deployment-plan.md)'s step 4) |
+| Client installs | The AWS and Google Cloud example installs run end to end from the release channel, as the public demos: `INSTALL.md` was run through on AWS on 2026-10-11 (the [deployment plan](deployment-plan.md)'s step 4), and Google Cloud followed ([ADR 0107](../adr/0107-google-cloud-install-with-kafka-in-the-cluster.md)) |
 
 ## Goals and non-goals
 
@@ -105,14 +105,14 @@ Each service's design is in its README, starting from [authz/README.md](../../au
 
 ## Data layer
 
-Each store has one job. Postgres holds things that change and need transactions. ClickHouse holds things that only get appended and need fast scans over large volumes. Valkey holds what the hot path reads.
+Each store has one job. Postgres holds things that change and need transactions. ClickHouse holds things that only get appended and need fast scans over large volumes. The hot path reads none of them: each PDP holds what it needs in memory, filled from awzy-policy, awzy-context, and awzy-challenge.
 
 | Store | Holds | Default | Alternative |
 | --- | --- | --- | --- |
 | Postgres | World model, policies, challenges, containments, client portal state | Managed: Aurora PostgreSQL · Cloud SQL · Azure Database for PostgreSQL | CloudNativePG in cluster, for clients who refuse managed databases |
 | ClickHouse | Every decision and event, activity windows, peer baselines, investigation evidence, portal search | In cluster: Altinity ClickHouse operator with ClickHouse Keeper | ClickHouse Cloud BYOC on AWS, GCP, or Azure |
 | Kafka | Decisions, events, attribute change feed. Decisions and events kept at least 7 days for ClickHouse replay | Managed: MSK · Google Cloud Managed Service for Apache Kafka · Event Hubs (Kafka API) | Strimzi in cluster. The `small` profile may drop Kafka (open question) |
-| Valkey | Resource entities, active containment list and its pub/sub feed, short-lived challenge grants, rate counters | Managed: ElastiCache for Valkey · Memorystore for Valkey · Azure Managed Redis | Valkey Helm chart in cluster |
+| Valkey | Not used yet. A shared tier for resource entities, the containment list, and rate counters, if PDPs' own caches stop being enough ([ADR 0044](../adr/0044-pdp-loads-resources-from-awzy-context.md), [ADR 0054](../adr/0054-challenges-and-containments-over-grpc.md)). The cloud layer already creates it | Managed: ElastiCache for Valkey · Memorystore for Valkey · Azure Managed Redis | Valkey Helm chart in cluster |
 | Object storage | Raw connector data, ClickHouse cold tier, backups | Cloud's own: S3 · GCS · Azure Blob | None |
 | LLM | Classification, justification checks, investigations | Cloud's own: Bedrock · Vertex AI · Azure OpenAI | vLLM on a GPU node pool |
 | Key management | Envelope encryption, policy bundle signing | Cloud's own: AWS KMS · Cloud KMS · Azure Key Vault | None |
@@ -123,7 +123,7 @@ Each store has one job. Postgres holds things that change and need transactions.
 - **Layout:** `MergeTree` tables ordered by `(principal_type, principal_id, at)` so "everything this principal did in the last hour" reads a narrow range. A bloom-filter index on `id` serves explain-decision. A second projection ordered by `resource_id` answers "who touched this resource" (not built yet).
 - **Baselines:** materialized views keep per-principal and per-peer-group rollups (hourly counts by action and sensitivity tier). The reasoner compares against these instead of scanning raw rows. This is how the paper's "500 percent more files than their peer group" check stays cheap.
 - **Retention:** TTL moves data older than 30 days to an object-storage disk (S3, GCS, or Blob) and deletes it after the client's retention period. The decision audit trail keeps its own longer TTL.
-- **Not on the hot path:** awzy-pdp never queries ClickHouse. The reasoner turns ClickHouse results into attributes, and those reach the PDP through Valkey and the snapshot feed.
+- **Not on the hot path:** awzy-pdp never queries ClickHouse. The reasoner turns ClickHouse results into attributes, and those reach the PDP through awzy-context, with the principals snapshot.
 - **Schema in the monorepo:** table definitions and migrations live in `authz/jobs/clickhouse-migrate/` and are applied by `awzy-clickhouse-migrate` as a Kubernetes Job on each release. Per-install settings such as the brokers ClickHouse reaches are filled into placeholders.
 
 ## Operating model
@@ -194,42 +194,40 @@ flowchart LR
   GW -->|check| PDP[awzy-pdp<br>Cedar + attributes]
   PDP -->|allow / deny / challenge| GW
   GW -.->|challenge| CH[awzy-challenge]
-  CH -.->|grants and containments| VK[(Valkey)]
-  VK -.->|containment feed| PDP
-  PDP -->|resource entity, cache miss| VK
+  PDP -->|passed challenges, on a challenge verdict| CH
+  CH -.->|containment feed| PDP
+  PDP -->|resource entity, cache miss| CTX[awzy-context]
   PDP -.->|decision| K[(Kafka)]
   SRC[App logs, cloud audit logs, DLP, agent traces] -.-> IN[awzy-intake] -.-> K
   K -.-> CHDB[(ClickHouse)]
   CHDB -.->|windows and baselines| RS[awzy-reasoner]
   K -.-> RS
-  RS -.->|risk attributes| CTX[awzy-context]
+  RS -.->|risk attributes| CTX
   RS -.->|containment request| CH
   CON[awzy-connectors<br>IdP, HR, Jira, Drive] -.-> CTX
-  CTX -.->|write-through| VK
-  CTX -.->|attributes.v1| K
-  K -.->|snapshot updates| PDP
+  CTX -.->|principals snapshot and change log| PDP
 ```
 
 ### Latency budget for one check
 
 - ≤ 1 ms: principal, containment, and cached resource lookup, all in memory
 - ≤ 2 ms: Cedar evaluation
-- ≤ 3 ms: Valkey round trip, only when a resource entity isn't cached
+- ≤ 3 ms: awzy-context round trip, only when a resource entity isn't cached
 - < 10 ms: p99 end to end inside the client network
 
-Measured 2026-10-09 with `bazel run -c opt //authz/services/pdp:pdp_loadtest` (gRPC, entities sent inline, a third of checks delegated so they run two Cedar evaluations, decision logging to Kafka on; load generator, PDP, and Kafka on one Apple M1 laptop): 10,600 checks/s at p99 1.08 ms with 4 clients, and 18,000 checks/s at p99 4.95 ms (p99.9 11.7 ms) with 32 clients saturating the machine. Measured again on 2026-10-11 inside the example install (#94), from the release image CI publishes (`-c opt`): `pdp_loadtest` ran as a pod in the cluster against the awzy-pdp Service, so a check crossed the cluster network, carried a service token, and was decided against awzy-context's directory (99.8% of resource lookups from cache). The install is the `small` profile: two `t3.large` nodes, about 30 pods each, the PDP at a 250m CPU request, the load generator sharing a node. One client: 403 checks/s at p50 2.11 ms, p99 7.47 ms (p99.9 15.1 ms), inside the 10 ms budget. Four clients: 881 checks/s at p99 17.8 ms. Thirty-two: 1,273 checks/s at p99 53.4 ms. The decision itself stays at 0.39 ms on average (`awzy_pdp_check_duration_seconds`); the rest under load is queueing on two shared vCPUs, so p99 holds under 10 ms only while traffic stays well below a `small` install's ceiling of about 1,300 checks/s per PDP. Larger profiles give the PDP dedicated cores; their numbers are still to measure, as is the load with resource entities loaded from Valkey instead of the cache.
+Measured 2026-10-09 with `bazel run -c opt //authz/services/pdp:pdp_loadtest` (gRPC, entities sent inline, a third of checks delegated so they run two Cedar evaluations, decision logging to Kafka on; load generator, PDP, and Kafka on one Apple M1 laptop): 10,600 checks/s at p99 1.08 ms with 4 clients, and 18,000 checks/s at p99 4.95 ms (p99.9 11.7 ms) with 32 clients saturating the machine. Measured again on 2026-10-11 inside the example install (#94), from the release image CI publishes (`-c opt`): `pdp_loadtest` ran as a pod in the cluster against the awzy-pdp Service, so a check crossed the cluster network, carried a service token, and was decided against awzy-context's directory (99.8% of resource lookups from cache). The install is the `small` profile: two `t3.large` nodes, about 30 pods each, the PDP at a 250m CPU request, the load generator sharing a node. One client: 403 checks/s at p50 2.11 ms, p99 7.47 ms (p99.9 15.1 ms), inside the 10 ms budget. Four clients: 881 checks/s at p99 17.8 ms. Thirty-two: 1,273 checks/s at p99 53.4 ms. The decision itself stays at 0.39 ms on average (`awzy_pdp_check_duration_seconds`); the rest under load is queueing on two shared vCPUs, so p99 holds under 10 ms only while traffic stays well below a `small` install's ceiling of about 1,300 checks/s per PDP. Larger profiles give the PDP dedicated cores; their numbers are still to measure, as is the load with resource entities loaded from awzy-context instead of the cache.
 
 On 2026-10-12, after the hot path was profiled and cut ([report](../perf/2026-10-12-hot-path.md)), a PDP check took about 0.5 ms of CPU, against 0.85 ms before. With 16 clients and the PDP autoscaled to 4 pods, the AWS example install (2× `t3.large`) decided 4,525 checks/s at p99 13.9 ms, and the GCP example install (2× `e2-standard-4`) 5,814 checks/s at p99 9.1 ms. Both installs ran their nodes at their CPU limit.
 
-The containment list is pushed to each PDP over Valkey pub/sub with a heartbeat, so a normal check makes no network call for it. If a PDP misses heartbeats for more than 2 seconds, it reads the list from Valkey on every decision until the feed recovers, and that Valkey time counts against the 10 ms.
+The containment list is pushed to each PDP by awzy-challenge over a gRPC stream with a heartbeat, so a normal check makes no network call for it ([ADR 0054](../adr/0054-challenges-and-containments-over-grpc.md)). If a PDP misses heartbeats for more than 2 seconds, each check asks awzy-challenge directly until the feed recovers, and that time counts against the 10 ms.
 
 ### Entity data for Cedar
 
 Cedar evaluates against entities with attributes and parents. Relationships such as owner, shared-with, and parent folder are what most policies use.
 
 - **Principals** (humans, agents, groups, teams, and their parents) are all in the in-process snapshot. Their number grows with headcount, not with data.
-- **Resources** can number in the millions, so they are not in the snapshot. The enforcement point sends the resource type and ID. The PDP loads the resource entity (attributes, parent chain, and sharing edges) from Valkey, where awzy-context writes it from connector metadata, and keeps hot entities in a local LRU cache that the attribute feed invalidates.
-- **Unknown resources** (not yet synced) get the client's default tier and are marked as unknown in the decision, so policies can challenge them. Until Valkey and the attribute feed exist, PDPs load resources straight from awzy-context with a 30-second cache ([ADR 0044](../adr/0044-pdp-loads-resources-from-awzy-context.md)).
+- **Resources** can number in the millions, so they are not in the snapshot. The enforcement point sends the resource type and ID. The PDP loads the resource entity (attributes, parent chain, and sharing edges) by ID from awzy-context, which builds it from connector metadata, and keeps it in a local cache that awzy-context's change log invalidates ([ADR 0044](../adr/0044-pdp-loads-resources-from-awzy-context.md), [ADR 0077](../adr/0077-pdps-wait-for-changes-instead-of-polling.md)). Valkey joins as a shared tier between them only if scale needs it.
+- **Unknown resources** (not yet synced) get the client's default tier and are marked as unknown in the decision, so policies can challenge them.
 - **Schema versions.** The Cedar schema is generated from awzy-context's attribute registry and versioned. Attributes added by connectors are optional in the schema, so policies must test for them with `has`. A bundle is rejected if it needs a newer schema than the PDPs run.
 
 ### Freshness targets
@@ -598,13 +596,13 @@ awzy-pdp with Cedar over gRPC and AuthZEN HTTP. awzy-policy with versioned, sign
 
 ### Phase 2: World model
 
-awzy-context and the first connectors (IdP, HR, Jira), including the agent registry. Resource entities in Valkey and the generated, versioned Cedar schema. Metadata-first sensitivity classification within the LLM budget. Attribute change feed into PDP snapshots, with snapshot size monitored. awzy-intake for app logs, agent traces, and CloudTrail. Client portal policy editor with dry-run.
+awzy-context and the first connectors (IdP, HR, Jira), including the agent registry. Resource entities served to PDPs by ID, and the generated, versioned Cedar schema. Metadata-first sensitivity classification within the LLM budget. Attribute change feed into PDP snapshots, with snapshot size monitored. awzy-intake for app logs, agent traces, and CloudTrail. Client portal policy editor with dry-run.
 
 **Done when:** policies can reference team, work assignment, and data sensitivity, kept current without manual entry, attribute changes reach every PDP within the freshness target, and model cost per thousand resources is measured.
 
 ### Phase 3: Challenges and containments
 
-awzy-challenge with justification, WebAuthn, and approval, including the async challenge-and-retry flow for agents. Containments with lift flows, the containment list in Valkey, and its push feed to every PDP. Fallback bundles for PDP outages. Client portal pages for employees to answer challenges and for admins to review containments.
+awzy-challenge with justification, WebAuthn, and approval, including the async challenge-and-retry flow for agents. Containments with lift flows, and the containment list's push feed to every PDP. Fallback bundles for PDP outages. Client portal pages for employees to answer challenges and for admins to review containments.
 
 **Done when:** the "curious contractor" scenario from the paper runs end to end, the freshness targets are measured under load and written here, and a PDP outage drill never replays an allow for a principal contained before the outage.
 

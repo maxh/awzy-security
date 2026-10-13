@@ -26,7 +26,7 @@ const MOST_TEXT: usize = 2_000;
 /// How investigations run in this install.
 pub struct Investigations<M> {
     /// Where each investigation gets its model: the install's router, by the `investigations`
-    /// route (ADR 0114).
+    /// route (ADR 0120).
     pub models: M,
     /// The most tokens a calendar month may spend.
     pub monthly_tokens: u64,

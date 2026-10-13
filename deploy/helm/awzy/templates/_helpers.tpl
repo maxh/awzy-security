@@ -188,7 +188,7 @@ https://{{ required "clientPortal.hostname is required for demoIdp" .Values.clie
 {{- end -}}
 
 {{/*
-The model routing's environment (ADR 0114), for a service with a feature that uses models: the
+The model routing's environment (ADR 0120), for a service with a feature that uses models: the
 connections the install can reach, the routing to start with, and the API keys connections name.
 */}}
 {{- define "awzy.modelsEnv" -}}

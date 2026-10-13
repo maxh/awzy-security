@@ -1,6 +1,6 @@
 load("//tools:rust.bzl", "awzy_rust_library")
 
-# The model routing setting from awzy-policy, verified and taken by a service's router (ADR 0114).
+# The model routing setting from awzy-policy, verified and taken by a service's router (ADR 0120).
 awzy_rust_library(
     name = "model-routing",
     crate_name = "awzy_model_routing",

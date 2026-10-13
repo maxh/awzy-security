@@ -88,7 +88,7 @@ data:
   support.pub: {{ . | quote }}
 {{- end }}
 ---
-{{- /* Awzy Bot's model routing comes signed from awzy-policy (ADR 0114). */ -}}
+{{- /* Awzy Bot's model routing comes signed from awzy-policy (ADR 0120). */ -}}
 {{- if $p.awzyBot.enabled }}
 {{- $env = append $env (dict "name" "AWZY_POLICY_VERIFY_KEY_FILE" "value" "/var/run/secrets/awzy/policy-verify/verify.pem") }}
 {{- $volumes = append $volumes (dict "name" "policy-verify" "secret" (dict "secretName" (required "policy.verifyKeySecret is required" .Values.policy.verifyKeySecret))) }}

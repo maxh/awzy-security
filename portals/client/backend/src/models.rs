@@ -1,4 +1,4 @@
-//! The model routing (ADR 0114): which models Awzy Bot and investigations use, and how each
+//! The model routing (ADR 0120): which models Awzy Bot and investigations use, and how each
 //! feature's conversations split between them. Kept and signed by awzy-policy; this portal and
 //! awzy-reasoner follow it. A routing can only name the connections this install was set up with.
 

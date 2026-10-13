@@ -4,7 +4,7 @@ output "install_contract" {
   value = {
     cloud  = "gcp"
     region = var.region
-    # Vertex AI in the install's project, as a model connection (vertex.tf, ADR 0114).
+    # Vertex AI in the install's project, as a model connection (vertex.tf, ADR 0120).
     model_connection = { kind = "vertex", project = var.project, region = var.model_region }
     size_profile     = var.size_profile
     cluster = {

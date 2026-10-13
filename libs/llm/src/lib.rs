@@ -1,4 +1,4 @@
-//! Model access for awzy's AI features (ADR 0048, 0114): Awzy Bot's policy drafting and
+//! Model access for awzy's AI features (ADR 0048, 0120): Awzy Bot's policy drafting and
 //! explanations, the reasoner's investigations, and later classification and justification checks.
 //!
 //! Callers speak in neutral types ([`ModelRequest`], [`Message`], [`Content`]) and get a model

@@ -1,4 +1,4 @@
-//! What a catalog model is, in the native terms of the API it speaks (ADR 0114). The connection
+//! What a catalog model is, in the native terms of the API it speaks (ADR 0120). The connection
 //! says where it is and how awzy signs in; the spec says which model, and the settings that API
 //! has. Fields awzy hasn't typed yet go in `extra`, merged into each request as they are.
 

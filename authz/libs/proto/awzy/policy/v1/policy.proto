@@ -30,7 +30,7 @@ service PolicyService {
   // which tiers fail open. Never set means every tool is unclassified and everything fails closed.
   rpc GetOutageFallback(GetOutageFallbackRequest) returns (GetOutageFallbackResponse);
   rpc SetOutageFallback(SetOutageFallbackRequest) returns (SetOutageFallbackResponse);
-  // The model routing (ADR 0114): which models Awzy Bot and investigations use. The client portal
+  // The model routing (ADR 0120): which models Awzy Bot and investigations use. The client portal
   // sets it; the portal and awzy-reasoner follow it.
   rpc GetModelRouting(GetModelRoutingRequest) returns (GetModelRoutingResponse);
   rpc SetModelRouting(SetModelRoutingRequest) returns (SetModelRoutingResponse);
@@ -267,7 +267,7 @@ message SetOutageFallbackResponse {
   OutageFallback fallback = 1;
 }
 
-// A model routing setting (ADR 0114): the catalog of models and each feature's route.
+// A model routing setting (ADR 0120): the catalog of models and each feature's route.
 message ModelRouting {
   // Increases with every change; 0 when never set, and then each service keeps the routing its
   // deploy configuration started it with.

@@ -1,4 +1,4 @@
-# Claude on Vertex AI for Awzy Bot and investigations (ADR 0114): the API, and leave for the
+# Claude on Vertex AI for Awzy Bot and investigations (ADR 0120): the API, and leave for the
 # portal's and the services' identities to call models in the project. The client still enables
 # Claude in Vertex AI's Model Garden; until then calls fail, and both features say so.
 

@@ -165,6 +165,9 @@ jobs:
       # One word for each thing (ADR 0074, 0079): human, principal, enforcement point.
       - name: Names stay consistent
         run: tools/ci/check-names.sh
+      # Each ADR has its own number, so a citation names one decision.
+      - name: ADR numbers are unique
+        run: tools/ci/check-adr-numbers.sh
       # What the code-quality pass removed stays removed, and what's left only shrinks (#221 to
       # #227).
       - name: Code quality ratchets

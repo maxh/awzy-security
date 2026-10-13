@@ -35,7 +35,7 @@ async fn main() -> anyhow::Result<()> {
     };
     let investigations = if or("AWZY_REASONER_INVESTIGATIONS", "false") == "true" {
         let router = std::sync::Arc::new(awzy_llm::ModelRouter::from_env().await?);
-        // The investigations route as set in the client portal and kept by awzy-policy (ADR 0114).
+        // The investigations route as set in the client portal and kept by awzy-policy (ADR 0120).
         if let Ok(addr) = std::env::var("AWZY_POLICY_ADDR") {
             let policy = awzy_authz_proto::policy::v1::policy_service_client::PolicyServiceClient::new(
                 awzy_service_auth::grpc_channel(

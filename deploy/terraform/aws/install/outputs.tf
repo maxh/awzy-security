@@ -4,7 +4,7 @@ output "install_contract" {
   value = {
     cloud  = "aws"
     region = data.aws_region.current.region
-    # Bedrock in the install account, as a model connection (ADR 0114); the workload role may call it.
+    # Bedrock in the install account, as a model connection (ADR 0120); the workload role may call it.
     model_connection = { kind = "bedrock", region = data.aws_region.current.region }
     size_profile     = var.size_profile
     cluster = {

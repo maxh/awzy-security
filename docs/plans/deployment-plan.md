@@ -189,7 +189,7 @@ Dashboards and alert rules live in the repository as code, so every install, inc
 | Scenario | What it measures | Pass condition |
 | --- | --- | --- |
 | Steady-state checks | PDP throughput and latency with a warm cache | p99 under 10 ms at 1,500 checks/s for 30 minutes, client-side; 5,000/s bursts under 25 ms |
-| Cold resources | Checks on resources outside the local cache, so every one goes to Valkey | p99 under 10 ms, and Valkey time within its 3 ms budget |
+| Cold resources | Checks on resources outside the local cache, so every one goes to awzy-context | p99 under 10 ms, and awzy-context's time within its 3 ms budget |
 | Snapshot size | PDP memory, startup time, and feed apply time at 10k and 100k principals | 10k: under 512 MB per pod and 30 s startup; 100k measured |
 | Containment propagation | Time from writing a containment to the first deny on every PDP pod, under load | Within the proposed 2 s, or the target is revised |
 | Attribute freshness | Time from an attribute change to every PDP snapshot | Within the proposed 60 s, or the target is revised |
