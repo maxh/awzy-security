@@ -10,6 +10,11 @@
 //! omission). Open loop measures each check from when it was due, and prints a line a minute, so
 //! a run long enough to use up burstable nodes' CPU credits shows when latency changes.
 //!
+//! A fifth argument sets that line's window in seconds. A game day (#353) uses 1, to time what the
+//! PDPs do while a dependency is away: each line has the time, the verdicts, and the errors by
+//! gRPC code. In open loop a check unanswered after 2 seconds counts as an error, as the gateway
+//! gives up on it then.
+//!
 //! Entities are sent inline, as enforcement points do until awzy-context exists.
 //!
 //! In a cluster it runs from the PDP's image and sends the pod's service token for `awzy-pdp`
@@ -19,8 +24,10 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::mpsc;
 
+use std::collections::BTreeMap;
+
 use awzy_authz_proto::{
-    authz::v1::{authorizer_client::AuthorizerClient, CheckRequest, Entity, EntityRef},
+    authz::v1::{authorizer_client::AuthorizerClient, CheckRequest, Entity, EntityRef, Verdict},
     json_to_struct,
 };
 use serde_json::json;
@@ -82,6 +89,7 @@ async fn main() -> anyhow::Result<()> {
     let clients: usize = args.get(2).map(|s| s.parse()).transpose()?.unwrap_or(16);
     let seconds: u64 = args.get(3).map(|s| s.parse()).transpose()?.unwrap_or(10);
     let rate: Option<f64> = args.get(4).map(|s| s.parse()).transpose()?;
+    let window: u64 = args.get(5).map(|s| s.parse()).transpose()?.unwrap_or(60);
 
     // One connection per client, as separate enforcement points have: a Service spreads
     // connections across PDP pods, not requests, so one shared connection would load one pod.
@@ -96,7 +104,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let (all, errors) = match rate {
-        Some(rate) => open_loop(connections, rate, seconds).await?,
+        Some(rate) => open_loop(connections, rate, seconds, window).await?,
         None => closed_loop(connections, seconds).await?,
     };
     if all.is_empty() {
@@ -120,12 +128,23 @@ type Client = AuthorizerClient<awzy_service_auth::AuthChannel>;
 
 /// Retried once like an enforcement point does, so a rollout counts what they'd see.
 async fn check(client: &Client, i: usize) -> bool {
+    ask(client, i).await.is_ok()
+}
+
+async fn ask(client: &Client, i: usize) -> Result<Verdict, tonic::Status> {
     let ask = || {
         let mut client = client.clone();
         async move { client.check(request(i)).await }
     };
-    awzy_service_auth::retry_once_if_unanswered(ask).await.is_ok()
+    let response = awzy_service_auth::retry_once_if_unanswered(ask).await?;
+    Ok(Verdict::try_from(response.get_ref().verdict).unwrap_or(Verdict::Unspecified))
 }
+
+/// How long an open-loop check waits, as the gateway waits for a PDP before its outage rules apply.
+const OPEN_LOOP_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// What an open-loop check got: a verdict and its latency from when it was due, or an error's code.
+type Outcome = Result<(Verdict, Duration), tonic::Code>;
 
 /// Each client sends its next check when the last is answered. Sorted latencies, and errors.
 async fn closed_loop(connections: Vec<Client>, seconds: u64) -> anyhow::Result<(Vec<Duration>, usize)> {
@@ -162,9 +181,15 @@ async fn closed_loop(connections: Vec<Client>, seconds: u64) -> anyhow::Result<(
 
 /// Checks are due every `1 / rate` seconds whatever the PDP does, and each is timed from when it
 /// was due, so time spent queued behind a slow PDP counts. Sorted latencies, and errors.
-async fn open_loop(connections: Vec<Client>, rate: f64, seconds: u64) -> anyhow::Result<(Vec<Duration>, usize)> {
+async fn open_loop(
+    connections: Vec<Client>,
+    rate: f64,
+    seconds: u64,
+    window_secs: u64,
+) -> anyhow::Result<(Vec<Duration>, usize)> {
     anyhow::ensure!(rate > 0.0, "the rate is in checks per second, above 0");
-    let (tx, mut rx) = mpsc::unbounded_channel::<Option<Duration>>();
+    anyhow::ensure!(window_secs > 0, "the window is in seconds, above 0");
+    let (tx, mut rx) = mpsc::unbounded_channel::<Outcome>();
     let start = Instant::now();
     let total = (rate * seconds as f64) as usize;
     let sender = tokio::spawn(async move {
@@ -176,60 +201,97 @@ async fn open_loop(connections: Vec<Client>, rate: f64, seconds: u64) -> anyhow:
             let client = connections[i % connections.len()].clone();
             let tx = tx.clone();
             tokio::spawn(async move {
-                let ok = check(&client, i).await;
-                let _ = tx.send(ok.then(|| due.elapsed()));
+                let outcome = match tokio::time::timeout(OPEN_LOOP_TIMEOUT, ask(&client, i)).await {
+                    Ok(Ok(verdict)) => Ok((verdict, due.elapsed())),
+                    Ok(Err(status)) => Err(status.code()),
+                    Err(_) => Err(tonic::Code::DeadlineExceeded),
+                };
+                let _ = tx.send(outcome);
             });
         }
     });
 
-    // A line a minute: the checks answered in it, each timed from when it was due.
+    // A line a window (a minute by default): the checks answered in it, each timed from when it
+    // was due.
+    let every = Duration::from_secs(window_secs);
     let mut all = Vec::with_capacity(total);
-    let mut window = Vec::new();
-    let (mut errors, mut window_errors) = (0usize, 0usize);
-    let mut window_end = start + Duration::from_secs(60);
-    println!("minute   checks/s  errors    p50 ms    p99 ms  p99.9 ms    max ms");
-    let mut minute = 1;
-    while let Some(latency) = rx.recv().await {
+    let mut window = Window::default();
+    let mut errors = 0usize;
+    let mut window_end = start + every;
+    println!("time (UTC)  checks/s  allow   deny  chall.  errors    p50 ms    p99 ms  p99.9 ms    max ms  error codes");
+    let mut received = 0;
+    while let Some(outcome) = rx.recv().await {
         while Instant::now() >= window_end {
-            report_minute(&mut window, &mut window_errors, minute, 60.0);
-            window_end += Duration::from_secs(60);
-            minute += 1;
+            window.report(every.as_secs_f64());
+            window_end += every;
         }
-        match latency {
-            Some(l) => {
-                window.push(l);
-                all.push(l);
+        received += 1;
+        match outcome {
+            Ok((verdict, latency)) => {
+                *window.verdicts.entry(verdict_name(verdict)).or_default() += 1;
+                window.latencies.push(latency);
+                all.push(latency);
             }
-            None => {
-                window_errors += 1;
+            Err(code) => {
+                *window.errors.entry(format!("{code:?}")).or_default() += 1;
                 errors += 1;
             }
         }
-        if all.len() + errors == total {
+        if received == total {
             break;
         }
     }
-    // The last minute is usually part of one.
-    let last = 60.0 - window_end.saturating_duration_since(Instant::now()).as_secs_f64();
-    report_minute(&mut window, &mut window_errors, minute, last.max(1.0));
+    // The last window is usually part of one.
+    let last = every.as_secs_f64() - window_end.saturating_duration_since(Instant::now()).as_secs_f64();
+    window.report(last.max(1.0));
     sender.await?;
     all.sort();
     Ok((all, errors))
 }
 
-/// Prints one minute's line and starts the next.
-fn report_minute(window: &mut Vec<Duration>, errors: &mut usize, minute: u64, seconds: f64) {
-    window.sort();
-    if let Some(max) = window.last() {
-        println!(
-            "{minute:6} {:10.0} {errors:7} {:9.2} {:9.2} {:9.2} {:9.2}",
-            window.len() as f64 / seconds,
-            percentile(window, 0.50).as_secs_f64() * 1000.0,
-            percentile(window, 0.99).as_secs_f64() * 1000.0,
-            percentile(window, 0.999).as_secs_f64() * 1000.0,
-            max.as_secs_f64() * 1000.0,
-        );
+fn verdict_name(verdict: Verdict) -> &'static str {
+    match verdict {
+        Verdict::Allow => "allow",
+        Verdict::Deny => "deny",
+        Verdict::Challenge => "challenge",
+        Verdict::Unspecified => "unspecified",
     }
-    window.clear();
-    *errors = 0;
+}
+
+/// The checks answered in one window of an open-loop run.
+#[derive(Default)]
+struct Window {
+    verdicts: BTreeMap<&'static str, usize>,
+    errors: BTreeMap<String, usize>,
+    latencies: Vec<Duration>,
+}
+
+impl Window {
+    /// Prints the window's line and starts the next. A window with no answers prints too, so an
+    /// outage shows as a run of lines with errors and nothing else.
+    fn report(&mut self, seconds: f64) {
+        self.latencies.sort();
+        let ms = |p: f64| match self.latencies.is_empty() {
+            true => "-".to_string(),
+            false => format!("{:.2}", percentile(&self.latencies, p).as_secs_f64() * 1000.0),
+        };
+        let max = self.latencies.last().map_or("-".to_string(), |l| format!("{:.2}", l.as_secs_f64() * 1000.0));
+        let count = |v: &str| self.verdicts.get(v).copied().unwrap_or(0);
+        let codes: Vec<String> = self.errors.iter().map(|(code, n)| format!("{code} {n}")).collect();
+        println!(
+            "{}  {:8.0} {:6} {:6} {:7} {:7} {:>9} {:>9} {:>9} {:>9}  {}",
+            chrono::Utc::now().format("%H:%M:%S"),
+            self.latencies.len() as f64 / seconds,
+            count("allow"),
+            count("deny"),
+            count("challenge"),
+            self.errors.values().sum::<usize>(),
+            ms(0.50),
+            ms(0.99),
+            ms(0.999),
+            max,
+            codes.join(", "),
+        );
+        *self = Self::default();
+    }
 }
