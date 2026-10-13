@@ -63,6 +63,19 @@ pub struct Classification {
     pub by: Option<String>,
     pub reason: String,
     pub at: DateTime<Utc>,
+    /// The kinds of data it found (ADR 0123).
+    #[serde(default)]
+    pub data_types: Vec<DataType>,
+}
+
+/// One kind of data the classifier found in a resource (ADR 0123).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DataType {
+    /// `customer_personal`, `financial`, … or a kind the client sent.
+    pub data_type: String,
+    /// label | content | metadata
+    pub by: String,
+    pub reason: String,
 }
 
 /// A resource as awzy-context keeps it.
@@ -87,6 +100,18 @@ pub struct Resource {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub classification: Option<Classification>,
+}
+
+impl Resource {
+    /// The data types a connector or the client's app sent in `attributes.data_types` (ADR 0123).
+    pub fn sent_data_types(&self) -> Vec<String> {
+        #[derive(Default, Deserialize)]
+        struct Sent {
+            #[serde(default)]
+            data_types: Vec<String>,
+        }
+        serde_json::from_value::<Sent>(self.attributes.clone()).unwrap_or_default().data_types
+    }
 }
 
 /// `GET /v1/resources/{id}`.

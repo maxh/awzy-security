@@ -8,6 +8,10 @@
 //!
 //! What none of this places is left unclassified for the model step, which runs within the
 //! client's LLM budget once a provider is configured.
+//!
+//! Beside the tier, [`data_types`] says what kinds of data a resource holds (ADR 0123): customer
+//! or employee personal data, financial records, credentials, and so on. The same sources decide
+//! them, but they add up: a document can hold several, and nothing here removes one.
 
 use std::fmt;
 
@@ -78,6 +82,8 @@ pub struct Facts<'a> {
     pub folders: &'a [&'a str],
     /// The connector's text excerpt, if it could read one.
     pub text: Option<&'a str>,
+    /// Data types the connector or the client's app sent, the starter ones or the client's own.
+    pub data_types: &'a [String],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,6 +92,150 @@ pub struct Classification {
     pub source: Source,
     /// One line on why, for the client portal and audits.
     pub reason: String,
+}
+
+/// The kinds of data awzy recognizes on its own. A client can name others by sending them with a
+/// resource; policies see both alike.
+pub const DATA_TYPES: [&str; 7] =
+    ["customer_personal", "employee_personal", "financial", "credentials", "source_code", "legal", "health"];
+
+/// One kind of data a resource holds, and why awzy thinks so.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DataTypeFinding {
+    pub data_type: String,
+    pub source: Source,
+    /// One line on why, for the client portal and audits.
+    pub reason: String,
+}
+
+/// Phrases that say a resource holds a kind of data, in a label, the content excerpt, a name, or a
+/// folder's name. Each lists only what nearly always means that data is inside: "customer case
+/// study" doesn't name personal data, "customer list" does.
+const DATA_PHRASES: &[(&str, &[&str])] = &[
+    (
+        "customer_personal",
+        &[
+            "customer data",
+            "customer list",
+            "customer records",
+            "customer export",
+            "client holdings",
+            "client account",
+            "client accounts",
+            "account holders",
+            "pii",
+            "personal data",
+            "date of birth",
+            "social security",
+            "passport number",
+        ],
+    ),
+    (
+        "employee_personal",
+        &[
+            "payroll",
+            "performance review",
+            "offer letter",
+            "personnel file",
+            "employee records",
+            "compensation",
+            "salary",
+            "salaries",
+            "background check",
+        ],
+    ),
+    (
+        "financial",
+        &[
+            "cash flow",
+            "budget",
+            "forecast",
+            "monthly close",
+            "balance sheet",
+            "general ledger",
+            "financial statements",
+            "invoice",
+            "invoices",
+            "balances",
+            "bank account",
+            "payroll register",
+        ],
+    ),
+    (
+        "credentials",
+        &[
+            "password",
+            "passwords",
+            "credentials",
+            "api key",
+            "api keys",
+            "private key",
+            "secret key",
+            "access keys",
+            "recovery codes",
+            "privileged accounts",
+        ],
+    ),
+    ("source_code", &["source code"]),
+    (
+        "legal",
+        &[
+            "contract",
+            "nda",
+            "litigation",
+            "attorney client privileged",
+            "legal hold",
+            "settlement agreement",
+            "regulatory filing",
+            "vendor agreement",
+        ],
+    ),
+    ("health", &["medical", "health records", "hipaa", "phi", "diagnosis", "health insurance claim"]),
+];
+
+/// The kinds of data `facts` holds, each once, with the most trusted reason for it: what was sent
+/// or labeled, then the content, then the name and folders. A folder, like its tier, gets only
+/// what was sent or labeled: a folder called "Payroll" holds payroll, but listing it isn't
+/// reading it.
+pub fn data_types(facts: &Facts) -> Vec<DataTypeFinding> {
+    let mut found: Vec<DataTypeFinding> = Vec::new();
+    let mut add = |data_type: &str, source: Source, reason: String| {
+        if !found.iter().any(|f| f.data_type == data_type) {
+            found.push(DataTypeFinding { data_type: data_type.to_string(), source, reason });
+        }
+    };
+    for t in facts.data_types {
+        add(t, Source::Label, "sent with the resource".into());
+    }
+    for label in facts.labels {
+        for (t, phrase) in all_matched(label) {
+            add(t, Source::Label, format!("labeled \"{label}\" (\"{phrase}\")"));
+        }
+    }
+    if facts.kind == "folder" {
+        return found;
+    }
+    for (t, phrase) in facts.text.map(all_matched).unwrap_or_default() {
+        add(t, Source::Content, format!("the content mentions \"{phrase}\""));
+    }
+    if facts.kind == "repository" {
+        add("source_code", Source::Metadata, "a code repository".into());
+    }
+    for (t, phrase) in all_matched(facts.name) {
+        add(t, Source::Metadata, format!("the name mentions \"{phrase}\""));
+    }
+    for folder in facts.folders {
+        for (t, phrase) in all_matched(folder) {
+            add(t, Source::Metadata, format!("in a folder about \"{phrase}\" ({folder})"));
+        }
+    }
+    found
+}
+
+/// Every data type with a phrase in `text`, each with its first phrase.
+fn all_matched(text: &str) -> Vec<(&'static str, &'static str)> {
+    let t = normalize(text);
+    DATA_PHRASES.iter().filter_map(|(dt, phrases)| phrases.iter().find(|p| has(&t, p)).map(|p| (*dt, *p))).collect()
 }
 
 /// Places `facts` in a tier, or `None` when nothing here decides it.
@@ -275,6 +425,54 @@ mod tests {
         assert_eq!(tier(&Facts { kind: "folder", ..doc("Board", Some("Strictly confidential")) }), None);
         let labeled = Facts { kind: "folder", sensitivity: Some(Tier::Confidential), ..doc("Board", None) };
         assert_eq!(tier(&labeled), Some(Tier::Confidential));
+    }
+
+    fn types(f: &Facts) -> Vec<String> {
+        data_types(f).into_iter().map(|d| d.data_type).collect()
+    }
+
+    #[test]
+    fn a_resource_holds_every_kind_of_data_its_sources_name() {
+        let export = doc(
+            "Client holdings export, September 2026",
+            Some("Positions and balances for every client account as of September 30."),
+        );
+        assert_eq!(types(&export), vec!["customer_personal", "financial"]);
+        let found = data_types(&export);
+        assert_eq!(found[0].source, Source::Content, "the content is trusted before the name");
+        assert_eq!(found[0].reason, "the content mentions \"client account\"");
+
+        let folders = ["Payroll", "Finance"];
+        let march = Facts { folders: &folders, ..doc("March", None) };
+        assert_eq!(types(&march), vec!["employee_personal"]);
+        assert!(data_types(&march)[0].reason.contains("in a folder about \"payroll\""));
+
+        assert!(types(&doc("Customer case study", None)).is_empty(), "a case study names no personal data");
+        assert!(types(&doc("Pricing overview", None)).is_empty());
+        let repo = Facts { kind: "repository", ..doc("payments-service", None) };
+        assert_eq!(types(&repo), vec!["source_code"]);
+    }
+
+    #[test]
+    fn what_was_sent_or_labeled_comes_first_and_the_client_can_name_its_own() {
+        let sent = vec!["trade_secrets".to_string(), "legal".to_string()];
+        let labels = vec!["PII".to_string()];
+        let f = Facts { data_types: &sent, labels: &labels, ..doc("Vendor contract", Some("Confidential.")) };
+        let found = data_types(&f);
+        let summary: Vec<(&str, Source)> = found.iter().map(|d| (d.data_type.as_str(), d.source)).collect();
+        assert_eq!(
+            summary,
+            vec![("trade_secrets", Source::Label), ("legal", Source::Label), ("customer_personal", Source::Label)],
+            "the contract's name adds nothing already there"
+        );
+    }
+
+    #[test]
+    fn a_folder_holds_only_what_was_sent_or_labeled() {
+        let payroll = Facts { kind: "folder", ..doc("Payroll", Some("Salaries for March")) };
+        assert!(types(&payroll).is_empty());
+        let labels = vec!["Health records".to_string()];
+        assert_eq!(types(&Facts { kind: "folder", labels: &labels, ..doc("Benefits", None) }), vec!["health"]);
     }
 
     #[test]

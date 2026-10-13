@@ -86,6 +86,8 @@ Who awzy knows about.
 
 - **People and groups,** as your IdP provisions them over SCIM, with search. These are read-only
   here: your IdP owns them.
+- **Resources,** by ID or name: their tier and data types, each with the classifier's reason,
+  their owner, sharing, folders, and who is assigned to work on them.
 - **Service accounts:** register each backend service, scheduled job, or AI agent with its
   accountable owner, whether it's an AI agent, and its groups. One that isn't registered is
   denied everything.

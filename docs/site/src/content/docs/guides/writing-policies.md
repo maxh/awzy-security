@@ -40,6 +40,22 @@ forbid (principal is ServiceAccount, action, resource)
 when { context has on_behalf_of && !context.human_present && context.risk_score > 50 };
 ```
 
+## What kind of data
+
+`resource.data_types` names what a resource holds, such as `customer_personal`, `financial`, or
+`credentials`, so a policy can treat customer data differently from a board paper at the same
+tier. See [data types](/concepts/domain-model/#data-types).
+
+```cedar
+@id("customer-data-needs-assigned-work")
+@challenge("approval")
+forbid (principal, action == Action::"read", resource)
+when {
+  resource has data_types && resource.data_types.contains("customer_personal") &&
+  context has assigned && !context.assigned
+};
+```
+
 ## What's in the context
 
 | Field | What |

@@ -16,8 +16,8 @@ pub fn chain_entities(chain: &[Resource]) -> Vec<Value> {
     (0..chain.len()).map(|i| entity_sharing(&chain[i], chain[i..].iter().flat_map(|r| r.sharing.iter()))).collect()
 }
 
-/// The entity: its sensitivity (the default tier until it is classified), its owner, who it's
-/// shared with (ADR 0061), and its parent folder.
+/// The entity: its sensitivity (the default tier until it is classified), the kinds of data it
+/// holds (ADR 0123), its owner, who it's shared with (ADR 0061), and its parent folder.
 fn entity_sharing<'a>(r: &Resource, sharing: impl Iterator<Item = &'a Share>) -> Value {
     use std::collections::BTreeSet;
     let parents: Vec<Value> = r.parent.iter().map(|p| json!({ "type": entity_type::RESOURCE, "id": p })).collect();
@@ -51,6 +51,7 @@ fn entity_sharing<'a>(r: &Resource, sharing: impl Iterator<Item = &'a Share>) ->
     let mut attrs = json!({
         "sensitivity": r.effective_sensitivity().unwrap_or(DEFAULT_SENSITIVITY),
         "unclassified": r.effective_sensitivity().is_none(),
+        "data_types": r.effective_data_types(),
         "shared_humans": refs(entity_type::HUMAN, humans),
         "shared_groups": refs(entity_type::GROUP, groups),
         "writer_humans": refs(entity_type::HUMAN, writer_humans),

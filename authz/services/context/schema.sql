@@ -140,7 +140,8 @@ CREATE TABLE public.resources (
     classified_sensitivity text,
     classified_by text,
     classification_reason text,
-    classified_at timestamp with time zone
+    classified_at timestamp with time zone,
+    classified_data_types jsonb DEFAULT '[]'::jsonb NOT NULL
 );
 
 CREATE TABLE public.risk_scores (

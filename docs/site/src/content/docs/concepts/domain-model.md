@@ -26,7 +26,7 @@ See [writing policies](/guides/writing-policies/#your-apps-own-data).
 | `Human`                | A person, by your IdP's ID for them                                                                                                                                                     | `active`; `title`, `employee_type`, `department`, `division`, `organization`, `cost_center`, `manager`, and `team` when known; member of `Group`s                         |
 | `ServiceAccount`       | Anything non-human with its own credentials: a backend service, a scheduled job, an AI agent. Registered in awzy-context; one that isn't is denied before any policy runs               | `owner` (the accountable `Human`), `ai`                                                                                                                                      |
 | `Group`                | A group or team from your IdP. Groups can nest                                                                                                                                          |                                                                                                                                                                              |
-| `Resource`             | Something people access: a document, a folder, a project. Resources nest                                                                                                                | `sensitivity`, `unclassified`, `owner`, and sharing: `shared_humans`, `shared_groups` (can read), `writer_humans`, `writer_groups` (can also change), `shared_with_everyone` |
+| `Resource`             | Something people access: a document, a folder, a project. Resources nest                                                                                                                | `sensitivity`, `unclassified`, `data_types`, `owner`, and sharing: `shared_humans`, `shared_groups` (can read), `writer_humans`, `writer_groups` (can also change), `shared_with_everyone` |
 | `McpServer`, `McpTool` | An MCP server behind awzy-gateway, and its tools (`<server>/<tool>`)                                                                                                                    | `sensitivity`                                                                                                                                                                |
 | `PortalArea`           | An area of the client portal: `decisions`, `policies`, `enforcement`, `directory`, `challenges`, `investigations`                                                                       | `sensitivity`                                                                                                                                                                |
 | `PortalField`          | A sensitive field the portal shows, inside its area: `Decision.context`, `PrincipalDetail.attributes`, `PrincipalDetail.riskScore`, `ResourceDetail.sharing`, `Challenge.justification` | `sensitivity`                                                                                                                                                                |
@@ -55,6 +55,28 @@ Every `Resource`, `McpTool`, and `PortalArea` has a `sensitivity`: `public`, `in
 Policies see the **higher** of the two, so a label is never lowered. A resource neither has
 placed gets your default tier and `unclassified: true`, so policies can challenge it. A resource
 awzy-context doesn't know yet is treated the same way.
+
+### Data types
+
+Beside how sensitive it is, a resource says what kinds of data it holds, as `data_types`: a set
+of names from `customer_personal`, `employee_personal`, `financial`, `credentials`,
+`source_code`, `legal`, and `health`. With it, a policy can ask for a work assignment on
+customer personal data without also catching every confidential board paper.
+
+awzy's classifier finds them from the same sources as the tier, and in the same order of trust:
+labels ("PII", "Health records"), then the content ("client account", "date of birth"), then
+names and folders ("Payroll", "Cash flow forecast"). Unlike the tier, they add up: a client
+holdings export holds both customer personal and financial data. A folder gets only what its
+labels say.
+
+To add a resource's data types yourself, including kinds of your own such as `trade_secrets`,
+send them with the resource as `attributes.data_types`. Policies see what you send and what the
+classifier finds together, and the client portal's Directory shows each with its reason. A
+resource awzy-context doesn't know has no `data_types`, so test with `has`:
+
+```cedar
+when { resource has data_types && resource.data_types.contains("customer_personal") }
+```
 
 ### Risk
 

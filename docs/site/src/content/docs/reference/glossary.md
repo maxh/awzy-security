@@ -78,6 +78,10 @@ person's agents are stopped too. See
 
 **Crown jewels.** The highest sensitivity tier: data whose exposure would do the most harm.
 
+**Data types.** What kinds of data a resource holds, such as `customer_personal` or `financial`,
+beside its sensitivity. Found by awzy's classifier or sent with the resource. See
+[data types](/concepts/domain-model/#data-types).
+
 **Decision.** awzy-pdp's answer to one check: its verdict, the policies that produced it, and its
 mode. Every decision is logged with a QID and can be explained. See
 [How awzy decides](/concepts/how-awzy-decides/).

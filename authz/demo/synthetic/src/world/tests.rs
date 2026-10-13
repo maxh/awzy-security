@@ -62,6 +62,19 @@ fn everything_refers_to_things_that_exist() {
     assert!(seen.values().all(|n| *n == 1), "work item IDs are unique");
 }
 
+/// The scenarios' customer export is found to hold customer personal data, so a policy on
+/// `resource.data_types` decides it (ADR 0123).
+#[test]
+fn the_customer_export_holds_customer_personal_data() {
+    use awzy_classify::{data_types, Facts};
+
+    let (_, all, _) = world(1);
+    let export = all.iter().find(|r| r.id == "synthetic:doc:client-holdings-export").expect("the export");
+    let facts = Facts { kind: export.kind, name: &export.name, text: Some(&export.text), ..Facts::default() };
+    let found: Vec<String> = data_types(&facts).into_iter().map(|d| d.data_type).collect();
+    assert!(found.contains(&"customer_personal".to_string()), "{found:?}");
+}
+
 /// How awzy-classify does on the generated documents against the true tiers, with each
 /// document's text and with metadata only. Printed for `bazel test --test_output=all`.
 #[test]
@@ -89,6 +102,7 @@ fn the_classifier_against_ground_truth() {
                 labels: &d.labels,
                 folders: &folders,
                 text: with_text.then_some(d.text.as_str()),
+                data_types: &[],
             };
             let truth = tier(d.truth);
             match classify(&facts).map(|c| c.tier) {
