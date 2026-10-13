@@ -38,11 +38,6 @@ export type Session = {
   signOut: () => Promise<void>;
 };
 
-/**
- * Signs the viewer in with the client's IdP: OIDC authorization code with PKCE. The backend
- * says which IdP at /auth/config. Resolves once there is a signed-in user; otherwise the browser
- * is sent to the IdP and the promise never resolves.
- */
 /** The portal's `/auth/config`, checked: which IdP signs people in. */
 function authConfig(v: unknown): { issuer: string; clientId: string } {
   if (isRecord(v) && typeof v.issuer === "string" && typeof v.clientId === "string") {
@@ -51,6 +46,11 @@ function authConfig(v: unknown): { issuer: string; clientId: string } {
   throw new Error("The portal's sign-in settings (/auth/config) aren't what this page expects.");
 }
 
+/**
+ * Signs the viewer in with the client's IdP: OIDC authorization code with PKCE. The backend
+ * says which IdP at /auth/config. Resolves once there is a signed-in user; otherwise the browser
+ * is sent to the IdP and the promise never resolves.
+ */
 export async function signIn(): Promise<Session> {
   const support = supportSession();
   if (support) return support;
@@ -67,8 +67,13 @@ export async function signIn(): Promise<Session> {
     loadUserInfo: false,
     userStore: new WebStorageStateStore({ store: window.sessionStorage }),
   });
+  // Each trip to the IdP replaces the page that starts it, which shows nothing. Left in history,
+  // the back button from the portal would land on it, blank, instead of on the IdP's page.
   const signInAgain = () => {
-    void manager.signinRedirect({ state: { returnTo: window.location.pathname + window.location.search } });
+    void manager.signinRedirect({
+      redirectMethod: "replace",
+      state: { returnTo: window.location.pathname + window.location.search },
+    });
   };
 
   if (window.location.pathname === CALLBACK_PATH) {
@@ -84,7 +89,7 @@ export async function signIn(): Promise<Session> {
       const retried = window.sessionStorage.getItem(RETRIED_SIGN_IN);
       if (retried === null) {
         window.sessionStorage.setItem(RETRIED_SIGN_IN, "silent");
-        void manager.signinRedirect({ prompt: "none", state: { returnTo: "/" } });
+        void manager.signinRedirect({ prompt: "none", redirectMethod: "replace", state: { returnTo: "/" } });
         return new Promise(() => {});
       }
       if (retried === "silent" && needsInteraction(error)) {
