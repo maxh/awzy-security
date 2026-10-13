@@ -17,11 +17,15 @@
 #   cold                        awzy-context away, then every PDP restarted: the cold start
 #
 # Load: open loop at AWZY_TEST_GAMEDAY_RATE checks/s (default 200) over 8 connections, a line a
-# second. Timeline: 60 s of load, the dependency away, one PDP pod deleted 30 s into it so its replacement
+# second, on AWZY_TEST_LOADTEST_RESOURCES (resource IDs awzy-context knows) if set. Timeline: 60 s of load, the dependency away, one PDP pod deleted 30 s into it so its replacement
 # starts without the dependency, the dependency back, then 120 s more. Argo CD's automated sync
 # is off for the run, so neither self-heal nor a new release undoes the outage, and is put back
 # as it was at the end, even on failure.
 set -euo pipefail
+# A Mac that sleeps mid-run holds the dependency away for as long as it sleeps: stay awake.
+if [[ $(uname) == Darwin && -z ${AWZY_TEST_GAMEDAY_AWAKE:-} ]] && command -v caffeinate >/dev/null; then
+  AWZY_TEST_GAMEDAY_AWAKE=1 exec caffeinate -i bash "$0" "$@"
+fi
 
 ctx=${1:?kube context}
 scenario=${2:?scenario}
@@ -95,6 +99,8 @@ spec:
       image: $image
       command: [/usr/local/bin/pdp_loadtest, "http://awzy-pdp.$sys.svc:8080", "8", "$seconds", "${AWZY_TEST_GAMEDAY_RATE:-200}", "1"]
       securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] }, readOnlyRootFilesystem: true }
+      # Resources awzy-context knows, so their tiers' stale limits apply; unset, unknown ones.
+      env: [{ name: AWZY_TEST_LOADTEST_RESOURCES, value: "${AWZY_TEST_LOADTEST_RESOURCES:-}" }]
       resources: { requests: { cpu: 250m, memory: 64Mi } }
       volumeMounts: [{ name: tokens, mountPath: /var/run/secrets/awzy/tokens, readOnly: true }]
   volumes:

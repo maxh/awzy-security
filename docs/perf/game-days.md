@@ -62,5 +62,9 @@ scenario at a time per install. Two installs can run at once.
 - **Use resources awzy-context knows.** `pdp_loadtest` checks three resources it doesn't, which
   get the shortest stale limit, so every check fails 5 minutes into an awzy-context outage.
   Real resources mostly last longer (#402).
+- **Keep the machine running the harness awake.** A laptop that idle-slept 6 minutes into a run
+  held awzy-context away for 18 minutes instead of 3, and froze the sampler, so a PDP that was
+  ready in 5 seconds looked not ready for 14 minutes. The harness now runs itself under
+  `caffeinate` on macOS.
 - **Leave headroom for the load pod.** It requests 250m CPU, and on the AWS `small` install that
   is part of why evicted pods had nowhere to go.

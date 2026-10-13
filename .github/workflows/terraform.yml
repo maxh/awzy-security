@@ -16,9 +16,12 @@ on:
         description: "Apply one deployment now: corp-terraform, example-aws, or example-gcp"
         required: true
 
-# One plan per pull request, and one apply per deployment at a time; a running apply finishes.
+# One plan per pull request. On main each run is its own group: a shared one let every push,
+# most with nothing to apply, cancel the apply queued before it, and let one apply left waiting
+# for approval hold back every later one. Applies queue per deployment instead (`apply` below),
+# where a newer commit's apply replaces an older one still waiting.
 concurrency:
-  group: terraform-${{ github.event_name == 'pull_request' && github.event.number || 'main' }}
+  group: terraform-${{ github.event_name == 'pull_request' && github.event.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
