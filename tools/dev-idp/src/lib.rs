@@ -1,7 +1,8 @@
 //! awzy-dev-idp: a development-only OpenID Connect provider for the local stack. Never deploy it.
 //!
 //! - Browser sign-in: authorization code + PKCE (S256). `/authorize` shows a "sign in as" page
-//!   listing the dev users; no passwords.
+//!   listing the dev users; no passwords. The person picked is remembered in a cookie, the IdP's
+//!   session, so `prompt=none` signs them in again without the page, as a real IdP's session does.
 //! - Agents: `client_credentials` for a service account acting on its own authority, and RFC 8693
 //!   token exchange for a service account acting for a person (`sub` = person, `act.sub` =
 //!   account).
@@ -47,8 +48,11 @@ pub const AUDIENCES: &[&str] = &[AUDIENCE, "awzy-mcp", "awzy-gateway"];
 const KID: &str = "awzy-dev-1";
 const TOKEN_LIFETIME: Duration = Duration::from_secs(3600);
 
-/// The people you can sign in as: (id, name, groups).
-pub const USERS: &[(&str, &str, &[&str])] = &[
+/// A person you can sign in as: (id, name, groups).
+pub type DevUser = (&'static str, &'static str, &'static [&'static str]);
+
+/// The people you can sign in as.
+pub const USERS: &[DevUser] = &[
     ("alice", "Alice (security)", &["security"]),
     ("bob", "Bob (engineering)", &["engineering"]),
     ("carol", "Carol (finance)", &["finance"]),
@@ -231,15 +235,43 @@ struct AuthorizeParams {
     code_challenge_method: String,
     #[serde(default)]
     nonce: Option<String>,
+    /// `none`: sign in whoever the session names, without the page, or answer `login_required`.
+    #[serde(default)]
+    prompt: Option<String>,
+}
+
+/// The cookie holding who was last picked: the IdP's session. Its path defaults to the
+/// `/authorize` it was set under, so it works under any prefix the demo serves the IdP at.
+const SESSION_COOKIE: &str = "awzy_dev_idp_user";
+
+/// The dev user the session cookie names, if any.
+fn session_user(headers: &axum::http::HeaderMap) -> Option<&'static DevUser> {
+    let cookies = headers.get_all(header::COOKIE).into_iter().filter_map(|v| v.to_str().ok());
+    let id = cookies
+        .flat_map(|v| v.split(';'))
+        .find_map(|c| c.trim().strip_prefix(SESSION_COOKIE)?.strip_prefix('='))?;
+    USERS.iter().find(|(user, ..)| *user == id)
 }
 
 fn escape(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
-async fn authorize(Query(p): Query<AuthorizeParams>, raw: axum::extract::RawQuery) -> Response {
+async fn authorize(
+    State(idp): State<DevIdp>,
+    Query(p): Query<AuthorizeParams>,
+    headers: axum::http::HeaderMap,
+    raw: axum::extract::RawQuery,
+) -> Response {
     if p.response_type != "code" || p.code_challenge_method != "S256" {
         return (StatusCode::BAD_REQUEST, "only response_type=code with PKCE S256 is supported").into_response();
+    }
+    let signed_in = session_user(&headers);
+    if p.prompt.as_deref() == Some("none") {
+        return match signed_in {
+            Some((user, ..)) => issue_code(&idp, user, p),
+            None => redirect_back(&p, "error=login_required"),
+        };
     }
     let query = raw.0.unwrap_or_default();
     let buttons: String = USERS
@@ -253,12 +285,16 @@ async fn authorize(Query(p): Query<AuthorizeParams>, raw: axum::extract::RawQuer
             )
         })
         .collect();
+    let session = match signed_in {
+        Some((_, name, _)) => format!(r#"<p class="session">You're signed in as {}. Pick someone to switch.</p>"#, escape(name)),
+        None => String::new(),
+    };
     Html(format!(
         r#"<!doctype html><meta charset="utf-8"><title>awzy dev sign-in</title>
 <style>body{{font:15px system-ui;max-width:420px;margin:60px auto;padding:0 16px;color:#17212b}}
 .user{{display:flex;justify-content:space-between;padding:12px 14px;margin:8px 0;border:1px solid #d9e0e5;border-radius:6px;color:inherit;text-decoration:none}}
-.user:hover{{border-color:#0d6b66}}span{{color:#5a6875}}p{{color:#9a5b00}}</style>
-<h2>Sign in to awzy (development)</h2><p>Development identity provider. No passwords.</p>{buttons}"#
+.user:hover{{border-color:#0d6b66}}span{{color:#5a6875}}p{{color:#9a5b00}}p.session{{color:#0d6b66}}</style>
+<h2>Sign in to awzy (development)</h2><p>Development identity provider. No passwords.</p>{session}{buttons}"#
     ))
     .into_response()
 }
@@ -274,20 +310,34 @@ async fn authorize_as(State(idp): State<DevIdp>, Query(p): Query<AsParams>) -> R
     if !USERS.iter().any(|(id, ..)| *id == p.user) {
         return (StatusCode::BAD_REQUEST, "unknown dev user").into_response();
     }
+    let mut res = issue_code(&idp, &p.user, p.auth);
+    let cookie = format!("{SESSION_COOKIE}={}; HttpOnly; SameSite=Lax", p.user);
+    res.headers_mut().insert(header::SET_COOKIE, cookie.parse().expect("a dev user's ID is a valid header value"));
+    res
+}
+
+/// Signs `user` in: a code for the client, sent back to its redirect URI.
+fn issue_code(idp: &DevIdp, user: &str, auth: AuthorizeParams) -> Response {
     let code = uuid::Uuid::now_v7().simple().to_string();
+    let res = redirect_back(&auth, &format!("code={code}"));
     idp.0.codes.lock().expect("codes lock").insert(
-        code.clone(),
+        code,
         PendingCode {
-            user: p.user,
-            client_id: p.auth.client_id,
-            redirect_uri: p.auth.redirect_uri.clone(),
-            code_challenge: p.auth.code_challenge,
-            nonce: p.auth.nonce,
+            user: user.to_string(),
+            client_id: auth.client_id,
+            redirect_uri: auth.redirect_uri,
+            code_challenge: auth.code_challenge,
+            nonce: auth.nonce,
         },
     );
-    let sep = if p.auth.redirect_uri.contains('?') { '&' } else { '?' };
-    let state = p.auth.state.map(|s| format!("&state={}", urlencode(&s))).unwrap_or_default();
-    Redirect::to(&format!("{}{sep}code={code}{state}", p.auth.redirect_uri)).into_response()
+    res
+}
+
+/// Back to the client's redirect URI with `params` and the request's state.
+fn redirect_back(auth: &AuthorizeParams, params: &str) -> Response {
+    let sep = if auth.redirect_uri.contains('?') { '&' } else { '?' };
+    let state = auth.state.as_ref().map(|s| format!("&state={}", urlencode(s))).unwrap_or_default();
+    Redirect::to(&format!("{}{sep}{params}{state}", auth.redirect_uri)).into_response()
 }
 
 fn urlencode(s: &str) -> String {
@@ -413,6 +463,38 @@ mod tests {
         let status = res.status();
         let bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
         (status, serde_json::from_slice(&bytes).unwrap())
+    }
+
+    async fn get(app: Router, uri: &str, cookie: Option<&str>) -> Response {
+        let mut req = Request::get(uri);
+        if let Some(cookie) = cookie {
+            req = req.header("cookie", cookie);
+        }
+        app.oneshot(req.body(Body::empty()).unwrap()).await.unwrap()
+    }
+
+    const AUTHORIZE: &str = "client_id=portal&redirect_uri=http%3A%2F%2Fapp%2Fcb&response_type=code&state=s1&code_challenge=c&code_challenge_method=S256";
+
+    #[tokio::test]
+    async fn the_person_picked_is_signed_in_again_without_the_page() {
+        let app = router(idp());
+        let picked = get(app.clone(), &format!("/authorize/as?user=bob&{AUTHORIZE}"), None).await;
+        let cookie = picked.headers()["set-cookie"].to_str().unwrap().split(';').next().unwrap().to_string();
+        assert_eq!(cookie, "awzy_dev_idp_user=bob");
+
+        let silent = get(app.clone(), &format!("/authorize?prompt=none&{AUTHORIZE}"), Some(&cookie)).await;
+        let location = silent.headers()["location"].to_str().unwrap();
+        assert!(location.starts_with("http://app/cb?code=") && location.ends_with("&state=s1"), "{location}");
+
+        let page = get(app, &format!("/authorize?{AUTHORIZE}"), Some(&cookie)).await;
+        let html = axum::body::to_bytes(page.into_body(), usize::MAX).await.unwrap();
+        assert!(String::from_utf8_lossy(&html).contains("signed in as Bob (engineering)"));
+    }
+
+    #[tokio::test]
+    async fn without_a_session_prompt_none_answers_login_required() {
+        let res = get(router(idp()), &format!("/authorize?prompt=none&{AUTHORIZE}"), None).await;
+        assert_eq!(res.headers()["location"], "http://app/cb?error=login_required&state=s1");
     }
 
     #[tokio::test]
