@@ -95,19 +95,15 @@ impl DecisionExportQuery {
         };
         let filename = format!("awzy-decisions-{}-to-{}.{extension}", file_time(since), file_time(until));
 
-        let mut activity = awzy_activity::Activity::now(
-            viewer.subject.clone(),
-            viewer.on_behalf_of.clone(),
-            "exportDecisions",
-            None,
-        )
-        .with_outcome(Some("success"))
-        .with_attribute("client", "portal")
-        .with_attribute("since", rfc3339(since))
-        .with_attribute("until", rfc3339(until))
-        .with_attribute("count", records.len())
-        .with_attribute("truncated", page.has_next)
-        .with_attribute("includes_context", includes_context);
+        let mut activity =
+            awzy_activity::Activity::now(viewer.subject.clone(), viewer.on_behalf_of.clone(), "exportDecisions", None)
+                .with_outcome(Some("success"))
+                .with_attribute("client", "portal")
+                .with_attribute("since", rfc3339(since))
+                .with_attribute("until", rfc3339(until))
+                .with_attribute("count", records.len())
+                .with_attribute("truncated", page.has_next)
+                .with_attribute("includes_context", includes_context);
         for (key, value) in [
             ("principal_id", filter.principal_id),
             ("resource_id", filter.resource_id),
@@ -198,9 +194,13 @@ fn to_csv(records: &[Map<String, Value>], includes_context: bool) -> String {
             .iter()
             .map(|c| match record.get(*c) {
                 Some(Value::String(s)) => cell(s),
-                Some(Value::Array(items)) => {
-                    cell(&items.iter().map(|v| v.as_str().map_or_else(|| v.to_string(), str::to_string)).collect::<Vec<_>>().join(" "))
-                }
+                Some(Value::Array(items)) => cell(
+                    &items
+                        .iter()
+                        .map(|v| v.as_str().map_or_else(|| v.to_string(), str::to_string))
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                ),
                 Some(Value::Null) | None => String::new(),
                 Some(v) => cell(&v.to_string()),
             })

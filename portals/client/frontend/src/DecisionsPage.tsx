@@ -5,10 +5,7 @@ import { type SyntheticEvent, Suspense, useState } from "react";
 import { fetchQuery, graphql, useLazyLoadQuery, usePaginationFragment, useRelayEnvironment } from "react-relay";
 
 import type { DecisionsPage_decisions$key } from "./__generated__/DecisionsPage_decisions.graphql";
-import type {
-  DecisionExportFormat,
-  DecisionsPageExportQuery,
-} from "./__generated__/DecisionsPageExportQuery.graphql";
+import type { DecisionExportFormat, DecisionsPageExportQuery } from "./__generated__/DecisionsPageExportQuery.graphql";
 import type { DecisionFilter, DecisionsPageQuery } from "./__generated__/DecisionsPageQuery.graphql";
 import { DecisionDetail } from "./DecisionDetail";
 import { Entity, Time, VerdictBadge } from "./format";
@@ -333,7 +330,9 @@ function Export({ filter }: { filter: DecisionFilter }) {
       {result && (
         <Text size="xs">
           Exported {result.count.toLocaleString()} decisions
-          {result.includesContext ? ", with their request context" : ", without request context, which a policy hides from you"}
+          {result.includesContext
+            ? ", with their request context"
+            : ", without request context, which a policy hides from you"}
           .
         </Text>
       )}
