@@ -1,10 +1,11 @@
-import { EmptyState, oneOf, PageHeader, PageLoader, Section } from "@awzy/ui";
-import { Button, Drawer, Group, Select, Table, Text, TextInput } from "@mantine/core";
-import { IconListSearch, IconSearch } from "@tabler/icons-react";
+import { EmptyState, messageOf, oneOf, PageHeader, PageLoader, Section } from "@awzy/ui";
+import { Alert, Button, Drawer, Group, Menu, Select, Table, Text, TextInput } from "@mantine/core";
+import { IconDownload, IconListSearch, IconSearch } from "@tabler/icons-react";
 import { type SyntheticEvent, Suspense, useState } from "react";
-import { graphql, useLazyLoadQuery, usePaginationFragment } from "react-relay";
+import { fetchQuery, graphql, useLazyLoadQuery, usePaginationFragment, useRelayEnvironment } from "react-relay";
 
 import type { DecisionsPage_decisions$key } from "./__generated__/DecisionsPage_decisions.graphql";
+import type { DecisionExportFormat, DecisionsPageExportQuery } from "./__generated__/DecisionsPageExportQuery.graphql";
 import type { DecisionFilter, DecisionsPageQuery } from "./__generated__/DecisionsPageQuery.graphql";
 import { DecisionDetail } from "./DecisionDetail";
 import { Entity, Time, VerdictBadge } from "./format";
@@ -27,6 +28,7 @@ export function DecisionsPage() {
       />
       <Section flush>
         <Filters onApply={setFilter} />
+        <Export filter={filter} />
         <Suspense fallback={<PageLoader />}>
           <DecisionList filter={filter} onSelect={setSelected} />
         </Suspense>
@@ -53,6 +55,8 @@ function Filters({ onApply }: { onApply: (f: DecisionFilter) => void }) {
   const [resourceId, setResourceId] = useState("");
   const [verdict, setVerdict] = useState<string | null>(null);
   const [mode, setMode] = useState<string | null>(null);
+  const [since, setSince] = useState("");
+  const [until, setUntil] = useState("");
 
   const submit = (e: SyntheticEvent) => {
     e.preventDefault();
@@ -61,6 +65,8 @@ function Filters({ onApply }: { onApply: (f: DecisionFilter) => void }) {
       resourceId: resourceId.trim() || null,
       verdict: oneOf(VERDICTS, verdict),
       mode: oneOf(MODES, mode),
+      since: utc(since),
+      until: utc(until),
     });
   };
 
@@ -105,6 +111,22 @@ function Filters({ onApply }: { onApply: (f: DecisionFilter) => void }) {
           ]}
           value={mode}
           onChange={setMode}
+        />
+        <TextInput
+          id="filter-since"
+          label="From"
+          description="Default: a day before To"
+          type="datetime-local"
+          value={since}
+          onChange={(e) => setSince(e.currentTarget.value)}
+        />
+        <TextInput
+          id="filter-until"
+          label="To"
+          description="Default: now; at most 30 days after From"
+          type="datetime-local"
+          value={until}
+          onChange={(e) => setUntil(e.currentTarget.value)}
         />
         <Button type="submit" variant="light" leftSection={<IconSearch size={16} />}>
           Search
@@ -174,7 +196,7 @@ function DecisionList({ filter, onSelect }: { filter: DecisionFilter; onSelect: 
       <EmptyState
         icon={<IconListSearch size={22} />}
         title="No matching decisions"
-        description="Nothing in the last 24 hours matches these filters."
+        description="Nothing in this period matches these filters. Without From and To, it's the last 24 hours."
       />
     );
   }
@@ -230,5 +252,100 @@ function DecisionList({ filter, onSelect }: { filter: DecisionFilter; onSelect: 
         </Group>
       )}
     </>
+  );
+}
+
+/** A `datetime-local` input's value, in the viewer's time zone, as a UTC timestamp. */
+function utc(local: string): string | null {
+  if (!local) return null;
+  const at = new Date(local);
+  return Number.isNaN(at.getTime()) ? null : at.toISOString();
+}
+
+const exportQuery = graphql`
+  query DecisionsPageExportQuery($filter: DecisionFilter, $format: DecisionExportFormat!) {
+    decisionExport(filter: $filter, format: $format) {
+      filename
+      count
+      truncated
+      includesContext
+      csv
+      json
+    }
+  }
+`;
+
+/**
+ * Downloads what the filters select, for an auditor to keep. The backend records each export, and
+ * includes the request context only for those who may see it.
+ */
+function Export({ filter }: { filter: DecisionFilter }) {
+  const environment = useRelayEnvironment();
+  const [exporting, setExporting] = useState(false);
+  const [result, setResult] = useState<{ count: number; truncated: boolean; includesContext: boolean } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = (format: DecisionExportFormat) => {
+    setExporting(true);
+    setError(null);
+    setResult(null);
+    fetchQuery<DecisionsPageExportQuery>(environment, exportQuery, { filter, format }, { fetchPolicy: "network-only" })
+      .toPromise()
+      .then((data) => {
+        const file = data?.decisionExport;
+        if (!file) return;
+        // A byte-order mark, so a spreadsheet reads the CSV as UTF-8.
+        const blob =
+          typeof file.csv === "string"
+            ? new Blob(["\uFEFF", file.csv], { type: "text/csv" })
+            : new Blob([file.json ?? ""], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = file.filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        setResult({ count: file.count, truncated: file.truncated, includesContext: file.includesContext });
+      })
+      .catch((e: unknown) => setError(messageOf(e)))
+      .finally(() => setExporting(false));
+  };
+
+  return (
+    <Group px="md" py="xs" gap="sm" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
+      <Menu position="bottom-start">
+        <Menu.Target>
+          <Button size="xs" variant="default" loading={exporting} leftSection={<IconDownload size={14} />}>
+            Export
+          </Button>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Item onClick={() => run("CSV")}>CSV, for a spreadsheet</Menu.Item>
+          <Menu.Item onClick={() => run("JSON")}>JSON</Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
+      <Text size="xs" c="dimmed">
+        Up to 50,000 decisions matching these filters. Each export is recorded.
+      </Text>
+      {result && (
+        <Text size="xs">
+          Exported {result.count.toLocaleString()} decisions
+          {result.includesContext
+            ? ", with their request context"
+            : ", without request context, which a policy hides from you"}
+          .
+        </Text>
+      )}
+      {result?.truncated && (
+        <Alert color="yellow" p="xs" w="100%">
+          More decisions matched than one export holds. Narrow the filters or the period to get the rest.
+        </Alert>
+      )}
+      {error && (
+        <Alert color="red" p="xs" w="100%">
+          {error}
+        </Alert>
+      )}
+    </Group>
   );
 }

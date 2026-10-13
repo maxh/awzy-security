@@ -31,7 +31,7 @@ see [what isn't in the portal yet](#what-isnt-in-the-portal-yet).
 
 | Control                                             | Where                                 | What it shows                                                                                                                                                                                        |
 | --------------------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Access is decided per action                        | **Decisions**                         | Every allow, deny, and challenge: who, for whom, which action, which resource, when, and in which mode                                                                                               |
+| Access is decided per action                        | **Decisions**                         | Every allow, deny, and challenge: who, for whom, which action, which resource, when, and in which mode. [Exported](#sampling-and-exporting-decisions) for a period as CSV or JSON                    |
 | Decisions follow approved policy                    | **Decisions**, open one               | The policies that produced it, with their source, from the bundle in force at the time                                                                                                               |
 | Policy changes are controlled                       | **Policies**                          | Every bundle: drafts, the active one, and those it replaced, each with its version and who wrote it, and who published the active one. A draft is validated and can be dry-run before it's published |
 | Enforcement is on, and changes to it are controlled | **Enforcement**, History              | Every switch between monitor and enforce, for the install and for each action or tool, with who made it and when. Each switch takes a touch of the person's security key                             |
@@ -44,6 +44,25 @@ see [what isn't in the portal yet](#what-isnt-in-the-portal-yet).
 
 Who did something is recorded as a person, a service account acting for a person, one of awzy's
 own services (such as an automated containment), or a break-glass key: never as free text.
+
+## Sampling and exporting decisions
+
+The **Decisions** page filters by principal, resource, verdict, mode, and a period: **From** and
+**To**, in your own time zone. A period can be anywhere in the decision log's history, up to 30
+days long, so a quarter is three searches. Without one, the page shows the last 24 hours.
+
+**Export** downloads what the filters select, newest first, as CSV for a spreadsheet or as JSON,
+up to 50,000 decisions at a time. Each row holds the decision's ID, time, principal, the person it
+acted for and that check's verdict, the action, resource, verdict, mode, the policies that
+determined it, and the policy version. If more decisions match than one export holds, the page
+says so; narrow the filters or the period to get the rest.
+
+- **Each export is recorded**, with who made it, the period, the filters, and how many decisions it
+  held, in the install's activity log beside every other change made in the portal.
+- **The request context is included only if you may see it.** If the security team keeps it to
+  others, the export leaves it out and says so.
+- **The IDs are the ones enforcement points were given**, so a decision in the export can be
+  matched to an application's own logs, and opened in the portal with its policies explained.
 
 ## What the evidence rests on
 
@@ -69,12 +88,6 @@ own services (such as an automated containment), or a break-glass key: never as 
   administer challenges, which would also let you approve requests and contain people, so an
   auditor isn't given it. Ask the security team to pull the challenges and containments for your
   audit period from the Challenges page.
-
-- **Exporting decisions.** The Decisions page filters by principal, resource, verdict, and mode,
-  and shows a decision's full detail, but has no download. For a sample, ask the company's
-  platform team for a query of the decision log in ClickHouse, which runs in their account, or
-  use an agent through the portal's [MCP server](/client-portal/#mcp-for-your-own-agents), which
-  can search and explain decisions as you.
 - **Break-glass rollbacks.** Each is recorded with the key that signed it, the reason, and the
   version it restored, and posted to the security team's Slack channel, but the portal doesn't
   list them. Ask the security team for the channel's history. See

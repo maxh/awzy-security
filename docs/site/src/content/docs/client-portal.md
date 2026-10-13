@@ -28,8 +28,10 @@ access. Every change made in the portal is recorded with who made it.
 ### Decisions
 
 Every allow, deny, and challenge the PDPs decided, newest first. Filter by principal, resource,
-verdict, and mode, so that, for instance, *monitor* and *deny* together list what enforcing would
-have blocked.
+verdict, mode, and period (the last 24 hours unless you choose one, up to 30 days anywhere in the
+history), so that, for instance, *monitor* and *deny* together list what enforcing would have
+blocked. **Export** downloads what the filters select as CSV or JSON, and each export is recorded;
+see [sampling and exporting decisions](/workflows/auditors/#sampling-and-exporting-decisions).
 
 Open a decision to see what was asked (the principal, the person it acted for, the action, the
 resource), the verdict and mode, and **why**: the policies that produced it, with their source,

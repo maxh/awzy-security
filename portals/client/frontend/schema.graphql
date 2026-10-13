@@ -581,15 +581,59 @@ type DecisionEdge {
 	cursor: String!
 }
 
+"""
+An export, ready to save. Exactly one of `csv` and `json` is set, as the format asked.
+"""
+type DecisionExport {
+	"""
+	A file name that says what it covers.
+	"""
+	filename: String!
+	"""
+	The period it covers: decisions at or after `since` and before `until`.
+	"""
+	since: UtcTimestamp!
+	until: UtcTimestamp!
+	"""
+	How many decisions it holds, newest first.
+	"""
+	count: Int!
+	"""
+	More decisions matched than one export holds; narrow the filter or the period.
+	"""
+	truncated: Boolean!
+	"""
+	Whether each decision's request context is included: only for those who may see it.
+	"""
+	includesContext: Boolean!
+	csv: String
+	json: JSONString
+}
+
+enum DecisionExportFormat {
+	"""
+	One row per decision, for a spreadsheet.
+	"""
+	CSV
+	"""
+	An array of objects, one per decision.
+	"""
+	JSON
+}
+
 input DecisionFilter {
 	principalId: String
 	resourceId: String
 	verdict: Verdict
 	mode: EnforcementMode
 	"""
-	Defaults to 24 hours ago; at most 30 days ago.
+	Defaults to 24 hours before `until`; at most 30 days before it.
 	"""
 	since: UtcTimestamp
+	"""
+	Decisions before this time. Defaults to now.
+	"""
+	until: UtcTimestamp
 }
 
 type DirectoryGroup {
@@ -1470,6 +1514,10 @@ type Query {
 	Decisions newest first. Cursors are opaque.
 	"""
 	decisions(after: String, first: Int, filter: DecisionFilter): DecisionConnection!
+	"""
+	The decisions the filter selects, newest first, as a file. Recorded in the activity log.
+	"""
+	decisionExport(filter: DecisionFilter, format: DecisionExportFormat!): DecisionExport!
 	"""
 	A scope's enforcement mode: the install's by default.
 	"""

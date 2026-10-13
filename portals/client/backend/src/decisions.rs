@@ -3,8 +3,10 @@
 //! [`search`], [`find`], and [`explain`] are the operations; the GraphQL types below and the
 //! MCP tools (crate::mcp) both call them, so neither can do more than the other.
 //!
-//! Every query is bounded: a time window (default the last 24 hours, at most 30 days) and a
-//! page size (default 50, at most 200), so a portal request can't scan the whole table.
+//! Every query is bounded: a time window (default the 24 hours before its end, which defaults to
+//! now; at most 30 days long) and a page size (default 50, at most 200), so a portal request
+//! can't scan the whole table. The window can sit anywhere in the history, for an auditor
+//! sampling a past quarter a month at a time.
 
 use async_graphql::{
     connection::{query, Connection, Edge},
@@ -267,8 +269,10 @@ pub struct DecisionFilter {
     pub resource_id: Option<String>,
     pub verdict: Option<Verdict>,
     pub mode: Option<crate::enforcement::Mode>,
-    /// Defaults to 24 hours ago; at most 30 days ago.
+    /// Defaults to 24 hours before `until`; at most 30 days before it.
     pub since: Option<UtcTimestamp>,
+    /// Decisions before this time. Defaults to now.
+    pub until: Option<UtcTimestamp>,
 }
 
 pub async fn get_by_id(ctx: &Context<'_>, id: DecisionId) -> Result<Option<Decision>> {
@@ -303,6 +307,7 @@ impl DecisionQuery {
                     verdict: filter.verdict,
                     mode: filter.mode.map(Into::into),
                     since: filter.since.map(|t| t.0),
+                    until: filter.until.map(|t| t.0),
                     after,
                     limit: first.unwrap_or(DEFAULT_PAGE),
                 },
@@ -316,13 +321,15 @@ impl DecisionQuery {
     }
 }
 
-/// What to search for. `since` and `limit` are clamped to the bounds at the top of this file.
+/// What to search for. `since`, `until`, and `limit` are clamped to the bounds at the top of this
+/// file.
 pub struct SearchParams {
     pub principal_id: Option<String>,
     pub resource_id: Option<String>,
     pub verdict: Option<Verdict>,
     pub mode: Option<awzy_model::EnforcementMode>,
     pub since: Option<DateTime<Utc>>,
+    pub until: Option<DateTime<Utc>>,
     /// Continue after this position in `ORDER BY at DESC, id DESC`.
     pub after: Option<(DateTime<Utc>, Uuid)>,
     pub limit: usize,
@@ -335,10 +342,18 @@ pub struct SearchPage {
 
 /// Decisions newest first, within the time window and page size bounds.
 pub async fn search(ch: &::clickhouse::Client, p: SearchParams) -> anyhow::Result<SearchPage> {
-    let limit = p.limit.clamp(1, MAX_PAGE);
-    let since = window_start(p.since, Utc::now());
+    search_up_to(ch, p, MAX_PAGE).await
+}
 
-    let mut sql = format!("SELECT {COLUMNS} FROM decisions WHERE at >= fromUnixTimestamp64Milli(?, 'UTC')");
+/// [`search`] with a larger page bound, for an export (crate::decision_export).
+pub(crate) async fn search_up_to(ch: &::clickhouse::Client, p: SearchParams, max: usize) -> anyhow::Result<SearchPage> {
+    let limit = p.limit.clamp(1, max);
+    let (since, until) = window(p.since, p.until, Utc::now());
+
+    let mut sql = format!(
+        "SELECT {COLUMNS} FROM decisions WHERE at >= fromUnixTimestamp64Milli(?, 'UTC') \
+         AND at < fromUnixTimestamp64Milli(?, 'UTC')"
+    );
     let mut strings = Vec::new();
     if let Some(v) = p.principal_id {
         sql.push_str(" AND principal_id = ?");
@@ -361,7 +376,7 @@ pub async fn search(ch: &::clickhouse::Client, p: SearchParams) -> anyhow::Resul
     }
     sql.push_str(" ORDER BY at DESC, id DESC LIMIT ?");
 
-    let mut q = ch.query(&sql).bind(since.timestamp_millis());
+    let mut q = ch.query(&sql).bind(since.timestamp_millis()).bind(until.timestamp_millis());
     for s in &strings {
         q = q.bind(s.as_str());
     }
@@ -444,7 +459,7 @@ pub async fn mode_counts_for(
         enforced_deny: u64,
         enforced_challenge: u64,
     }
-    let since = window_start(since, Utc::now());
+    let (since, _) = window(since, None, Utc::now());
     let r: Row = ch
         .query(
             "SELECT count() AS total,
@@ -575,8 +590,15 @@ pub fn split_challenges(s: &str) -> Vec<&str> {
     s.split(',').filter(|k| !k.is_empty()).collect()
 }
 
-fn window_start(since: Option<DateTime<Utc>>, now: DateTime<Utc>) -> DateTime<Utc> {
-    since.unwrap_or(now - DEFAULT_WINDOW).max(now - MAX_WINDOW)
+/// The window `[since, until)` a query reads: it ends at `until` (default now), starts at `since`
+/// (default a day before the end), and is at most [`MAX_WINDOW`] long.
+pub(crate) fn window(
+    since: Option<DateTime<Utc>>,
+    until: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
+) -> (DateTime<Utc>, DateTime<Utc>) {
+    let until = until.unwrap_or(now);
+    (since.unwrap_or(until - DEFAULT_WINDOW).max(until - MAX_WINDOW), until)
 }
 
 /// Opaque to clients: `<at millis>.<uuid>`, the position in `ORDER BY at DESC, id DESC`.
@@ -602,9 +624,15 @@ mod tests {
     #[test]
     fn window_is_clamped_to_30_days() {
         let now = Utc::now();
-        assert_eq!(window_start(None, now), now - DEFAULT_WINDOW);
-        assert_eq!(window_start(Some(now - Duration::days(400)), now), now - MAX_WINDOW);
-        assert_eq!(window_start(Some(now - Duration::hours(1)), now), now - Duration::hours(1));
+        assert_eq!(window(None, None, now), (now - DEFAULT_WINDOW, now));
+        assert_eq!(window(Some(now - Duration::days(400)), None, now).0, now - MAX_WINDOW);
+        assert_eq!(window(Some(now - Duration::hours(1)), None, now).0, now - Duration::hours(1));
+        // A past month, as an auditor samples one: the window ends where it's asked to, and
+        // still can't be longer than the maximum.
+        let april = now - Duration::days(180);
+        assert_eq!(window(Some(april - Duration::days(30)), Some(april), now), (april - Duration::days(30), april));
+        assert_eq!(window(Some(april - Duration::days(90)), Some(april), now).0, april - MAX_WINDOW);
+        assert_eq!(window(None, Some(april), now).0, april - DEFAULT_WINDOW);
     }
 
     #[test]
