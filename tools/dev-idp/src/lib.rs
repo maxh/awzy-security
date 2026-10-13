@@ -247,9 +247,8 @@ const SESSION_COOKIE: &str = "awzy_dev_idp_user";
 /// The dev user the session cookie names, if any.
 fn session_user(headers: &axum::http::HeaderMap) -> Option<&'static DevUser> {
     let cookies = headers.get_all(header::COOKIE).into_iter().filter_map(|v| v.to_str().ok());
-    let id = cookies
-        .flat_map(|v| v.split(';'))
-        .find_map(|c| c.trim().strip_prefix(SESSION_COOKIE)?.strip_prefix('='))?;
+    let id =
+        cookies.flat_map(|v| v.split(';')).find_map(|c| c.trim().strip_prefix(SESSION_COOKIE)?.strip_prefix('='))?;
     USERS.iter().find(|(user, ..)| *user == id)
 }
 
@@ -286,7 +285,9 @@ async fn authorize(
         })
         .collect();
     let session = match signed_in {
-        Some((_, name, _)) => format!(r#"<p class="session">You're signed in as {}. Pick someone to switch.</p>"#, escape(name)),
+        Some((_, name, _)) => {
+            format!(r#"<p class="session">You're signed in as {}. Pick someone to switch.</p>"#, escape(name))
+        }
         None => String::new(),
     };
     Html(format!(
