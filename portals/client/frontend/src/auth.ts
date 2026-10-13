@@ -1,5 +1,5 @@
 import { isRecord } from "@awzy/ui";
-import { UserManager, WebStorageStateStore } from "oidc-client-ts";
+import { ErrorResponse, UserManager, WebStorageStateStore } from "oidc-client-ts";
 
 /** Where the IdP sends the browser back after sign-in. A frontend route, not an API route. */
 const CALLBACK_PATH = "/auth/callback";
@@ -11,8 +11,22 @@ const CALLBACK_PATH = "/auth/callback";
 const SUPPORT_PATH = "/support/sign-in";
 const SUPPORT_TOKEN = "awzy-support-token";
 
-/** Set while a sign-in started over after a stale callback, so a second failure stops there. */
+/**
+ * How a sign-in that started over after a stale callback went about it: `silent` (`prompt=none`,
+ * whoever the IdP's session names), then `interactive` if the IdP has none. So a third failure
+ * stops there.
+ */
 const RETRIED_SIGN_IN = "awzy-sign-in-retried";
+
+/** The IdP answered a `prompt=none` sign-in that it needs to ask the person something. */
+function needsInteraction(error: unknown): boolean {
+  return (
+    error instanceof ErrorResponse &&
+    ["login_required", "interaction_required", "consent_required", "account_selection_required"].includes(
+      error.error ?? "",
+    )
+  );
+}
 
 export type Session = {
   /** Who is signed in, for the sidebar. */
@@ -63,11 +77,18 @@ export async function signIn(): Promise<Session> {
       user = await manager.signinRedirectCallback();
     } catch (error) {
       // A callback whose sign-in this tab already finished or never started: the back button to
-      // the IdP's page, then signing in (as someone else) from it. Its state is gone, so the
-      // code can't be trusted; start a fresh sign-in, once, rather than fail.
+      // the IdP's page, then signing in (as someone else) from it. Its state is gone, so its code
+      // can't be trusted. But the IdP has just signed that person in, so a fresh sign-in with
+      // prompt=none comes back as them without asking again: one click to switch people.
       window.history.replaceState(null, "", "/");
-      if (window.sessionStorage.getItem(RETRIED_SIGN_IN) === null) {
-        window.sessionStorage.setItem(RETRIED_SIGN_IN, "1");
+      const retried = window.sessionStorage.getItem(RETRIED_SIGN_IN);
+      if (retried === null) {
+        window.sessionStorage.setItem(RETRIED_SIGN_IN, "silent");
+        void manager.signinRedirect({ prompt: "none", state: { returnTo: "/" } });
+        return new Promise(() => {});
+      }
+      if (retried === "silent" && needsInteraction(error)) {
+        window.sessionStorage.setItem(RETRIED_SIGN_IN, "interactive");
         signInAgain();
         return new Promise(() => {});
       }
