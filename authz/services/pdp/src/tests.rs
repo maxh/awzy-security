@@ -739,3 +739,19 @@ fn an_unmarked_added_type_fails_validation() {
     let err = validate(&schema, DEFAULT_POLICIES).unwrap_err().to_string();
     assert!(err.contains("mark it @awzy(\"app\")"), "{err}");
 }
+
+#[tokio::test]
+async fn a_decision_names_the_inputs_it_was_made_on_while_stale() {
+    let state = AppState::new(shared(Pdp::with_defaults().unwrap())).with_challenges(
+        Arc::new(containments::Containments::from_challenge("http://127.0.0.1:9").unwrap()),
+        Arc::new(challenges::ChallengeResolver::none()),
+    );
+    state.containments.load_list(1, vec![], std::time::Duration::from_secs(10));
+    let stale = state.stale_inputs(true);
+    assert!(stale.iter().any(|s| s == "containments"), "the feed was last heard 10 s ago: {stale:?}");
+    assert!(stale.iter().any(|s| s == "resources"), "{stale:?}");
+
+    state.containments.load_list(2, vec![], std::time::Duration::ZERO);
+    let fresh = state.stale_inputs(false);
+    assert!(!fresh.iter().any(|s| s == "containments" || s == "resources"), "{fresh:?}");
+}

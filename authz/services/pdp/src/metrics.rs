@@ -99,6 +99,10 @@ pub static DECISIONS_DROPPED_PRODUCE_FAILED: Counter = Counter::new();
 pub static PLANS_DROPPED_BUFFER_FULL: Counter = Counter::new();
 pub static PLANS_DROPPED_PRODUCE_FAILED: Counter = Counter::new();
 
+/// The target for the bundle and mode, and for principals: a change reaches every PDP within a
+/// minute (platform plan). A decision made past it says so (ADR 0119).
+pub const SYNC_TARGET: Duration = Duration::from_secs(60);
+
 /// The freshness targets (platform plan): when the bundle and mode, and the principals snapshot,
 /// were last synced. A sync that finds nothing new still counts: the PDP is as fresh as it can be.
 pub static POLICY_SYNC: LazyLock<LastSuccess> = LazyLock::new(LastSuccess::default);

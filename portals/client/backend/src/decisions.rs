@@ -30,7 +30,7 @@ const MAX_WINDOW: Duration = Duration::days(30);
 
 const COLUMNS: &str = "id, at, principal_type, principal_id, on_behalf_of_type, on_behalf_of_id, human_present, \
     action, resource_type, resource_id, verdict, mode, challenge, policies, on_behalf_of_verdict, on_behalf_of_policies, \
-    policy_version, context, resource_attributes_from, work_item_id";
+    policy_version, context, resource_attributes_from, work_item_id, stale_inputs";
 
 #[derive(::clickhouse::Row, serde::Deserialize, Clone, Debug)]
 pub struct DecisionRow {
@@ -59,6 +59,8 @@ pub struct DecisionRow {
     pub resource_attributes_from: String,
     /// The work item the request named (ADR 0118); empty when none.
     pub work_item_id: String,
+    /// The inputs that were past their freshness target (ADR 0119); empty when none.
+    pub stale_inputs: Vec<String>,
 }
 
 /// Where a decision's resource attributes came from (ADR 0108), so an explanation says whom it
@@ -71,6 +73,32 @@ pub enum AttributesFrom {
     EnforcementPoint,
     /// Neither knew the resource, so it was decided at the default tier, unclassified.
     Default,
+}
+
+/// An input the PDP decided on while it was out of date, because its source couldn't be reached
+/// (ADR 0119).
+#[derive(Enum, Copy, Clone, Eq, PartialEq)]
+pub enum StaleInput {
+    /// The list of contained principals: a containment made meanwhile may be missing.
+    Containments,
+    /// People and groups from the IdP: a change made meanwhile may be missing.
+    Principals,
+    /// The policy bundle and enforcement mode.
+    Policy,
+    /// The resource's attributes, from the PDP's cache.
+    Resources,
+}
+
+impl StaleInput {
+    fn parse(s: &str) -> Option<Self> {
+        match s {
+            "containments" => Some(Self::Containments),
+            "principals" => Some(Self::Principals),
+            "policy" => Some(Self::Policy),
+            "resources" => Some(Self::Resources),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq, serde::Deserialize, rmcp::schemars::JsonSchema)]
@@ -183,6 +211,12 @@ impl Decision {
     /// which decided whether the principal was assigned (ADR 0118); null when it named none.
     async fn work_item_id(&self) -> Option<&str> {
         Some(self.0.work_item_id.as_str()).filter(|w| !w.is_empty())
+    }
+
+    /// The inputs the PDP decided on while they were out of date, because their source couldn't
+    /// be reached; empty for a decision on current inputs.
+    async fn stale_inputs(&self) -> Vec<StaleInput> {
+        self.0.stale_inputs.iter().filter_map(|s| StaleInput::parse(s)).collect()
     }
 
     /// The policy bundle version in force; 0 means the built-in defaults.
@@ -596,6 +630,7 @@ mod tests {
             context: String::new(),
             resource_attributes_from: "awzy-context".into(),
             work_item_id: String::new(),
+            stale_inputs: vec![],
         };
         assert_eq!(parse_cursor(&cursor_for(&row)).unwrap(), (row.at, row.id));
         assert!(parse_cursor("nonsense").is_err());

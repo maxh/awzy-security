@@ -138,6 +138,11 @@ impl LastSuccess {
         self.failures.inc();
     }
 
+    /// Since the last success; None if it never succeeded.
+    pub fn since_success(&self) -> Option<Duration> {
+        (self.at_ms.load(Relaxed) != i64::MIN).then(|| self.age())
+    }
+
     /// Seconds since the last success, or since the process started if it never succeeded.
     pub fn age(&self) -> Duration {
         let at = match self.at_ms.load(Relaxed) {
