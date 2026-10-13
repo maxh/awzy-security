@@ -242,7 +242,8 @@ impl GatewayState {
     }
 
     fn pause_pdp(&self) {
-        *self.0.pdp_paused_until.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now() + PDP_PAUSE);
+        *self.0.pdp_paused_until.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(std::time::Instant::now() + PDP_PAUSE);
     }
 
     /// Records each forwarded tool call in awzy-intake (ADR 0084). Call before sharing the state.
