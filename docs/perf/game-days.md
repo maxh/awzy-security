@@ -55,9 +55,10 @@ scenario at a time per install. Two installs can run at once.
   lasted 9½, and a PDP can't start meanwhile (#400). Plan for it, or take Kafka away another way.
 - **There's no Aurora replica in the example install,** so the `postgres` scenario reboots the
   writer. A failover needs a replica first.
-- **Neither install evaluates the alert rules,** and the GCP one doesn't scrape awzy's metrics (#401),
-  so which alerts fire is worked out from the sampled metrics against the rules in
-  `deploy/observability/prometheus/alerts.yaml`.
+- **Read what fired from the monitoring, not from guesses.** On AWS, AMP keeps an `ALERTS` series
+  to query afterwards; that's how the first run found AMP's scraper shut out of most services
+  (#406). The GCP install doesn't scrape awzy's metrics (#401), so there, which alerts would fire
+  is worked out from the sampled metrics against `deploy/observability/prometheus/alerts.yaml`.
 - **Use resources awzy-context knows.** `pdp_loadtest` checks three resources it doesn't, which
   get the shortest stale limit, so every check fails 5 minutes into an awzy-context outage.
   Real resources mostly last longer (#402).
