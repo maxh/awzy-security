@@ -169,6 +169,12 @@ impl Containments {
         self.age() <= STALE_AFTER
     }
 
+    /// Whether the list in force is past the feed's freshness target, so a decision says it was
+    /// made on it (ADR 0119).
+    pub fn is_stale(&self) -> bool {
+        self.client.is_some() && self.is_ready() && !self.is_fresh()
+    }
+
     fn in_list(&self, who: &[&EntityRef]) -> Vec<String> {
         let active = self.active.load();
         who.iter().filter_map(|w| active.by_principal.get(&key(w)).cloned()).collect()

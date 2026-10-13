@@ -357,6 +357,11 @@ pub struct DecisionRecord {
     /// The work item the request named (ADR 0118); empty when it named none.
     #[serde(default)]
     pub work_item_id: String,
+    /// The inputs the decision was made on while they were past their freshness target, because
+    /// their source couldn't be reached (ADR 0119): `containments`, `principals`, `policy`,
+    /// `resources`. Empty for a decision on current inputs.
+    #[serde(default)]
+    pub stale_inputs: Vec<String>,
 }
 
 /// Where a decision's resource attributes came from (ADR 0108), so an explanation says whom it
@@ -424,12 +429,18 @@ impl DecisionRecord {
             context: Value::Object(req.context.clone()).to_string(),
             resource_attributes_from: String::new(),
             work_item_id: req.work_item_id.clone().unwrap_or_default(),
+            stale_inputs: Vec::new(),
         }
     }
 
     /// The same record, saying where its resource's attributes came from (ADR 0108).
     pub fn with_attributes_from(mut self, from: AttributesFrom) -> Self {
         self.resource_attributes_from = from.as_str().to_string();
+        self
+    }
+
+    pub fn with_stale_inputs(mut self, inputs: Vec<String>) -> Self {
+        self.stale_inputs = inputs;
         self
     }
 }

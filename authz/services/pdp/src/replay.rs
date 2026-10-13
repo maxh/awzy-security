@@ -31,6 +31,8 @@ pub(crate) enum Assembled {
         automation: std::collections::HashMap<String, i64>,
         /// Where the resource's attributes came from (ADR 0108).
         attributes_from: awzy_model::AttributesFrom,
+        /// The resource was a cached entry past its TTL (ADR 0119).
+        stale_resource: bool,
     },
 }
 
@@ -81,7 +83,14 @@ pub(crate) async fn assemble(
         (Some(_), Some(_)) => Some(Arc::new(on_work_item(req, &merged.work))),
         (_, assignees) => assignees,
     };
-    Ok(Assembled::Ready { entities: merged.entities, assignees, risk, automation, attributes_from: merged.from })
+    Ok(Assembled::Ready {
+        entities: merged.entities,
+        assignees,
+        risk,
+        automation,
+        attributes_from: merged.from,
+        stale_resource: merged.stale,
+    })
 }
 
 /// The decision for a service account awzy-context doesn't know.

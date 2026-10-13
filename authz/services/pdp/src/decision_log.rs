@@ -177,6 +177,7 @@ mod tests {
             context: "{}".into(),
             resource_attributes_from: String::new(),
             work_item_id: String::new(),
+            stale_inputs: vec![],
         }
     }
 

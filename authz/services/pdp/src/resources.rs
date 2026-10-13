@@ -89,6 +89,8 @@ pub struct Merged {
     pub work: Arc<HashMap<String, HashSet<String>>>,
     /// Where the resource's attributes came from (ADR 0108).
     pub from: AttributesFrom,
+    /// Served from the cache past its TTL because awzy-context couldn't be reached (ADR 0119).
+    pub stale: bool,
 }
 
 struct Cached {
@@ -211,14 +213,21 @@ impl Resources {
     /// only when awzy-context can't be reached and nothing is cached for the resource.
     pub async fn merge(&self, request: Value, resource: &EntityRef) -> anyhow::Result<Merged> {
         let unchanged = |entities| {
-            Ok(Merged { entities, assignees: None, work: Arc::default(), from: AttributesFrom::EnforcementPoint })
+            Ok(Merged {
+                entities,
+                assignees: None,
+                work: Arc::default(),
+                from: AttributesFrom::EnforcementPoint,
+                stale: false,
+            })
         };
         let Some(endpoint) = &self.endpoint else { return unchanged(request) };
         if resource.kind != entity_type::RESOURCE {
             return unchanged(request);
         }
         let Value::Array(mut entities) = request else { return unchanged(request) };
-        let (assignees, work, from) = match self.lookup(endpoint, &resource.id).await? {
+        let (loaded, stale) = self.lookup(endpoint, &resource.id).await?;
+        let (assignees, work, from) = match loaded {
             Some(loaded) => {
                 entities.retain(|e| !loaded.entities.iter().any(|c| c["uid"] == e["uid"]));
                 entities.extend(loaded.entities.iter().cloned());
@@ -238,16 +247,17 @@ impl Resources {
                 }
             }
         };
-        Ok(Merged { entities: Value::Array(entities), assignees: Some(assignees), work, from })
+        Ok(Merged { entities: Value::Array(entities), assignees: Some(assignees), work, from, stale })
     }
 
-    async fn lookup(&self, endpoint: &str, id: &str) -> anyhow::Result<Option<Arc<Loaded>>> {
+    /// The resource, and whether it's a cached entry past its TTL.
+    async fn lookup(&self, endpoint: &str, id: &str) -> anyhow::Result<(Option<Arc<Loaded>>, bool)> {
         let stale = {
             let cache = self.cache.read().unwrap_or_else(|e| e.into_inner());
             match cache.get(id) {
                 Some(c) if c.fresh(self.ttl(), self.unknown_ttl) => {
                     crate::metrics::RESOURCE_CACHE_HITS.inc();
-                    return Ok(c.entities.clone());
+                    return Ok((c.entities.clone(), false));
                 }
                 Some(c) => Some(c.entities.clone()),
                 None => None,
@@ -257,13 +267,13 @@ impl Resources {
             Ok(entities) => {
                 crate::metrics::RESOURCE_FETCHES.inc();
                 self.store(id, entities.clone());
-                Ok(entities)
+                Ok((entities, false))
             }
             Err(error) => match stale {
                 Some(entities) => {
                     crate::metrics::RESOURCE_STALE_SERVED.inc();
                     tracing::warn!(%error, resource = id, "awzy-context unreachable; using the cached resource");
-                    Ok(entities)
+                    Ok((entities, true))
                 }
                 None => Err(error),
             },
@@ -409,6 +419,7 @@ mod tests {
         down.store("drive:plans/fy27", r.cache.read().unwrap()["drive:plans/fy27"].entities.clone());
         let merged = down.merge(json!([]), &resource("drive:plans/fy27")).await.unwrap();
         assert_eq!(merged.entities[0]["attrs"]["sensitivity"], "crown_jewels", "an expired entry beats no answer");
+        assert!(merged.stale, "and the decision says it was stale");
     }
 
     #[tokio::test]

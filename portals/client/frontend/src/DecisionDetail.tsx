@@ -2,7 +2,11 @@ import { Code, Divider, Group, Stack, Text } from "@mantine/core";
 import type { ReactNode } from "react";
 import { graphql, useFragment, useLazyLoadQuery } from "react-relay";
 
-import type { AttributesFrom, DecisionDetail_decision$key } from "./__generated__/DecisionDetail_decision.graphql";
+import type {
+  AttributesFrom,
+  DecisionDetail_decision$key,
+  StaleInput,
+} from "./__generated__/DecisionDetail_decision.graphql";
 import type { DecisionDetailQuery } from "./__generated__/DecisionDetailQuery.graphql";
 import { entityLabel, formatTime, Hidden, prettyObject, VerdictBadge } from "./format";
 
@@ -11,6 +15,14 @@ const ATTRIBUTES_FROM: Record<Exclude<AttributesFrom, "%future added value">, st
   AWZY_CONTEXT: "awzy-context (your connectors and classification)",
   ENFORCEMENT_POINT: "the app that asked (its own data)",
   DEFAULT: "nowhere: unknown to awzy, so the default tier",
+};
+
+/** What a decision made do with while its source couldn't be reached (ADR 0119). */
+const STALE_INPUTS: Record<Exclude<StaleInput, "%future added value">, string> = {
+  CONTAINMENTS: "the containment list",
+  PRINCIPALS: "people and groups",
+  POLICY: "the policy and mode",
+  RESOURCES: "the resource's attributes",
 };
 
 /** Explains one decision: what was asked, the verdict, and the policies that produced it. */
@@ -65,6 +77,7 @@ function DecisionView({ decision }: { decision: DecisionDetail_decision$key }) {
         policyVersion
         resourceAttributesFrom
         workItemId
+        staleInputs
         context
         determiningPolicies {
           id
@@ -99,6 +112,14 @@ function DecisionView({ decision }: { decision: DecisionDetail_decision$key }) {
           />
         )}
         {d.workItemId && <Field label="For work item" value={d.workItemId} />}
+        {d.staleInputs.length > 0 && (
+          <Field
+            label="Out of date"
+            value={d.staleInputs
+              .map((input) => (input === "%future added value" ? "an input" : STALE_INPUTS[input]))
+              .join(", ")}
+          />
+        )}
         <Field
           label="Policy bundle"
           value={d.policyVersion === 0 ? "built-in defaults" : `version ${d.policyVersion}`}

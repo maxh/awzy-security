@@ -577,9 +577,11 @@ impl AppState {
         };
         // Loaded after the lookup, which may wait on awzy-context, so a sync isn't held up.
         let pdp = self.pdp.load_full();
-        let attributes_from = match &assembled {
-            Some(replay::Assembled::Ready { attributes_from, .. }) => *attributes_from,
-            _ => awzy_model::AttributesFrom::EnforcementPoint,
+        let (attributes_from, stale_resource) = match &assembled {
+            Some(replay::Assembled::Ready { attributes_from, stale_resource, .. }) => {
+                (*attributes_from, *stale_resource)
+            }
+            _ => (awzy_model::AttributesFrom::EnforcementPoint, false),
         };
         let mut decision = match assembled {
             // A contained principal, or a delegated request for a contained person, is denied
@@ -604,10 +606,29 @@ impl AppState {
         if let Some(log) = &self.log {
             log.record(
                 DecisionRecord::new(req, &decision, pdp.version(), chrono::Utc::now())
-                    .with_attributes_from(attributes_from),
+                    .with_attributes_from(attributes_from)
+                    .with_stale_inputs(self.stale_inputs(stale_resource)),
             );
         }
         Ok(decision)
+    }
+
+    /// The inputs a decision now rests on that are past their freshness target, because their
+    /// source can't be reached (ADR 0119), in name order.
+    fn stale_inputs(&self, stale_resource: bool) -> Vec<String> {
+        let past = |sync: &awzy_server::metrics::LastSuccess| {
+            sync.since_success().is_some_and(|age| age > metrics::SYNC_TARGET)
+        };
+        [
+            ("containments", self.containments.is_stale()),
+            ("principals", past(&metrics::PRINCIPALS_SYNC)),
+            ("policy", past(&metrics::POLICY_SYNC)),
+            ("resources", stale_resource),
+        ]
+        .into_iter()
+        .filter(|(_, stale)| *stale)
+        .map(|(input, _)| input.to_string())
+        .collect()
     }
 
     /// An enforced challenge: denied if an approver rejected the request, decided again with

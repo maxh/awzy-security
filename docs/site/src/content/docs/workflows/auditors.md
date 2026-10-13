@@ -57,6 +57,10 @@ own services (such as an automated containment), or a break-glass key: never as 
 - **Monitor mode records but doesn't block.** A decision recorded in `monitor` mode shows what
   enforcing would have done, not what happened. Check the Enforcement history for when each part
   of the install was enforcing.
+- **A decision made on out-of-date inputs says so.** When a part of the install that a decision
+  point reads from was down, the decision point keeps deciding on what it last had, for a limited
+  time. Such a decision's "Out of date" field names what was old: the containment list, people
+  and groups, the policy, or the resource's attributes.
 
 ## What isn't in the portal yet
 
