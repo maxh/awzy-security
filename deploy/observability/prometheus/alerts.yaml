@@ -20,6 +20,29 @@ groups:
           summary: "{{ $labels.job }} is up but not ready to take traffic"
           description: "A PDP stays not ready until it has a signed bundle and the enforcement mode, from awzy-policy or from a running PDP."
 
+      # A service that runs a spare, down to its last ready pod: a node lost, or pods that can't be
+      # scheduled. Nothing fails yet, but the next pod to go takes the service with it. Services
+      # that run one pod aren't listed.
+      - alert: AwzyServiceOnOnePod
+        expr: |
+          count by (job) (awzy_ready{job=~"awzy-(pdp|gateway|context|challenge|policy|intake|client-portal)"} == 1) < 2
+        for: 5m
+        labels: { severity: ticket }
+        annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzyserviceononepod-ticket"
+          summary: "{{ $labels.job }} has had one ready pod for 5 minutes"
+
+      # Checks near the enforcement points' timeout (the gateway gives up at 2 s), which a short
+      # outage of a service the PDP waits on causes; the 10 ms target above waits 10 minutes.
+      - alert: AwzyPdpChecksSlow
+        expr: |
+          histogram_quantile(0.99, sum by (le) (rate(awzy_pdp_check_duration_seconds_bucket[2m]))) > 0.5
+        for: 1m
+        labels: { severity: page }
+        annotations:
+          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzypdpchecksslow-page"
+          summary: "PDP check p99 is {{ $value | humanizeDuration }}, close to enforcement points' timeouts"
+
       - alert: AwzyPdpCheckLatencyHigh
         expr: |
           histogram_quantile(0.99, sum by (le) (rate(awzy_pdp_check_duration_seconds_bucket[5m]))) > 0.01
@@ -129,7 +152,6 @@ groups:
           runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzypdpdroppingdecisions-page"
           summary: "PDPs dropped {{ $value | humanize }} decision records in 5 minutes; the audit trail is missing them"
           description: "reason=buffer_full: Kafka is slow or down. reason=produce_failed: Kafka refused the records after every retry. The PDP's log says why."
-          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzypdpdroppingdecisions-page"
 
       - alert: AwzyPdpDroppingPlans
         expr: sum(increase(awzy_pdp_plans_dropped_total[5m])) > 0
@@ -137,7 +159,6 @@ groups:
         annotations:
           runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzypdpdroppingplans-ticket"
           summary: "PDPs dropped {{ $value | humanize }} query plan records in 5 minutes"
-          runbook_url: "https://docs.awzysecurity.com/guides/monitoring/#awzypdpdroppingplans-ticket"
 
       - alert: AwzyGatewayCantReachPdp
         expr: sum(rate(awzy_gateway_pdp_unreachable_total[5m])) > 0
