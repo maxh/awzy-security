@@ -46,8 +46,9 @@ PDP picks it up at once. To restore a particular version instead, add `--to-vers
 
 - A request is signed with the time it was made and refused after five minutes, and each is used
   once, so a captured request can't be replayed.
-- Every use is recorded with the key that signed it and the reason, and posted to your security
-  team's Slack channel when Slack is connected.
+- Every use is recorded with the key that signed it and the reason, listed on the client
+  portal's **Policies** page under "Break-glass rollbacks" with the version it restored and the
+  bundle it published, and posted to your security team's Slack channel when Slack is connected.
 - The restored bundle is signed like any other, so the PDPs accept it.
 
 Then fix the bad policy in the client portal as usual, and publish the fix.

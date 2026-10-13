@@ -7,10 +7,11 @@ use awzy_authz_proto::{
     policy::v1::{
         get_bundle_request::Key,
         policy_service_server::{PolicyService, PolicyServiceServer},
-        BreakGlassRollbackRequest, BreakGlassRollbackResponse, BundleStatus as WireStatus, CreateDraftRequest,
-        CreateDraftResponse, EnforcementSetting as WireSetting, GetActiveRequest, GetActiveResponse, GetBundleRequest,
-        GetBundleResponse, GetEnforcementRequest, GetEnforcementResponse, GetModelRoutingRequest,
-        GetModelRoutingResponse, GetOutageFallbackRequest, GetOutageFallbackResponse, ListBundlesRequest,
+        BreakGlassRollback as WireBreakGlass, BreakGlassRollbackRequest, BreakGlassRollbackResponse,
+        BundleStatus as WireStatus, CreateDraftRequest, CreateDraftResponse, EnforcementSetting as WireSetting,
+        GetActiveRequest, GetActiveResponse, GetBundleRequest, GetBundleResponse, GetEnforcementRequest,
+        GetEnforcementResponse, GetModelRoutingRequest, GetModelRoutingResponse, GetOutageFallbackRequest,
+        GetOutageFallbackResponse, ListBreakGlassRollbacksRequest, ListBreakGlassRollbacksResponse, ListBundlesRequest,
         ListBundlesResponse, ListEnforcementChangesRequest, ListEnforcementChangesResponse,
         ListEnforcementSettingsRequest, ListEnforcementSettingsResponse, ModelRouting as WireRouting,
         OutageFallback as WireFallback, PolicyBundle as WireBundle, PublishRequest, PublishResponse,
@@ -39,6 +40,7 @@ const READ_METHODS: &[&str] = &[
     "GetEnforcement",
     "GetModelRouting",
     "GetOutageFallback",
+    "ListBreakGlassRollbacks",
     "ListBundles",
     "ListEnforcementChanges",
     "ListEnforcementSettings",
@@ -229,6 +231,31 @@ impl PolicyService for Service {
         Ok(Response::new(ListEnforcementChangesResponse {
             changes: changes.into_iter().map(setting_to_wire).collect(),
         }))
+    }
+
+    async fn list_break_glass_rollbacks(
+        &self,
+        req: Request<ListBreakGlassRollbacksRequest>,
+    ) -> Result<Response<ListBreakGlassRollbacksResponse>, Status> {
+        let limit = match req.into_inner().limit {
+            n if n <= 0 => 50,
+            n => n.min(500),
+        };
+        let events = self.0.break_glass_events(limit.into()).await.map_err(status)?;
+        let ts = |t: DateTime<Utc>| Timestamp { seconds: t.timestamp(), nanos: t.timestamp_subsec_nanos() as i32 };
+        let rollbacks = events
+            .into_iter()
+            .map(|e| WireBreakGlass {
+                key_id: e.key_id,
+                reason: e.reason,
+                requested_at: Some(ts(e.requested_at)),
+                recorded_at: Some(ts(e.recorded_at)),
+                restored_version: e.restored_version,
+                replaced_version: e.replaced_version.unwrap_or_default(),
+                bundle_qid: e.bundle_id.to_string(),
+            })
+            .collect();
+        Ok(Response::new(ListBreakGlassRollbacksResponse { rollbacks }))
     }
 
     async fn list_enforcement_settings(

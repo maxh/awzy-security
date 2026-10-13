@@ -34,6 +34,7 @@ see [what isn't in the portal yet](#what-isnt-in-the-portal-yet).
 | Access is decided per action                        | **Decisions**                         | Every allow, deny, and challenge: who, for whom, which action, which resource, when, and in which mode. [Exported](#sampling-and-exporting-decisions) for a period as CSV or JSON                    |
 | Decisions follow approved policy                    | **Decisions**, open one               | The policies that produced it, with their source, from the bundle in force at the time                                                                                                               |
 | Policy changes are controlled                       | **Policies**                          | Every bundle: drafts, the active one, and those it replaced, each with its version and who wrote it, and who published the active one. A draft is validated and can be dry-run before it's published |
+| Emergency changes are controlled                    | **Policies**, Break-glass rollbacks   | Each rollback made with an emergency key enrolled at install: when, the key that signed it, the reason, the version it restored, and the bundle it published. See [break-glass rollback](/guides/break-glass/) |
 | Enforcement is on, and changes to it are controlled | **Enforcement**, History              | Every switch between monitor and enforce, for the install and for each action or tool, with who made it and when. Each switch takes a touch of the person's security key                             |
 | Sensitive actions get a second look                 | **Challenges** (admins)               | Each challenge, its kind (a justification, a security key, or an approval), who answered it, and their reason or note                                                                                |
 | Risky access is stopped                             | **Challenges**, Containments (admins) | Each containment, why, and who or what made it; lifting one takes a reason                                                                                                                           |
@@ -88,7 +89,3 @@ says so; narrow the filters or the period to get the rest.
   administer challenges, which would also let you approve requests and contain people, so an
   auditor isn't given it. Ask the security team to pull the challenges and containments for your
   audit period from the Challenges page.
-- **Break-glass rollbacks.** Each is recorded with the key that signed it, the reason, and the
-  version it restored, and posted to the security team's Slack channel, but the portal doesn't
-  list them. Ask the security team for the channel's history. See
-  [break-glass rollback](/guides/break-glass/).
