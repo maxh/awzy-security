@@ -106,7 +106,7 @@ spec:
           {{- end }}
           ports:
             - { name: http, containerPort: 8080 }
-            # /metrics alone, for scrapers the network policy can't name (ADR 0123).
+            # /metrics alone, for scrapers the network policy can't name (ADR 0124).
             - { name: metrics, containerPort: 9090 }
           env:
             - { name: AWZY_LOG_FORMAT, value: {{ $root.Values.logFormat | quote }} }

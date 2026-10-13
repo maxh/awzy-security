@@ -215,7 +215,7 @@ impl Requests {
 static REQUESTS: LazyLock<Requests> = LazyLock::new(Requests::default);
 
 /// Adds `/metrics` and times every route already on `app`. Call it last, so every route is timed.
-/// `/metrics` and nothing else, for the metrics port (ADR 0123).
+/// `/metrics` and nothing else, for the metrics port (ADR 0124).
 pub fn routes() -> Router {
     Router::new().route("/metrics", get(metrics))
 }

@@ -1,4 +1,4 @@
-# 0123. Metrics on a port of their own, which any scraper may reach
+# 0124. Metrics on a port of their own, which any scraper may reach
 
 - Status: Accepted
 - Date: 2026-10-13

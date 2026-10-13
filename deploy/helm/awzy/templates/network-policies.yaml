@@ -15,7 +15,7 @@ spec:
 ---
 # The metrics port, and only it, from anywhere: a managed scraper (Amazon Managed Prometheus's)
 # connects from the cluster's subnets, not from a pod, and holds no token. The port serves counts
-# and latencies alone (ADR 0068, 0123).
+# and latencies alone (ADR 0068, 0124).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
