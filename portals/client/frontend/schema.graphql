@@ -533,6 +533,11 @@ type Decision implements Node {
 	"""
 	workItemId: String
 	"""
+	The inputs the PDP decided on while they were out of date, because their source couldn't
+	be reached; empty for a decision on current inputs.
+	"""
+	staleInputs: [StaleInput!]!
+	"""
 	The policy bundle version in force; 0 means the built-in defaults.
 	"""
 	policyVersion: Int!
@@ -2022,6 +2027,29 @@ type SetOutageFallbackPayload {
 input SetScopedEnforcementModeInput {
 	target: EnforcementTarget!
 	mode: EnforcementMode!
+}
+
+"""
+An input the PDP decided on while it was out of date, because its source couldn't be reached
+(ADR 0119).
+"""
+enum StaleInput {
+	"""
+	The list of contained principals: a containment made meanwhile may be missing.
+	"""
+	CONTAINMENTS
+	"""
+	People and groups from the IdP: a change made meanwhile may be missing.
+	"""
+	PRINCIPALS
+	"""
+	The policy bundle and enforcement mode.
+	"""
+	POLICY
+	"""
+	The resource's attributes, from the PDP's cache.
+	"""
+	RESOURCES
 }
 
 type SupportSession implements Node {
