@@ -19,7 +19,7 @@ in, all in your own cloud account. awzy has no access to any of it.
    token so it provisions people and groups.
 
 See [Installing awzy](/guides/install/) for each step, and
-[Turning on optional features](/guides/optional-features/) for Awzy Bot, investigations, and Slack.
+[Turning on optional features](/guides/optional-features/) for Awzy Bot, investigations, and notifications.
 
 ## Upgrading
 

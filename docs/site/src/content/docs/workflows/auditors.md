@@ -14,18 +14,23 @@ Ask the security team for a sign-in through the company's IdP, in a group whose 
 view the portal and change nothing. The portal's own access is policy, so one policy does it:
 
 ```cedar
-@id("auditors-view-the-portal")
-permit (principal in Group::"auditors", action == Action::"view", resource is PortalArea);
+@id("auditors-see-the-portal")
+permit (
+  principal in Group::"auditors",
+  action in [Action::"view", Action::"audit"],
+  resource is PortalArea
+);
 ```
 
-Viewing never lets you change anything: publishing, switching modes, containing, and approving
-all need `administer`, or the security key of whoever does them. The security team can narrow
+`view` shows each page as anyone allowed there sees it, and `audit` adds what only those who run
+an area otherwise see: every challenge and every containment. Neither lets you change anything:
+publishing, switching modes, containing, and approving all need `administer`, or the security key
+of whoever does them. The security team can narrow
 what you see, such as keeping requests' context to its privacy team, without changing this
 policy. See [changing who can do what](/workflows/security-team/#changing-who-can-do-what).
 
-This shows you everything in the table below except other people's challenges and the
-containments, which only those who can act on them see today. Ask the security team for those;
-see [what isn't in the portal yet](#what-isnt-in-the-portal-yet).
+This shows you everything in the table below. On the **Challenges** page you see every
+challenge and containment, without the buttons to approve, contain, or lift.
 
 ## The evidence
 
@@ -36,8 +41,8 @@ see [what isn't in the portal yet](#what-isnt-in-the-portal-yet).
 | Policy changes are controlled                       | **Policies**                          | Every bundle: drafts, the active one, and those it replaced, each with its version and who wrote it, and who published the active one. A draft is validated and can be dry-run before it's published |
 | Emergency changes are controlled                    | **Policies**, Break-glass rollbacks   | Each rollback made with an emergency key enrolled at install: when, the key that signed it, the reason, the version it restored, and the bundle it published. See [break-glass rollback](/guides/break-glass/) |
 | Enforcement is on, and changes to it are controlled | **Enforcement**, History              | Every switch between monitor and enforce, for the install and for each action or tool, with who made it and when. Each switch takes a touch of the person's security key                             |
-| Sensitive actions get a second look                 | **Challenges** (admins)               | Each challenge, its kind (a justification, a security key, or an approval), who answered it, and their reason or note                                                                                |
-| Risky access is stopped                             | **Challenges**, Containments (admins) | Each containment, why, and who or what made it; lifting one takes a reason                                                                                                                           |
+| Sensitive actions get a second look                 | **Challenges**                        | Each challenge, its kind (a justification, a security key, or an approval), who answered it, and their reason or note                                                                                |
+| Risky access is stopped                             | **Challenges**, Containments          | Each containment, why, and who or what made it; lifting one takes a reason                                                                                                                           |
 | Software has an accountable owner                   | **Directory**, Service accounts       | Each service account and AI agent, its owner (a person from the IdP), whether it's AI, and who registered it                                                                                         |
 | People come from the IdP                            | **Directory**, People and groups      | People and groups exactly as the IdP provisions them. They can't be edited in awzy                                                                                                                   |
 | Flagged principals are reviewed                     | **Investigations**, when turned on    | Each finding, its evidence, what was done, and the review that closed it                                                                                                                             |
@@ -81,11 +86,3 @@ says so; narrow the filters or the period to get the rest.
   point reads from was down, the decision point keeps deciding on what it last had, for a limited
   time. Such a decision's "Out of date" field names what was old: the containment list, people
   and groups, the policy, or the resource's attributes.
-
-## What isn't in the portal yet
-
-- **Read-only access to every challenge and containment.** Viewing the Challenges page shows you
-  only the challenges sent to you. Seeing everyone's, and the containments, takes the right to
-  administer challenges, which would also let you approve requests and contain people, so an
-  auditor isn't given it. Ask the security team to pull the challenges and containments for your
-  audit period from the Challenges page.

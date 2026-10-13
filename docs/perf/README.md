@@ -17,3 +17,6 @@ measure capacity, not the latency budget. `pdp_loadtest <endpoint> <connections>
 is open loop: checks fall due at `rate` per second however the PDP is doing, each is timed from
 when it was due, and a line a minute shows latency over the run. The pass conditions ("p99 under
 10 ms at 1,500 checks/s") are open-loop numbers (#350).
+
+Failure runs, which take a dependency away under load, use `tools/gameday/gameday.sh`; how to run
+one, and what the first one taught, is in [game-days.md](game-days.md).

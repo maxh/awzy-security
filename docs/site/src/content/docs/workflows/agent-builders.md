@@ -109,7 +109,7 @@ What your agent should do:
 ### When nobody is in the agent's session
 
 An agent running a script can't show its person a prompt. It doesn't need to: awzy sends the
-challenge to the person, tells them in Slack when that's set up, and they answer in the client
+challenge to the person, tells them in Slack or by email when that's set up, and they answer in the client
 portal. The agent waits for the answer, then retries:
 
 ```sh

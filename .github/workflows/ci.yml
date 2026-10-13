@@ -171,6 +171,12 @@ jobs:
       # Every alert links the section of the docs that says what to do about it.
       - name: Alerts link their runbooks
         run: tools/ci/check-alert-runbooks.sh
+      # The rules load in Prometheus itself, the local stack's version: a duplicate key or a bad
+      # expression otherwise surfaces only when an install's monitoring is applied.
+      - name: Alert rules load in Prometheus
+        run: >-
+          docker run --rm -v "$PWD/deploy/observability/prometheus:/rules:ro" --entrypoint promtool
+          prom/prometheus:v3.5.0 check rules /rules/alerts.yaml
       # What the code-quality pass removed stays removed, and what's left only shrinks (#221 to
       # #227).
       - name: Code quality ratchets

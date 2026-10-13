@@ -1,6 +1,7 @@
 //! Telling people what's waiting for them (ADR 0073). Who to tell about what is decided here, as
-//! challenges and containments happen, and recorded in `notifications`; a [`Worker`] sends the due
-//! ones through the client's Slack, retrying with backoff.
+//! challenges and containments happen, and recorded in `notifications`, once for each channel
+//! configured: the client's Slack, and email through their SMTP relay (ADR 0122). A [`Worker`]
+//! sends the due ones, retrying each channel's with backoff on its own.
 //!
 //! Messages say what's waiting and link to the client portal. They never carry document
 //! contents, justifications, or the evidence behind a containment, and never approve anything.
@@ -13,6 +14,7 @@ use sqlx::{types::Json, PgPool, Row};
 use uuid::Uuid;
 
 use crate::{
+    email::Email,
     slack::Slack,
     store::{Challenge, ChallengeStore, Containment, StoreError},
 };
@@ -22,6 +24,30 @@ pub const MOST_ATTEMPTS: i32 = 8;
 /// How many due notifications one pass sends, and how often a pass runs.
 const BATCH: i64 = 20;
 const EVERY: Duration = Duration::from_secs(5);
+
+/// How a notification reaches people.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Channel {
+    Slack,
+    Email,
+}
+
+impl Channel {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Slack => "slack",
+            Self::Email => "email",
+        }
+    }
+
+    fn parse(s: &str) -> Option<Self> {
+        match s {
+            "slack" => Some(Self::Slack),
+            "email" => Some(Self::Email),
+            _ => None,
+        }
+    }
+}
 
 /// Who a notification is for.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -135,21 +161,27 @@ pub struct BreakGlass {
 }
 
 impl ChallengeStore {
+    /// One row for each channel, so a channel that's failing retries without resending the others.
     async fn record(&self, to: &Recipient, notice: &Notice) -> Result<(), StoreError> {
-        sqlx::query("INSERT INTO notifications (id, kind, recipient, details) VALUES ($1, $2, $3, $4)")
+        for channel in &self.channels {
+            sqlx::query(
+                "INSERT INTO notifications (id, channel, kind, recipient, details) VALUES ($1, $2, $3, $4, $5)",
+            )
             .bind(Uuid::now_v7())
+            .bind(channel.as_str())
             .bind(notice.kind())
             .bind(to.to_text())
             .bind(Json(notice))
             .execute(self.pool())
             .await?;
+        }
         Ok(())
     }
 
     /// A challenge was just opened: the person it went to answers a justification or a security
     /// key; the resource's owner and the security team hear about an approval.
     pub async fn notify_opened(&self, id: ChallengeId, resource_owner: Option<&str>) -> Result<(), StoreError> {
-        if !self.notify {
+        if self.channels.is_empty() {
             return Ok(());
         }
         let c = self.get(id).await?;
@@ -174,7 +206,7 @@ impl ChallengeStore {
 
     /// An approver decided: the person the challenge went to learns whether to retry.
     pub async fn notify_decided(&self, c: &Challenge, approved: bool) -> Result<(), StoreError> {
-        let Some(answerer) = c.answerer_id.as_deref().filter(|_| self.notify) else { return Ok(()) };
+        let Some(answerer) = c.answerer_id.as_deref().filter(|_| !self.channels.is_empty()) else { return Ok(()) };
         let notice = Notice::ChallengeDecided {
             challenge: ChallengeNotice::of(c),
             approved,
@@ -186,7 +218,7 @@ impl ChallengeStore {
 
     /// A break-glass rollback (ADR 0022): the security team, every time.
     pub async fn notify_break_glass(&self, rollback: BreakGlass) -> Result<(), StoreError> {
-        if !self.notify {
+        if self.channels.is_empty() {
             return Ok(());
         }
         self.record(&Recipient::Security, &Notice::BreakGlass(rollback)).await
@@ -199,7 +231,7 @@ impl ChallengeStore {
         requested_by: &str,
         reason: &str,
     ) -> Result<(), StoreError> {
-        if !self.notify {
+        if self.channels.is_empty() {
             return Ok(());
         }
         let notice = Notice::LiftRequested {
@@ -213,7 +245,7 @@ impl ChallengeStore {
 
     /// A containment, applied or only recorded: the security team, never the contained person.
     pub async fn notify_contained(&self, c: &Containment) -> Result<(), StoreError> {
-        if !self.notify {
+        if self.channels.is_empty() {
             return Ok(());
         }
         let notice = Notice::Containment {
@@ -223,6 +255,20 @@ impl ChallengeStore {
             monitor: c.monitor,
         };
         self.record(&Recipient::Security, &notice).await
+    }
+}
+
+/// An email's subject: what's waiting, without the request's details.
+pub fn subject(notice: &Notice) -> &'static str {
+    match notice {
+        Notice::ChallengeOpened { approver: true, .. } => "awzy: an approval is waiting for you",
+        Notice::ChallengeOpened { approver: false, .. } => "awzy: a request of yours needs your answer",
+        Notice::ChallengeDecided { approved: true, .. } => "awzy: your request was approved",
+        Notice::ChallengeDecided { approved: false, .. } => "awzy: your request wasn't approved",
+        Notice::Containment { monitor: true, .. } => "awzy: a containment in monitor",
+        Notice::Containment { monitor: false, .. } => "awzy: a containment",
+        Notice::LiftRequested { .. } => "awzy: a request to lift a containment",
+        Notice::BreakGlass(_) => "awzy: a break-glass policy rollback",
     }
 }
 
@@ -280,10 +326,11 @@ pub fn render(notice: &Notice, portal_url: &str) -> String {
     }
 }
 
-/// Sends due notifications through Slack.
+/// Sends due notifications through each channel configured.
 pub struct Worker {
     pub pool: PgPool,
-    pub slack: Slack,
+    pub slack: Option<Slack>,
+    pub email: Option<Email>,
     pub portal_url: String,
     /// awzy-context, for the email a person's IdP provisioned (#65). Without it, only people
     /// whose `userName` is an email address are reached.
@@ -305,6 +352,23 @@ impl Worker {
         }
     }
 
+    /// Sends one notification through its channel.
+    async fn send(&self, channel: Channel, to: Recipient, notice: &Notice) -> anyhow::Result<()> {
+        let text = render(notice, &self.portal_url);
+        match (channel, &self.slack, &self.email) {
+            (Channel::Slack, Some(slack), _) => match to {
+                Recipient::Human(id) => slack.to_human(&self.address_of(&id).await, &text).await,
+                Recipient::Security => slack.to_security(&text).await,
+            },
+            (Channel::Email, _, Some(email)) => match to {
+                Recipient::Human(id) => email.to_human(&self.address_of(&id).await, subject(notice), &text).await,
+                Recipient::Security => email.to_security(subject(notice), &text).await,
+            },
+            // Recorded while the channel was on, and it's been turned off since.
+            _ => Err(anyhow::anyhow!("{} isn't configured any more", channel.as_str())),
+        }
+    }
+
     /// Sends what's due, every few seconds, for as long as the service runs.
     pub async fn run(self) {
         let mut ticks = tokio::time::interval(EVERY);
@@ -320,7 +384,7 @@ impl Worker {
     pub async fn pass(&self) -> anyhow::Result<usize> {
         let mut tx = self.pool.begin().await?;
         let rows = sqlx::query(
-            "SELECT id, kind, recipient, details, attempts FROM notifications
+            "SELECT id, channel, kind, recipient, details, attempts FROM notifications
              WHERE sent_at IS NULL AND next_attempt_at <= now() AND attempts < $1
              ORDER BY created_at LIMIT $2 FOR UPDATE SKIP LOCKED",
         )
@@ -333,14 +397,12 @@ impl Worker {
             let id: Uuid = row.try_get("id")?;
             let attempts: i32 = row.try_get("attempts")?;
             let notice: Result<Json<Notice>, _> = row.try_get("details");
-            let outcome = match (notice, Recipient::parse(row.try_get("recipient")?)) {
-                (Err(e), _) => Err(anyhow::anyhow!("unreadable notification: {e}")),
-                (Ok(n), Some(Recipient::Human(id))) => {
-                    let address = self.address_of(&id).await;
-                    self.slack.to_human(&address, &render(&n.0, &self.portal_url)).await
-                }
-                (Ok(n), Some(Recipient::Security)) => self.slack.to_security(&render(&n.0, &self.portal_url)).await,
-                (Ok(_), None) => Err(anyhow::anyhow!("unknown recipient")),
+            let channel = Channel::parse(row.try_get("channel")?);
+            let outcome = match (notice, channel, Recipient::parse(row.try_get("recipient")?)) {
+                (Err(e), _, _) => Err(anyhow::anyhow!("unreadable notification: {e}")),
+                (Ok(n), Some(channel), Some(to)) => self.send(channel, to, &n.0).await,
+                (Ok(_), None, _) => Err(anyhow::anyhow!("unknown channel")),
+                (Ok(_), _, None) => Err(anyhow::anyhow!("unknown recipient")),
             };
             match outcome {
                 Ok(()) => {
@@ -470,21 +532,32 @@ mod tests {
     }
 
     #[test]
-    fn recipients_round_trip() {
+    fn an_email_subject_says_whats_waiting_and_nothing_more() {
+        assert_eq!(subject(&opened(&["approval"], true)), "awzy: an approval is waiting for you");
+        assert_eq!(subject(&opened(&["justification"], false)), "awzy: a request of yours needs your answer");
+        assert!(!subject(&opened(&["justification"], false)).contains("Resource::plan"));
+    }
+
+    #[test]
+    fn recipients_and_channels_round_trip() {
+        for c in [Channel::Slack, Channel::Email] {
+            assert_eq!(Channel::parse(c.as_str()), Some(c));
+        }
         for r in [Recipient::Human("nora@larkspur.example".into()), Recipient::Security] {
             assert_eq!(Recipient::parse(&r.to_text()), Some(r));
         }
         assert_eq!(Recipient::parse("human:"), None);
     }
 
-    /// With the local stack: notifications are recorded only when turned on, and for whom.
+    /// With the local stack: notifications are recorded only when turned on, for whom, and once
+    /// for each channel.
     #[tokio::test]
     async fn an_approval_is_recorded_for_the_owner_and_the_security_team() {
         use crate::store::{tests::test_store, Lifetimes, RequestKey};
         use awzy_model::{Challenges, DecisionId, EntityRef};
 
         let Some(store) = test_store(Lifetimes::default()).await else { return };
-        let store = store.with_notifications();
+        let store = store.with_notifications(vec![Channel::Slack, Channel::Email]);
         let request = RequestKey {
             principal: EntityRef::new("ServiceAccount", "sales-genie"),
             on_behalf_of: Some(EntityRef::new("Human", "nora")),
@@ -499,10 +572,21 @@ mod tests {
         let again = store.resolve(DecisionId::new(), &request, required, Some("nora"), true).await.unwrap();
         assert_eq!((again.challenge_id, again.opened), (r.challenge_id, false));
 
-        let recipients: Vec<String> = sqlx::query_scalar("SELECT recipient FROM notifications ORDER BY recipient")
-            .fetch_all(store.pool())
-            .await
-            .unwrap();
-        assert_eq!(recipients, vec!["human:nora", "human:priya", "security"]);
+        let recipients: Vec<String> =
+            sqlx::query_scalar("SELECT channel || ' ' || recipient FROM notifications ORDER BY channel, recipient")
+                .fetch_all(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(
+            recipients,
+            vec![
+                "email human:nora",
+                "email human:priya",
+                "email security",
+                "slack human:nora",
+                "slack human:priya",
+                "slack security"
+            ]
+        );
     }
 }

@@ -1,5 +1,5 @@
 {
-  "checksum": "8fa5a0dec6b5dbbc20ea0e4627729d7c14cd2fef61041efdb069efae096d4e02",
+  "checksum": "4f602fa4e6276a3fb0a0dfca0e357f2af80a1bf7470b4a1de4b98e039632c505",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -108,6 +108,12 @@
       "x86_64-unknown-linux-gnu"
     ],
     "cfg(any(unix, target_os = \"hermit\", target_os = \"wasi\"))": [
+      "aarch64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-apple-darwin",
+      "x86_64-unknown-linux-gnu"
+    ],
+    "cfg(any(unix, target_os = \"redox\"))": [
       "aarch64-apple-darwin",
       "aarch64-unknown-linux-gnu",
       "x86_64-apple-darwin",
@@ -3409,6 +3415,10 @@
           {
             "id": "hyper-util 0.1.21",
             "target": "hyper_util"
+          },
+          {
+            "id": "lettre 0.11.23",
+            "target": "lettre"
           },
           {
             "id": "p256 0.13.2",
@@ -10176,6 +10186,77 @@
       ],
       "version": "0.13.8"
     },
+    "email-encoding 0.4.2": {
+      "common_attrs": {
+        "crate_features": [
+          "default",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "base64 0.23.1",
+            "target": "base64"
+          },
+          {
+            "id": "memchr 2.8.3",
+            "target": "memchr"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "email_encoding",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "email-encoding",
+      "package_url": "https://github.com/lettre/email-encoding",
+      "repository": {
+        "Http": {
+          "sha256": "420b9da095f052ea597503e39073b5b3c522f7db933fbac202d91d24492693fd",
+          "url": "https://static.crates.io/crates/email-encoding/0.4.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "email_encoding",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.4.2"
+    },
+    "email_address 0.2.9": {
+      "common_attrs": {
+        "edition": "2018"
+      },
+      "library_target_name": "email_address",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "email_address",
+      "package_url": "https://github.com/johnstonskj/rust-email_address.git",
+      "repository": {
+        "Http": {
+          "sha256": "e079f19b08ca6239f47f8ba8509c11cf3ea30095831f7fed61441475edd8c449",
+          "url": "https://static.crates.io/crates/email_address/0.2.9/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "email_address",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.2.9"
+    },
     "ena 0.14.4": {
       "common_attrs": {
         "deps": [
@@ -12590,6 +12671,59 @@
       ],
       "version": "0.5.12"
     },
+    "hostname 0.4.2": {
+      "common_attrs": {
+        "crate_features": [
+          "default"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.5",
+              "target": "cfg_if"
+            }
+          ],
+          "selects": {
+            "cfg(any(unix, target_os = \"redox\"))": [
+              {
+                "id": "libc 0.2.190",
+                "target": "libc"
+              }
+            ],
+            "cfg(target_os = \"windows\")": [
+              {
+                "id": "windows-link 0.2.1",
+                "target": "windows_link"
+              }
+            ]
+          }
+        },
+        "edition": "2021"
+      },
+      "library_target_name": "hostname",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "hostname",
+      "package_url": "https://github.com/djc/hostname",
+      "repository": {
+        "Http": {
+          "sha256": "617aaa3557aef3810a6369d0a99fac8a080891b68bd9f9812a1eeda0c0730cbd",
+          "url": "https://static.crates.io/crates/hostname/0.4.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hostname",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.4.2"
+    },
     "http 1.5.0": {
       "common_attrs": {
         "crate_features": [
@@ -13708,6 +13842,7 @@
         "crate_features": [
           "alloc",
           "compiled_data",
+          "default",
           "std"
         ],
         "deps": [
@@ -14633,6 +14768,130 @@
         }
       ],
       "version": "1.5.1"
+    },
+    "lettre 0.11.23": {
+      "common_attrs": {
+        "crate_features": [
+          "builder",
+          "hostname",
+          "ring",
+          "rustls",
+          "smtp-transport",
+          "tokio1",
+          "tokio1-rustls",
+          "webpki-roots"
+        ],
+        "deps": [
+          {
+            "id": "base64 0.23.1",
+            "target": "base64"
+          },
+          {
+            "id": "email-encoding 0.4.2",
+            "target": "email_encoding"
+          },
+          {
+            "id": "email_address 0.2.9",
+            "target": "email_address"
+          },
+          {
+            "id": "fastrand 2.5.0",
+            "target": "fastrand"
+          },
+          {
+            "id": "futures-io 0.3.34",
+            "target": "futures_io"
+          },
+          {
+            "id": "futures-util 0.3.34",
+            "target": "futures_util"
+          },
+          {
+            "id": "hostname 0.4.2",
+            "target": "hostname"
+          },
+          {
+            "id": "httpdate 1.0.3",
+            "target": "httpdate"
+          },
+          {
+            "id": "idna 1.1.0",
+            "target": "idna"
+          },
+          {
+            "id": "mime 0.3.17",
+            "target": "mime"
+          },
+          {
+            "id": "nom 8.0.0",
+            "target": "nom"
+          },
+          {
+            "id": "percent-encoding 2.3.2",
+            "target": "percent_encoding"
+          },
+          {
+            "id": "quoted_printable 0.5.2",
+            "target": "quoted_printable"
+          },
+          {
+            "id": "rustls 0.23.45",
+            "target": "rustls"
+          },
+          {
+            "id": "socket2 0.6.5",
+            "target": "socket2"
+          },
+          {
+            "alias": "tokio1_crate",
+            "id": "tokio 1.53.2",
+            "target": "tokio"
+          },
+          {
+            "alias": "tokio1_rustls",
+            "id": "tokio-rustls 0.26.6",
+            "target": "tokio_rustls"
+          },
+          {
+            "id": "url 2.5.8",
+            "target": "url"
+          },
+          {
+            "id": "webpki-roots 1.0.9",
+            "target": "webpki_roots"
+          }
+        ],
+        "edition": "2024",
+        "proc_macro_deps": [
+          {
+            "id": "async-trait 0.1.92",
+            "target": "async_trait"
+          }
+        ]
+      },
+      "library_target_name": "lettre",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "lettre",
+      "package_url": "https://github.com/lettre/lettre",
+      "repository": {
+        "Http": {
+          "sha256": "f2c646bd5cc763b1087b15493e29a64be6147ba8f19342004fa52048ee596eae",
+          "url": "https://static.crates.io/crates/lettre/0.11.23/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "lettre",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.11.23"
     },
     "libc 0.2.190": {
       "build_script_attrs": {},
@@ -15835,6 +16094,45 @@
         }
       ],
       "version": "0.26.4"
+    },
+    "nom 8.0.0": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "default",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "memchr 2.8.3",
+            "target": "memchr"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "nom",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "nom",
+      "package_url": "https://github.com/rust-bakery/nom",
+      "repository": {
+        "Http": {
+          "sha256": "df9761775871bdef83bee530e60050f7e54b1105350d6884eb0fb4f46c2f9405",
+          "url": "https://static.crates.io/crates/nom/8.0.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "nom",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "8.0.0"
     },
     "nonempty 0.12.0": {
       "common_attrs": {
@@ -19107,6 +19405,38 @@
         }
       ],
       "version": "1.0.47"
+    },
+    "quoted_printable 0.5.2": {
+      "common_attrs": {
+        "crate_features": [
+          "default",
+          "std"
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "quoted_printable",
+      "license": "0BSD",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "0BSD"
+      ],
+      "name": "quoted_printable",
+      "package_url": "https://github.com/staktrace/quoted-printable",
+      "repository": {
+        "Http": {
+          "sha256": "478e0585659a122aa407eb7e3c0e1fa51b1d8a870038bd29f0cf4a8551eea972",
+          "url": "https://static.crates.io/crates/quoted_printable/0.5.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "quoted_printable",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.5.2"
     },
     "r-efi 5.3.0": {
       "common_attrs": {
@@ -29732,6 +30062,7 @@
     "hyper-rustls 0.27.10",
     "hyper-util 0.1.21",
     "jsonwebtoken 11.1.0",
+    "lettre 0.11.23",
     "opentelemetry 0.31.0",
     "opentelemetry-otlp 0.31.1",
     "opentelemetry_sdk 0.31.0",

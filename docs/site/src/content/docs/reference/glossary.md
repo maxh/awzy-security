@@ -10,7 +10,7 @@ them. Both are checked, and the stricter verdict wins, so an agent never gets mo
 them could. See [People, agents, and delegation](/concepts/principals-and-delegation/).
 
 **Action.** What a principal wants to do: `read` and `write` on a resource, `call` on an MCP tool,
-`view` and `administer` on a portal area, `switch_enforcement` to switch between monitor and
+`view`, `audit`, and `administer` on a portal area, `switch_enforcement` to switch between monitor and
 enforce, and `approve` on someone else's challenged request.
 
 **Actor.** Who did something that awzy records, such as publishing a bundle or lifting a
@@ -121,11 +121,11 @@ calls, and the client portal serves its own MCP endpoint.
 enforcement points allow everything, so you can see what enforcing would do first. See
 [Monitor, then enforce](/concepts/monitor-and-enforce/).
 
-**Notifications.** Messages in your own Slack when something waits for someone: a person who
+**Notifications.** Messages in your own Slack, or by email through your own mail relay, when something waits for someone: a person who
 needs to give a reason or touch their security key, an owner or the security team asked to
 approve, a requester whose request was decided, and the security team about containments. They
 link into the client portal and never carry document contents or evidence. Off until you add a
-Slack app's token.
+Slack app's token or a mail relay.
 
 **Policy.** A Cedar `permit` or `forbid` rule. A `forbid` annotated with `@challenge(...)` asks for
 a challenge instead of denying.

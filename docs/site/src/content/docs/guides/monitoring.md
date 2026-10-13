@@ -59,6 +59,23 @@ that's already running. So a new PDP that stays not ready usually means a source
 other PDP is running: check that awzy-policy is ready, and look for signature errors in the PDP's
 log.
 
+### AwzyServiceOnOnePod (ticket)
+
+A service that runs two or more pods has had only one ready for 5 minutes. Nothing has failed,
+but losing that pod takes the service down, and for the PDP, every enforcement point falls back.
+`kubectl -n awzy-system get pods -o wide` shows the missing pods and where they'd go. Pods
+`Pending` with "Insufficient cpu" mean the cluster has no room for them, often after a node was
+lost or drained: add a node or larger ones. Two PDPs on one node is the same risk, so check
+where they run.
+
+### AwzyPdpChecksSlow (page)
+
+The PDP's p99 check time has been over half a second for a minute, close to the time enforcement
+points wait before they use their outage fallback (2 s at awzy-gateway). It's almost always the
+PDP waiting on a service that takes connections but doesn't answer: awzy-context with its
+database down, or one with no ready pods. Check the freshness alerts below and the services
+behind them. When they recover, so does this.
+
 ### AwzyPdpCheckLatencyHigh (page)
 
 The PDP's p99 check time has been over 10 ms for 10 minutes. On the dashboard, compare Cedar time

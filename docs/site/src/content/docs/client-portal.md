@@ -14,11 +14,13 @@ only your install's data.
 People sign in through your IdP (OpenID Connect). There are no awzy passwords.
 
 What someone can see and change is decided by awzy itself: every page and every action is a check
-against your policies, as `view` or `administer` on a **portal area**. The areas are
-`decisions`, `policies`, `enforcement`, `directory`, `challenges`, and `investigations`. The base
-policies let your security team view and administer all of them, and let everyone view
-`challenges`, so they can answer their own. You can change that like any other policy, for
-example to let auditors view decisions but change nothing.
+against your policies, as `view`, `audit`, or `administer` on a **portal area**. `view` shows
+what anyone allowed in the area sees, `audit` everything in it without changing anything (every
+challenge and containment, where `view` shows only your own), and `administer` lets you change
+what it controls. The areas are `decisions`, `policies`, `enforcement`, `directory`,
+`challenges`, and `investigations`. The base policies give your security team all three on every
+area, and let everyone view `challenges`, so they can answer their own. You can change that like
+any other policy, for example to let auditors view and audit everything but change nothing.
 
 These checks apply even while the install is in monitor mode: the portal always enforces its own
 access. Every change made in the portal is recorded with who made it.
@@ -103,7 +105,7 @@ What's waiting for people. See [Challenges and containment](/concepts/challenges
   only your sign-in; changing them later needs a key you already have. Admins can reset someone's
   keys when one is lost.
 
-When your install connects Slack, people get a message when something waits for them here, with
+When your install has notifications on (Slack or email), people get a message when something waits for them here, with
 a link.
 
 ### Investigations

@@ -35,8 +35,8 @@ Leave **automated containments** in monitor for longer, and switch them separate
 - **Approvals.** On the Challenges page, under *Waiting for approval*, approve or reject requests,
   with a note. You see every request; resource owners see, and approve, the ones for what they
   own. With
-  [Slack connected](/guides/optional-features/#slack-notifications), each request reaches your
-  team's channel with a link.
+  [notifications](/guides/optional-features/#notifications) on, each request reaches your team's
+  Slack channel or email address with a link.
 - **Containments.** Contain a principal yourself when you see something wrong, and lift a
   containment once you've reviewed it, with what you found. Review awzy-reasoner's
   *Would contain* records: contain the person, or dismiss the record.
@@ -51,13 +51,17 @@ Leave **automated containments** in monitor for longer, and switch them separate
 
 ## Changing who can do what
 
-The portal's own access is policy too: `view` and `administer` on each portal area. To let
-auditors read decisions and change nothing, for example:
+The portal's own access is policy too: `view`, `audit`, and `administer` on each portal area.
+`audit` sees everything in an area and changes nothing, such as every challenge and containment.
+To let auditors read decisions and change nothing, for example:
 
 ```cedar
 permit (principal in Group::"auditors", action == Action::"view",
         resource == PortalArea::"decisions");
 ```
+
+To let them see everything in the portal, every challenge and containment included, and still
+change nothing, see [external auditors](/workflows/auditors/#getting-read-only-access).
 
 Within an area, a few sensitive fields are checked on their own: a decision's request context, a
 person's attributes and risk score, a resource's sharing, and a challenge's justification.

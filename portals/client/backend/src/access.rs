@@ -51,6 +51,9 @@ pub enum PortalAction {
     View,
     /// Change what an area controls: publish policy, switch enforcement.
     Administer,
+    /// See everything in an area and change nothing (ADR 0121): every challenge and containment,
+    /// where `view` shows only your own.
+    Audit,
 }
 
 impl PortalAction {
@@ -58,6 +61,7 @@ impl PortalAction {
         match self {
             Self::View => "view",
             Self::Administer => "administer",
+            Self::Audit => "audit",
         }
     }
 }
@@ -69,7 +73,8 @@ pub enum PortalArea {
     Enforcement,
     /// People and groups from the IdP, and service accounts.
     Directory,
-    /// `view`: answer your own challenges. `administer`: every challenge, and containments.
+    /// `view`: answer your own challenges. `audit`: see every challenge and containment.
+    /// `administer`: approve requests, and contain and lift principals.
     Challenges,
     /// `view`: awzy-reasoner's investigations (ADR 0071). `administer`: close them.
     Investigations,
@@ -273,6 +278,27 @@ pub(crate) async fn require(
     let services = ctx.data::<Services>()?;
     authorize(services, &viewer, Surface::Portal, action, area).await.map_err(|e| e.extend())?;
     Ok(viewer)
+}
+
+/// [`require`] for a read of everyone's records in `area`: `audit` (ADR 0121), or `administer`,
+/// which can see what it changes. Asks `audit` first, so an auditor's reads aren't logged as
+/// denied `administer` checks. Returns the action that was allowed, to recheck a live feed with.
+pub(crate) async fn require_to_see_all(
+    ctx: &Context<'_>,
+    area: PortalArea,
+) -> async_graphql::Result<(Viewer, PortalAction)> {
+    let viewer = signed_in(ctx)?.clone();
+    let services = ctx.data::<Services>()?;
+    match authorize(services, &viewer, Surface::Portal, PortalAction::Audit, area).await {
+        Ok(()) => Ok((viewer, PortalAction::Audit)),
+        Err(AccessError::Denied { .. } | AccessError::Challenged { .. }) => {
+            authorize(services, &viewer, Surface::Portal, PortalAction::Administer, area)
+                .await
+                .map_err(|e| e.extend())?;
+            Ok((viewer, PortalAction::Administer))
+        }
+        Err(e) => Err(e.extend()),
+    }
 }
 
 /// Validates bearer tokens for the portal.
