@@ -17,6 +17,8 @@
 //!
 //! If awzy-context can't be reached, an expired entry is still used, but only for as long as its
 //! sensitivity tier allows (ADR 0119): a stale attribute matters more on a sensitive resource.
+//! After a fetch fails, checks don't ask awzy-context again for a second, so an outage costs one
+//! timeout rather than one per check.
 //! Past that, or with nothing cached, the check fails and the enforcement point uses its fallback
 //! (ADR 0030): deciding a crown-jewel document as "internal" because awzy-context was down would
 //! be worse.
@@ -53,6 +55,9 @@ const UNKNOWN_TTL: Duration = Duration::from_secs(5);
 /// Entries kept before expired ones are dropped, and then everything if none had expired.
 const CAPACITY: usize = 100_000;
 const TIMEOUT: Duration = Duration::from_secs(1);
+/// After a fetch fails, checks skip awzy-context for this long and go straight to a stale entry
+/// or a peer, so an outage that hangs requests doesn't add the timeout to every check (#353).
+const PAUSE_AFTER_FAILED_FETCH: Duration = Duration::from_secs(1);
 
 /// How long an expired entry may still be used while awzy-context can't be reached, by the
 /// resource's sensitivity tier (ADR 0119). A tier not listed, and a resource awzy-context didn't
@@ -204,6 +209,8 @@ pub struct Resources {
     started: Instant,
     /// Milliseconds after `started`, plus one, when the change log last answered; 0: never.
     feed_heard_ms: AtomicU64,
+    /// Milliseconds after `started` until which fetches are skipped after one failed.
+    fetches_paused_until_ms: AtomicU64,
 }
 
 impl Resources {
@@ -228,6 +235,7 @@ impl Resources {
             peers: None,
             started: Instant::now(),
             feed_heard_ms: AtomicU64::new(0),
+            fetches_paused_until_ms: AtomicU64::new(0),
         }
     }
 
@@ -367,7 +375,11 @@ impl Resources {
                 _ => None,
             }
         };
-        match self.fetch(endpoint, id).await {
+        let fetched = match self.fetches_paused() {
+            true => Err(anyhow::anyhow!("awzy-context didn't answer a moment ago")),
+            false => self.fetch(endpoint, id).await.inspect_err(|_| self.pause_fetches()),
+        };
+        match fetched {
             Ok(entities) => {
                 crate::metrics::RESOURCE_FETCHES.inc();
                 self.store(id, entities.clone());
@@ -391,6 +403,19 @@ impl Resources {
                 }
             }
         }
+    }
+
+    fn now_ms(&self) -> u64 {
+        u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX)
+    }
+
+    fn fetches_paused(&self) -> bool {
+        self.now_ms() < self.fetches_paused_until_ms.load(Ordering::Acquire)
+    }
+
+    fn pause_fetches(&self) {
+        let pause = u64::try_from(PAUSE_AFTER_FAILED_FETCH.as_millis()).unwrap_or(u64::MAX);
+        self.fetches_paused_until_ms.store(self.now_ms().saturating_add(pause), Ordering::Release);
     }
 
     async fn fetch(&self, endpoint: &str, id: &str) -> anyhow::Result<Option<Arc<Loaded>>> {
@@ -606,6 +631,34 @@ mod tests {
             starting.merge(json!([]), &resource("drive:elsewhere")).await.is_err(),
             "a resource no peer has still fails closed"
         );
+    }
+
+    #[tokio::test]
+    async fn an_awzy_context_that_hangs_costs_one_timeout_not_one_per_check() {
+        // Accepts connections and never answers, as awzy-context does while its database is down.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            let mut held = Vec::new();
+            while let Ok((socket, _)) = listener.accept().await {
+                held.push(socket);
+            }
+        });
+        let (fresh, _) = context().await;
+        let r = Resources::new(Some(fresh), Duration::ZERO, Duration::ZERO);
+        r.merge(json!([]), &resource("drive:plans/fy27")).await.unwrap();
+        let cached = r.cache.read().unwrap()["drive:plans/fy27"].entities.clone();
+
+        let hanging = Resources::new(Some(url), Duration::ZERO, Duration::ZERO);
+        hanging.store("drive:plans/fy27", cached);
+        let first = Instant::now();
+        assert!(hanging.merge(json!([]), &resource("drive:plans/fy27")).await.unwrap().stale);
+        assert!(first.elapsed() >= TIMEOUT, "the first check waits for awzy-context");
+        let next = Instant::now();
+        for _ in 0..10 {
+            assert!(hanging.merge(json!([]), &resource("drive:plans/fy27")).await.unwrap().stale);
+        }
+        assert!(next.elapsed() < Duration::from_millis(100), "the next ones don't, for a second");
     }
 
     #[test]
