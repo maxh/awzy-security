@@ -740,8 +740,8 @@ fn an_unmarked_added_type_fails_validation() {
     assert!(err.contains("mark it @awzy(\"app\")"), "{err}");
 }
 
-#[test]
-fn a_decision_names_the_inputs_it_was_made_on_while_stale() {
+#[tokio::test]
+async fn a_decision_names_the_inputs_it_was_made_on_while_stale() {
     let state = AppState::new(shared(Pdp::with_defaults().unwrap())).with_challenges(
         Arc::new(containments::Containments::from_challenge("http://127.0.0.1:9").unwrap()),
         Arc::new(challenges::ChallengeResolver::none()),
