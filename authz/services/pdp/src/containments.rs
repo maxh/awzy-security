@@ -378,8 +378,8 @@ mod tests {
         assert_eq!(c.find(&[&mallory]).await.unwrap(), ["containment_1"], "the containment stands");
     }
 
-    #[test]
-    fn a_list_from_a_peer_never_replaces_a_newer_one() {
+    #[tokio::test]
+    async fn a_list_from_a_peer_never_replaces_a_newer_one() {
         let c = Containments::from_challenge("http://127.0.0.1:9").unwrap();
         assert!(c.load_list(7, vec![], Duration::ZERO));
         assert!(!c.load_list(6, vec![], Duration::from_secs(3)));
