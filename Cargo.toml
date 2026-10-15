@@ -85,7 +85,7 @@ http = "1"
 http-body-util = "0.1"
 # rustls with ring: aws-lc-rs needs CMake, which the hermetic Bazel toolchain doesn't have.
 hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "ring", "tls12", "webpki-tokio"] }
-rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-pki-types = "1"
 webpki-roots = "1"
 hyper = "1"
