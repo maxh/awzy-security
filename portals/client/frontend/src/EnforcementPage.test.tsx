@@ -3,8 +3,8 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { loadQuery } from "react-relay";
 import type { OperationDescriptor } from "relay-runtime";
-import { createMockEnvironment, MockPayloadGenerator } from "relay-test-utils";
-import { describe, expect, it, vi } from "vitest";
+import { createMockEnvironment, MockPayloadGenerator, type RelayMockEnvironment } from "relay-test-utils";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 import enforcementPageQuery, { type EnforcementPageQuery } from "./__generated__/EnforcementPageQuery.graphql";
 import { EnforcementPage } from "./EnforcementPage";
@@ -27,13 +27,30 @@ vi.mock(import("./securityKeyChallenge"), async (importOriginal) => ({
 }));
 
 /**
+ * Answers each operation the page sends, as it's sent, with `answer`: the page's query, the
+ * sections' own queries, and each mutation. (The mock environment's own queued resolvers don't
+ * see an operation `loadQuery` starts.)
+ */
+function answerEverything(
+  environment: RelayMockEnvironment,
+  answer: (operation: OperationDescriptor) => ReturnType<typeof MockPayloadGenerator.generate>,
+) {
+  const timer = setInterval(() => {
+    for (const operation of environment.mock.getAllOperations()) {
+      environment.mock.resolve(operation, answer(operation));
+    }
+  }, 5);
+  onTestFinished(() => clearInterval(timer));
+}
+
+/**
  * The Enforcement page for someone policy lets switch (or not), in monitor mode. Each switch
  * answers with `answers` in turn: a challenge to pass first, or the switch made.
  */
 function renderEnforcement({ canSwitch, answers }: { canSwitch: boolean; answers: ("challenge" | "switched")[] }) {
   const environment = createMockEnvironment();
   const switches: unknown[] = [];
-  environment.mock.queueOperationResolver((operation: OperationDescriptor) => {
+  answerEverything(environment, (operation: OperationDescriptor) => {
     if (operation.request.node.params.name === "EnforcementPageSetModeMutation") {
       switches.push(operation.request.variables);
       const answer = answers[switches.length - 1];
@@ -45,9 +62,11 @@ function renderEnforcement({ canSwitch, answers }: { canSwitch: boolean; answers
       });
     }
     return MockPayloadGenerator.generate(operation, {
-      Query: () => ({ canSwitch }),
+      Query: () => ({ canSwitch, enforcementScopes: [] }),
+      OutageFallback: () => ({ tools: [], servers: [], failOpenTiers: [], changedAt: null, changedBy: null }),
       Enforcement: () => ({ mode: "MONITOR", changedAt: null, changedBy: null }),
       EnforcementSummary: () => ({ since: "2026-10-14T12:00:00Z", total: 100, monitored: 100 }),
+      Decision: () => ({ at: "2026-10-15T09:00:00Z", policies: ["contractors-outside-their-work"] }),
     });
   });
   const invalidate = vi.fn(() => Promise.resolve());
