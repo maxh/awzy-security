@@ -45,6 +45,12 @@ machine ContextDb {
       var changed: bool;
       horizon = nextSeq;
       foreach (s in values(running)) { if (s < horizon) { horizon = s; } }
+      if (Bug() == 1) {
+        // The bigserial cursor: just past the newest row committed, running writes or not.
+        horizon = c.after;
+        if (horizon < 1) { horizon = 1; }
+        foreach (s in committed) { if (s + 1 > horizon) { horizon = s + 1; } }
+      }
       if (c.after >= 0) {
         foreach (s in committed) {
           if (s >= c.after && s < horizon) { changed = true; }

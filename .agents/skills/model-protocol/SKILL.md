@@ -29,5 +29,10 @@ ADR 0126 has the why. The containment feed is the worked example:
 6. **Fix bugs in both.** Change the model to the fixed design, change the Rust to match, and add a
    Rust test that reproduces each bug, named for the behavior. Record the bugs found and any
    change to a decision in an ADR (see `write-adr`).
-7. **Keep it in step.** A PR that changes a file with a `.p` beside it changes the model, or says
-   in its description why it doesn't need to.
+7. **Keep each bug behind a switch.** The protocol's folder has a `bugs.p` with
+   `fun Bug(): int { return 0; }` and a line per bug, `// bug <n> breaks <test>: <what it was>`.
+   Where the fix is in the model, keep the old behavior when `Bug() == <n>`. CI puts each back
+   and fails unless its test breaks. A bug the checker only reached by reasoning, not by
+   itself, gets a note in `bugs.p` instead of a line.
+8. **Keep it in step.** A PR that changes a file with a `.p` beside it changes the model, or says
+   in its description why it doesn't need to. CI warns when it doesn't.

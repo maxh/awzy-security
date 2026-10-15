@@ -62,7 +62,7 @@ machine ChallengeStore {
           // given before it asked isn't one (ADR 0080).
           c = challenges[id];
           foreach (p in unanswered) {
-            if (!(p in c.policies)) { c.passed -= (KindOf(p)); }
+            if (!(p in c.policies) && Bug() != 1) { c.passed -= (KindOf(p)); }
             c.policies += (p);
             c.kinds += (KindOf(p));
           }

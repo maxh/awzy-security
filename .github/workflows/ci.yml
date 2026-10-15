@@ -91,7 +91,8 @@ jobs:
             echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   # The P models of protocols between services (ADR 0126): each property, over a few thousand
-  # schedules. A failure prints the trace that broke it.
+  # schedules, and each bug a model found put back, which must break its property. A failure
+  # prints the trace that broke it. p-models-nightly.yml runs many more schedules.
   p-models:
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -100,6 +101,11 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the drift warning compares with the pull request's base
+      - name: Models changed with their code
+        if: github.event_name == 'pull_request'
+        run: tools/ci/check-p-drift.sh "${{ github.event.pull_request.base.sha }}"
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"

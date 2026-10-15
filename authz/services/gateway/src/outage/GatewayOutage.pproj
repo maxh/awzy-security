@@ -3,6 +3,7 @@
   <ProjectName>GatewayOutage</ProjectName>
   <InputFiles>
     <PFile>./events.p</PFile>
+    <PFile>./bugs.p</PFile>
     <PFile>./timings.p</PFile>
     <PFile>./specs.p</PFile>
     <PFile>./test.p</PFile>

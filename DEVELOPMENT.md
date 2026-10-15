@@ -116,7 +116,14 @@ needs .NET 8 (`brew install dotnet@8`) and the P toolchain:
 dotnet tool install --global P --version 3.1.0
 tools/ci/check-p-models.sh                        # every model, 3000 schedules per property
 AWZY_P_SCHEDULES=200 tools/ci/check-p-models.sh authz/services/challenge/src/feed/ContainmentFeed.pproj
+AWZY_P_BUGS=0 tools/ci/check-p-models.sh          # without putting back the bugs each found
 ```
+
+After the properties, the script puts back each bug a model's `bugs.p` lists, one at a time,
+and fails unless the property named for it breaks, so a model can't quietly stop catching what
+it caught. The checker samples schedules rather than trying them all, so `p-models-nightly`
+runs every model over 50,000. On a pull request, CI warns about a `.rs` that changed while the
+`.p` beside it didn't.
 
 A failure prints the trace that broke the property. `p check` in the project's folder writes the
 full trace under `PCheckerOutput/`, which git ignores. In zsh, `p` may be an alias (for `git

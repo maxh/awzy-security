@@ -83,7 +83,7 @@ machine ChangeFollower {
         case eChangesAnswer: (a: (cursor: int, changed: bool, reset: bool)) {
           // The first answer only sets the cursor, so what was cached before it, or fetched
           // while it was asked, may predate a change it will never name: dropped too.
-          if (a.changed || a.reset || cursor < 0) { send cache, eInvalidate; }
+          if (a.changed || a.reset || (cursor < 0 && Bug() != 2)) { send cache, eInvalidate; }
           cursor = a.cursor;
         }
       }
