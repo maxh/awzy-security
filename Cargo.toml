@@ -42,6 +42,11 @@ members = [
     "portals/corp/backend",
     "portals/corp/registry",
 ]
+# cargo-fuzz targets (#429): built by cargo-fuzz on nightly in CI, not by Bazel.
+exclude = [
+    "authz/libs/signing/fuzz",
+    "libs/model/fuzz",
+]
 
 [workspace.package]
 version = "0.1.0"

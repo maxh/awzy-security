@@ -132,6 +132,23 @@ A failure prints the trace that broke the property. `p check` in the project's f
 full trace under `PCheckerOutput/`, which git ignores. In zsh, `p` may be an alias (for `git
 push`, say); `unalias p` first.
 
+### Fuzzing
+
+Code that parses what an attacker controls has cargo-fuzz targets in a `fuzz/` folder beside it
+(`libs/model/fuzz`, `authz/libs/signing/fuzz`), outside the Cargo workspace and Bazel. The `fuzz`
+workflow runs each for a minute on a pull request that changes fuzzed code and for half an hour
+nightly. To run one (Linux, or a Mac with Xcode's C++ headers):
+
+```sh
+cargo install cargo-fuzz
+cd libs/model/fuzz && cargo +nightly fuzz run qid -- -max_total_time=60
+tools/ci/fuzz.sh                                  # every target, AWZY_FUZZ_SECONDS each
+```
+
+A crash leaves its input in `fuzz/artifacts/<target>/`. Fix it, and add a test with that input
+beside the code. A new parser of untrusted input gets a target: a `[[bin]]` in that `fuzz/Cargo.toml`
+and a file in `fuzz_targets/`, or a new `fuzz/` folder added to the root `Cargo.toml`'s `exclude`.
+
 ### Images
 
 Every service gets `:image_index` (the release image) from the `awzy_service` macro. Linux
