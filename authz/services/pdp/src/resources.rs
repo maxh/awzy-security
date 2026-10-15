@@ -15,6 +15,12 @@
 //! 0077), including every one under a changed folder. While that feed is heard from, entries
 //! live longer; when it isn't, they expire as they did before it.
 //!
+//! A fetch races the change log: awzy-context may change the resource after answering and the
+//! change arrive before the fetch is cached. So each drop is logged, and a fetch isn't cached if
+//! a drop since it began touches what it fetched; and the change log's first answer, which only
+//! sets the cursor, drops everything cached before it. The P model beside this file
+//! (`resources.p`, ADR 0126) checks both.
+//!
 //! If awzy-context can't be reached, an expired entry is still used, but only for as long as its
 //! sensitivity tier allows (ADR 0119): a stale attribute matters more on a sensitive resource.
 //! After a fetch fails, checks don't ask awzy-context again for a second, so an outage costs one
@@ -58,6 +64,8 @@ const TIMEOUT: Duration = Duration::from_secs(1);
 /// After a fetch fails, checks skip awzy-context for this long and go straight to a stale entry
 /// or a peer, so an outage that hangs requests doesn't add the timeout to every check (#353).
 const PAUSE_AFTER_FAILED_FETCH: Duration = Duration::from_secs(1);
+/// Drops remembered for fetches in flight. A fetch that began before the oldest isn't cached.
+const DROPS_KEPT: usize = 256;
 
 /// How long an expired entry may still be used while awzy-context can't be reached, by the
 /// resource's sensitivity tier (ADR 0119). A tier not listed, and a resource awzy-context didn't
@@ -193,6 +201,40 @@ impl Cached {
     }
 }
 
+/// Recent drops from the cache, for telling whether a fetch in flight saw what they dropped.
+#[derive(Default)]
+struct Drops {
+    /// The number the next drop gets.
+    next: u64,
+    /// The last [`DROPS_KEPT`], oldest first, each with its number: the IDs, or None for all.
+    recent: std::collections::VecDeque<(u64, Option<HashSet<String>>)>,
+}
+
+impl Drops {
+    fn record(&mut self, ids: Option<HashSet<String>>) {
+        self.recent.push_back((self.next, ids));
+        self.next += 1;
+        if self.recent.len() > DROPS_KEPT {
+            self.recent.pop_front();
+        }
+    }
+
+    /// Whether a drop numbered `since` or later touches any of `ids`, or might have: one that
+    /// dropped everything, or one no longer remembered.
+    fn touched_since(&self, since: u64, ids: &[&str]) -> bool {
+        if since >= self.next {
+            return false;
+        }
+        if self.recent.front().is_none_or(|(n, _)| *n > since) {
+            return true;
+        }
+        self.recent
+            .iter()
+            .filter(|(n, _)| *n >= since)
+            .any(|(_, dropped)| dropped.as_ref().is_none_or(|d| ids.iter().any(|i| d.contains(*i))))
+    }
+}
+
 pub struct Resources {
     /// awzy-context's base URL; `None` when the PDP runs without it.
     endpoint: Option<String>,
@@ -200,6 +242,9 @@ pub struct Resources {
     /// This process's service token for awzy-context (ADR 0055).
     tokens: awzy_service_auth::TokenSource,
     cache: RwLock<HashMap<String, Cached>>,
+    /// The recent drops, numbered: the IDs dropped, or None for everything. Changed only with
+    /// `cache` held for writing.
+    drops: std::sync::Mutex<Drops>,
     ttl: Duration,
     unknown_ttl: Duration,
     stale_limits: StaleLimits,
@@ -229,6 +274,7 @@ impl Resources {
             client: awzy_http::client(),
             tokens: awzy_service_auth::TokenSource::from_env(),
             cache: RwLock::default(),
+            drops: std::sync::Mutex::default(),
             ttl,
             unknown_ttl,
             stale_limits: StaleLimits::default(),
@@ -272,6 +318,7 @@ impl Resources {
         }
         let changed: HashSet<&str> = ids.iter().map(String::as_str).collect();
         let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
+        self.drops().record(Some(ids.iter().cloned().collect()));
         cache.retain(|id, c| {
             let in_chain = c.entities.as_ref().is_some_and(|l| {
                 l.entities.iter().any(|e| e["uid"]["id"].as_str().is_some_and(|i| changed.contains(i)))
@@ -289,9 +336,13 @@ impl Resources {
                 Ok((next, ids, reset)) => {
                     self.feed_heard_ms.store(self.started.elapsed().as_millis() as u64 + 1, Ordering::Release);
                     crate::metrics::RESOURCE_FEED.succeeded();
-                    if reset {
-                        self.cache.write().unwrap_or_else(|e| e.into_inner()).clear();
-                        tracing::info!("resource change log reset; dropped every cached resource");
+                    // The first answer only sets the cursor: what's cached may predate a change it
+                    // will never name.
+                    if reset || cursor.is_none() {
+                        self.clear();
+                        if reset {
+                            tracing::info!("resource change log reset; dropped every cached resource");
+                        }
                     } else {
                         self.invalidate(&ids);
                     }
@@ -375,6 +426,7 @@ impl Resources {
                 _ => None,
             }
         };
+        let began = self.drops().next;
         let fetched = match self.fetches_paused() {
             true => Err(anyhow::anyhow!("awzy-context didn't answer a moment ago")),
             false => self.fetch(endpoint, id).await.inspect_err(|_| self.pause_fetches()),
@@ -382,7 +434,7 @@ impl Resources {
         match fetched {
             Ok(entities) => {
                 crate::metrics::RESOURCE_FETCHES.inc();
-                self.store(id, entities.clone());
+                self.store_fetched(id, entities.clone(), began);
                 Ok((entities, false))
             }
             Err(error) => {
@@ -461,12 +513,43 @@ impl Resources {
         Some(entities)
     }
 
+    fn drops(&self) -> std::sync::MutexGuard<'_, Drops> {
+        self.drops.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Drops everything.
+    fn clear(&self) {
+        let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
+        self.drops().record(None);
+        cache.clear();
+    }
+
+    /// Caches what a fetch that began at drop `began` got, unless a drop since touches it.
+    fn store_fetched(&self, id: &str, entities: Option<Arc<Loaded>>, began: u64) {
+        let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
+        let chain: Vec<&str> = entities
+            .iter()
+            .flat_map(|l| l.entities.iter())
+            .filter_map(|e| e["uid"]["id"].as_str())
+            .chain(std::iter::once(id))
+            .collect();
+        if self.drops().touched_since(began, &chain) {
+            return;
+        }
+        self.insert(&mut cache, id, Cached { at: Instant::now(), entities });
+    }
+
+    #[cfg(test)]
     fn store(&self, id: &str, entities: Option<Arc<Loaded>>) {
         self.store_cached(id, Cached { at: Instant::now(), entities });
     }
 
     fn store_cached(&self, id: &str, cached: Cached) {
         let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
+        self.insert(&mut cache, id, cached);
+    }
+
+    fn insert(&self, cache: &mut HashMap<String, Cached>, id: &str, cached: Cached) {
         if cache.len() >= CAPACITY && !cache.contains_key(id) {
             // What can't stand in during an outage goes first, then what's merely expired.
             cache.retain(|_, c| self.usable_stale(c));
@@ -698,5 +781,33 @@ mod tests {
     #[test]
     fn ids_are_one_path_segment() {
         assert_eq!(awzy_http::encode("synthetic:folder:sales/accounts"), "synthetic%3Afolder%3Asales%2Faccounts");
+    }
+
+    #[test]
+    fn a_drop_touches_the_fetches_in_flight_for_what_it_dropped() {
+        let mut drops = Drops::default();
+        drops.record(Some(HashSet::from(["synthetic:folder:board".to_string()])));
+        let chain = ["synthetic:doc:deck", "synthetic:folder:board"];
+        assert!(drops.touched_since(0, &chain), "the folder above the document changed");
+        assert!(!drops.touched_since(1, &chain), "a fetch that began after it");
+        assert!(!drops.touched_since(0, &["synthetic:doc:other"]));
+        drops.record(None);
+        assert!(drops.touched_since(1, &["synthetic:doc:other"]), "a reset touches everything");
+        for _ in 0..DROPS_KEPT {
+            drops.record(Some(HashSet::new()));
+        }
+        assert!(drops.touched_since(0, &["synthetic:doc:other"]), "one no longer remembered might have");
+    }
+
+    #[tokio::test]
+    async fn a_fetch_that_raced_a_change_isnt_cached() {
+        let r = Resources::from_context("http://127.0.0.1:9".into());
+        let began = r.drops().next;
+        r.invalidate(&["synthetic:doc:1".to_string()]);
+        r.store_fetched("synthetic:doc:1", None, began);
+        assert!(!r.cache.read().unwrap().contains_key("synthetic:doc:1"), "fetched before the change");
+        let began = r.drops().next;
+        r.store_fetched("synthetic:doc:1", None, began);
+        assert!(r.cache.read().unwrap().contains_key("synthetic:doc:1"), "nothing dropped since");
     }
 }

@@ -128,6 +128,19 @@ fn sharing_comes_from_the_resource_and_its_folders() {
     assert!(entity(&public)["attrs"].get("owner").is_none(), "no owner, no attribute");
 }
 
+/// The change log from `after` once it names `want`: other tests' transactions running at the
+/// same time hold its horizon back for a moment.
+async fn changes_naming(store: &ContextStore, after: i64, want: usize) -> (i64, Vec<String>, bool) {
+    for _ in 0..100 {
+        let answer = store.resource_changes(Some(after), 100).await.unwrap();
+        if answer.1.len() >= want || answer.2 {
+            return answer;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    store.resource_changes(Some(after), 100).await.unwrap()
+}
+
 #[tokio::test]
 async fn the_change_log_names_every_resource_whose_entity_may_have_changed() {
     let Some(store) = test_store().await else { return };
@@ -135,7 +148,7 @@ async fn the_change_log_names_every_resource_whose_entity_may_have_changed() {
     assert!(ids.is_empty() && !reset, "a first call only gets the cursor");
 
     store.put_resources(&[doc("synthetic:doc:1")]).await.unwrap();
-    let (cursor, ids, _) = store.resource_changes(Some(start), 100).await.unwrap();
+    let (cursor, ids, _) = changes_naming(&store, start, 1).await;
     assert_eq!(ids, ["synthetic:doc:1"]);
 
     // Work changes the assignees of what it links, before and after.
@@ -151,11 +164,31 @@ async fn the_change_log_names_every_resource_whose_entity_may_have_changed() {
     };
     store.put_work_items(&[work]).await.unwrap();
     assert!(store.delete_resource("synthetic:doc:1").await.unwrap());
-    let (_, ids, reset) = store.resource_changes(Some(cursor), 100).await.unwrap();
+    let (_, ids, reset) = changes_naming(&store, cursor, 2).await;
     assert_eq!((ids, reset), (vec!["synthetic:doc:1".to_string(), "synthetic:doc:2".to_string()], false));
 
-    let (_, _, reset) = store.resource_changes(Some(start - 1_000_000), 100).await.unwrap();
-    assert!(reset || start < 1_000_000, "a cursor the log no longer reaches resets");
+    let (_, _, reset) = store.resource_changes(Some(i64::MAX), 100).await.unwrap();
+    assert!(reset, "a cursor from another database resets");
+}
+
+#[tokio::test]
+async fn a_write_that_commits_late_is_still_ahead_of_the_cursor() {
+    let Some(store) = test_store().await else { return };
+    let (start, _, _) = store.resource_changes(None, 100).await.unwrap();
+    // A write takes its row, then waits to commit while another write commits and is read.
+    let mut slow = store.pool().begin().await.unwrap();
+    sqlx::query("INSERT INTO resource_changes (resource_id) VALUES ('synthetic:doc:slow')")
+        .execute(&mut *slow)
+        .await
+        .unwrap();
+    store.put_resources(&[doc("synthetic:doc:fast")]).await.unwrap();
+    let (cursor, ids, _) = store.resource_changes(Some(start), 100).await.unwrap();
+    assert!(!ids.contains(&"synthetic:doc:fast".to_string()), "held back by the slow write: {ids:?}");
+    slow.commit().await.unwrap();
+
+    let (_, ids, reset) = changes_naming(&store, cursor, 2).await;
+    assert!(!reset);
+    assert_eq!(ids, ["synthetic:doc:fast", "synthetic:doc:slow"], "neither is skipped");
 }
 
 #[tokio::test]
