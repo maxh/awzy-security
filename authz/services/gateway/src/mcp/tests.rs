@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::sync::{atomic::AtomicBool, Mutex};
 
 use axum::routing::post;
 use jsonwebtoken::{encode, EncodingKey, Header};
@@ -539,4 +539,24 @@ fn a_challenged_call_links_to_the_challenge_in_the_portal() {
         meta.get("awzy/challenge_url").is_none() && meta.get("awzy/challenge_wait").is_none(),
         "nothing to link to"
     );
+}
+
+#[test]
+fn a_tool_monitored_on_its_own_leaves_the_others_enforced_in_an_outage() {
+    let modes = ModesSeen::default();
+    let (search, delete) = (ModesSeen::key("drive", "search", "call"), ModesSeen::key("drive", "delete", "call"));
+    modes.record(search.clone(), true);
+    modes.record(delete.clone(), false);
+    assert!(modes.monitoring(&search), "the monitored tool still forwards in an outage");
+    assert!(!modes.monitoring(&delete), "the enforced one falls back to the outage rules");
+    assert!(!modes.monitoring(&ModesSeen::key("drive", "rename", "call")), "and so does one never decided");
+}
+
+#[test]
+fn a_deny_clears_the_allow_an_outage_would_replay() {
+    let allows = AllowCache { ttl: std::time::Duration::from_secs(300), entries: Default::default() };
+    allows.record("ServiceAccount::sales-genie||drive/delete".into());
+    assert!(allows.recent("ServiceAccount::sales-genie||drive/delete").is_some());
+    allows.remove("ServiceAccount::sales-genie||drive/delete");
+    assert!(allows.recent("ServiceAccount::sales-genie||drive/delete").is_none(), "the PDP denied it since");
 }
