@@ -80,6 +80,7 @@ export default defineConfig({
             "reference/decision-api",
             "reference/api-conventions",
             "reference/security-model",
+            "reference/threat-model",
             "reference/glossary",
           ],
         },
