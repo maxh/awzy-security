@@ -14,5 +14,8 @@ fun ReloadEvery(): int { return 3; }
 // A replica vouches for its list on its streams only this long after it last read Postgres
 // (CONFIRMED_FOR, 10 s): two reloads.
 fun ConfirmedFor(): int { return 2 * ReloadEvery(); }
+// The longest a message takes to arrive: under a tick, as test.p assumes, but one sent between
+// ticks is handled in the next.
+fun Delivery(): int { return 1; }
 // A follower reconnects this long after its stream breaks (1 s).
 fun ReconnectAfter(): int { return 1; }

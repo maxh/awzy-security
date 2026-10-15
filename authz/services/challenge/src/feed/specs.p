@@ -1,9 +1,9 @@
 // What the containment feed promises.
 
 // The longest a PDP may decide "not contained" from a list after Postgres moved past it: how
-// long a replica that lost Postgres keeps vouching for its list, plus the PDP's own limit on a
-// stale one.
-fun Bound(): int { return ConfirmedFor() + MaxStale(); }
+// long a replica that lost Postgres keeps vouching for its list, the time its last word takes to
+// arrive (the PDP counts staleness from then), and the PDP's own limit on a stale one (ADR 0129).
+fun Bound(): int { return ConfirmedFor() + Delivery() + MaxStale(); }
 
 // A PDP never answers "not contained" for a principal contained in the list it answered from,
 // nor from a list Postgres replaced more than Bound() ago. Failing as unavailable is always
