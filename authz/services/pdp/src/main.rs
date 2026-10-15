@@ -28,7 +28,15 @@ async fn main() -> anyhow::Result<()> {
                 }
             };
             let every = Duration::from_secs(10);
-            tokio::spawn(awzy_pdp::sync_policies(pdp, enforcement, verifier.clone(), endpoint, every));
+            let peers = std::env::var("AWZY_PDP_PEER_ADDR").ok();
+            let verify = verifier.clone();
+            tokio::spawn(async move {
+                // The running PDPs' policy first, so the first sync can't set this one behind them.
+                if let Some(peers) = peers {
+                    awzy_pdp::peer::adopt_newer_policy(&pdp, &enforcement, verify.as_deref(), &peers).await;
+                }
+                awzy_pdp::sync_policies(pdp, enforcement, verify, endpoint, every).await
+            });
         }
         Err(_) => {
             tracing::warn!("AWZY_POLICY_ADDR is not set; built-in default policies, monitor mode");

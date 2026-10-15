@@ -154,16 +154,17 @@ pub(crate) fn apply_setting(
 }
 
 /// The modes actions and tools have of their own (ADR 0109), each verified as the install's is.
-/// One that fails verification keeps the mode in force for its scope.
+/// One that fails verification keeps the mode in force for its scope. So does a scope the list
+/// leaves out: switches are never deleted, so a missing one was, and deleting a scope's rows must
+/// not take it back to the install's mode (ADR 0126; `sync.p` beside this file models it).
 pub(crate) fn apply_scoped(
     enforcement: &Enforcement,
     verifier: Option<&BundleVerifier>,
     settings: Vec<EnforcementSetting>,
 ) {
     let current = enforcement.scoped();
-    let mut kept_signed = enforcement.signed().scoped;
-    let mut next = std::collections::HashMap::new();
-    let mut signed = std::collections::HashMap::new();
+    let mut next = current.clone();
+    let mut signed = enforcement.signed().scoped;
     for setting in settings {
         let mode = EnforcementMode::from(setting.mode());
         let at = setting.changed_at.as_ref().map_or(i64::MIN, |t| t.seconds);
@@ -182,12 +183,6 @@ pub(crate) fn apply_scoped(
                 Ok(()) => false,
             };
             if refused {
-                if let Some(kept) = current.get(&setting.scope) {
-                    next.insert(setting.scope.clone(), *kept);
-                    if let Some(kept) = kept_signed.remove(&setting.scope) {
-                        signed.insert(setting.scope, kept);
-                    }
-                }
                 continue;
             }
         }
@@ -434,5 +429,34 @@ mod tests {
             "every change deleted"
         );
         assert!(verify_setting(&verifier, &enforcement, &setting(monitor, 3_000), monitor).is_ok(), "a newer one");
+    }
+
+    #[test]
+    fn a_scope_the_list_leaves_out_keeps_its_mode() {
+        let key = p256::ecdsa::SigningKey::from_bytes(&[5u8; 32].into()).unwrap();
+        let signer = awzy_signing::BundleSigner::from_key(key.clone()).unwrap();
+        let verifier = BundleVerifier::from_keys([*key.verifying_key()]).unwrap();
+        let scope = "tool:files/delete";
+        let at = 2_000;
+        let enforced = EnforcementSetting {
+            scope: scope.into(),
+            mode: awzy_authz_proto::authz::v1::EnforcementMode::Enforce.into(),
+            changed_by: "Human::alice".into(),
+            changed_at: Some(awzy_authz_proto::prost_types::Timestamp { seconds: at, nanos: 0 }),
+            signature: signer.sign_payload(&awzy_signing::enforcement_payload(scope, "enforce", "Human::alice", at)),
+            signing_key_id: signer.key_id().into(),
+            ..Default::default()
+        };
+        let enforcement = Enforcement::awaiting_sync();
+        apply_scoped(&enforcement, Some(&verifier), vec![enforced]);
+        assert_eq!(enforcement.scoped().get(scope).map(|s| s.mode), Some(EnforcementMode::Enforce));
+
+        apply_scoped(&enforcement, Some(&verifier), vec![]);
+        assert_eq!(
+            enforcement.scoped().get(scope).map(|s| s.mode),
+            Some(EnforcementMode::Enforce),
+            "its switches deleted from the database"
+        );
+        assert!(enforcement.signed().scoped.contains_key(scope), "and a starting peer is still given it");
     }
 }
