@@ -76,13 +76,16 @@ machine Replica {
   // Whether the list may go out as current: loaded, and read from Postgres recently. A replica
   // cut off from Postgres goes quiet, so its followers go stale instead of trusting it.
   fun vouches(): bool {
-    return loaded && now - confirmedAt <= ConfirmedFor();
+    return loaded && (now - confirmedAt <= ConfirmedFor() || Bug() == 2);
   }
 
   // The list if this stream hasn't had this version, a heartbeat if it has; nothing while the
   // replica doesn't vouch for its list.
   fun tell(f: machine) {
-    if (!vouches()) { return; }
+    if (!vouches()) {
+      if (Bug() == 3) { sentOn[f] = version; }
+      return;
+    }
     if (sentOn[f] != version) {
       sentOn[f] = version;
       send f, eFeedList, (stream = streams[f], version = version, contained = contained);

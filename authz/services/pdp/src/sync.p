@@ -41,7 +41,7 @@ machine PolicyPdp {
 
   fun sync() {
     var answer: (ok: bool, policy: tState);
-    if (!askedPeers && peer != null) {
+    if (!askedPeers && peer != null && Bug() != 2) {
       askedPeers = true;
       startFromPeer();
     }
@@ -106,7 +106,13 @@ machine PolicyPdp {
   // apply_scoped: each scope listed replaces the one held if it's signed and no older. A scope
   // not listed keeps the mode held: switches are never deleted, so a missing one was.
   fun applyScoped(s: tSetting, has: bool) {
-    if (!has) { return; }
+    if (!has) {
+      if (Bug() == 1) {
+        held.scoped = (at = -1, mode = 0, genuine = false);
+        held.hasScoped = false;
+      }
+      return;
+    }
     if (!s.genuine || (held.hasScoped && held.scoped.at > s.at)) { return; }
     held.scoped = s;
     held.hasScoped = true;

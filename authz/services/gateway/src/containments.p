@@ -28,7 +28,7 @@ machine Gateway {
 
     on eFeedList do (l: (stream: int, version: int, contained: tContained)) {
       // Never an older list than the one held: the replica may lag the one sent it before.
-      if (connected && l.stream == stream && l.version >= version) {
+      if (connected && l.stream == stream && (l.version >= version || Bug() == 1)) {
         version = l.version;
         contained = l.contained;
         announce eApplied, (follower = this, version = l.version);

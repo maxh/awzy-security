@@ -52,14 +52,14 @@ machine Pdp {
 
     on eFeedList do (l: (stream: int, version: int, contained: tContained)) {
       // Never an older list than the one held: the replica may lag the one sent it before.
-      if (connected && l.stream == stream && (!loaded || l.version >= version)) {
+      if (connected && l.stream == stream && (!loaded || l.version >= version || Bug() == 1)) {
         load(l.version, l.contained, now);
       }
     }
 
     on eHeartbeat do (h: (stream: int, version: int)) {
       // A heartbeat vouches only for the version it names.
-      if (connected && h.stream == stream && h.version == version) { heardAt = now; }
+      if (connected && h.stream == stream && (h.version == version || Bug() == 3)) { heardAt = now; }
     }
 
     on eStreamClosed do (s: int) {
