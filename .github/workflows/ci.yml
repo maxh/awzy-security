@@ -41,7 +41,7 @@ jobs:
               - '!.agents/**'
               - '!.claude/**'
 
-  # Four jobs in parallel, so a run takes as long as the slowest. All four must pass.
+  # Five jobs in parallel, so a run takes as long as the slowest. All five must pass.
 
   # The protobuf APIs SDKs and enforcement points build on (ADR 0045): buf lint and format,
   # and on pull requests no breaking change against main, to generated code or the wire.
@@ -89,6 +89,22 @@ jobs:
           { echo '### Frontend test coverage'; echo '```'
             grep -E ' coverage: (Statements|Branches|Functions|Lines) ' coverage.txt || echo "no coverage summary"
             echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  # The P models of protocols between services (ADR 0126): each property, over a few thousand
+  # schedules. A failure prints the trace that broke it.
+  p-models:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: dotnet tool install --global P --version 3.1.0
+      - run: tools/ci/check-p-models.sh
 
   # Clippy and rustfmt over every Rust target; any warning fails.
   lint-rust:

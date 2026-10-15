@@ -122,7 +122,11 @@ PDP asks awzy-challenge on every check, which counts against the 10 ms budget. I
 can't answer either, the PDP decides on the last list it heard for up to 5 minutes
 (`pdp.containmentsMaxStaleSeconds`), so a restart or a database failover doesn't fail checks, and
 after that fails them. A containment added meanwhile doesn't reach that PDP. Check that
-awzy-challenge is ready and that the PDP can reach it.
+awzy-challenge is ready and that the PDP can reach it. An awzy-challenge replica that can't read
+its database for 10 seconds stops sending the feed, so its PDPs go stale rather than trust a list
+that may be behind; check the replicas' logs for database errors too. After awzy-challenge's
+database is restored from a backup, restart the PDPs and gateways: they refuse a list older than
+the one they hold.
 
 ### AwzyPdpPolicySyncStale (page)
 

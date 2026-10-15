@@ -441,7 +441,7 @@ async fn an_outage_never_replays_an_allow_for_someone_contained_before_it() {
     // The feed arrives with no one contained; everyone builds up recent allows.
     let list = |who: &[&str]| who.iter().map(|w| format!("Human::{w}")).collect::<std::collections::HashSet<_>>();
     state.forget_allows(&list(&[]));
-    containments.load(list(&[]));
+    containments.load(1, list(&[]));
     for t in [&alice, &carol, &genie_for_alice] {
         let (_, ok) = call(&app, Some(t), "read_file").await;
         assert_eq!(ok["result"]["content"][0]["text"], "ran read_file");
@@ -449,7 +449,7 @@ async fn an_outage_never_replays_an_allow_for_someone_contained_before_it() {
 
     // Alice is contained, then the PDP goes down.
     state.forget_allows(&list(&["alice"]));
-    containments.load(list(&["alice"]));
+    containments.load(2, list(&["alice"]));
     pdp_down.store(true, Ordering::Release);
     for t in [&alice, &genie_for_alice] {
         let (_, refused) = call(&app, Some(t), "read_file").await;
@@ -459,7 +459,7 @@ async fn an_outage_never_replays_an_allow_for_someone_contained_before_it() {
     assert_eq!(carol_replayed["result"]["content"][0]["text"], "ran read_file", "carol isn't contained");
 
     // Lifted while the PDP is still down: her old allows were forgotten, so still nothing.
-    containments.load(list(&[]));
+    containments.load(3, list(&[]));
     let (_, lifted) = call(&app, Some(&alice), "read_file").await;
     assert!(lifted["result"]["content"][0]["text"].as_str().unwrap().contains("no recent allow"), "{lifted}");
 
