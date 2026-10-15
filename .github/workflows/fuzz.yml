@@ -24,20 +24,20 @@ jobs:
     env:
       AWZY_FUZZ_SECONDS: ${{ github.event_name == 'pull_request' && '60' || '1800' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-fuzz
       - if: github.event_name != 'pull_request'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: "**/fuzz/corpus"
           key: fuzz-corpus-${{ github.run_id }}
           restore-keys: fuzz-corpus-
       - run: tools/ci/fuzz.sh
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-artifacts
           path: "**/fuzz/artifacts"
