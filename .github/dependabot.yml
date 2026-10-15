@@ -1,0 +1,29 @@
+# Dependency updates (#430), grouped so each ecosystem opens at most one pull request a week.
+# Security updates come as they're published, apart from these.
+#
+# Not Cargo yet: a Cargo.lock update also needs cargo-bazel-lock.json re-pinned, and on a
+# Dependabot pull request the workflow token is read-only, so fix-prs can't push it. Rust
+# dependencies are watched by cargo-deny's advisories (supply-chain.yml) until something re-pins
+# Dependabot's branches.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
