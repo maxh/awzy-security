@@ -6,13 +6,17 @@
 //! When awzy-challenge can't answer either, the last list stands in for up to `max_stale` after
 //! the feed was last heard (ADR 0119), long enough to ride out a restart or a database failover.
 //! Past that a check fails as unavailable rather than missing a containment.
+//!
+//! The list never goes back to an older version, since the replica a PDP reconnects to may lag the
+//! one it left, and a heartbeat freshens only the version it names. The P model beside this file
+//! (`containments.p`, ADR 0126) checks both against the feed.
 
 use awzy_service_auth::{grpc_channel, AuthChannel};
 use std::{
     collections::HashMap,
     sync::{
         atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering},
-        Arc,
+        Arc, Mutex,
     },
     time::{Duration, Instant},
 };
@@ -66,6 +70,9 @@ pub struct Containments {
     /// Moves with each list, so a cached query plan is dropped when anyone is contained or
     /// lifted (ADR 0113).
     epoch: AtomicU64,
+    /// Held while a list is compared with the one in force and replaced, since the feed and a
+    /// peer may both load one.
+    loading: Mutex<()>,
 }
 
 impl Containments {
@@ -89,6 +96,7 @@ impl Containments {
             lookups_paused_until_ms: AtomicI64::new(0),
             max_stale: DEFAULT_MAX_STALE,
             epoch: AtomicU64::new(0),
+            loading: Mutex::new(()),
         }
     }
 
@@ -121,8 +129,18 @@ impl Containments {
         self.load_list(0, list, Duration::ZERO);
     }
 
+    /// The version of the list in force.
+    pub fn version(&self) -> i64 {
+        self.active.load().version
+    }
+
     /// Replaces the list with one heard `age` ago: from the feed, or from a peer (ADR 0119).
-    pub fn load_list(&self, version: i64, list: Vec<Containment>, age: Duration) {
+    /// Refuses a list older than the one in force, and returns whether it loaded.
+    pub fn load_list(&self, version: i64, list: Vec<Containment>, age: Duration) -> bool {
+        let _loading = self.loading.lock().expect("containments loading lock");
+        if self.is_ready() && version < self.version() {
+            return false;
+        }
         let by_principal = list
             .iter()
             .filter_map(|c| {
@@ -134,6 +152,7 @@ impl Containments {
         self.epoch.fetch_add(1, Ordering::AcqRel);
         self.heard_ago(age);
         self.loaded.store(true, Ordering::Release);
+        true
     }
 
     /// The list in force, its version, and how long since the feed was heard, for a starting
@@ -248,9 +267,18 @@ impl Containments {
         while let Some(msg) = stream.message().await? {
             if msg.changed {
                 let count = msg.active.len();
-                self.load_list(msg.version, msg.active, Duration::ZERO);
-                tracing::info!(version = msg.version, active = count, "loaded containments");
-            } else {
+                if self.load_list(msg.version, msg.active, Duration::ZERO) {
+                    tracing::info!(version = msg.version, active = count, "loaded containments");
+                } else {
+                    tracing::warn!(
+                        version = msg.version,
+                        held = self.version(),
+                        "refused an older containment list; this replica is behind"
+                    );
+                }
+            } else if msg.version == self.version() {
+                // A heartbeat vouches only for the version it names: one for a list this PDP
+                // refused, or never got, leaves the feed going stale.
                 self.heard();
             }
         }
@@ -333,5 +361,25 @@ mod tests {
         assert_eq!((version, held.len()), (4, 1));
         assert!(age >= Duration::from_secs(30), "the peer's age carries over: {age:?}");
         assert_eq!(c.find(&[&mallory]).await.unwrap(), ["containment_2"]);
+    }
+
+    #[tokio::test]
+    async fn a_lagging_replica_never_rolls_the_list_back() {
+        let c = Containments::from_challenge("http://127.0.0.1:9").unwrap();
+        let mallory = EntityRef::new("Human", "mallory");
+        let contained =
+            vec![Containment { qid: "containment_1".into(), principal: Some(mallory.clone().into()), ..Default::default() }];
+        assert!(c.load_list(5, contained, Duration::ZERO));
+        assert!(!c.load_list(4, vec![], Duration::ZERO), "an older list is refused");
+        assert_eq!(c.version(), 5);
+        assert_eq!(c.find(&[&mallory]).await.unwrap(), ["containment_1"], "the containment stands");
+    }
+
+    #[test]
+    fn a_list_from_a_peer_never_replaces_a_newer_one() {
+        let c = Containments::from_challenge("http://127.0.0.1:9").unwrap();
+        assert!(c.load_list(7, vec![], Duration::ZERO));
+        assert!(!c.load_list(6, vec![], Duration::from_secs(3)));
+        assert!(c.load_list(7, vec![], Duration::ZERO), "the same version again is fine");
     }
 }

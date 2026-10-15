@@ -112,6 +112,9 @@ bazel build --config=lint //...                    # clippy
 - **Tests** sit next to the code in `#[cfg(test)] mod tests` and read as statements of behavior
   (`delegation_never_exceeds_the_person`). TypeScript tests are `*.test.ts` beside the module,
   run by Vitest (`pnpm test`, and each package's `:unit` Bazel target).
+- **Protocols between services** (a feed, version-ordered sync, a shared lifecycle, a fallback)
+  have a P model, each machine in a `.p` beside the Rust it models, checked by CI's `p-models`
+  job. Change the model with the code (ADR 0126; the `model-protocol` skill).
 - **Comments and docs** explain why, briefly, in plain sentences. Match the comment density of the
   surrounding code. Doc comments on public items say what they're for, not how.
 - **Public docs** (`docs/site/`, and `INSTALL.md`, which the site publishes) describe the product

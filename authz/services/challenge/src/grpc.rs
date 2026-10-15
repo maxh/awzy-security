@@ -604,14 +604,18 @@ impl ChallengeService for Service {
         &self,
         _req: Request<WatchContainmentsRequest>,
     ) -> Result<Response<Self::WatchContainmentsStream>, Status> {
-        let mut rx = self.feed.subscribe();
+        let feed = self.feed.clone();
+        let mut rx = feed.subscribe();
         let (tx, out) = tokio::sync::mpsc::channel(4);
         tokio::spawn(async move {
             let mut sent = None;
             loop {
                 let current = rx.borrow_and_update().clone();
                 // Nothing until the first load: an empty list would read as "no one is contained".
-                if let Some(list) = current {
+                // Nothing either while this replica can't read Postgres, so the PDP goes stale
+                // rather than trusting a list that may be behind (ADR 0126). A stream that missed
+                // a list while quiet gets it when the replica vouches again.
+                if let Some(list) = current.filter(|_| feed.vouches()) {
                     let changed = sent != Some(list.version);
                     sent = Some(list.version);
                     let active =

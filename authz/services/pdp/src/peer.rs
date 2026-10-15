@@ -207,8 +207,9 @@ pub fn apply(state: &AppState, verifier: Option<&BundleVerifier>, answers: Vec<G
     }
     if state.containments.is_configured() && !state.containments.is_ready() {
         if let Some(newest) = containments.into_iter().max_by_key(|c| c.version) {
-            state.containments.load_list(newest.version, newest.active, Duration::from_millis(newest.age_ms));
-            loaded.push("containments");
+            if state.containments.load_list(newest.version, newest.active, Duration::from_millis(newest.age_ms)) {
+                loaded.push("containments");
+            }
         }
     }
     loaded
