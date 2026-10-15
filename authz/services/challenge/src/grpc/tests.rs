@@ -343,7 +343,7 @@ async fn the_feed_logs_what_its_model_observes_for_a_replay() {
     }
 
     let field = |line: &serde_json::Map<String, serde_json::Value>, name: &str| line.get(name).cloned();
-    let of = |event: &str| lines.iter().filter(move |l| field(l, "model_event") == Some(json!(event)));
+    let of = |event: &'static str| lines.iter().filter(move |l| field(l, "model_event") == Some(json!(event)));
     let changed = of("eStoreChanged")
         .find(|l| field(l, "contained").and_then(|c| c.as_str().map(|c| c.contains("Human::mallory"))) == Some(true))
         .expect("the store logs the version that contains mallory");
