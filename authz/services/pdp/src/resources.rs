@@ -149,6 +149,13 @@ pub struct Loaded {
     pub tier: Option<String>,
 }
 
+impl Loaded {
+    /// The IDs of the resource and its ancestors.
+    fn ids(&self) -> impl Iterator<Item = &str> {
+        self.entities.iter().filter_map(|e| e["uid"]["id"].as_str())
+    }
+}
+
 impl From<EntitiesBody> for Loaded {
     fn from(body: EntitiesBody) -> Self {
         let work = body.work.into_iter().map(|w| (w.id, w.assignees.into_iter().collect())).collect();
@@ -288,7 +295,7 @@ impl Resources {
         self.drops().record(Some(ids.iter().cloned().collect()));
         cache.retain(|id, c| {
             let in_chain = c.entities.as_ref().is_some_and(|l| {
-                l.entities.iter().any(|e| e["uid"]["id"].as_str().is_some_and(|i| changed.contains(i)))
+                l.ids().any(|i| changed.contains(i))
             });
             !changed.contains(id.as_str()) && !in_chain
         });
@@ -494,12 +501,7 @@ impl Resources {
     /// Caches what a fetch that began at drop `began` got, unless a drop since touches it.
     fn store_fetched(&self, id: &str, entities: Option<Arc<Loaded>>, began: u64) {
         let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
-        let chain: Vec<&str> = entities
-            .iter()
-            .flat_map(|l| l.entities.iter())
-            .filter_map(|e| e["uid"]["id"].as_str())
-            .chain(std::iter::once(id))
-            .collect();
+        let chain: Vec<&str> = entities.iter().flat_map(|l| l.ids()).chain(std::iter::once(id)).collect();
         if self.drops().touched_since(began, &chain) {
             return;
         }
