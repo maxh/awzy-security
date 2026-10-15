@@ -1,0 +1,11 @@
+{
+  "model": ["../events.p", "../specs.p"],
+  "increasing": { "eStoreChanged": "version" },
+  "since": { "eDecision.basis": "eStoreChanged.version" },
+  "fixtures": {
+    "fixtures/ok.jsonl": null,
+    "fixtures/midrun.jsonl": null,
+    "fixtures/rollback.jsonl": "tcReplayNoRollback",
+    "fixtures/stale.jsonl": "tcReplayBoundedStaleness"
+  }
+}

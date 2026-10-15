@@ -1,0 +1,11 @@
+{"timestamp": "2026-10-15T12:00:00.000000Z", "level": "DEBUG", "fields": {"model_event": "eStoreChanged", "version": 1, "contained": "[]"}, "target": "awzy_model"}
+{"timestamp": "2026-10-15T12:00:00.500000Z", "level": "DEBUG", "fields": {"model_event": "eApplied", "follower": "0199f0a0-0000-7000-8000-00000000000a", "version": 1}, "target": "awzy_model"}
+{"timestamp": "2026-10-15T12:00:00.700000Z", "level": "DEBUG", "fields": {"model_event": "eApplied", "follower": "0199f0a0-0000-7000-8000-00000000000b", "version": 1}, "target": "awzy_model"}
+awzy-pdp-1  | {"timestamp": "2026-10-15T12:00:00.600000Z", "level": "INFO", "fields": {"message": "loaded containments", "version": 1}, "target": "awzy_pdp::containments"}
+{"timestamp": "2026-10-15T12:00:01.000000Z", "level": "DEBUG", "fields": {"model_event": "eDecision", "pdp": "0199f0a0-0000-7000-8000-00000000000a", "principal": "Human::alice", "answer": 0, "basis": 1}, "target": "awzy_model"}
+{"timestamp": "2026-10-15T12:00:02.000000Z", "level": "DEBUG", "fields": {"model_event": "eStoreChanged", "version": 2, "contained": "[\"Human::alice\"]"}, "target": "awzy_model"}
+{"timestamp": "2026-10-15T12:00:02.200000Z", "level": "DEBUG", "fields": {"model_event": "eApplied", "follower": "0199f0a0-0000-7000-8000-00000000000a", "version": 2}, "target": "awzy_model"}
+{"timestamp": "2026-10-15T12:00:03.000000Z", "level": "DEBUG", "fields": {"model_event": "eDecision", "pdp": "0199f0a0-0000-7000-8000-00000000000a", "principal": "Human::alice", "answer": 1, "basis": 2}, "target": "awzy_model"}
+{"timestamp": "2026-10-15T12:03:20.000000Z", "level": "DEBUG", "fields": {"model_event": "eDecision", "pdp": "0199f0a0-0000-7000-8000-00000000000b", "principal": "Human::bob", "answer": 0, "basis": 1}, "target": "awzy_model"}
+{"timestamp": "2026-10-15T12:00:02.500000Z", "level": "DEBUG", "fields": {"model_event": "eStoreChanged", "version": 2, "contained": "[\"Human::alice\"]"}, "target": "awzy_model"}
+{"timestamp": "2026-10-15T12:03:21.000000Z", "level": "DEBUG", "fields": {"model_event": "eApplied", "follower": "0199f0a0-0000-7000-8000-00000000000b", "version": 2}, "target": "awzy_model"}

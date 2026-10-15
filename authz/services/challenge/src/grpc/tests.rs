@@ -266,3 +266,93 @@ fn every_method_the_service_has_has_exactly_one_access_rule() {
     let gaps = Access::off().guard().gaps(proto);
     assert!(gaps.is_empty(), "{gaps:#?}");
 }
+
+/// What a subscriber writes, kept for the test to read back.
+#[derive(Clone, Default)]
+struct Captured(Arc<std::sync::Mutex<Vec<u8>>>);
+
+impl std::io::Write for Captured {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Captured {
+    type Writer = Captured;
+
+    fn make_writer(&'a self) -> Captured {
+        self.clone()
+    }
+}
+
+/// The payload field names `events.p` declares for `event`, without `at`, which the replay fills
+/// from the line's time.
+fn declared_fields(events: &str, event: &str) -> Vec<String> {
+    let decl = events
+        .lines()
+        .find(|l| l.starts_with(&format!("event {event}:")))
+        .unwrap_or_else(|| panic!("events.p declares no {event}"));
+    let payload = decl.split_once('(').unwrap().1.rsplit_once(')').unwrap().0;
+    payload.split(", ").map(|f| f.split(':').next().unwrap().trim().to_string()).filter(|f| f != "at").collect()
+}
+
+#[tokio::test]
+async fn the_feed_logs_what_its_model_observes_for_a_replay() {
+    let Some(store) = test_store(Lifetimes::default()).await else { return };
+    // A tokio test runs on one thread, so this catches the feed, the server, and the PDP alike.
+    let captured = Captured::default();
+    let subscriber = tracing_subscriber::fmt()
+        .json()
+        .with_env_filter(tracing_subscriber::EnvFilter::new(format!("{}=debug", awzy_telemetry::MODEL_EVENTS)))
+        .with_writer(captured.clone())
+        .finish();
+    let _logging = tracing::subscriber::set_default(subscriber);
+
+    let (endpoint, mut client) = serve(store).await;
+    let state = pdp(&endpoint).await;
+    client
+        .contain(ContainRequest {
+            principal: Some(awzy_model::EntityRef::new("Human", "mallory").into()),
+            reason: "bulk download of design docs".into(),
+            created_by_actor: Some(awzy_model::Actor::awzy("awzy-reasoner").into()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    until(|| async { check(&state, "mallory", "design-doc").await.verdict == Verdict::Deny }).await;
+
+    let text = String::from_utf8(captured.0.lock().unwrap().clone()).unwrap();
+    let lines: Vec<serde_json::Map<String, serde_json::Value>> = text
+        .lines()
+        .map(|l| {
+            let line: serde_json::Map<String, serde_json::Value> = serde_json::from_str(l).unwrap();
+            line.get("fields").and_then(|f| f.as_object()).cloned().unwrap()
+        })
+        .collect();
+    let events = include_str!("../feed/events.p");
+    for line in &lines {
+        let event = line.get("model_event").and_then(|e| e.as_str()).unwrap();
+        for field in declared_fields(events, event) {
+            assert!(line.contains_key(&field), "{event} is logged without {field}: {line:?}");
+        }
+    }
+
+    let field = |line: &serde_json::Map<String, serde_json::Value>, name: &str| line.get(name).cloned();
+    let of = |event: &'static str| lines.iter().filter(move |l| field(l, "model_event") == Some(json!(event)));
+    let changed = of("eStoreChanged")
+        .find(|l| field(l, "contained").and_then(|c| c.as_str().map(|c| c.contains("Human::mallory"))) == Some(true))
+        .expect("the store logs the version that contains mallory");
+    let version = field(changed, "version").unwrap();
+    assert!(of("eApplied").any(|l| field(l, "version") == Some(version.clone())), "the PDP logs applying it");
+    assert!(
+        of("eDecision").any(|l| field(l, "principal") == Some(json!("Human::mallory"))
+            && field(l, "answer") == Some(json!(1))
+            && field(l, "basis") == Some(version.clone())),
+        "the PDP logs deciding from it that mallory is contained"
+    );
+}

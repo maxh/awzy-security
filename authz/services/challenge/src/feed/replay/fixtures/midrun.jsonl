@@ -1,0 +1,4 @@
+{"timestamp": "2026-10-15T12:00:00.000000Z", "level": "DEBUG", "fields": {"model_event": "eStoreChanged", "version": 5, "contained": "[\"Human::alice\"]"}, "target": "awzy_model"}
+{"timestamp": "2026-10-15T12:00:01.000000Z", "level": "DEBUG", "fields": {"model_event": "eDecision", "pdp": "0199f0a0-0000-7000-8000-00000000000a", "principal": "Human::bob", "answer": 0, "basis": 4}, "target": "awzy_model"}
+{"timestamp": "2026-10-15T12:00:02.000000Z", "level": "DEBUG", "fields": {"model_event": "eApplied", "follower": "0199f0a0-0000-7000-8000-00000000000a", "version": 5}, "target": "awzy_model"}
+{"timestamp": "2026-10-15T12:00:03.000000Z", "level": "DEBUG", "fields": {"model_event": "eDecision", "pdp": "0199f0a0-0000-7000-8000-00000000000a", "principal": "Human::alice", "answer": 1, "basis": 5}, "target": "awzy_model"}

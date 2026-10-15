@@ -518,11 +518,12 @@ impl ChallengeStore {
         .bind(monitor)
         .fetch_optional(&mut *tx)
         .await?;
+        let mut change = None;
         let result = match inserted {
             Some(row) => {
                 // PDPs never see a monitored containment, so the feed needn't move.
                 if !monitor {
-                    bump_feed(&mut tx).await?;
+                    change = Some(bump_feed(&mut tx).await?);
                 }
                 (containment_from_row(&row)?, true)
             }
@@ -540,6 +541,9 @@ impl ChallengeStore {
             }
         };
         tx.commit().await?;
+        if let Some(change) = change {
+            change.log();
+        }
         Ok(result)
     }
 
@@ -574,8 +578,9 @@ impl ChallengeStore {
                 .is_some();
             return Err(if exists { StoreError::AlreadyLifted(id) } else { StoreError::ContainmentNotFound(id) });
         };
-        bump_feed(&mut tx).await?;
+        let change = bump_feed(&mut tx).await?;
         tx.commit().await?;
+        change.log();
         Ok(containment_from_row(&row)?)
     }
 
@@ -645,8 +650,8 @@ async fn lock_for_answerer(
 }
 
 /// Bumps the feed version and tells every replica's feed, in the caller's transaction, so the
-/// notification goes out only if the change commits.
-async fn bump_feed(tx: &mut Transaction<'_, Postgres>) -> Result<(), sqlx::Error> {
+/// notification goes out only if the change commits. The caller logs the change once it has.
+async fn bump_feed(tx: &mut Transaction<'_, Postgres>) -> Result<FeedChange, sqlx::Error> {
     let version: i64 = sqlx::query("UPDATE containment_feed SET version = version + 1 RETURNING version")
         .fetch_one(&mut **tx)
         .await?
@@ -656,7 +661,32 @@ async fn bump_feed(tx: &mut Transaction<'_, Postgres>) -> Result<(), sqlx::Error
         .bind(version.to_string())
         .execute(&mut **tx)
         .await?;
-    Ok(())
+    // The list as this version has it, read only while the model's events are logged.
+    let contained = if crate::feed::model_events_on() {
+        let principals: Vec<String> = sqlx::query_scalar(
+            "SELECT principal_type || '::' || principal_id FROM containments WHERE lifted_at IS NULL AND NOT monitor",
+        )
+        .fetch_all(&mut **tx)
+        .await?;
+        Some(principals)
+    } else {
+        None
+    };
+    Ok(FeedChange { version, contained })
+}
+
+/// A new version of the containment feed, for the model's log once it commits (ADR 0130).
+struct FeedChange {
+    version: i64,
+    contained: Option<Vec<String>>,
+}
+
+impl FeedChange {
+    fn log(self) {
+        if let Some(contained) = self.contained {
+            crate::feed::log_store_changed(self.version, contained);
+        }
+    }
 }
 
 fn kind_names(kinds: Challenges) -> Vec<&'static str> {

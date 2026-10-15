@@ -82,8 +82,17 @@ impl Feed {
         *confirmed = Some(confirmed.map_or(started, |at| at.max(started)));
         drop(confirmed);
         Ok(self.tx.send_if_modified(|current| {
+            let first = current.is_none();
             let newer = current.as_ref().is_none_or(|c| latest.version > c.version);
             if newer {
+                // The list as this replica first found it, for a replay that starts mid-run; the
+                // replay keeps the first line for each version.
+                if first && model_events_on() {
+                    log_store_changed(
+                        latest.version,
+                        latest.active.iter().map(|c| principal_key(&c.principal)).collect(),
+                    );
+                }
                 *current = Some(Arc::new(latest));
             }
             newer
@@ -144,6 +153,26 @@ impl Feed {
             Err(error) => tracing::warn!(%error, "couldn't reload containments; keeping the current list"),
         }
     }
+}
+
+/// Whether the events the feed's P model names are logged (ADR 0130).
+pub(crate) fn model_events_on() -> bool {
+    tracing::enabled!(target: awzy_telemetry::MODEL_EVENTS, tracing::Level::DEBUG)
+}
+
+/// The model's `eStoreChanged`: Postgres has a new version of the list. `at` is the line's time.
+pub(crate) fn log_store_changed(version: i64, contained: Vec<String>) {
+    tracing::debug!(
+        target: awzy_telemetry::MODEL_EVENTS,
+        model_event = "eStoreChanged",
+        version,
+        contained = %serde_json::Value::from(contained),
+    );
+}
+
+/// `Type::id`, as the PDP keys a principal, so the two services' lines name it alike.
+fn principal_key(r: &awzy_model::EntityRef) -> String {
+    format!("{}::{}", r.kind, r.id)
 }
 
 #[cfg(test)]

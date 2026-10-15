@@ -1,5 +1,5 @@
 {
-  "checksum": "16786ef1b96f75f2536690b34c06f62e5514ccd3a06e196337a04ab19426f2e4",
+  "checksum": "52fa32c4cf4578987e83075dea97a31eaee5ba911522095f146f4757415a5dd1",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -3506,6 +3506,12 @@
           {
             "id": "uuid 1.27.0",
             "target": "uuid"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "tracing-subscriber 0.3.23",
+            "target": "tracing_subscriber"
           }
         ],
         "edition": "2021"

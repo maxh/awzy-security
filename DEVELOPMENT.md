@@ -132,6 +132,20 @@ A failure prints the trace that broke the property. `p check` in the project's f
 full trace under `PCheckerOutput/`, which git ignores. In zsh, `p` may be an alias (for `git
 push`, say); `unalias p` first.
 
+A model with a `replay/` folder can also be checked against what the services actually did
+([ADR 0130](docs/adr/0130-runs-are-replayed-against-their-p-models.md)). Run them with
+`RUST_LOG=info,awzy_model=debug AWZY_LOG_FORMAT=json`, keep the logs, and replay them:
+
+```sh
+tools/ci/replay-p-model.py authz/services/challenge/src/feed/replay challenge.log pdp-*.log
+tools/ci/replay-p-model.py <replay dir> <logs>... --timing MaxStale=60000  # a run's own setting
+tools/ci/replay-p-model.py --self-test             # every replay, on logs known to pass or break
+```
+
+A failure names the log line that broke the property. The replay checks only the properties that
+hold of any stretch of a run, so the logs needn't start at the beginning: a line about a version
+from before them is skipped, and the replay says how many were.
+
 ### Fuzzing
 
 Code that parses what an attacker controls has cargo-fuzz targets in a `fuzz/` folder beside it

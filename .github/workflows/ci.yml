@@ -111,6 +111,8 @@ jobs:
           dotnet-version: "8.0.x"
       - run: dotnet tool install --global P --version 3.1.0
       - run: tools/ci/check-p-models.sh
+      # The replays of logged runs against the models (ADR 0130), on logs known to pass or break.
+      - run: tools/ci/replay-p-model.py --self-test
 
   # What the dependencies are (#430): cargo-deny's licenses, bans, and sources (deny.toml), which
   # only a change here can break, and npm's advisories for what the portals ship. Rust advisories
