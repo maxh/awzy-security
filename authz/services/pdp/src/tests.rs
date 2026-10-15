@@ -61,6 +61,31 @@ fn a_bundle_published_before_unclassified_still_loads_resources() {
 }
 
 #[test]
+fn a_policy_can_decide_on_the_kind_of_data_a_resource_holds() {
+    let policies = r#"
+        @id("anyone-reads")
+        permit (principal, action == Action::"read", resource);
+        @id("customer-data-needs-a-reason")
+        @challenge("justification")
+        forbid (principal, action == Action::"read", resource)
+        when { resource has data_types && resource.data_types.contains("customer_personal") };
+    "#;
+    let doc = |id: &str, types: &[&str]| json!({ "uid": { "type": "Resource", "id": id }, "attrs": { "sensitivity": "confidential", "data_types": types }, "parents": [] });
+    let pdp = Pdp::new(DEFAULT_SCHEMA, policies).unwrap();
+    let entities = pdp
+        .entities(json!([doc("holdings", &["customer_personal", "financial"]), doc("budget", &["financial"])]))
+        .unwrap();
+    let challenged = Verdict::Challenge { challenges: Challenges::of(ChallengeKind::Justification) };
+    assert_eq!(pdp.decide(&read("bob", "holdings", 1), &entities).unwrap().verdict, challenged);
+    assert_eq!(pdp.decide(&read("bob", "budget", 1), &entities).unwrap().verdict, Verdict::Allow);
+
+    // A bundle published before data types existed drops them and still decides.
+    let old = Pdp::new(&DEFAULT_SCHEMA.replace("data_types?: Set<String>,", ""), DEFAULT_POLICIES).unwrap();
+    let entities = old.entities(json!([doc("holdings", &["customer_personal"])])).unwrap();
+    assert!(old.decide(&read("bob", "holdings", 1), &entities).is_ok());
+}
+
+#[test]
 fn assignment_is_checked_for_the_agent_and_the_person_it_acts_for() {
     let policies = r#"
         @id("anyone-reads")

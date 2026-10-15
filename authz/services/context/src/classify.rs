@@ -3,11 +3,11 @@
 //! sets `updated_at`, which puts it back in the queue.
 //!
 //! What the rules can't place keeps no tier and stays `unclassified` for policies, until the
-//! model step exists. Each replica claims its batch with `SKIP LOCKED`, so they share the work.
+//! model step exists. The same pass finds the kinds of data each holds (ADR 0123). Each replica claims its batch with `SKIP LOCKED`, so they share the work.
 
 use std::time::Duration;
 
-use awzy_classify::{classify, Facts, Tier};
+use awzy_classify::{classify, data_types, Facts, Tier};
 
 use crate::store::ContextStore;
 
@@ -37,6 +37,7 @@ pub async fn classify_pending(store: &ContextStore, limit: i64) -> Result<usize,
         // The resource itself comes first; its folders' names are part of what it's about.
         let chain = store.resource_with_ancestors(&r.id).await?;
         let folders: Vec<&str> = chain.iter().skip(1).map(|f| f.name.as_str()).collect();
+        let sent = crate::resources::data_types_sent(&r.attributes);
         let facts = Facts {
             kind: &r.kind,
             name: &r.name,
@@ -44,9 +45,10 @@ pub async fn classify_pending(store: &ContextStore, limit: i64) -> Result<usize,
             labels: &r.labels,
             folders: &folders,
             text: r.text.as_deref(),
+            data_types: &sent,
         };
         let result = classify(&facts);
-        store.set_classification(&mut tx, r, result.as_ref()).await?;
+        store.set_classification(&mut tx, r, result.as_ref(), &data_types(&facts)).await?;
     }
     tx.commit().await?;
     Ok(pending.len())
@@ -126,12 +128,23 @@ mod tests {
         assert_eq!(entity(&march)["attrs"]["unclassified"], false);
         assert_eq!(entity(&get("synthetic:doc:memo").await)["attrs"]["sensitivity"], "crown_jewels");
 
+        assert_eq!(
+            entity(&march)["attrs"]["data_types"],
+            serde_json::json!(["employee_personal"]),
+            "in the Payroll folder"
+        );
+        let found = &march.classification.as_ref().unwrap().data_types;
+        assert_eq!(
+            (found[0].by.as_str(), found[0].reason.as_str()),
+            ("metadata", "in a folder about \"payroll\" (Payroll)")
+        );
+
         let misc = get("synthetic:doc:misc").await;
         assert_eq!(misc.classification.as_ref().unwrap().sensitivity, None, "nothing decides it");
         let attrs = &entity(&misc)["attrs"];
         assert_eq!(
-            (&attrs["sensitivity"], &attrs["unclassified"]),
-            (&serde_json::json!("internal"), &serde_json::json!(true))
+            (&attrs["sensitivity"], &attrs["unclassified"], &attrs["data_types"]),
+            (&serde_json::json!("internal"), &serde_json::json!(true), &serde_json::json!([]))
         );
         let folder = get("synthetic:folder:payroll").await;
         assert_eq!(folder.classification.unwrap().sensitivity, None, "folders only by label");

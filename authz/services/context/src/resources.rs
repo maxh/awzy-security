@@ -21,8 +21,10 @@ use sqlx::{postgres::PgRow, Postgres, Row, Transaction};
 
 use crate::store::{ContextStore, StoreError};
 
+mod data_types;
 mod entities;
 
+pub use data_types::{sent as data_types_sent, DataType};
 pub use entities::{chain_entities, entity};
 
 /// Sensitivity tiers, lowest to highest, as the Cedar schema names them.
@@ -112,6 +114,8 @@ pub struct Classification {
     pub by: Option<String>,
     pub reason: String,
     pub at: DateTime<Utc>,
+    /// The kinds of data it found (ADR 0123), each with why.
+    pub data_types: Vec<DataType>,
 }
 
 impl Resource {
@@ -215,7 +219,7 @@ impl ResourceInput {
         if !(self.attributes.is_null() || self.attributes.is_object()) {
             return Err(invalid(format!("{}: attributes are a JSON object", self.id)));
         }
-        Ok(())
+        data_types::validate_sent(&self.id, &self.attributes)
     }
 }
 
@@ -250,7 +254,8 @@ fn object(v: &Value) -> Value {
 
 const RESOURCE_COLUMNS: &str =
     "id, source, kind, name, parent, owner, sensitivity, labels, sharing, text, url, attributes, \
-     created_at, updated_at, classified_sensitivity, classified_by, classification_reason, classified_at";
+     created_at, updated_at, classified_sensitivity, classified_by, classification_reason, classified_at, \
+     classified_data_types";
 
 fn resource_from_row(row: &PgRow) -> Result<Resource, sqlx::Error> {
     Ok(Resource {
@@ -276,6 +281,7 @@ fn resource_from_row(row: &PgRow) -> Result<Resource, sqlx::Error> {
                     by: row.try_get("classified_by")?,
                     reason: row.try_get::<Option<String>, _>("classification_reason")?.unwrap_or_default(),
                     at,
+                    data_types: row.try_get::<sqlx::types::Json<Vec<DataType>>, _>("classified_data_types")?.0,
                 })
             })
             .transpose()?,
@@ -461,6 +467,7 @@ impl ContextStore {
         conn: &mut sqlx::PgConnection,
         r: &Resource,
         result: Option<&awzy_classify::Classification>,
+        data_types: &[awzy_classify::DataTypeFinding],
     ) -> Result<(), sqlx::Error> {
         let reason = result.map_or_else(
             || "nothing in its label, content, name, or folders decides it".to_string(),
@@ -468,7 +475,7 @@ impl ContextStore {
         );
         sqlx::query(
             "UPDATE resources SET classified_sensitivity = $2, classified_by = $3, classification_reason = $4,
-               classified_at = now()
+               classified_data_types = $6, classified_at = now()
              WHERE id = $1 AND updated_at = $5",
         )
         .bind(&r.id)
@@ -476,6 +483,7 @@ impl ContextStore {
         .bind(result.map(|c| c.source.as_str()))
         .bind(reason)
         .bind(r.updated_at)
+        .bind(sqlx::types::Json(data_types.iter().map(DataType::from).collect::<Vec<_>>()))
         .execute(conn)
         .await?;
         Ok(())

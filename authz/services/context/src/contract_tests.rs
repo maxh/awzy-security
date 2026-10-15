@@ -4,7 +4,7 @@
 use chrono::Utc;
 use serde_json::json;
 
-use crate::resources::{chain_entities, Classification, Resource, Share};
+use crate::resources::{chain_entities, Classification, DataType, Resource, Share};
 
 /// A resource as this server writes it reads back through the client's type.
 #[test]
@@ -30,6 +30,11 @@ fn a_resource_reads_back_through_the_client_api() {
             by: Some("label".into()),
             reason: "labelled".into(),
             at,
+            data_types: vec![DataType {
+                data_type: "financial".into(),
+                by: "content".into(),
+                reason: "the content mentions \"cash flow\"".into(),
+            }],
         }),
     };
     let wire = serde_json::to_value(json!({ "resource": r })).unwrap();
@@ -39,7 +44,12 @@ fn a_resource_reads_back_through_the_client_api() {
         (c.id.as_str(), c.parent.as_deref(), c.sharing[0].role.as_str()),
         ("gdrive:1", Some("gdrive:folder"), "writer")
     );
-    assert_eq!(c.classification.unwrap().sensitivity.as_deref(), Some("crown_jewels"));
+    let classification = c.classification.unwrap();
+    assert_eq!(classification.sensitivity.as_deref(), Some("crown_jewels"));
+    assert_eq!(
+        (classification.data_types[0].data_type.as_str(), classification.data_types[0].by.as_str()),
+        ("financial", "content")
+    );
     let entities = json!({ "entities": chain_entities(&[r]), "assignees": ["bob"],
         "work": [{ "id": "jira:OPS-1", "assignees": ["bob"] }] });
     let read: awzy_context_api::model::ResourceEntities = serde_json::from_value(entities).unwrap();

@@ -1877,6 +1877,21 @@ type ResourceClassification {
 }
 
 """
+A kind of data a resource holds (ADR 0123), and why awzy thinks so.
+"""
+type ResourceDataType {
+	"""
+	`customer_personal`, `financial`, … or a kind the client sent.
+	"""
+	dataType: String!
+	"""
+	label, content, or metadata.
+	"""
+	by: String!
+	reason: String!
+}
+
+"""
 A resource as the PDPs see it.
 """
 type ResourceDetail {
@@ -1890,6 +1905,10 @@ type ResourceDetail {
 	"""
 	sensitivity: String
 	classification: ResourceClassification
+	"""
+	The kinds of data it holds, as policies see them in `resource.data_types`.
+	"""
+	dataTypes: [ResourceDataType!]!
 	"""
 	Who it's shared with, as JSON (the connector's sharing entries). Null when a policy hides
 	it (ADR 0103).

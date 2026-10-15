@@ -79,6 +79,7 @@ fn unclassified_resources_get_the_default_tier() {
         by: Some("content".into()),
         reason: String::new(),
         at: now,
+        data_types: vec![],
     };
     let r = Resource { classification: Some(classified("crown_jewels")), ..r };
     assert_eq!(
@@ -205,7 +206,7 @@ async fn resources_and_work_items_round_trip() {
     assert_eq!(
         entity(&r),
         json!({ "uid": { "type": "Resource", "id": "synthetic:doc:1" },
-                 "attrs": { "sensitivity": "confidential", "unclassified": false,
+                 "attrs": { "sensitivity": "confidential", "unclassified": false, "data_types": [],
                             "owner": { "__entity": { "type": "Human", "id": "nora.patel@larkspur.example" } },
                             "shared_humans": [], "shared_groups": [{ "__entity": { "type": "Group", "id": "sales" } }],
                             "writer_humans": [], "writer_groups": [], "shared_with_everyone": false },

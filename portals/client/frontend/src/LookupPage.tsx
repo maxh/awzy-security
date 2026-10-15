@@ -238,6 +238,11 @@ function Resource({ id }: { id: string }) {
             by
             reason
           }
+          dataTypes {
+            dataType
+            by
+            reason
+          }
           sharing
           labels
           url
@@ -262,6 +267,16 @@ function Resource({ id }: { id: string }) {
             r.classification
               ? `${r.classification.sensitivity ?? "not placed yet"}${r.classification.by ? `, by ${r.classification.by}` : ""}: ${r.classification.reason}`
               : "not classified yet",
+          )}
+          {row(
+            "Data types",
+            r.dataTypes.length === 0
+              ? "none found"
+              : r.dataTypes.map((d) => (
+                  <Text key={d.dataType} size="sm">
+                    <Code>{d.dataType}</Code>, by {d.by}: {d.reason}
+                  </Text>
+                )),
           )}
           {row("Labels", r.labels.join(", ") || "none")}
           {row("Folders above", r.folders.join(" › ") || "none")}

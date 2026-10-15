@@ -62,6 +62,16 @@ pub struct ResourceClassification {
     pub reason: String,
 }
 
+/// A kind of data a resource holds (ADR 0123), and why awzy thinks so.
+#[derive(SimpleObject)]
+pub struct ResourceDataType {
+    /// `customer_personal`, `financial`, … or a kind the client sent.
+    pub data_type: String,
+    /// label, content, or metadata.
+    pub by: String,
+    pub reason: String,
+}
+
 /// A resource as the PDPs see it.
 #[derive(SimpleObject)]
 pub struct ResourceDetail {
@@ -73,6 +83,8 @@ pub struct ResourceDetail {
     /// The connector's tier.
     pub sensitivity: Option<String>,
     pub classification: Option<ResourceClassification>,
+    /// The kinds of data it holds, as policies see them in `resource.data_types`.
+    pub data_types: Vec<ResourceDataType>,
     /// Who it's shared with, as JSON (the connector's sharing entries). Null when a policy hides
     /// it (ADR 0103).
     pub sharing: Option<JsonString>,
@@ -143,6 +155,27 @@ impl LookupQuery {
             Some(e) => (e.entities.into_iter().skip(1).map(|f| f.uid.id).collect(), e.assignees),
             None => (vec![], vec![]),
         };
+        // Once classified, what was sent is among what the classifier found; until then it's all.
+        let data_types = match &r.classification {
+            Some(c) => c
+                .data_types
+                .iter()
+                .map(|d| ResourceDataType {
+                    data_type: d.data_type.clone(),
+                    by: d.by.clone(),
+                    reason: d.reason.clone(),
+                })
+                .collect(),
+            None => r
+                .sent_data_types()
+                .into_iter()
+                .map(|data_type| ResourceDataType {
+                    data_type,
+                    by: "label".into(),
+                    reason: "sent with the resource".into(),
+                })
+                .collect(),
+        };
         Ok(Some(ResourceDetail {
             id: r.id,
             name: r.name,
@@ -155,6 +188,7 @@ impl LookupQuery {
                 by: c.by,
                 reason: c.reason,
             }),
+            data_types,
             sharing: Some(JsonString::of(&serde_json::to_value(&r.sharing)?)),
             labels: r.labels,
             url: r.url,

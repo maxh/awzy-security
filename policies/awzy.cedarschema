@@ -39,6 +39,10 @@ entity Resource in [Resource] {
   // Set by the PDP: true when no label or classifier has set `sensitivity`, so it's the default
   // tier, including for a resource awzy-context doesn't know yet. Policies can challenge these.
   unclassified?: Bool,
+  // The kinds of data it holds (ADR 0123): customer_personal, employee_personal, financial,
+  // credentials, source_code, legal, health, or the client's own. Absent when awzy-context doesn't
+  // know the resource, so test it with `has`.
+  data_types?: Set<String>,
   // Who owns it in its source system (ADR 0061). Owners approve access to it.
   owner?: Human,
   // Who it's shared with, including through its folders (ADR 0061): the people and groups who can
