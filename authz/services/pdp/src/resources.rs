@@ -43,6 +43,9 @@ use http_body_util::BodyExt;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+mod drops;
+use drops::Drops;
+
 /// The tier a resource awzy-context doesn't know gets. Matches awzy-context's default for one
 /// it knows but hasn't classified.
 pub const DEFAULT_SENSITIVITY: &str = "internal";
@@ -64,8 +67,6 @@ const TIMEOUT: Duration = Duration::from_secs(1);
 /// After a fetch fails, checks skip awzy-context for this long and go straight to a stale entry
 /// or a peer, so an outage that hangs requests doesn't add the timeout to every check (#353).
 const PAUSE_AFTER_FAILED_FETCH: Duration = Duration::from_secs(1);
-/// Drops remembered for fetches in flight. A fetch that began before the oldest isn't cached.
-const DROPS_KEPT: usize = 256;
 
 /// How long an expired entry may still be used while awzy-context can't be reached, by the
 /// resource's sensitivity tier (ADR 0119). A tier not listed, and a resource awzy-context didn't
@@ -198,40 +199,6 @@ struct Cached {
 impl Cached {
     fn fresh(&self, ttl: Duration, unknown_ttl: Duration) -> bool {
         self.at.elapsed() < if self.entities.is_some() { ttl } else { unknown_ttl }
-    }
-}
-
-/// Recent drops from the cache, for telling whether a fetch in flight saw what they dropped.
-#[derive(Default)]
-struct Drops {
-    /// The number the next drop gets.
-    next: u64,
-    /// The last [`DROPS_KEPT`], oldest first, each with its number: the IDs, or None for all.
-    recent: std::collections::VecDeque<(u64, Option<HashSet<String>>)>,
-}
-
-impl Drops {
-    fn record(&mut self, ids: Option<HashSet<String>>) {
-        self.recent.push_back((self.next, ids));
-        self.next += 1;
-        if self.recent.len() > DROPS_KEPT {
-            self.recent.pop_front();
-        }
-    }
-
-    /// Whether a drop numbered `since` or later touches any of `ids`, or might have: one that
-    /// dropped everything, or one no longer remembered.
-    fn touched_since(&self, since: u64, ids: &[&str]) -> bool {
-        if since >= self.next {
-            return false;
-        }
-        if self.recent.front().is_none_or(|(n, _)| *n > since) {
-            return true;
-        }
-        self.recent
-            .iter()
-            .filter(|(n, _)| *n >= since)
-            .any(|(_, dropped)| dropped.as_ref().is_none_or(|d| ids.iter().any(|i| d.contains(*i))))
     }
 }
 
@@ -781,22 +748,6 @@ mod tests {
     #[test]
     fn ids_are_one_path_segment() {
         assert_eq!(awzy_http::encode("synthetic:folder:sales/accounts"), "synthetic%3Afolder%3Asales%2Faccounts");
-    }
-
-    #[test]
-    fn a_drop_touches_the_fetches_in_flight_for_what_it_dropped() {
-        let mut drops = Drops::default();
-        drops.record(Some(HashSet::from(["synthetic:folder:board".to_string()])));
-        let chain = ["synthetic:doc:deck", "synthetic:folder:board"];
-        assert!(drops.touched_since(0, &chain), "the folder above the document changed");
-        assert!(!drops.touched_since(1, &chain), "a fetch that began after it");
-        assert!(!drops.touched_since(0, &["synthetic:doc:other"]));
-        drops.record(None);
-        assert!(drops.touched_since(1, &["synthetic:doc:other"]), "a reset touches everything");
-        for _ in 0..DROPS_KEPT {
-            drops.record(Some(HashSet::new()));
-        }
-        assert!(drops.touched_since(0, &["synthetic:doc:other"]), "one no longer remembered might have");
     }
 
     #[tokio::test]
