@@ -1,0 +1,12 @@
+[package]
+name = "awzy-policy-proofs"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+cedar-policy.workspace = true
+cedar-policy-symcc.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["process"] }

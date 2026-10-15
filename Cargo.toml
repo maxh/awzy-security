@@ -29,6 +29,7 @@ members = [
     "authz/services/reasoner",
     "authz/services/reporter",
     "authz/libs/signing",
+    "authz/libs/policy-proofs",
     "authz/libs/signing-aws",
     "authz/libs/signing-gcp",
     "authz/libs/secrets-aws",
@@ -78,6 +79,8 @@ async-graphql-axum = "7.2"
 async-trait = "0.1"
 axum = "0.8"
 cedar-policy = "=4.13.0"
+# Proofs about policy sets (#428); its version follows cedar-policy's exactly.
+cedar-policy-symcc = "=0.7.0"
 http = "1"
 http-body-util = "0.1"
 # rustls with ring: aws-lc-rs needs CMake, which the hermetic Bazel toolchain doesn't have.

@@ -33,9 +33,11 @@ globalThis.ResizeObserver = class {
 // Without Vitest globals, Testing Library doesn't unmount between tests by itself.
 afterEach(cleanup);
 
-/** Renders `ui` as a page would be, against a fresh mock Relay environment, which it returns. */
-export function renderWithRelay(ui: ReactNode) {
-  const environment = createMockEnvironment();
+/**
+ * Renders `ui` as a page would be, against a mock Relay environment, which it returns: a fresh
+ * one, or `environment` when a test has loaded the page's query into it first.
+ */
+export function renderWithRelay(ui: ReactNode, environment = createMockEnvironment()) {
   render(
     <MantineProvider>
       <RelayEnvironmentProvider environment={environment}>{ui}</RelayEnvironmentProvider>

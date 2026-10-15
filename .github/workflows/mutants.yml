@@ -1,0 +1,62 @@
+name: mutants
+
+# Mutation testing on the decision path (#431): cargo-mutants changes the code, a comparison or
+# a returned value at a time, and runs the crate's tests. A mutant they don't catch is a change
+# to how awzy decides that no test would notice. Nightly, as a report on the run's summary; it
+# fails only when the tests fail with nothing changed. Tests that need Postgres skip here, as
+# they do without the local stack, so code only they cover shows as missed.
+on:
+  schedule:
+    - cron: "41 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mutants:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: pdp
+            files: >-
+              --file authz/services/pdp/src/lib.rs
+              --file authz/services/pdp/src/prepared.rs
+              --file authz/services/pdp/src/challenges.rs
+              --file authz/services/pdp/src/containments.rs
+          - name: gateway
+            files: --file authz/services/gateway/src/mcp.rs
+          - name: challenge
+            files: --file authz/services/challenge/src/store.rs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+      - name: Mutate and test
+        run: |
+          set +e
+          cargo mutants --no-shuffle --jobs 2 --timeout-multiplier 3 --output target ${{ matrix.files }}
+          status=$?
+          set -e
+          out=target/mutants.out
+          { echo "### Mutants: ${{ matrix.name }}"
+            for kind in caught missed timeout unviable; do
+              echo "- $kind: $(wc -l < "$out/$kind.txt" 2>/dev/null || echo 0)"
+            done
+            if [ -s "$out/missed.txt" ]; then
+              echo; echo "Missed, each a change no test noticed:"; echo '```'; cat "$out/missed.txt"; echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          # 0: all caught, 2: some missed, 3: some timed out. Anything else, such as 4 (the tests
+          # fail unmutated), is a broken run.
+          case $status in 0|2|3) exit 0 ;; *) exit $status ;; esac
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutants-${{ matrix.name }}
+          path: target/mutants.out
