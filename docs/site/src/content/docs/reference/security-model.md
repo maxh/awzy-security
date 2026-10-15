@@ -3,6 +3,9 @@ title: Security model
 description: What awzy can and can't see, and how releases reach your install.
 ---
 
+Who these defend against, attacker by attacker, and how each defense is checked, is in
+[Threat model](/reference/threat-model/).
+
 - **Single-tenant, in your account.** Each client runs its own install in its own cloud
   account. There is no shared awzy service holding client data.
 - **No vendor access.** awzy has no credentials for your install, even in an emergency. Repairs
