@@ -1,0 +1,59 @@
+# cargo-deny over the Rust workspace (#430), in CI's `deny` job: known vulnerabilities and
+# unmaintained crates (the RustSec advisory database), licenses, and where crates come from.
+# Run locally: `cargo deny check`, with cargo-deny installed.
+
+[graph]
+# The platforms images are built for and developers build on; Windows crates don't ship.
+targets = [
+  "aarch64-apple-darwin",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-unknown-linux-gnu",
+]
+all-features = false
+
+[advisories]
+# Every advisory fails the check, unmaintained crates included, unless it's listed here with why
+# it doesn't reach awzy.
+ignore = [
+  # Marvin: RSA private-key operations leak timing. `rsa` comes in through jsonwebtoken, and has no
+  # fixed release. awzy verifies RSA tokens (public-key, unaffected) and signs with RSA only in
+  # awzy-connectors' Google service-account assertion, inside the pod, where no one can time it.
+  { id = "RUSTSEC-2023-0071", reason = "only RSA verification, and one signature no attacker can time" },
+]
+unmaintained = "all"
+yanked = "deny"
+
+[licenses]
+# What awzy, MIT itself, can ship in its images. MPL-2.0 is file-level copyleft: fine unmodified.
+allow = [
+  "0BSD",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "CDLA-Permissive-2.0",
+  "ISC",
+  "MIT",
+  "MPL-2.0",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+confidence-threshold = 0.9
+
+[licenses.private]
+# awzy's own crates aren't published.
+ignore = true
+
+[bans]
+# Two versions of a crate is common and harmless enough to only report.
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+# crates.io only: no git dependencies or other registries.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

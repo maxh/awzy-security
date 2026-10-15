@@ -41,7 +41,7 @@ jobs:
               - '!.agents/**'
               - '!.claude/**'
 
-  # Five jobs in parallel, so a run takes as long as the slowest. All five must pass.
+  # Six jobs in parallel, so a run takes as long as the slowest. All six must pass.
 
   # The protobuf APIs SDKs and enforcement points build on (ADR 0045): buf lint and format,
   # and on pull requests no breaking change against main, to generated code or the wire.
@@ -111,6 +111,33 @@ jobs:
           dotnet-version: "8.0.x"
       - run: dotnet tool install --global P --version 3.1.0
       - run: tools/ci/check-p-models.sh
+
+  # What the dependencies are (#430): cargo-deny's licenses, bans, and sources (deny.toml), which
+  # only a change here can break, and npm's advisories for what the portals ship. Rust advisories
+  # are reported but don't fail a pull request, since a new one can land against any commit;
+  # supply-chain.yml fails on them daily.
+  supply-chain:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        checks: [advisories, "bans licenses sources"]
+    continue-on-error: ${{ matrix.checks == 'advisories' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check ${{ matrix.checks }}
+      - if: matrix.checks != 'advisories'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - if: matrix.checks != 'advisories'
+        run: corepack enable && pnpm audit --prod
 
   # Clippy and rustfmt over every Rust target; any warning fails.
   lint-rust:
