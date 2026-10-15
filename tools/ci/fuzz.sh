@@ -15,17 +15,25 @@ else
   dirs="$(git ls-files '*/fuzz/Cargo.toml' | xargs -n1 dirname)"
 fi
 
+# The host's target: cargo-fuzz otherwise builds for the one it was built for, and a prebuilt
+# cargo-fuzz is musl, which the sanitizers can't use.
+host="$(rustc +nightly -vV | sed -n 's/^host: //p')"
+
 failed=0
 for dir in $dirs; do
   for target in $(cd "$dir" && cargo +nightly fuzz list); do
     echo "::group::fuzz $dir $target (${seconds}s)"
-    if (cd "$dir" && cargo +nightly fuzz run "$target" -- -max_total_time="$seconds"); then
+    if (cd "$dir" && cargo +nightly fuzz run --target "$host" "$target" -- -max_total_time="$seconds"); then
       echo "::endgroup::"
       echo "ok: $dir $target"
     else
       echo "::endgroup::"
       failed=1
-      echo "::error file=$dir/fuzz_targets/$target.rs::$target found a failing input; it's in $dir/artifacts/$target/"
+      if [ -n "$(ls -A "$dir/artifacts/$target" 2>/dev/null)" ]; then
+        echo "::error file=$dir/fuzz_targets/$target.rs::$target found a failing input; it's in $dir/artifacts/$target/"
+      else
+        echo "::error file=$dir/fuzz_targets/$target.rs::$target didn't build or run; see its log above"
+      fi
     fi
   done
 done
