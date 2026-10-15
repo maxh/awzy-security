@@ -1,5 +1,5 @@
 {
-  "checksum": "4f602fa4e6276a3fb0a0dfca0e357f2af80a1bf7470b4a1de4b98e039632c505",
+  "checksum": "53065d2884a866a64331d843ff46ce8448adcf20563ac8811cc0666f97889510",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -1174,6 +1174,49 @@
         }
       ],
       "version": "2.6.0"
+    },
+    "async-recursion 1.2.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "proc-macro2 1.0.107",
+            "target": "proc_macro2"
+          },
+          {
+            "id": "quote 1.0.47",
+            "target": "quote"
+          },
+          {
+            "id": "syn 3.0.6",
+            "target": "syn"
+          }
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "async_recursion",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "async-recursion",
+      "package_url": "https://github.com/dcchut/async-recursion",
+      "repository": {
+        "Http": {
+          "sha256": "4f8abc12baad266b1c8cec146854c195b5864b4221d4b2ca7296a7ae82d9e451",
+          "url": "https://static.crates.io/crates/async-recursion/1.2.0/download"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "async_recursion",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.2.0"
     },
     "async-trait 0.1.92": {
       "common_attrs": {
@@ -5032,6 +5075,45 @@
       ],
       "version": "0.1.0"
     },
+    "awzy-policy-proofs 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "cedar-policy 4.13.0",
+            "target": "cedar_policy"
+          },
+          {
+            "id": "cedar-policy-symcc 0.7.0",
+            "target": "cedar_policy_symcc"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          },
+          {
+            "id": "tokio 1.53.2",
+            "target": "tokio"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "awzy_policy_proofs",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "awzy-policy-proofs",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "awzy_policy_proofs",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
     "awzy-portal 0.1.0": {
       "common_attrs": {
         "deps": [
@@ -7301,6 +7383,89 @@
         }
       ],
       "version": "4.13.0"
+    },
+    "cedar-policy-symcc 0.7.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "cedar-policy 4.13.0",
+            "target": "cedar_policy"
+          },
+          {
+            "id": "cedar-policy-core 4.13.0",
+            "target": "cedar_policy_core"
+          },
+          {
+            "id": "chrono 0.4.45",
+            "target": "chrono"
+          },
+          {
+            "id": "itertools 0.15.0",
+            "target": "itertools"
+          },
+          {
+            "id": "miette 7.6.0",
+            "target": "miette"
+          },
+          {
+            "id": "nonempty 0.12.0",
+            "target": "nonempty"
+          },
+          {
+            "id": "num-bigint 0.5.1",
+            "target": "num_bigint"
+          },
+          {
+            "id": "num-traits 0.2.19",
+            "target": "num_traits"
+          },
+          {
+            "id": "ref-cast 1.0.27",
+            "target": "ref_cast"
+          },
+          {
+            "id": "smol_str 0.3.6",
+            "target": "smol_str"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          },
+          {
+            "id": "tokio 1.53.2",
+            "target": "tokio"
+          }
+        ],
+        "edition": "2021",
+        "proc_macro_deps": [
+          {
+            "id": "async-recursion 1.2.0",
+            "target": "async_recursion"
+          }
+        ]
+      },
+      "library_target_name": "cedar_policy_symcc",
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "name": "cedar-policy-symcc",
+      "package_url": "https://github.com/cedar-policy/cedar",
+      "repository": {
+        "Http": {
+          "sha256": "c4a1e6ff21119f50f3114451b9d7ac135690fe18759cc37a59d8aa5b1c797c5b",
+          "url": "https://static.crates.io/crates/cedar-policy-symcc/0.7.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "cedar_policy_symcc",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.7.0"
     },
     "cfg-if 1.0.5": {
       "common_attrs": {
@@ -16255,6 +16420,49 @@
         }
       ],
       "version": "0.4.8"
+    },
+    "num-bigint 0.5.1": {
+      "common_attrs": {
+        "crate_features": [
+          "default",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "num-integer 0.1.47",
+            "target": "num_integer"
+          },
+          {
+            "id": "num-traits 0.2.19",
+            "target": "num_traits"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "num_bigint",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "num-bigint",
+      "package_url": "https://github.com/rust-num/num-bigint",
+      "repository": {
+        "Http": {
+          "sha256": "93e7820bc0a80a0238e650327316f929ba18d5be054b647490a3a6a339f3e7c0",
+          "url": "https://static.crates.io/crates/num-bigint/0.5.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "num_bigint",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.5.1"
     },
     "num-bigint-dig 0.8.6": {
       "build_script_attrs": {},
@@ -30051,6 +30259,7 @@
     "base64 0.22.1",
     "bytes 1.12.1",
     "cedar-policy 4.13.0",
+    "cedar-policy-symcc 0.7.0",
     "chrono 0.4.45",
     "ciborium 0.2.2",
     "clickhouse 0.15.2",
@@ -30125,6 +30334,7 @@
     "awzy-model-routing 0.1.0": "authz/libs/model-routing",
     "awzy-pdp 0.1.0": "authz/services/pdp",
     "awzy-policy 0.1.0": "authz/services/policy",
+    "awzy-policy-proofs 0.1.0": "authz/libs/policy-proofs",
     "awzy-portal 0.1.0": "libs/portal",
     "awzy-reasoner 0.1.0": "authz/services/reasoner",
     "awzy-registry 0.1.0": "portals/corp/registry",

@@ -223,6 +223,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-recursion"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f8abc12baad266b1c8cec146854c195b5864b4221d4b2ca7296a7ae82d9e451"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.6",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1273,6 +1284,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "awzy-policy-proofs"
+version = "0.1.0"
+dependencies = [
+ "cedar-policy",
+ "cedar-policy-symcc",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "awzy-portal"
 version = "0.1.0"
 dependencies = [
@@ -1852,6 +1873,27 @@ dependencies = [
  "pretty",
  "regex",
  "smol_str",
+]
+
+[[package]]
+name = "cedar-policy-symcc"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4a1e6ff21119f50f3114451b9d7ac135690fe18759cc37a59d8aa5b1c797c5b"
+dependencies = [
+ "async-recursion",
+ "cedar-policy",
+ "cedar-policy-core",
+ "chrono",
+ "itertools 0.15.0",
+ "miette",
+ "nonempty",
+ "num-bigint 0.5.1",
+ "num-traits",
+ "ref-cast",
+ "smol_str",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]
@@ -3816,6 +3858,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-bigint"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93e7820bc0a80a0238e650327316f929ba18d5be054b647490a3a6a339f3e7c0"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "num-bigint-dig"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5246,7 +5298,7 @@ version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d585997b0ac10be3c5ee635f1bab02d512760d14b7c468801ac8a01d9ae5f1d"
 dependencies = [
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-traits",
  "thiserror 2.0.21",
  "time",

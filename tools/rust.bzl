@@ -19,13 +19,15 @@ IMAGE_PLATFORMS = [
     "//tools/platforms:linux_arm64",
 ]
 
-def awzy_rust_library(name, crate_name, deps = [], test_deps = [], compile_data = [], test_size = "small", visibility = None):
+def awzy_rust_library(name, crate_name, deps = [], test_deps = [], compile_data = [], test_data = [], test_env = {}, test_size = "small", visibility = None):
     """A library crate plus its unit tests (`:<name>_test`).
 
     Third-party deps come from the package's Cargo.toml via crate_universe;
     `deps` lists only first-party Bazel targets, and `test_deps` first-party targets that
-    only the tests use (Cargo dev-dependencies). `test_size` is Bazel's: "small" allows a minute,
-    "medium" five, for tests that run several services end to end.
+    only the tests use (Cargo dev-dependencies). `test_data` and `test_env` are files the tests
+    run with and their environment, which can name those files with `$(rootpath ...)`.
+    `test_size` is Bazel's: "small" allows a minute, "medium" five, for tests that run several
+    services end to end.
     """
     rust_library(
         name = name,
@@ -40,6 +42,8 @@ def awzy_rust_library(name, crate_name, deps = [], test_deps = [], compile_data 
         name = name + "_test",
         crate = ":" + name,
         size = test_size,
+        data = test_data,
+        env = test_env,
         deps = test_deps + all_crate_deps(normal_dev = True),
         proc_macro_deps = all_crate_deps(proc_macro_dev = True),
     )
