@@ -137,6 +137,31 @@ async fn a_grant_answers_only_the_policies_that_asked_for_it() {
 }
 
 #[tokio::test]
+async fn a_policy_that_joins_a_pending_challenge_needs_its_kind_answered_again() {
+    let Some(store) = test_store(Lifetimes::default()).await else { return };
+    let req = request(alice(), None);
+    let approval = ChallengedPolicy { id: "board-material".into(), kind: ChallengeKind::Approval };
+    let justify = |id: &str| ChallengedPolicy { id: id.into(), kind: ChallengeKind::Justification };
+    let first = [approval.clone(), justify("outside-work")];
+    let id = store.resolve_policies(DecisionId::new(), &req, &first, Some("alice"), true).await.unwrap();
+    let id = id.challenge_id.unwrap();
+    store.justify(id, "alice", WHY).await.unwrap();
+
+    // Before the approval, a policy asking for a justification of its own starts to apply.
+    let more = [approval, justify("outside-work"), justify("risk-went-up")];
+    let r = store.resolve_policies(DecisionId::new(), &req, &more, Some("alice"), true).await.unwrap();
+    assert_eq!(r.challenge_id, Some(id), "the retry joins the pending challenge");
+    let c = store.get(id).await.unwrap();
+    assert!(!c.passed.contains(ChallengeKind::Justification), "the earlier justification wasn't for the new policy");
+
+    store.decide(id, "carol", true, "").await.unwrap();
+    assert_eq!(store.get(id).await.unwrap().status, ChallengeStatus::Pending, "a justification is still owed");
+    store.justify(id, "alice", WHY).await.unwrap();
+    let r = store.resolve_policies(DecisionId::new(), &req, &more, Some("alice"), true).await.unwrap();
+    assert_eq!(r.passed_policies.len(), 3, "now the grant answers all three: {:?}", r.passed_policies);
+}
+
+#[tokio::test]
 async fn no_one_approves_their_own_request() {
     let Some(store) = test_store(Lifetimes::default()).await else { return };
     let agent = EntityRef::new("ServiceAccount", "sales-genie");

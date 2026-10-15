@@ -1,0 +1,13 @@
+<!-- A challenge's lifecycle (ADR 0126). Each machine sits beside the Rust it models. -->
+<Project>
+  <ProjectName>ChallengeLifecycle</ProjectName>
+  <InputFiles>
+    <PFile>./events.p</PFile>
+    <PFile>./timings.p</PFile>
+    <PFile>./specs.p</PFile>
+    <PFile>./test.p</PFile>
+    <PFile>../store/challenges.p</PFile>
+    <PFile>../../../pdp/src/challenges.p</PFile>
+  </InputFiles>
+  <OutputDir>./PGenerated/</OutputDir>
+</Project>
