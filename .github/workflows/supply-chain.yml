@@ -1,0 +1,25 @@
+name: supply-chain
+
+# Known vulnerabilities in what awzy ships, daily (#430): RustSec advisories through cargo-deny
+# (deny.toml), and npm's for the portals' production dependencies. CI reports Rust advisories on
+# pull requests without failing them; this fails, so a new one is seen within a day.
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  advisories:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable && pnpm audit --prod
