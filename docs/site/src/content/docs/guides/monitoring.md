@@ -3,11 +3,14 @@ title: Monitoring and alerts
 description: What awzy's dashboard and alerts watch, and what to do when each alert fires.
 ---
 
-Every awzy service serves Prometheus metrics at `/metrics`. awzy ships one Grafana dashboard and a
+Every awzy service serves Prometheus metrics at `/metrics` on its `metrics` port (9090), which the
+install's network policies let any scraper reach. awzy ships one Grafana dashboard and a
 set of alert rules for them, in
 [deploy/observability](https://github.com/maxh/awzy-security/tree/main/deploy/observability).
 On AWS, the `aws/monitoring` module runs Amazon Managed Prometheus with a scraper for the cluster
-and loads the alert rules, and the `grafana` module loads the dashboard into any Grafana. You can
+and loads the alert rules, and the `grafana` module loads the dashboard into any Grafana. On
+Google Cloud, the `gcp/monitoring` module has Managed Service for Prometheus scrape the cluster
+and makes each alert rule a Cloud Monitoring alert policy, with the same query and wait. You can
 use your own Prometheus and Grafana instead: load the same files.
 
 ## Traces
@@ -56,6 +59,23 @@ that's already running. So a new PDP that stays not ready usually means a source
 other PDP is running: check that awzy-policy is ready, and look for signature errors in the PDP's
 log.
 
+### AwzyServiceOnOnePod (ticket)
+
+A service that runs two or more pods has had only one ready for 5 minutes. Nothing has failed,
+but losing that pod takes the service down, and for the PDP, every enforcement point falls back.
+`kubectl -n awzy-system get pods -o wide` shows the missing pods and where they'd go. Pods
+`Pending` with "Insufficient cpu" mean the cluster has no room for them, often after a node was
+lost or drained: add a node or larger ones. Two PDPs on one node is the same risk, so check
+where they run.
+
+### AwzyPdpChecksSlow (page)
+
+The PDP's p99 check time has been over half a second for a minute, close to the time enforcement
+points wait before they use their outage fallback (2 s at awzy-gateway). It's almost always the
+PDP waiting on a service that takes connections but doesn't answer: awzy-context with its
+database down, or one with no ready pods. Check the freshness alerts below and the services
+behind them. When they recover, so does this.
+
 ### AwzyPdpCheckLatencyHigh (page)
 
 The PDP's p99 check time has been over 10 ms for 10 minutes. On the dashboard, compare Cedar time
@@ -102,7 +122,11 @@ PDP asks awzy-challenge on every check, which counts against the 10 ms budget. I
 can't answer either, the PDP decides on the last list it heard for up to 5 minutes
 (`pdp.containmentsMaxStaleSeconds`), so a restart or a database failover doesn't fail checks, and
 after that fails them. A containment added meanwhile doesn't reach that PDP. Check that
-awzy-challenge is ready and that the PDP can reach it.
+awzy-challenge is ready and that the PDP can reach it. An awzy-challenge replica that can't read
+its database for 10 seconds stops sending the feed, so its PDPs go stale rather than trust a list
+that may be behind; check the replicas' logs for database errors too. After awzy-challenge's
+database is restored from a backup, restart the PDPs and gateways: they refuse a list older than
+the one they hold.
 
 ### AwzyPdpPolicySyncStale (page)
 

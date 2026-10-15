@@ -647,7 +647,7 @@ pub struct ChangesParams {
     pub wait: Option<u64>,
 }
 
-/// The most changes one answer carries; a caller with more to read asks again at once.
+/// The most resources one answer names; past that, the caller drops its whole cache instead.
 const MAX_CHANGES: i64 = 10_000;
 
 /// Which resources' entities may have changed since `after`, so a PDP drops them from its cache.

@@ -1,0 +1,26 @@
+name: p-models-nightly
+
+# The P models (ADR 0126) over many more schedules than a pull request's run, since the checker
+# samples schedules rather than trying them all: an interleaving 3000 miss, 50,000 may reach.
+on:
+  schedule:
+    - cron: "37 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  p-models:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: dotnet tool install --global P --version 3.1.0
+      - run: tools/ci/check-p-models.sh
+        env:
+          AWZY_P_SCHEDULES: "50000"
+          AWZY_P_SLOW_BUGS: "1"

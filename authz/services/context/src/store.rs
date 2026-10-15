@@ -210,8 +210,11 @@ impl ContextStore {
         tokio::spawn(self.principals_changed.clone().follow(self.pool.clone(), "awzy_principals"));
         tokio::spawn(self.resources_changed.clone().follow(self.pool.clone(), "awzy_resources"));
         loop {
+            // Recording what went, so a PDP whose cursor is behind it drops its whole cache.
             let pruned = sqlx::query(&format!(
-                "DELETE FROM resource_changes WHERE changed_at < now() - interval '{KEEP_CHANGES}'"
+                "WITH gone AS (DELETE FROM resource_changes WHERE changed_at < now() - interval '{KEEP_CHANGES}' \
+                    RETURNING txid) \
+                 UPDATE resource_changes_pruned SET below = greatest(below, (SELECT txid FROM gone ORDER BY txid DESC LIMIT 1))"
             ))
             .execute(&self.pool)
             .await;
@@ -230,32 +233,46 @@ impl ContextStore {
         &self.resources_changed
     }
 
-    /// Resources whose entity may have changed after `after` in the change log, up to `limit`:
-    /// the new cursor, their IDs, and whether the log no longer reaches back to `after` (the
-    /// caller then drops everything it cached). Without `after`, just the cursor to start from.
+    /// Resources whose entity may have changed since cursor `after` in the change log, up to
+    /// `limit`: the new cursor, their IDs, and whether the caller should drop everything it
+    /// cached instead (the log no longer reaches back to `after`, or holds more than `limit`).
+    /// Without `after`, just the cursor to start from.
+    ///
+    /// A cursor is a transaction ID: the oldest transaction running when it was read. Every row
+    /// written below it is committed or never will be, so reading up to it, and from it next
+    /// time, misses no write however late it commits (ADR 0126). A transaction that runs long
+    /// holds the cursor back for as long.
     pub async fn resource_changes(
         &self,
         after: Option<i64>,
         limit: i64,
     ) -> Result<(i64, Vec<String>, bool), sqlx::Error> {
-        let (oldest, newest): (Option<i64>, Option<i64>) =
-            sqlx::query_as("SELECT min(seq), max(seq) FROM resource_changes").fetch_one(&self.pool).await?;
-        let Some(after) = after else { return Ok((newest.unwrap_or(0), vec![], false)) };
-        if oldest.is_some_and(|o| o > after + 1) || newest.is_some_and(|n| n < after) {
-            // Pruned past the caller's cursor, or the log was recreated beneath it.
-            return Ok((newest.unwrap_or(0), vec![], true));
+        let (horizon, pruned): (i64, i64) = sqlx::query_as(
+            "SELECT pg_snapshot_xmin(pg_current_snapshot())::text::bigint, below::text::bigint \
+             FROM resource_changes_pruned",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        let Some(after) = after else { return Ok((horizon, vec![], false)) };
+        if after <= pruned || after > horizon {
+            // Pruned past the caller's cursor, or the database is a different one beneath it.
+            return Ok((horizon, vec![], true));
         }
-        let rows: Vec<(i64, String)> =
-            sqlx::query_as("SELECT seq, resource_id FROM resource_changes WHERE seq > $1 ORDER BY seq LIMIT $2")
-                .bind(after)
-                .bind(limit)
-                .fetch_all(&self.pool)
-                .await?;
-        let cursor = rows.last().map_or(after, |(seq, _)| *seq);
-        let mut ids: Vec<String> = rows.into_iter().map(|(_, id)| id).collect();
+        let ids: Vec<String> = sqlx::query_scalar(
+            "SELECT DISTINCT resource_id FROM resource_changes \
+             WHERE txid >= $1::text::xid8 AND txid < $2::text::xid8 LIMIT $3",
+        )
+        .bind(after.to_string())
+        .bind(horizon.to_string())
+        .bind(limit + 1)
+        .fetch_all(&self.pool)
+        .await?;
+        if i64::try_from(ids.len()).unwrap_or(i64::MAX) > limit {
+            return Ok((horizon, vec![], true));
+        }
+        let mut ids = ids;
         ids.sort();
-        ids.dedup();
-        Ok((cursor, ids, false))
+        Ok((horizon, ids, false))
     }
 
     /// For the other stores in this crate ([`crate::resources`]).

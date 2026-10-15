@@ -110,7 +110,14 @@ CREATE TABLE public.removed_humans (
 CREATE TABLE public.resource_changes (
     seq bigint NOT NULL,
     resource_id text NOT NULL,
-    changed_at timestamp with time zone DEFAULT now() NOT NULL
+    changed_at timestamp with time zone DEFAULT now() NOT NULL,
+    txid xid8 DEFAULT pg_current_xact_id() NOT NULL
+);
+
+CREATE TABLE public.resource_changes_pruned (
+    one boolean DEFAULT true NOT NULL,
+    below xid8 DEFAULT '0'::xid8 NOT NULL,
+    CONSTRAINT resource_changes_pruned_one_check CHECK (one)
 );
 
 CREATE SEQUENCE public.resource_changes_seq_seq
@@ -220,6 +227,9 @@ ALTER TABLE ONLY public.removed_humans
 ALTER TABLE ONLY public.resource_changes
     ADD CONSTRAINT resource_changes_pkey PRIMARY KEY (seq);
 
+ALTER TABLE ONLY public.resource_changes_pruned
+    ADD CONSTRAINT resource_changes_pruned_pkey PRIMARY KEY (one);
+
 ALTER TABLE ONLY public.resources
     ADD CONSTRAINT resources_pkey PRIMARY KEY (id);
 
@@ -252,6 +262,8 @@ CREATE INDEX investigations_by_finished ON public.investigations USING btree (fi
 CREATE INDEX investigations_by_principal ON public.investigations USING btree (principal_type, principal_id, finished_at DESC);
 
 CREATE INDEX resource_changes_by_time ON public.resource_changes USING btree (changed_at);
+
+CREATE INDEX resource_changes_by_txid ON public.resource_changes USING btree (txid);
 
 CREATE INDEX resources_owner ON public.resources USING btree (owner);
 

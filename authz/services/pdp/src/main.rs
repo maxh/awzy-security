@@ -28,7 +28,15 @@ async fn main() -> anyhow::Result<()> {
                 }
             };
             let every = Duration::from_secs(10);
-            tokio::spawn(awzy_pdp::sync_policies(pdp, enforcement, verifier.clone(), endpoint, every));
+            let peers = std::env::var("AWZY_PDP_PEER_ADDR").ok();
+            let verify = verifier.clone();
+            tokio::spawn(async move {
+                // The running PDPs' policy first, so the first sync can't set this one behind them.
+                if let Some(peers) = peers {
+                    awzy_pdp::peer::adopt_newer_policy(&pdp, &enforcement, verify.as_deref(), &peers).await;
+                }
+                awzy_pdp::sync_policies(pdp, enforcement, verify, endpoint, every).await
+            });
         }
         Err(_) => {
             tracing::warn!("AWZY_POLICY_ADDR is not set; built-in default policies, monitor mode");
@@ -76,11 +84,12 @@ async fn main() -> anyhow::Result<()> {
     match awzy_kafka::Brokers::from_env("AWZY_KAFKA_BROKERS")? {
         Some(brokers) => {
             let topic = std::env::var("AWZY_DECISIONS_TOPIC").unwrap_or_else(|_| DEFAULT_DECISIONS_TOPIC.into());
-            state = state.with_log(DecisionLog::connect_kafka(&brokers, &topic).await?);
+            // Connected in the background: a PDP serves checks while Kafka is down (#400).
+            state = state.with_log(DecisionLog::start_kafka(brokers.clone(), topic));
             // Query plans have their own record and topic (ADR 0113).
             let plans =
                 std::env::var("AWZY_PLANS_TOPIC").unwrap_or_else(|_| awzy_pdp::plan::DEFAULT_PLANS_TOPIC.into());
-            state = state.with_plan_log(awzy_pdp::plan::PlanLog::connect_kafka(&brokers, &plans).await?);
+            state = state.with_plan_log(awzy_pdp::plan::PlanLog::start_kafka(brokers, plans));
         }
         None => tracing::warn!("AWZY_KAFKA_BROKERS is not set; decisions are not logged"),
     }

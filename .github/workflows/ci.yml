@@ -41,7 +41,7 @@ jobs:
               - '!.agents/**'
               - '!.claude/**'
 
-  # Four jobs in parallel, so a run takes as long as the slowest. All four must pass.
+  # Six jobs in parallel, so a run takes as long as the slowest. All six must pass.
 
   # The protobuf APIs SDKs and enforcement points build on (ADR 0045): buf lint and format,
   # and on pull requests no breaking change against main, to generated code or the wire.
@@ -89,6 +89,55 @@ jobs:
           { echo '### Frontend test coverage'; echo '```'
             grep -E ' coverage: (Statements|Branches|Functions|Lines) ' coverage.txt || echo "no coverage summary"
             echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  # The P models of protocols between services (ADR 0126): each property, over a few thousand
+  # schedules, and each bug a model found put back, which must break its property. A failure
+  # prints the trace that broke it. p-models-nightly.yml runs many more schedules.
+  p-models:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the drift warning compares with the pull request's base
+      - name: Models changed with their code
+        if: github.event_name == 'pull_request'
+        run: tools/ci/check-p-drift.sh "${{ github.event.pull_request.base.sha }}"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: dotnet tool install --global P --version 3.1.0
+      - run: tools/ci/check-p-models.sh
+
+  # What the dependencies are (#430): cargo-deny's licenses, bans, and sources (deny.toml), which
+  # only a change here can break, and npm's advisories for what the portals ship. Rust advisories
+  # are reported but don't fail a pull request, since a new one can land against any commit;
+  # supply-chain.yml fails on them daily.
+  supply-chain:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        checks: [advisories, "bans licenses sources"]
+    continue-on-error: ${{ matrix.checks == 'advisories' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check ${{ matrix.checks }}
+      - if: matrix.checks != 'advisories'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - if: matrix.checks != 'advisories'
+        run: corepack enable && pnpm audit --prod
 
   # Clippy and rustfmt over every Rust target; any warning fails.
   lint-rust:
@@ -171,6 +220,12 @@ jobs:
       # Every alert links the section of the docs that says what to do about it.
       - name: Alerts link their runbooks
         run: tools/ci/check-alert-runbooks.sh
+      # The rules load in Prometheus itself, the local stack's version: a duplicate key or a bad
+      # expression otherwise surfaces only when an install's monitoring is applied.
+      - name: Alert rules load in Prometheus
+        run: >-
+          docker run --rm -v "$PWD/deploy/observability/prometheus:/rules:ro" --entrypoint promtool
+          prom/prometheus:v3.5.0 check rules /rules/alerts.yaml
       # What the code-quality pass removed stays removed, and what's left only shrinks (#221 to
       # #227).
       - name: Code quality ratchets

@@ -120,6 +120,42 @@ pub async fn start_from_peers(state: AppState, verifier: Option<std::sync::Arc<B
     }
 }
 
+/// Before a starting PDP's first policy sync, takes any newer signed policy its running peers
+/// hold, so awzy-policy's database can't start it on an older bundle or mode than they enforce:
+/// one set back, or with its switches deleted (ADR 0126; `sync.p` models it). Whatever
+/// awzy-policy sends afterwards must then be no older. With no peer running, as on a new
+/// install's first start, it starts from awzy-policy alone.
+pub async fn adopt_newer_policy(
+    pdp: &crate::SharedPdp,
+    enforcement: &crate::Enforcement,
+    verifier: Option<&BundleVerifier>,
+    peers: &str,
+) {
+    let answers = match tokio::time::timeout(PEER_TIMEOUT, ask_peers(peers)).await {
+        Ok(answers) => answers,
+        Err(_) => {
+            tracing::warn!(%peers, "no peer passed its policy in time; starting from awzy-policy alone");
+            return;
+        }
+    };
+    let newest =
+        answers.into_iter().filter_map(|a| a.policy).max_by_key(|p| p.bundle.as_ref().map_or(0, |b| b.version));
+    let Some(policy) = newest else { return };
+    // Each is applied only if it verifies and is newer, so a refusal here just means the PDP
+    // already has as much.
+    if let Some(bundle) = policy.bundle {
+        if let Err(error) = crate::sync::apply_bundle(pdp, verifier, bundle) {
+            tracing::info!(%error, "kept this PDP's bundle over a peer's");
+        }
+    }
+    if let Some(install) = policy.install {
+        if let Err(error) = crate::sync::apply_setting(enforcement, verifier, install) {
+            tracing::info!(%error, "kept this PDP's mode over a peer's");
+        }
+    }
+    crate::sync::apply_scoped(enforcement, verifier, policy.scoped);
+}
+
 /// The state of up to `MOST_PEERS` of the PDPs behind `peers`. The ones that don't answer are
 /// logged and left out.
 async fn ask_peers(peers: &str) -> Vec<GetStateResponse> {
@@ -207,8 +243,9 @@ pub fn apply(state: &AppState, verifier: Option<&BundleVerifier>, answers: Vec<G
     }
     if state.containments.is_configured() && !state.containments.is_ready() {
         if let Some(newest) = containments.into_iter().max_by_key(|c| c.version) {
-            state.containments.load_list(newest.version, newest.active, Duration::from_millis(newest.age_ms));
-            loaded.push("containments");
+            if state.containments.load_list(newest.version, newest.active, Duration::from_millis(newest.age_ms)) {
+                loaded.push("containments");
+            }
         }
     }
     loaded
@@ -364,5 +401,34 @@ mod tests {
         let state = starting();
         assert_eq!(apply(&state, Some(&verifier), answers).len(), 3);
         assert!(state.is_ready());
+    }
+
+    #[tokio::test]
+    async fn a_starting_pdp_takes_its_peers_policy_before_awzy_policys() {
+        let (signer, verifier) = signer();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let app = crate::router(running(&signer, &verifier));
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let state = starting();
+        adopt_newer_policy(&state.pdp, &state.enforcement, Some(&verifier), &addr.to_string()).await;
+        assert_eq!(state.pdp.load().version(), 3);
+        assert_eq!(state.enforcement.mode(), EnforcementMode::Enforce);
+        // awzy-policy's database with the install's switches deleted: never switched, so monitor.
+        let deleted = awzy_authz_proto::policy::v1::EnforcementSetting::default();
+        assert!(
+            crate::sync::apply_setting(&state.enforcement, Some(&verifier), deleted).is_err(),
+            "the peer's signed mode stands"
+        );
+        assert_eq!(state.enforcement.mode(), EnforcementMode::Enforce);
+    }
+
+    #[tokio::test]
+    async fn with_no_peer_running_a_pdp_starts_from_awzy_policy_alone() {
+        let (_, verifier) = signer();
+        let state = starting();
+        adopt_newer_policy(&state.pdp, &state.enforcement, Some(&verifier), "127.0.0.1:9").await;
+        assert!(!state.enforcement.is_ready(), "nothing taken, so the first sync decides");
     }
 }

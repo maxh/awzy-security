@@ -307,6 +307,12 @@ impl ChallengeStore {
             let mut ids: Vec<String> = unanswered.iter().map(|p| p.id.clone()).collect();
             ids.sort();
             ids.dedup();
+            // Each unanswered policy beside the kind it asks. A policy new to a pending challenge
+            // takes back its kind if that was passed before it asked: an answer given before it
+            // asked isn't one (ADR 0080). The P model beside this module checks that
+            // (`store/challenges.p`, ADR 0126).
+            let asking_ids: Vec<&str> = unanswered.iter().map(|p| p.id.as_str()).collect();
+            let asking_kinds: Vec<&str> = unanswered.iter().map(|p| p.kind.as_str()).collect();
             let insert = "INSERT INTO challenges (principal_type, principal_id, on_behalf_of_type, on_behalf_of_id, \
                     action, resource_type, resource_id, id, decision_id, kinds, status, answerer_id, expires_at, \
                     policies) \
@@ -317,7 +323,10 @@ impl ChallengeStore {
                  DO UPDATE SET kinds = ARRAY(SELECT DISTINCT k FROM unnest(challenges.kinds || EXCLUDED.kinds) AS k \
                     ORDER BY k), \
                     policies = ARRAY(SELECT DISTINCT p FROM unnest(challenges.policies || EXCLUDED.policies) AS p \
-                    ORDER BY p) \
+                    ORDER BY p), \
+                    passed = ARRAY(SELECT k FROM unnest(challenges.passed) AS k WHERE NOT EXISTS ( \
+                       SELECT 1 FROM unnest($14::text[], $15::text[]) AS asking(id, kind) \
+                       WHERE asking.kind = k AND asking.id <> ALL(challenges.policies))) \
                  RETURNING id, (xmax = 0) AS inserted";
             let row = bind_request(sqlx::query(insert), request)
                 .bind(ChallengeId::new().uuid())
@@ -326,6 +335,8 @@ impl ChallengeStore {
                 .bind(answerer_id.unwrap_or_default())
                 .bind(self.lifetimes.pending.as_secs_f64())
                 .bind(&ids)
+                .bind(&asking_ids)
+                .bind(&asking_kinds)
                 .fetch_one(&mut *tx)
                 .await?;
             // An inserted row has no xmax; one the conflict updated does.

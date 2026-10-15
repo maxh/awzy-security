@@ -9,6 +9,9 @@
 //! The last-known list keeps counting while the feed is down. A containment issued during an
 //! outage can't reach a gateway that's cut off, and the replay TTL bounds that exposure, as ADR
 //! 0030 accepts. A gateway that has never received a list replays nothing.
+//!
+//! The list never goes back to an older version, since the replica a gateway reconnects to may
+//! lag the one it left. The P model beside this file (`containments.p`, ADR 0126) checks that.
 
 use std::{
     collections::HashSet,
@@ -26,8 +29,8 @@ pub(crate) fn key(r: &EntityRef) -> String {
 }
 
 pub struct Containments {
-    /// None until the first list arrives.
-    known: RwLock<Option<HashSet<String>>>,
+    /// None until the first list arrives; then its version and the principals it names.
+    known: RwLock<Option<(i64, HashSet<String>)>>,
     /// False without awzy-challenge: then no one is contained and replays are as before.
     configured: bool,
 }
@@ -45,7 +48,7 @@ pub enum Replay {
 impl Containments {
     /// Without awzy-challenge.
     pub fn none() -> Self {
-        Self { known: RwLock::new(Some(HashSet::new())), configured: false }
+        Self { known: RwLock::new(Some((0, HashSet::new()))), configured: false }
     }
 
     /// Replays nothing until the first list from awzy-challenge arrives.
@@ -57,16 +60,26 @@ impl Containments {
         self.configured
     }
 
-    /// Replaces the list.
-    pub fn load(&self, contained: HashSet<String>) {
-        *self.known.write().expect("containments lock") = Some(contained);
+    /// Whether a list at `version` would replace the one held: none is held, or it's no older.
+    pub fn takes(&self, version: i64) -> bool {
+        self.known.read().expect("containments lock").as_ref().is_none_or(|(held, _)| version >= *held)
+    }
+
+    /// Replaces the list, unless the one held is newer. Returns whether it did.
+    pub fn load(&self, version: i64, contained: HashSet<String>) -> bool {
+        let mut known = self.known.write().expect("containments lock");
+        if known.as_ref().is_some_and(|(held, _)| version < *held) {
+            return false;
+        }
+        *known = Some((version, contained));
+        true
     }
 
     /// Whether a recent allow may be replayed for `who` (the principal, and the person it acts for).
     pub fn replay(&self, who: &[&EntityRef]) -> Replay {
         match self.known.read().expect("containments lock").as_ref() {
             None => Replay::Unknown,
-            Some(set) if who.iter().any(|w| set.contains(&key(w))) => Replay::Contained,
+            Some((_, set)) if who.iter().any(|w| set.contains(&key(w))) => Replay::Contained,
             Some(_) => Replay::Allowed,
         }
     }
@@ -95,12 +108,17 @@ async fn follow_once(
     let mut stream = client.watch_containments(WatchContainmentsRequest {}).await?.into_inner();
     while let Some(msg) = stream.message().await? {
         if msg.changed {
+            // Only the feed loads lists, so nothing can change the one held between here and load.
+            if !containments.takes(msg.version) {
+                tracing::warn!(version = msg.version, "refused an older containment list; this replica is behind");
+                continue;
+            }
             let contained: HashSet<String> =
                 msg.active.iter().filter_map(|c| c.principal.clone()).map(|s| key(&s.into())).collect();
             // Forget first, so there's no moment when the list names someone whose allows remain.
             forget(&contained);
             tracing::info!(version = msg.version, active = contained.len(), "loaded containments");
-            containments.load(contained);
+            containments.load(msg.version, contained);
         }
     }
     anyhow::bail!("awzy-challenge closed the containment feed")
@@ -182,9 +200,20 @@ mod tests {
         let bob = EntityRef::new("Human", "bob");
         assert_eq!(c.replay(&[&agent]), Replay::Unknown, "nothing replays before the first list");
 
-        c.load(HashSet::from([key(&bob)]));
+        c.load(1, HashSet::from([key(&bob)]));
         assert_eq!(c.replay(&[&agent]), Replay::Allowed);
         assert_eq!(c.replay(&[&agent, &bob]), Replay::Contained, "an agent acting for a contained person");
         assert_eq!(Containments::none().replay(&[&bob]), Replay::Allowed, "without awzy-challenge, as before");
+    }
+
+    #[test]
+    fn a_lagging_replica_never_rolls_the_list_back() {
+        let c = Containments::awaiting_feed();
+        let bob = EntityRef::new("Human", "bob");
+        assert!(c.load(5, HashSet::from([key(&bob)])));
+        assert!(!c.takes(4) && !c.load(4, HashSet::new()), "an older list is refused");
+        assert_eq!(c.replay(&[&bob]), Replay::Contained, "so bob's containment stands");
+        assert!(c.load(6, HashSet::new()), "a newer one lifts it");
+        assert_eq!(c.replay(&[&bob]), Replay::Allowed);
     }
 }

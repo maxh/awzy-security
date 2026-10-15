@@ -28,3 +28,7 @@ portals/*/frontend/persisted_queries.json
 
 # tools/demo: its logs, pids, and the dev IdP's certificate.
 /.demo/
+
+# P models: what `p compile` and `p check` write beside each project (ADR 0126).
+PGenerated/
+PCheckerOutput/

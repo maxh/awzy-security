@@ -9,10 +9,11 @@ never references awzy's accounts or state.
 | --- | --- |
 | `install/` | the cloud layer (`gcp/install`) in the install's project |
 | `bootstrap/` | the cluster layer |
+| `monitoring/` | `gcp/monitoring`: Managed Prometheus scraping and Cloud Monitoring alert policies |
 
 What it leaves out on Google Cloud so far: ClickHouse backups (GCS's S3 API needs HMAC keys),
 Awzy Bot and investigations (Vertex AI), connector credentials from the client portal (it writes
-to AWS Secrets Manager only), and managed monitoring.
+to AWS Secrets Manager only), and dashboards (no Grafana yet).
 
 ## Once per project
 
@@ -32,7 +33,11 @@ to AWS Secrets Manager only), and managed monitoring.
 ```sh
 cd install && tofu init && tofu apply      # the cluster, Cloud SQL, KMS, and Kafka
 cd ../bootstrap && tofu init && tofu apply # Argo CD and the rest, then the awzy chart
+cd ../monitoring && tofu init && tofu apply # scraping, and the alert rules as alert policies
 ```
+
+Alerts go to `TF_VAR_alert_emails` (a list) by email. Without any, incidents still open in
+Cloud Monitoring.
 
 Then point the demo hostname (a DNS-only CNAME) at the Gateway's address:
 `kubectl -n awzy-ops get gateway awzy`.

@@ -105,6 +105,33 @@ buf breaking --against ".git#ref=origin/main,subdir=authz/libs/proto"   # after 
 Integration tests skip, and pass, unless the [local stack](#local-stack) is up and you add
 `--config=local-stack`.
 
+### P models
+
+Protocols between services are modeled in [P](https://p-org.github.io/P/), each machine in a
+`.p` file beside the Rust it models, and CI's `p-models` job checks every one
+([ADR 0126](docs/adr/0126-protocols-are-modeled-in-p-beside-their-code.md)). Working on one
+needs .NET 8 (`brew install dotnet@8`) and the P toolchain:
+
+```sh
+# dotnet@8 is keg-only: put it, and the .NET tools, on the PATH (in ~/.zshrc, say).
+export DOTNET_ROOT=/opt/homebrew/opt/dotnet@8/libexec
+export PATH="/opt/homebrew/opt/dotnet@8/bin:$HOME/.dotnet/tools:$PATH"
+dotnet tool install --global P --version 3.1.0
+tools/ci/check-p-models.sh                        # every model, 3000 schedules per property
+AWZY_P_SCHEDULES=200 tools/ci/check-p-models.sh authz/services/challenge/src/feed/ContainmentFeed.pproj
+AWZY_P_BUGS=0 tools/ci/check-p-models.sh          # without putting back the bugs each found
+```
+
+After the properties, the script puts back each bug a model's `bugs.p` lists, one at a time,
+and fails unless the property named for it breaks, so a model can't quietly stop catching what
+it caught. The checker samples schedules rather than trying them all, so `p-models-nightly`
+runs every model over 50,000, and puts back the bugs that need more than 3000 to reach. On a pull request, CI warns about a `.rs` that changed while the
+`.p` beside it didn't.
+
+A failure prints the trace that broke the property. `p check` in the project's folder writes the
+full trace under `PCheckerOutput/`, which git ignores. In zsh, `p` may be an alias (for `git
+push`, say); `unalias p` first.
+
 ### Images
 
 Every service gets `:image_index` (the release image) from the `awzy_service` macro. Linux

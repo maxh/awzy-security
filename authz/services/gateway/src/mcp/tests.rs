@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::sync::{atomic::AtomicBool, Mutex};
 
 use axum::routing::post;
 use jsonwebtoken::{encode, EncodingKey, Header};
@@ -90,19 +90,33 @@ async fn gateway_with_containments(
     upstream_url: String,
     containments: Arc<Containments>,
 ) -> (Router, Arc<AtomicBool>, GatewayState) {
+    let (app, down, _, state) = gateway_with_slow_outage(mode, upstream_url, containments).await;
+    (app, down, state)
+}
+
+/// As above, and how long the switched-off PDP takes to answer, in milliseconds: an outage
+/// whose calls wait before they fail.
+async fn gateway_with_slow_outage(
+    mode: awzy_model::EnforcementMode,
+    upstream_url: String,
+    containments: Arc<Containments>,
+) -> (Router, Arc<AtomicBool>, Arc<std::sync::atomic::AtomicU64>, GatewayState) {
     std::env::set_var(SECRET_ENV, SECRET);
     let enforcement = Arc::new(awzy_pdp::Enforcement::fixed(mode));
     let down = Arc::new(AtomicBool::new(false));
     let switch = down.clone();
+    let delay = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let wait = delay.clone();
     let pdp_app = awzy_pdp::router(
         awzy_pdp::AppState::new(awzy_pdp::shared(awzy_pdp::Pdp::with_defaults().unwrap()))
             .with_enforcement(enforcement)
             .with_resources(Arc::new(awzy_pdp::resources::Resources::from_context(start_context().await))),
     )
     .layer(axum::middleware::from_fn(move |req: Request<Body>, next: axum::middleware::Next| {
-        let down = switch.clone();
+        let (down, wait) = (switch.clone(), wait.clone());
         async move {
             if down.load(Ordering::Acquire) {
+                tokio::time::sleep(std::time::Duration::from_millis(wait.load(Ordering::Acquire))).await;
                 return axum::response::IntoResponse::into_response(StatusCode::SERVICE_UNAVAILABLE);
             }
             next.run(req).await
@@ -141,7 +155,7 @@ async fn gateway_with_containments(
     let state = GatewayState::with_containments(config, pdp, containments)
         .unwrap()
         .with_fallback(Arc::new(Fallback::fixed(drive_tiers())));
-    (router(state.clone()), down, state)
+    (router(state.clone()), down, delay, state)
 }
 
 /// What the client portal would set for the test's drive: three tools by name, the rest of
@@ -367,6 +381,39 @@ async fn outage_replays_only_recent_allows_for_listed_fail_open_tools() {
     );
 }
 
+#[tokio::test]
+async fn a_slow_outage_costs_one_wait_then_calls_fall_back_at_once() {
+    let seen = Upstream::default();
+    let (app, pdp_down, delay, _) = gateway_with_slow_outage(
+        awzy_model::EnforcementMode::Enforce,
+        start_upstream(seen.clone()).await,
+        Arc::new(Containments::none()),
+    )
+    .await;
+    let alice = token("alice", None, &["security"]);
+    call(&app, Some(&alice), "read_file").await;
+
+    delay.store(400, Ordering::Release);
+    pdp_down.store(true, Ordering::Release);
+    let first = std::time::Instant::now();
+    let (_, replayed) = call(&app, Some(&alice), "read_file").await;
+    assert_eq!(replayed["result"]["content"][0]["text"], "ran read_file");
+    assert!(first.elapsed() >= std::time::Duration::from_millis(400), "the first call waits for the PDP");
+
+    let next = std::time::Instant::now();
+    for _ in 0..5 {
+        let (_, replayed) = call(&app, Some(&alice), "read_file").await;
+        assert_eq!(replayed["result"]["content"][0]["text"], "ran read_file", "the outage rules still apply");
+    }
+    assert!(next.elapsed() < std::time::Duration::from_millis(300), "the next ones don't wait, for a second");
+
+    // Back after the pause: the PDP is asked again.
+    pdp_down.store(false, Ordering::Release);
+    tokio::time::sleep(PDP_PAUSE).await;
+    let (_, ok) = call(&app, Some(&alice), "delete_file").await;
+    assert_eq!(ok["result"]["content"][0]["text"], "ran delete_file", "decided by the PDP, not the fallback");
+}
+
 /// The drill from the platform plan's Phase 3: an outage never replays an allow for an
 /// principal contained before it.
 #[tokio::test]
@@ -394,7 +441,7 @@ async fn an_outage_never_replays_an_allow_for_someone_contained_before_it() {
     // The feed arrives with no one contained; everyone builds up recent allows.
     let list = |who: &[&str]| who.iter().map(|w| format!("Human::{w}")).collect::<std::collections::HashSet<_>>();
     state.forget_allows(&list(&[]));
-    containments.load(list(&[]));
+    containments.load(1, list(&[]));
     for t in [&alice, &carol, &genie_for_alice] {
         let (_, ok) = call(&app, Some(t), "read_file").await;
         assert_eq!(ok["result"]["content"][0]["text"], "ran read_file");
@@ -402,7 +449,7 @@ async fn an_outage_never_replays_an_allow_for_someone_contained_before_it() {
 
     // Alice is contained, then the PDP goes down.
     state.forget_allows(&list(&["alice"]));
-    containments.load(list(&["alice"]));
+    containments.load(2, list(&["alice"]));
     pdp_down.store(true, Ordering::Release);
     for t in [&alice, &genie_for_alice] {
         let (_, refused) = call(&app, Some(t), "read_file").await;
@@ -412,7 +459,7 @@ async fn an_outage_never_replays_an_allow_for_someone_contained_before_it() {
     assert_eq!(carol_replayed["result"]["content"][0]["text"], "ran read_file", "carol isn't contained");
 
     // Lifted while the PDP is still down: her old allows were forgotten, so still nothing.
-    containments.load(list(&[]));
+    containments.load(3, list(&[]));
     let (_, lifted) = call(&app, Some(&alice), "read_file").await;
     assert!(lifted["result"]["content"][0]["text"].as_str().unwrap().contains("no recent allow"), "{lifted}");
 
@@ -492,4 +539,24 @@ fn a_challenged_call_links_to_the_challenge_in_the_portal() {
         meta.get("awzy/challenge_url").is_none() && meta.get("awzy/challenge_wait").is_none(),
         "nothing to link to"
     );
+}
+
+#[test]
+fn a_tool_monitored_on_its_own_leaves_the_others_enforced_in_an_outage() {
+    let modes = ModesSeen::default();
+    let (search, delete) = (ModesSeen::key("drive", "search", "call"), ModesSeen::key("drive", "delete", "call"));
+    modes.record(search.clone(), true);
+    modes.record(delete.clone(), false);
+    assert!(modes.monitoring(&search), "the monitored tool still forwards in an outage");
+    assert!(!modes.monitoring(&delete), "the enforced one falls back to the outage rules");
+    assert!(!modes.monitoring(&ModesSeen::key("drive", "rename", "call")), "and so does one never decided");
+}
+
+#[test]
+fn a_deny_clears_the_allow_an_outage_would_replay() {
+    let allows = AllowCache { ttl: std::time::Duration::from_secs(300), entries: Default::default() };
+    allows.record("ServiceAccount::sales-genie||drive/delete".into());
+    assert!(allows.recent("ServiceAccount::sales-genie||drive/delete").is_some());
+    allows.remove("ServiceAccount::sales-genie||drive/delete");
+    assert!(allows.recent("ServiceAccount::sales-genie||drive/delete").is_none(), "the PDP denied it since");
 }

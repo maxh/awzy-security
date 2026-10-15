@@ -23,3 +23,5 @@ Run through these; each one has caught a real mistake.
 8. **Docs:** public docs never cite ADRs; a decision gets an ADR; nothing deployment-specific
    (see `keep-deployments-out`).
 9. **`tools/ci/check-quality-ratchets.sh`** passes: no count is higher than on main.
+10. **P models:** a change to a file with a `.p` beside it (`feed.rs` and `feed.p`) changes the
+    model too, or says why it doesn't need to (see `model-protocol`).
