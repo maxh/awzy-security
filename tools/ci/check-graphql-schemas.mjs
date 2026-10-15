@@ -45,6 +45,7 @@ const BOUNDED = new Map([
   ["PolicyDryRun.changes", "a dry run's verdict changes, capped by the run"],
   ["PolicyDryRunChange.examples", "a few examples of one change"],
   ["Query.enforcementScopes", "the mode in force for each action and tool"],
+  ["ResourceDetail.dataTypes", "the kinds of data one resource holds, from a fixed set"],
   ["Query.installStatus", "the install's components"],
   ["Query.connectors", "the connectors awzy ships"],
   ["Query.connectorConfigs", "one configuration per connector"],
