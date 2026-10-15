@@ -23,8 +23,10 @@ function renderConfigure(credentialsSupported: boolean) {
 }
 
 describe("Configure", () => {
-  it("saves Jira's settings as the API takes them, and closes", async () => {
-    const user = userEvent.setup();
+  // It types about 70 characters, which took over Vitest's 5 s default on a busy CI runner: no
+  // pause between keys, and more time.
+  it("saves Jira's settings as the API takes them, and closes", { timeout: 20_000 }, async () => {
+    const user = userEvent.setup({ delay: null });
     const { environment, onClose } = renderConfigure(true);
 
     await user.type(screen.getByRole("textbox", { name: /Site/ }), "https://example.atlassian.net");
