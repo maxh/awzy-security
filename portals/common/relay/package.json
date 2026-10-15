@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "graphql-ws": "^6.3.0",
-    "graphql": "^16.11.0",
+    "graphql": "^17.0.2",
     "relay-runtime": "^21.0.1",
     "@types/relay-runtime": "^20.1.1",
     "react-relay": "^21.0.1",
