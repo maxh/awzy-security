@@ -1,4 +1,5 @@
 use super::*;
+use cedar_policy::PolicyId;
 use std::str::FromStr;
 
 const SCHEMA: &str = include_str!("../../../../policies/awzy.cedarschema");
@@ -14,8 +15,8 @@ fn schema() -> Schema {
     Schema::from_cedarschema_str(SCHEMA).unwrap().0
 }
 
-/// Each property in base.properties.cedar, by ID, with whether it holds after challenges.
-fn properties() -> Vec<(PolicyId, bool, PolicySet)> {
+/// Each property in base.properties.cedar, by name, with whether it holds after challenges.
+fn properties() -> Vec<(String, bool, PolicySet)> {
     PolicySet::from_str(PROPERTIES)
         .unwrap()
         .policies()
@@ -23,9 +24,9 @@ fn properties() -> Vec<(PolicyId, bool, PolicySet)> {
             let after_challenges = match p.annotation("holds") {
                 Some("after_challenges") => true,
                 Some("outright") => false,
-                other => panic!("{} says it holds {other:?}, not \"outright\" or \"after_challenges\"", p.id()),
+                other => panic!("{} says it holds {other:?}, not \"outright\" or \"after_challenges\"", name(p)),
             };
-            (p.id().clone(), after_challenges, PolicySet::from_policies([p.clone()]).unwrap())
+            (name(p), after_challenges, PolicySet::from_policies([p.clone()]).unwrap())
         })
         .collect()
 }
@@ -82,7 +83,7 @@ async fn a_policy_that_breaks_a_property_is_caught() {
     policies.add(rogue).unwrap();
     let (_, _, property) = properties()
         .into_iter()
-        .find(|(id, _, _)| id.to_string() == "agents-never-switch-enforcement-or-configure-connectors")
+        .find(|(name, _, _)| name == "agents-never-switch-enforcement-or-configure-connectors")
         .unwrap();
     let after = after_challenges(&policies).unwrap();
     let cex = prover().allowed_outside(&schema, &after, &property).await.unwrap();

@@ -10,7 +10,7 @@
 //! Cedar skips a policy that errors, so a forbid that errors fails open.
 //! [`Prover::forbids_that_error`] finds them.
 
-use cedar_policy::{Effect, Policy, PolicyId, PolicySet, Schema};
+use cedar_policy::{Effect, Policy, PolicySet, Schema};
 use cedar_policy_symcc::solver::LocalSolver;
 use cedar_policy_symcc::{CedarSymCompiler, CompiledPolicy, CompiledPolicySet};
 use std::path::Path;
@@ -95,24 +95,30 @@ impl Prover {
         Ok(None)
     }
 
-    /// The forbids in `policies` that error on some request, each with one.
+    /// The forbids in `policies` that error on some request, by [`name`], each with one.
     pub async fn forbids_that_error(
         &mut self,
         schema: &Schema,
         policies: &PolicySet,
-    ) -> Result<Vec<(PolicyId, Counterexample)>, ProofError> {
+    ) -> Result<Vec<(String, Counterexample)>, ProofError> {
         let mut erring = Vec::new();
         for policy in policies.policies().filter(|p| p.effect() == Effect::Forbid) {
             for env in schema.request_envs() {
                 let compiled = CompiledPolicy::compile(policy, &env, schema)?;
                 if let Some(cex) = self.compiler.check_never_errors_with_counterexample_opt(&compiled).await? {
-                    erring.push((policy.id().clone(), Counterexample(cex.to_string())));
+                    erring.push((name(policy), Counterexample(cex.to_string())));
                     break;
                 }
             }
         }
         Ok(erring)
     }
+}
+
+/// A policy's name: its `@id` annotation, as awzy's policies and properties are named, or else
+/// the ID Cedar gave it when parsing (`policy0`).
+pub fn name(policy: &Policy) -> String {
+    policy.annotation("id").map_or_else(|| policy.id().to_string(), str::to_string)
 }
 
 /// `policies` once every challenge is passed: without the `@challenge` forbids. What it allows,
