@@ -1,0 +1,30 @@
+# Fuzz targets for awzy-model (#429), run by cargo-fuzz in CI's fuzz job: `cargo +nightly fuzz
+# run <target>` from this folder. Outside the workspace and Bazel: cargo-fuzz builds them itself.
+[package]
+name = "awzy-model-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+awzy-model = { path = ".." }
+libfuzzer-sys = "0.4"
+
+[workspace]
+
+[[bin]]
+name = "qid"
+path = "fuzz_targets/qid.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "actor"
+path = "fuzz_targets/actor.rs"
+test = false
+doc = false
+bench = false

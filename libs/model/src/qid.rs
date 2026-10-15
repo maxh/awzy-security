@@ -100,7 +100,7 @@ macro_rules! qids {
 
                 fn from_str(s: &str) -> Result<Self, QidError> {
                     s.strip_prefix(concat!($prefix, "_"))
-                        .and_then(|rest| Uuid::parse_str(rest).ok())
+                        .and_then(canonical_uuid)
                         .map(Self)
                         .ok_or_else(|| QidError { expected: QidEntity::$variant, value: s.to_string() })
                 }
@@ -126,9 +126,17 @@ impl QidEntity {
     pub fn of(qid: &str) -> Option<QidEntity> {
         // A UUID has hyphens, never underscores, so the prefix is everything before the last one.
         let (prefix, uuid) = qid.rsplit_once('_')?;
-        Uuid::parse_str(uuid).ok()?;
+        canonical_uuid(uuid)?;
         Self::ALL.iter().copied().find(|e| e.prefix() == prefix)
     }
+}
+
+/// A UUID as a QID writes it, lowercase and hyphenated, and no other way. `Uuid::parse_str`
+/// also takes braces, `urn:uuid:`, no hyphens, and uppercase, which would give one ID several
+/// spellings, and a check that compares QIDs as text a way around it (#429).
+fn canonical_uuid(s: &str) -> Option<Uuid> {
+    let uuid = Uuid::try_parse(s).ok()?;
+    (uuid.hyphenated().encode_lower(&mut Uuid::encode_buffer()) == s).then_some(uuid)
 }
 
 impl fmt::Display for QidEntity {
@@ -182,6 +190,21 @@ mod tests {
         assert_eq!(err.to_string(), "\"decision_not-a-uuid\" is not a policy_bundle ID; expected policy_bundle_<uuid>");
         assert!("decision_not-a-uuid".parse::<DecisionId>().is_err());
         assert!(id.uuid().to_string().parse::<DecisionId>().is_err(), "a bare UUID is not a QID");
+    }
+
+    #[test]
+    fn a_qid_has_one_spelling() {
+        let id = DecisionId::new();
+        let uuid = id.uuid();
+        for other in [
+            format!("decision_{}", uuid.hyphenated().to_string().to_uppercase()),
+            format!("decision_{}", uuid.simple()),
+            format!("decision_{}", uuid.braced()),
+            format!("decision_{}", uuid.urn()),
+        ] {
+            assert!(other.parse::<DecisionId>().is_err(), "{other} is another spelling of {id}");
+            assert_eq!(QidEntity::of(&other), None, "{other}");
+        }
     }
 
     #[test]

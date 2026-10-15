@@ -1,0 +1,43 @@
+name: fuzz
+
+# The cargo-fuzz targets (#429; tools/ci/fuzz.sh): a minute each on a pull request that changes
+# fuzzed code, and half an hour each nightly, growing a corpus kept between nightly runs. A crash
+# fails the run and uploads the input that caused it.
+on:
+  pull_request:
+    paths:
+      - "libs/model/**"
+      - "authz/libs/signing/**"
+      - "tools/ci/fuzz.sh"
+      - ".github/workflows/fuzz.yml"
+  schedule:
+    - cron: "11 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      AWZY_FUZZ_SECONDS: ${{ github.event_name == 'pull_request' && '60' || '1800' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+      - if: github.event_name != 'pull_request'
+        uses: actions/cache@v4
+        with:
+          path: "**/fuzz/corpus"
+          key: fuzz-corpus-${{ github.run_id }}
+          restore-keys: fuzz-corpus-
+      - run: tools/ci/fuzz.sh
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: "**/fuzz/artifacts"

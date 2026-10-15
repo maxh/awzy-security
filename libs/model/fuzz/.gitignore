@@ -1,0 +1,6 @@
+# cargo-fuzz output: built, found, and kept between runs.
+/target
+/corpus
+/artifacts
+/coverage
+Cargo.lock
