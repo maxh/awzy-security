@@ -3,7 +3,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { loadQuery } from "react-relay";
 import type { OperationDescriptor } from "relay-runtime";
-import { createMockEnvironment, MockPayloadGenerator, type RelayMockEnvironment } from "relay-test-utils";
+import { createMockEnvironment, MockPayloadGenerator } from "relay-test-utils";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 import enforcementPageQuery, { type EnforcementPageQuery } from "./__generated__/EnforcementPageQuery.graphql";
@@ -32,7 +32,7 @@ vi.mock(import("./securityKeyChallenge"), async (importOriginal) => ({
  * see an operation `loadQuery` starts.)
  */
 function answerEverything(
-  environment: RelayMockEnvironment,
+  environment: ReturnType<typeof createMockEnvironment>,
   answer: (operation: OperationDescriptor) => ReturnType<typeof MockPayloadGenerator.generate>,
 ) {
   const timer = setInterval(() => {
