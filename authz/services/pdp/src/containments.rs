@@ -367,8 +367,11 @@ mod tests {
     async fn a_lagging_replica_never_rolls_the_list_back() {
         let c = Containments::from_challenge("http://127.0.0.1:9").unwrap();
         let mallory = EntityRef::new("Human", "mallory");
-        let contained =
-            vec![Containment { qid: "containment_1".into(), principal: Some(mallory.clone().into()), ..Default::default() }];
+        let contained = vec![Containment {
+            qid: "containment_1".into(),
+            principal: Some(mallory.clone().into()),
+            ..Default::default()
+        }];
         assert!(c.load_list(5, contained, Duration::ZERO));
         assert!(!c.load_list(4, vec![], Duration::ZERO), "an older list is refused");
         assert_eq!(c.version(), 5);
