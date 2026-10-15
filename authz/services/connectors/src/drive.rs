@@ -473,7 +473,9 @@ impl DriveSync {
         let mut summary = Summary::default();
         for drive in drives {
             let members = self.permissions(&drive.id).await?;
-            let mut resources = vec![drive_resource(&drive, &members, &self.cfg, &self.groups)];
+            let drive_entry = drive_resource(&drive, &members, &self.cfg, &self.groups);
+            // Each changed file's resource, by its ID, written once the round's pages are read.
+            let mut files: Vec<(String, Value)> = Vec::new();
             let mut cursor = self.cursors[&drive.id].clone();
             loop {
                 let path = format!(
@@ -485,7 +487,7 @@ impl DriveSync {
                 for change in body.changes {
                     match change.file {
                         Some(file) if !change.removed && !file.trashed => {
-                            resources.push(self.file(&file).await?);
+                            files.push((resource_id(&file.id), self.file(&file).await?));
                         }
                         _ => {
                             if change.file_id.is_empty() {
@@ -494,7 +496,7 @@ impl DriveSync {
                             // Writes go out after the round's pages, deletes at once: an earlier
                             // change to this file in the round mustn't write it back.
                             let id = resource_id(&change.file_id);
-                            resources.retain(|r| r["id"].as_str() != Some(id.as_str()));
+                            files.retain(|(f, _)| *f != id);
                             self.delete(&id).await?;
                             summary.deleted += 1;
                         }
@@ -507,6 +509,7 @@ impl DriveSync {
                 cursor = body.new_start_page_token.context("no newStartPageToken from Drive")?;
                 break;
             }
+            let resources: Vec<Value> = std::iter::once(drive_entry).chain(files.into_iter().map(|(_, r)| r)).collect();
             summary.written += self.write(&resources).await?;
             self.cursors.insert(drive.id, cursor);
         }
