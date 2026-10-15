@@ -30,7 +30,7 @@ jobs:
     steps:
       - id: filter
         if: github.event_name == 'pull_request'
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           # A file counts as code if it matches every pattern, so is none of these.
           predicate-quantifier: every
@@ -52,7 +52,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # buf breaking compares with origin/main
       - uses: bufbuild/buf-action@v1
@@ -72,8 +72,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - run: corepack enable
@@ -100,13 +100,13 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # the drift warning compares with the pull request's base
       - name: Models changed with their code
         if: github.event_name == 'pull_request'
         run: tools/ci/check-p-drift.sh "${{ github.event.pull_request.base.sha }}"
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
       - run: dotnet tool install --global P --version 3.1.0
@@ -128,12 +128,12 @@ jobs:
         checks: [advisories, "bans licenses sources"]
     continue-on-error: ${{ matrix.checks == 'advisories' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check ${{ matrix.checks }}
       - if: matrix.checks != 'advisories'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
       - if: matrix.checks != 'advisories'
@@ -147,7 +147,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-bazel
         with:
           buildbuddy-api-key: ${{ secrets.AWZY_CORP_BUILDBUDDY_API_KEY }}
@@ -180,10 +180,10 @@ jobs:
       AWZY_CORP_PORTAL_RELEASE_REGISTRY: ${{ vars.AWZY_CORP_RELEASE_REGISTRY }}
       AWZY_CORP_PORTAL_RELEASE_TAG: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # the quality ratchets compare with where this branch meets main
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
       # The awzy chart and bootstrap's config chart render with example values.
       - name: Lint charts
         run: |
@@ -195,7 +195,7 @@ jobs:
       - name: Chart against the Kubernetes API
         run: tools/ci/check-chart-api.sh
       # Every Terraform directory is formatted and valid, and root modules' lock files are current.
-      - uses: opentofu/setup-opentofu@v1
+      - uses: opentofu/setup-opentofu@v2
         with:
           tofu_version: 1.13.1
           tofu_wrapper: false
@@ -248,7 +248,7 @@ jobs:
       # Every push to main publishes signed images and the chart to the build account's ECR
       # (deploy/terraform/corp/build).
       - if: env.AWZY_CI_PUBLISH == 'true'
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWZY_CORP_AWS_PUBLISH_ROLE_ARN }}
           aws-region: ${{ vars.AWZY_CORP_AWS_REGION }}
@@ -263,7 +263,7 @@ jobs:
         if: env.AWZY_CI_PUBLISH == 'true'
         run: tools/ci/publish-images.sh authz
       - if: env.AWZY_CI_PUBLISH == 'true'
-        uses: imjasonh/setup-crane@v0.4
+        uses: imjasonh/setup-crane@v0.7
       # Third-party images installs run, copied from upstream and signed (ADR 0057).
       - name: Mirror third-party images
         if: env.AWZY_CI_PUBLISH == 'true'
@@ -297,10 +297,10 @@ jobs:
       AWZY_CORP_PORTAL_RELEASE_REGISTRY: ${{ vars.AWZY_CORP_RELEASE_REGISTRY }}
       AWZY_CORP_PORTAL_RELEASE_TAG: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # deploy-corp.sh compares this commit with the deployed one
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWZY_CORP_AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWZY_CORP_AWS_REGION }}

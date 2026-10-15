@@ -18,8 +18,8 @@ jobs:
       id-token: write # GitHub OIDC token for AWS: the deploy role trusts main
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@v7
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWZY_CORP_AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWZY_CORP_AWS_REGION }}
