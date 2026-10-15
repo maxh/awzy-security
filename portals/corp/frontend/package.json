@@ -32,6 +32,6 @@
     "babel-plugin-relay": "^21.0.1",
     "relay-compiler": "^21.0.1",
     "typescript": "^7.0.2",
-    "@types/node": "^22.15.0"
+    "@types/node": "^26.6.5"
   }
 }
