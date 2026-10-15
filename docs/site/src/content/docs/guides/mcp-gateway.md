@@ -96,10 +96,11 @@ decided by that task alone. See [work items](/concepts/domain-model/#work-items)
 
 An enforcing gateway denies every call while the PDP is unreachable, with one exception you
 choose on the Enforcement page. A tool classified by name, in a tier you let fail open, can still
-be called by someone the PDP allowed to make that same call within the last five minutes.
-`confidential` and `crown_jewels` can never fail open. The gateway follows
-awzy-challenge's list of who is contained, so it never replays an allow for someone contained
-before the outage.
+be called by someone the PDP allowed to make that same call within the last five minutes, unless
+the PDP has denied it since. `confidential` and `crown_jewels` can never fail open. The gateway
+follows awzy-challenge's list of who is contained, so it never replays an allow for someone
+contained before the outage. A tool or action the PDP last decided in monitor mode is forwarded
+during an outage as before; that never extends to tools whose mode is enforce.
 
 ## Connecting an agent
 

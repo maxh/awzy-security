@@ -9,7 +9,7 @@
 
 use awzy_service_auth::AuthChannel;
 use std::sync::{
-    atomic::{AtomicBool, AtomicUsize, Ordering},
+    atomic::{AtomicUsize, Ordering},
     Arc,
 };
 
@@ -58,9 +58,11 @@ struct Inner {
     verifier: Verifier,
     pdp: PdpClients,
     upstream: awzy_http::Client,
-    /// The last mode the PDP reported. If the PDP becomes unreachable, a monitoring install
-    /// keeps allowing; an enforcing one (or one never heard from) falls back to `outage`.
-    last_seen_monitor: AtomicBool,
+    /// The last mode the PDP reported for each tool and action, since a tool's or an action's mode
+    /// can be its own (ADR 0109). If the PDP becomes unreachable, a call the PDP last decided in
+    /// monitor mode is forwarded; one decided in enforce mode, or never decided, falls back to
+    /// `outage`.
+    modes: ModesSeen,
     /// Until when tool calls skip the PDP, after a check was slow to fail.
     pdp_paused_until: std::sync::Mutex<Option<std::time::Instant>>,
     /// When the PDP last allowed each (caller, tool), for replaying during an outage.
@@ -154,6 +156,30 @@ fn initialize_client(msg: &Value) -> Option<String> {
     Some(name.trim().to_string()).filter(|n| !n.is_empty())
 }
 
+/// Whether the PDP last decided each tool and action in monitor mode. Bounded: once full, a key
+/// not yet seen counts as enforced.
+#[derive(Default)]
+struct ModesSeen(std::sync::Mutex<std::collections::HashMap<String, bool>>);
+
+const MODES_SEEN_MAX: usize = 10_000;
+
+impl ModesSeen {
+    fn key(upstream: &str, tool: &str, action: &str) -> String {
+        format!("{upstream}/{tool}|{action}")
+    }
+
+    fn record(&self, key: String, monitor: bool) {
+        let mut seen = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        if seen.len() < MODES_SEEN_MAX || seen.contains_key(&key) {
+            seen.insert(key, monitor);
+        }
+    }
+
+    fn monitoring(&self, key: &str) -> bool {
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).get(key).copied().unwrap_or(false)
+    }
+}
+
 /// Recent allows, keyed by everything that identified the call: principal, the person it acted
 /// for, the work item it named (ADR 0118), and the tool. Bounded; entries older than the TTL are dropped when it fills up.
 struct AllowCache {
@@ -180,6 +206,11 @@ impl AllowCache {
             }
         }
         entries.insert(key, std::time::Instant::now());
+    }
+
+    /// Forgets the allow for this call: the PDP has since decided otherwise.
+    fn remove(&self, key: &str) {
+        self.entries.lock().expect("allow cache lock").remove(key);
     }
 
     /// How long ago the PDP allowed this call, if within the TTL.
@@ -226,7 +257,7 @@ impl GatewayState {
             verifier,
             pdp: pdp.into(),
             upstream,
-            last_seen_monitor: AtomicBool::new(false),
+            modes: ModesSeen::default(),
             pdp_paused_until: std::sync::Mutex::new(None),
             allows,
             containments,
@@ -490,12 +521,18 @@ async fn check(
     if result.is_err() && started.elapsed() >= SLOW_FAILURE {
         state.pause_pdp();
     }
+    // The P model beside this file (`mcp.p`, ADR 0126) checks what an outage may forward.
+    let mode_key = ModesSeen::key(&up.name, tool, c.action);
     match result {
         Ok(res) => {
             let res = res.into_inner();
             // UNSPECIFIED counts as enforce: never skip enforcement by accident.
             let monitor = res.mode() == EnforcementMode::Monitor;
-            state.0.last_seen_monitor.store(monitor, Ordering::Release);
+            state.0.modes.record(mode_key, monitor);
+            if res.verdict() != Verdict::Allow {
+                // Any other verdict overrules an earlier allow, which an outage mustn't replay.
+                state.0.allows.remove(&c.cache_key);
+            }
             match (res.verdict(), monitor) {
                 (Verdict::Allow, _) => {
                     crate::metrics::FORWARDED.inc();
@@ -515,9 +552,9 @@ async fn check(
                 }
             }
         }
-        Err(status) if state.0.last_seen_monitor.load(Ordering::Acquire) => {
+        Err(status) if state.0.modes.monitoring(&mode_key) => {
             crate::metrics::OUTAGE_MONITOR_FORWARDED.inc();
-            tracing::warn!(%status, what = %c.what, "awzy-pdp unreachable; install was monitoring, forwarding");
+            tracing::warn!(%status, what = %c.what, "awzy-pdp unreachable; this was last decided in monitor mode, forwarding");
             None
         }
         Err(status) => outage(state, up, principal, tool, &c, id, &status),
