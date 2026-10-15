@@ -35,5 +35,11 @@ ADR 0126 has the why. The containment feed is the worked example:
    and fails unless its test breaks. One the checker needs more than 3000 schedules to reach
    says how many, `breaks <test> within <n>:`, and only the nightly run checks it. A bug the
    checker never reached by itself gets a note in `bugs.p` instead of a line.
-8. **Keep it in step.** A PR that changes a file with a `.p` beside it changes the model, or says
+8. **Replay real runs** (ADR 0130). Log each event the specs observe from the Rust, at debug
+   under `awzy_telemetry::MODEL_EVENTS`, with `model_event` and the payload's field names from
+   `events.p`, and add a test that holds the lines to them (the feed's is in
+   `challenge/src/grpc/tests.rs`). Then a `replay/` folder: `replay.json`, `timings.p` in real
+   milliseconds, `tests.p` for the properties of any stretch of a run, and fixture logs that pass
+   or break each. `tools/ci/replay-p-model.py --self-test` checks them.
+9. **Keep it in step.** A PR that changes a file with a `.p` beside it changes the model, or says
    in its description why it doesn't need to. CI warns when it doesn't.

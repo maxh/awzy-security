@@ -73,6 +73,8 @@ pub struct Containments {
     /// Held while a list is compared with the one in force and replaced, since the feed and a
     /// peer may both load one.
     loading: Mutex<()>,
+    /// Names this process's follower in the model's log, so a restarted PDP is a new one there.
+    instance: String,
 }
 
 impl Containments {
@@ -97,6 +99,7 @@ impl Containments {
             max_stale: DEFAULT_MAX_STALE,
             epoch: AtomicU64::new(0),
             loading: Mutex::new(()),
+            instance: uuid::Uuid::now_v7().to_string(),
         }
     }
 
@@ -152,6 +155,14 @@ impl Containments {
         self.epoch.fetch_add(1, Ordering::AcqRel);
         self.heard_ago(age);
         self.loaded.store(true, Ordering::Release);
+        if self.client.is_some() {
+            tracing::debug!(
+                target: awzy_telemetry::MODEL_EVENTS,
+                model_event = "eApplied",
+                follower = %self.instance,
+                version,
+            );
+        }
         true
     }
 
@@ -196,7 +207,24 @@ impl Containments {
 
     fn in_list(&self, who: &[&EntityRef]) -> Vec<String> {
         let active = self.active.load();
-        who.iter().filter_map(|w| active.by_principal.get(&key(w)).cloned()).collect()
+        let model_events = tracing::enabled!(target: awzy_telemetry::MODEL_EVENTS, tracing::Level::DEBUG);
+        who.iter()
+            .filter_map(|w| {
+                let found = active.by_principal.get(&key(w)).cloned();
+                if model_events {
+                    // The model's answers: 0 not contained, 1 contained, from list `basis`.
+                    tracing::debug!(
+                        target: awzy_telemetry::MODEL_EVENTS,
+                        model_event = "eDecision",
+                        pdp = %self.instance,
+                        principal = %key(w),
+                        answer = u8::from(found.is_some()),
+                        basis = active.version,
+                    );
+                }
+                found
+            })
+            .collect()
     }
 
     /// The containment QIDs of any of `who` that are contained.

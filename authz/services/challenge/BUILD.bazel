@@ -6,7 +6,8 @@ awzy_service(
     binary_name = "awzy-challenge",
     # Embedded by sqlx::migrate!.
     # The tests check every method in challenge.proto has an access rule.
-    compile_data = glob(["migrations/*.sql"]) + ["//authz/libs/proto:protos"],
+    # events.p: a test holds the model's log lines to the events the model declares (ADR 0130).
+    compile_data = glob(["migrations/*.sql"]) + ["src/feed/events.p", "//authz/libs/proto:protos"],
     visibility = ["//tools:client_side"],
     deps = [
         "//authz/libs/context-api",

@@ -21,6 +21,11 @@ use opentelemetry_sdk::{
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
+/// The tracing target for the events a P model names, at debug level (ADR 0130).
+/// `RUST_LOG=info,awzy_model=debug` turns them on, and `tools/ci/replay-p-model.py` checks a run's
+/// JSON logs against the model's properties.
+pub const MODEL_EVENTS: &str = "awzy_model";
+
 pub fn init(service: &'static str) {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     let json = std::env::var("AWZY_LOG_FORMAT").is_ok_and(|v| v == "json");
