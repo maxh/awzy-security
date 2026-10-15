@@ -138,10 +138,8 @@ pub async fn adopt_newer_policy(
             return;
         }
     };
-    let newest = answers
-        .into_iter()
-        .filter_map(|a| a.policy)
-        .max_by_key(|p| p.bundle.as_ref().map_or(0, |b| b.version));
+    let newest =
+        answers.into_iter().filter_map(|a| a.policy).max_by_key(|p| p.bundle.as_ref().map_or(0, |b| b.version));
     let Some(policy) = newest else { return };
     // Each is applied only if it verifies and is newer, so a refusal here just means the PDP
     // already has as much.
