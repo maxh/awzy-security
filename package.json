@@ -10,7 +10,7 @@
     "format:check": "oxfmt --check 'portals/**/*.{ts,tsx,js,mjs}' 'authz/sdks/**/*.ts'"
   },
   "devDependencies": {
-    "graphql": "^16.11.0",
+    "graphql": "^17.0.2",
     "oxfmt": "0.72.0",
     "oxlint": "1.87.0",
     "oxlint-tsgolint": "7.0.2004",
