@@ -1,0 +1,12 @@
+<!-- Signed policy reaching the PDPs (ADR 0126). Each machine sits beside the Rust it models. -->
+<Project>
+  <ProjectName>PolicySync</ProjectName>
+  <InputFiles>
+    <PFile>./events.p</PFile>
+    <PFile>./specs.p</PFile>
+    <PFile>./test.p</PFile>
+    <PFile>../store.p</PFile>
+    <PFile>../../../pdp/src/sync.p</PFile>
+  </InputFiles>
+  <OutputDir>./PGenerated/</OutputDir>
+</Project>
