@@ -1,9 +1,11 @@
-# Base Cedar schema and policies. Validated and exercised by //authz/services/pdp:pdp_test.
+# Base Cedar schema and policies. Validated and exercised by //authz/services/pdp:pdp_test, and
+# proved to keep the promises in base.properties.cedar by //authz/libs/policy-proofs.
 filegroup(
     name = "cedar",
     srcs = [
         "awzy.cedarschema",
         "base.cedar",
+        "base.properties.cedar",
     ],
     visibility = ["//tools:client_side"],
 )

@@ -17,6 +17,25 @@ platform(
     visibility = ["//visibility:public"],
 )
 
+# Building for, or testing on, a platform: for a tool the tests run, such as cvc5.
+config_setting(
+    name = "is_linux_x86_64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "is_macos_arm64",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:aarch64",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 # Building for linux/arm64, as opposed to on an arm64 Mac.
 config_setting(
     name = "is_linux_arm64",

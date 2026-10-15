@@ -1,0 +1,22 @@
+load("//tools:rust.bzl", "awzy_rust_library")
+
+# Proofs about Cedar policy sets, with Cedar's symbolic compiler and the cvc5 solver (#428).
+awzy_rust_library(
+    name = "policy-proofs",
+    crate_name = "awzy_policy_proofs",
+    # The base policies and the properties they're proved against, which the tests read.
+    compile_data = ["//policies:cedar"],
+    test_data = [":cvc5"],
+    test_env = {"CVC5": "$(rootpath :cvc5)"},
+    visibility = ["//tools:client_side"],
+)
+
+# cvc5 for the machine running the tests, from its release (MODULE.bazel).
+alias(
+    name = "cvc5",
+    actual = select({
+        "//tools/platforms:is_linux_arm64": "@cvc5_linux_arm64//:bin/cvc5",
+        "//tools/platforms:is_linux_x86_64": "@cvc5_linux_x86_64//:bin/cvc5",
+        "//tools/platforms:is_macos_arm64": "@cvc5_macos_arm64//:bin/cvc5",
+    }),
+)
