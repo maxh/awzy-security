@@ -16,9 +16,9 @@
     "react-dom": "^19.3.0",
     "react-relay": "^21.0.1",
     "relay-runtime": "^21.0.1",
-    "@mantine/core": "^9.7.1",
-    "@mantine/hooks": "^9.7.1",
-    "@tanstack/react-router": "^1.170.41",
+    "@mantine/core": "^9.7.2",
+    "@mantine/hooks": "^9.7.2",
+    "@tanstack/react-router": "^1.170.42",
     "@tabler/icons-react": "^3.49.0"
   },
   "devDependencies": {
