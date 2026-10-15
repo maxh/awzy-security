@@ -5,7 +5,8 @@
 #
 # Then it puts back each bug the model's `bugs.p` lists, one at a time, and fails unless the test
 # named for it breaks: a model that stops catching a bug it found has gone soft. AWZY_P_BUGS=0
-# skips that.
+# skips that. A bug the checker needs more schedules to reach says so (`within <n>`), and is
+# checked over that many only when AWZY_P_SLOW_BUGS=1, as the nightly run sets.
 #
 #   tools/ci/check-p-models.sh [path/to/Model.pproj ...]
 set -euo pipefail
@@ -13,6 +14,7 @@ cd "$(git rev-parse --show-toplevel)"
 
 schedules="${AWZY_P_SCHEDULES:-3000}"
 check_bugs="${AWZY_P_BUGS:-1}"
+slow_bugs="${AWZY_P_SLOW_BUGS:-0}"
 if [ "$#" -gt 0 ]; then
   projects="$*"
 else
@@ -36,7 +38,7 @@ compile() {
 # empty if none did, and `trace` to the trace's last lines; returns non-zero if the checker
 # failed without finding a bug.
 run_check() {
-  local dir="$1" tc="$2" out file status=0
+  local dir="$1" tc="$2" schedules="${3:-$schedules}" out file status=0
   out="$(mktemp -d)"
   broke=""
   trace=""
@@ -78,16 +80,26 @@ for pproj in $projects; do
     fi
   done
 
-  # Each bug back in turn: `// bug <n> breaks <test>: ...` in bugs.p, read by Bug().
+  # Each bug back in turn: `// bug <n> breaks <test>[ within <schedules>]: ...` in bugs.p, read
+  # by Bug().
   [ "$check_bugs" != 0 ] && [ -f "$dir/bugs.p" ] || continue
-  while read -r n tc; do
+  while read -r n tc within; do
+    within="${within:-$schedules}"
+    if [ "$within" -gt "$schedules" ]; then
+      if [ "$slow_bugs" = 0 ]; then
+        echo "skipped: $pproj bug $n needs $within schedules; the nightly run checks it"
+        continue
+      fi
+    else
+      within="$schedules"
+    fi
     bugs_file="$dir/bugs.p"
     cp "$bugs_file" "$bugs_file.orig"
     sed -i.tmp 's/^fun Bug(): int { return 0; }$/fun Bug(): int { return '"$n"'; }/' "$bugs_file"
     rm -f "$bugs_file.tmp"
     grep -q "return $n; }" "$bugs_file" || { echo "::error file=$bugs_file::no 'fun Bug(): int { return 0; }' to switch"; exit 1; }
     compile "$dir" "$pproj"
-    if ! run_check "$dir" "$tc"; then
+    if ! run_check "$dir" "$tc" "$within"; then
       failed=1
       echo "::error file=$bugs_file::with bug $n back, $tc failed to run"
       echo "$trace"
@@ -98,7 +110,7 @@ for pproj in $projects; do
       echo "ok: $pproj bug $n breaks $tc: $broke"
     fi
     restore
-  done < <(sed -n 's|^// bug \([0-9]*\) breaks \([A-Za-z0-9_]*\):.*|\1 \2|p' "$dir/bugs.p")
+  done < <(sed -n 's|^// bug \([0-9]*\) breaks \([A-Za-z0-9_]*\)\( within \([0-9]*\)\)\{0,1\}:.*|\1 \2 \4|p' "$dir/bugs.p")
   # Leave the project compiled as it is.
   compile "$dir" "$pproj"
 done
