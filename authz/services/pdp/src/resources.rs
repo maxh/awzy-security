@@ -294,9 +294,7 @@ impl Resources {
         let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
         self.drops().record(Some(ids.iter().cloned().collect()));
         cache.retain(|id, c| {
-            let in_chain = c.entities.as_ref().is_some_and(|l| {
-                l.ids().any(|i| changed.contains(i))
-            });
+            let in_chain = c.entities.as_ref().is_some_and(|l| l.ids().any(|i| changed.contains(i)));
             !changed.contains(id.as_str()) && !in_chain
         });
     }
