@@ -3,8 +3,9 @@
 // last list they were sent.
 //
 // Time is in ticks of a second. A tick goes to every machine and each acknowledges it before the
-// next, so a message sent during a tick is handled before the next one: the model assumes the
-// network is faster than a second, and looks at everything else that can go wrong.
+// next, so a message sent while handling a tick arrives before the next one, and one sent in reply
+// to another message may arrive in the next: the model assumes the network is faster than a
+// second, and looks at everything else that can go wrong.
 
 // Principals are numbered from 0.
 type tContained = set[int];
