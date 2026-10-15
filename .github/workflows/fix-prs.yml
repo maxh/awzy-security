@@ -30,14 +30,14 @@ jobs:
       contents: write # push the fixes to the PR's branch
       actions: write # start the PR's CI, which the workflow token's push doesn't
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0 # the merge base with main says what the PR changed
       - uses: ./.github/actions/setup-bazel
         with:
           buildbuddy-api-key: ${{ secrets.AWZY_CORP_BUILDBUDDY_API_KEY }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - run: corepack enable

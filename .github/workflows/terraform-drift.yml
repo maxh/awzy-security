@@ -23,12 +23,12 @@ jobs:
       id-token: write # GitHub OIDC token for AWS; only main can assume the plan role
       issues: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: opentofu/setup-opentofu@v1
+      - uses: actions/checkout@v7
+      - uses: opentofu/setup-opentofu@v2
         with:
           tofu_version: 1.13.1
           tofu_wrapper: false
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWZY_CORP_AWS_PLAN_ROLE_ARN }}
           aws-region: ${{ vars.AWZY_CORP_AWS_REGION }}
