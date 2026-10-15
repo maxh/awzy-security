@@ -88,7 +88,10 @@ impl Feed {
                 // The list as this replica first found it, for a replay that starts mid-run; the
                 // replay keeps the first line for each version.
                 if first && model_events_on() {
-                    log_store_changed(latest.version, latest.active.iter().map(|c| principal_key(&c.principal)).collect());
+                    log_store_changed(
+                        latest.version,
+                        latest.active.iter().map(|c| principal_key(&c.principal)).collect(),
+                    );
                 }
                 *current = Some(Arc::new(latest));
             }
