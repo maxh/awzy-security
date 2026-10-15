@@ -4,8 +4,9 @@
 //
 // bug 1 breaks tcChangesReachChecks: the change log's cursor was the newest row committed, so a
 // write that committed after a later-numbered one fell behind it and was never named.
-// bug 2 breaks tcChangesReachChecks: the follower's first answer only set the cursor, so what
-// was cached before it stayed for the TTL.
+// bug 2 breaks tcChangesReachChecks within 100000: the follower's first answer only set the
+// cursor, so what was cached before it stayed for the TTL. The checker took 21,092 schedules to
+// reach it once.
 //
 // Not here: a fetch in flight cached after a drop (the epoch in ResourceCache). The checker
 // didn't reach it in 10,000 schedules without the guard, so it's left to the Rust test.
