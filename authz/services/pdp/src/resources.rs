@@ -15,6 +15,12 @@
 //! 0077), including every one under a changed folder. While that feed is heard from, entries
 //! live longer; when it isn't, they expire as they did before it.
 //!
+//! A fetch races the change log: awzy-context may change the resource after answering and the
+//! change arrive before the fetch is cached. So each drop is logged, and a fetch isn't cached if
+//! a drop since it began touches what it fetched; and the change log's first answer, which only
+//! sets the cursor, drops everything cached before it. The P model beside this file
+//! (`resources.p`, ADR 0126) checks both.
+//!
 //! If awzy-context can't be reached, an expired entry is still used, but only for as long as its
 //! sensitivity tier allows (ADR 0119): a stale attribute matters more on a sensitive resource.
 //! After a fetch fails, checks don't ask awzy-context again for a second, so an outage costs one
@@ -36,6 +42,9 @@ use awzy_model::{entity_type, AttributesFrom, EntityRef};
 use http_body_util::BodyExt;
 use serde::Deserialize;
 use serde_json::{json, Value};
+
+mod drops;
+use drops::Drops;
 
 /// The tier a resource awzy-context doesn't know gets. Matches awzy-context's default for one
 /// it knows but hasn't classified.
@@ -140,6 +149,13 @@ pub struct Loaded {
     pub tier: Option<String>,
 }
 
+impl Loaded {
+    /// The IDs of the resource and its ancestors.
+    fn ids(&self) -> impl Iterator<Item = &str> {
+        self.entities.iter().filter_map(|e| e["uid"]["id"].as_str())
+    }
+}
+
 impl From<EntitiesBody> for Loaded {
     fn from(body: EntitiesBody) -> Self {
         let work = body.work.into_iter().map(|w| (w.id, w.assignees.into_iter().collect())).collect();
@@ -200,6 +216,9 @@ pub struct Resources {
     /// This process's service token for awzy-context (ADR 0055).
     tokens: awzy_service_auth::TokenSource,
     cache: RwLock<HashMap<String, Cached>>,
+    /// The recent drops, numbered: the IDs dropped, or None for everything. Changed only with
+    /// `cache` held for writing.
+    drops: std::sync::Mutex<Drops>,
     ttl: Duration,
     unknown_ttl: Duration,
     stale_limits: StaleLimits,
@@ -229,6 +248,7 @@ impl Resources {
             client: awzy_http::client(),
             tokens: awzy_service_auth::TokenSource::from_env(),
             cache: RwLock::default(),
+            drops: std::sync::Mutex::default(),
             ttl,
             unknown_ttl,
             stale_limits: StaleLimits::default(),
@@ -272,10 +292,9 @@ impl Resources {
         }
         let changed: HashSet<&str> = ids.iter().map(String::as_str).collect();
         let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
+        self.drops().record(Some(ids.iter().cloned().collect()));
         cache.retain(|id, c| {
-            let in_chain = c.entities.as_ref().is_some_and(|l| {
-                l.entities.iter().any(|e| e["uid"]["id"].as_str().is_some_and(|i| changed.contains(i)))
-            });
+            let in_chain = c.entities.as_ref().is_some_and(|l| l.ids().any(|i| changed.contains(i)));
             !changed.contains(id.as_str()) && !in_chain
         });
     }
@@ -289,9 +308,13 @@ impl Resources {
                 Ok((next, ids, reset)) => {
                     self.feed_heard_ms.store(self.started.elapsed().as_millis() as u64 + 1, Ordering::Release);
                     crate::metrics::RESOURCE_FEED.succeeded();
-                    if reset {
-                        self.cache.write().unwrap_or_else(|e| e.into_inner()).clear();
-                        tracing::info!("resource change log reset; dropped every cached resource");
+                    // The first answer only sets the cursor: what's cached may predate a change it
+                    // will never name.
+                    if reset || cursor.is_none() {
+                        self.clear();
+                        if reset {
+                            tracing::info!("resource change log reset; dropped every cached resource");
+                        }
                     } else {
                         self.invalidate(&ids);
                     }
@@ -375,6 +398,7 @@ impl Resources {
                 _ => None,
             }
         };
+        let began = self.drops().next;
         let fetched = match self.fetches_paused() {
             true => Err(anyhow::anyhow!("awzy-context didn't answer a moment ago")),
             false => self.fetch(endpoint, id).await.inspect_err(|_| self.pause_fetches()),
@@ -382,7 +406,7 @@ impl Resources {
         match fetched {
             Ok(entities) => {
                 crate::metrics::RESOURCE_FETCHES.inc();
-                self.store(id, entities.clone());
+                self.store_fetched(id, entities.clone(), began);
                 Ok((entities, false))
             }
             Err(error) => {
@@ -461,12 +485,38 @@ impl Resources {
         Some(entities)
     }
 
+    fn drops(&self) -> std::sync::MutexGuard<'_, Drops> {
+        self.drops.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Drops everything.
+    fn clear(&self) {
+        let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
+        self.drops().record(None);
+        cache.clear();
+    }
+
+    /// Caches what a fetch that began at drop `began` got, unless a drop since touches it.
+    fn store_fetched(&self, id: &str, entities: Option<Arc<Loaded>>, began: u64) {
+        let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
+        let chain: Vec<&str> = entities.iter().flat_map(|l| l.ids()).chain(std::iter::once(id)).collect();
+        if self.drops().touched_since(began, &chain) {
+            return;
+        }
+        self.insert(&mut cache, id, Cached { at: Instant::now(), entities });
+    }
+
+    #[cfg(test)]
     fn store(&self, id: &str, entities: Option<Arc<Loaded>>) {
         self.store_cached(id, Cached { at: Instant::now(), entities });
     }
 
     fn store_cached(&self, id: &str, cached: Cached) {
         let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
+        self.insert(&mut cache, id, cached);
+    }
+
+    fn insert(&self, cache: &mut HashMap<String, Cached>, id: &str, cached: Cached) {
         if cache.len() >= CAPACITY && !cache.contains_key(id) {
             // What can't stand in during an outage goes first, then what's merely expired.
             cache.retain(|_, c| self.usable_stale(c));
@@ -698,5 +748,17 @@ mod tests {
     #[test]
     fn ids_are_one_path_segment() {
         assert_eq!(awzy_http::encode("synthetic:folder:sales/accounts"), "synthetic%3Afolder%3Asales%2Faccounts");
+    }
+
+    #[tokio::test]
+    async fn a_fetch_that_raced_a_change_isnt_cached() {
+        let r = Resources::from_context("http://127.0.0.1:9".into());
+        let began = r.drops().next;
+        r.invalidate(&["synthetic:doc:1".to_string()]);
+        r.store_fetched("synthetic:doc:1", None, began);
+        assert!(!r.cache.read().unwrap().contains_key("synthetic:doc:1"), "fetched before the change");
+        let began = r.drops().next;
+        r.store_fetched("synthetic:doc:1", None, began);
+        assert!(r.cache.read().unwrap().contains_key("synthetic:doc:1"), "nothing dropped since");
     }
 }
