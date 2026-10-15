@@ -59,6 +59,33 @@ It sits beside your IdP, cloud IAM, and apps' own permissions rather than replac
 docs' [awzy and your existing authorization](https://docs.awzysecurity.com/concepts/existing-authorization/)
 covers what it adds and a step-by-step adoption path.
 
+## How it's checked
+
+The riskiest behavior in an authorization system sits between processes: a containment that has
+to reach every PDP, a PDP that keeps deciding while its database is down, a policy update that
+must never be applied out of order. Tests rarely hit those interleavings, so awzy specifies them
+in [P](https://p-org.github.io/P/), the language AWS uses for the same job.
+
+- **Each protocol between services has a P model**, each machine in a `.p` file beside the Rust it
+  models: the containment feed, the challenge lifecycle, policy and resource sync to the PDPs,
+  and the gateway's outage fallback, among others. Its properties are written as specifications:
+  a PDP never answers from a list Postgres replaced too long ago, no follower ever goes back to an
+  older list, and every one catches up once failures stop.
+- **CI checks every model** over thousands of schedules with databases going down, replicas
+  restarting, and streams breaking, and fails with the trace that broke a property. The
+  containment feed's model found three bugs in the code as first written; each is kept behind a
+  switch, and CI puts it back and fails unless the model still catches it.
+- **Real runs are checked against the same specifications.** The services can log the events a
+  model names, and [`tools/ci/replay-p-model.py`](tools/ci/replay-p-model.py) replays a run's logs
+  through the model's own properties, so the code is held to the design, not just the design to
+  itself.
+
+The base Cedar policies are proved against their properties with Cedar's symbolic compiler, over
+every request the schema allows. [ADR 0126](docs/adr/0126-protocols-are-modeled-in-p-beside-their-code.md),
+[ADR 0130](docs/adr/0130-runs-are-replayed-against-their-p-models.md), and
+[ADR 0128](docs/adr/0128-policies-are-proved-against-their-properties.md) have the details, and
+[DEVELOPMENT.md](DEVELOPMENT.md#p-models) how to run them.
+
 ## Run it locally
 
 ```sh
