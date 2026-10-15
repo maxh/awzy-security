@@ -23,3 +23,4 @@ jobs:
       - run: tools/ci/check-p-models.sh
         env:
           AWZY_P_SCHEDULES: "50000"
+          AWZY_P_SLOW_BUGS: "1"
