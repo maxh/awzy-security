@@ -1,5 +1,5 @@
 {
-  "checksum": "31d949ff560159f23d1ec34de9c7964ee1e14ac38ed3bdc409821457cf792659",
+  "checksum": "16786ef1b96f75f2536690b34c06f62e5514ccd3a06e196337a04ab19426f2e4",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -2619,7 +2619,7 @@
             "target": "pin_project_lite"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -3468,7 +3468,7 @@
             "target": "p256"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -4029,7 +4029,7 @@
             "target": "rmcp"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -4130,7 +4130,7 @@
             "target": "rcgen"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -4392,7 +4392,7 @@
             "target": "hyper_util"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -4465,7 +4465,7 @@
             "target": "jsonwebtoken"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -4615,7 +4615,7 @@
             "target": "rskafka"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -4660,7 +4660,7 @@
       "common_attrs": {
         "deps": [
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -5306,7 +5306,7 @@
             "target": "hyper_util"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -5833,7 +5833,7 @@
             "target": "jsonwebtoken"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -13277,7 +13277,7 @@
             "target": "hyper_util"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -15000,7 +15000,7 @@
             "target": "quoted_printable"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -16652,23 +16652,22 @@
       ],
       "version": "0.1.46"
     },
-    "num-modular 0.6.6": {
+    "num-modular 0.6.5": {
       "common_attrs": {
         "edition": "2018"
       },
       "library_target_name": "num_modular",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
+      "license": "Apache-2.0",
+      "license_file": "LICENSE",
       "license_ids": [
-        "Apache-2.0",
-        "MIT"
+        "Apache-2.0"
       ],
       "name": "num-modular",
       "package_url": "https://github.com/cmpute/num-modular",
       "repository": {
         "Http": {
-          "sha256": "26ac76200f74e658124f95fa63e1a82b2fd2181c5b2fdde80b3d89d2d3f905e7",
-          "url": "https://static.crates.io/crates/num-modular/0.6.6/download"
+          "sha256": "bd8e500409e6cd603b03e477c26a6caecdc27ac58979a53e881c75eafc079f44",
+          "url": "https://static.crates.io/crates/num-modular/0.6.5/download"
         }
       },
       "targets": [
@@ -16679,7 +16678,7 @@
           }
         }
       ],
-      "version": "0.6.6"
+      "version": "0.6.5"
     },
     "num-order 1.2.0": {
       "common_attrs": {
@@ -16688,7 +16687,7 @@
         ],
         "deps": [
           {
-            "id": "num-modular 0.6.6",
+            "id": "num-modular 0.6.5",
             "target": "num_modular"
           }
         ],
@@ -21054,7 +21053,7 @@
             "target": "rsasl"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -21310,7 +21309,7 @@
       ],
       "version": "1.1.5"
     },
-    "rustls 0.23.45": {
+    "rustls 0.23.46": {
       "build_script_attrs": {
         "link_deps": [
           {
@@ -21375,8 +21374,8 @@
       "package_url": "https://github.com/rustls/rustls",
       "repository": {
         "Http": {
-          "sha256": "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634",
-          "url": "https://static.crates.io/crates/rustls/0.23.45/download"
+          "sha256": "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf",
+          "url": "https://static.crates.io/crates/rustls/0.23.46/download"
         }
       },
       "targets": [
@@ -21393,7 +21392,7 @@
           }
         }
       ],
-      "version": "0.23.45"
+      "version": "0.23.46"
     },
     "rustls-native-certs 0.8.4": {
       "common_attrs": {
@@ -23534,7 +23533,7 @@
             "target": "percent_encoding"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -25569,7 +25568,7 @@
         ],
         "deps": [
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -30283,7 +30282,7 @@
     "rcgen 0.13.2",
     "rmcp 3.5.1",
     "rskafka 0.6.0",
-    "rustls 0.23.45",
+    "rustls 0.23.46",
     "rustls-pki-types 1.15.1",
     "serde 1.0.229",
     "serde_json 1.0.151",
