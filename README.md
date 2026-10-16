@@ -5,14 +5,12 @@
 Beyond Zero authorization for the AI era: per-action, per-resource decisions for humans and
 agents, deployed single-tenant inside each client's cloud (AWS or Google Cloud; Azure is planned).
 
-**Try it:** [aws.demo.awzysecurity.com](https://aws.demo.awzysecurity.com) on AWS, or
-[gcp.demo.awzysecurity.com](https://gcp.demo.awzysecurity.com) on Google Cloud: live installs with
-a synthetic 200-person company. Sign in as any sample person (no password) and look around;
-they're read-only, so changes are turned off. Or run it on your machine: `tools/demo up`
-([below](#run-it-locally)).
+> **This experiment has finished.** awzy is no longer developed, and its hosted demos, docs
+> site, and corp portal have been shut down. The code and docs stay here as a record; you can
+> still run it on your machine with `tools/demo up` ([below](#run-it-locally)).
 
-**Read about it:** [docs.awzysecurity.com](https://docs.awzysecurity.com), from the concepts to
-installing it in your own cloud.
+**Read about it:** the documentation's source is in [`docs/site`](docs/site/src/content/docs),
+from the concepts to installing it in your own cloud.
 
 ## What it does
 
@@ -56,7 +54,7 @@ what a policy engine leaves to you:
 - an enforcement point for AI agents' tool calls, and a portal to run it all
 
 It sits beside your IdP, cloud IAM, and apps' own permissions rather than replacing them; the
-docs' [awzy and your existing authorization](https://docs.awzysecurity.com/concepts/existing-authorization/)
+docs' [awzy and your existing authorization](docs/site/src/content/docs/concepts/existing-authorization.md)
 covers what it adds and a step-by-step adoption path.
 
 ## How it's checked
@@ -106,7 +104,7 @@ vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## Read more
 
-- [docs.awzysecurity.com](https://docs.awzysecurity.com): the public documentation, built from [`docs/site`](docs/site)
+- [Documentation](docs/site/src/content/docs): the public documentation's source, in [`docs/site`](docs/site)
 - [Principles](PRINCIPLES.md): the rules the design follows, and the decisions behind them
 - [Platform plan](docs/plans/platform-plan.md): the architecture, and what's built so far
 - [Deployment plan](docs/plans/deployment-plan.md): how installs reach a client's cloud
