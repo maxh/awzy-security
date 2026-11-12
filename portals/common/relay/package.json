@@ -8,8 +8,8 @@
     "./routes": "./src/routeQuery.ts"
   },
   "dependencies": {
-    "graphql-ws": "^6.3.0",
-    "graphql": "^17.0.2",
+    "graphql-ws": "^6.4.1",
+    "graphql": "^17.1.0",
     "relay-runtime": "^21.0.1",
     "@types/relay-runtime": "^20.1.1",
     "react-relay": "^21.0.1",
